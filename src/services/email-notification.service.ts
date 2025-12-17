@@ -450,7 +450,8 @@ export const EmailNotificationService = {
     mmpId: string,
     isRecipientFOM: boolean = true,
     recipientRole?: { en: string; ar: string },
-    retryCount: number = 0
+    retryCount: number = 0,
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
     const MAX_RETRIES = 2;
     const BASE_DELAY = 3000;
@@ -488,6 +489,7 @@ export const EmailNotificationService = {
           message_ar: messageAr,
           actionUrl: `/mmp/${mmpId}`,
           priority: 'high',
+          cc: cc, // CC Super Admin only
           details: [
             { label: 'MMP', value: mmpName },
             { label: 'By', value: forwarderName },
@@ -505,7 +507,7 @@ export const EmailNotificationService = {
           const delay = BASE_DELAY * Math.pow(2, retryCount);
           console.log(`[EMAIL] Transient error on MMP email, retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
-          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
         }
         
         await logEmailSend(email, subject, 'mmp', false, undefined, error.message);
@@ -517,7 +519,7 @@ export const EmailNotificationService = {
           const delay = BASE_DELAY * Math.pow(2, retryCount);
           console.log(`[EMAIL] Transient error in MMP response, retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
-          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
         }
         
         await logEmailSend(email, subject, 'mmp', false, undefined, data.error);
@@ -535,7 +537,7 @@ export const EmailNotificationService = {
         const delay = BASE_DELAY * Math.pow(2, retryCount);
         console.log(`[EMAIL] Network error on MMP email, retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
-        return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+        return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
       }
       
       await logEmailSend(email, `MMP Forwarded to FOM`, 'mmp', false, undefined, error.message);
@@ -553,7 +555,8 @@ export const EmailNotificationService = {
     forwarderName: string,
     coordinatorCount: number,
     mmpId?: string,
-    recipientRole?: { en: string; ar: string }
+    recipientRole?: { en: string; ar: string },
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
     const viewMmpUrl = mmpId ? `${APP_URL}/mmp/${mmpId}` : `${APP_URL}/mmp`;
     
@@ -665,6 +668,7 @@ PACT Workflow Platform | منصة باكت`;
       recipientName,
       html,
       text,
+      cc: cc, // CC Super Admin only
     });
   },
 
@@ -678,7 +682,8 @@ PACT Workflow Platform | منصة باكت`;
     mmpName: string,
     coordinatorName: string,
     siteId?: string,
-    recipientRole?: { en: string; ar: string }
+    recipientRole?: { en: string; ar: string },
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
     const viewSiteUrl = siteId ? `${APP_URL}/mmp?site=${siteId}` : `${APP_URL}/mmp`;
     
@@ -801,6 +806,7 @@ PACT Workflow Platform | منصة باكت`;
       recipientName,
       html,
       text,
+      cc: cc, // CC Super Admin only
     });
   },
 
