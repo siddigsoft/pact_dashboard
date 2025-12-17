@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { logEmailSend } from '@/utils/audit-logger';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1192,15 +1193,22 @@ export default function EmailManagement() {
         },
       });
 
-      if (error) throw error;
+      const subject = 'PACT SMTP Test - Connection Successful';
+      
+      if (error) {
+        await logEmailSend(testEmail, subject, 'smtp-test', false, undefined, error.message);
+        throw error;
+      }
 
       if (data?.success) {
+        await logEmailSend(testEmail, subject, 'smtp-test', true, data.messageId);
         toast({
           title: 'Test email sent',
           description: `Check ${testEmail} for the test message`,
         });
         setTestEmail('');
       } else {
+        await logEmailSend(testEmail, subject, 'smtp-test', false, undefined, data?.error);
         throw new Error(data?.error || 'Failed to send test email');
       }
     } catch (error: any) {
@@ -1421,15 +1429,22 @@ export default function EmailManagement() {
         },
       });
 
-      if (error) throw error;
+      const fullSubject = `[TEST] ${renderedSubject}`;
+      
+      if (error) {
+        await logEmailSend(templateTestEmail, fullSubject, 'template-test', false, undefined, error.message);
+        throw error;
+      }
 
       if (data?.success) {
+        await logEmailSend(templateTestEmail, fullSubject, 'template-test', true, data.messageId);
         toast({
           title: 'Test email sent',
           description: `Template preview sent to ${templateTestEmail}`,
         });
         setTemplateTestEmail('');
       } else {
+        await logEmailSend(templateTestEmail, fullSubject, 'template-test', false, undefined, data?.error);
         throw new Error(data?.error || 'Failed to send test email');
       }
     } catch (error: any) {
@@ -1507,7 +1522,7 @@ export default function EmailManagement() {
           const personalizedMessage = composeMessage
             .replace(/\{\{recipientName\}\}/g, user.full_name || 'User');
 
-          const { error } = await supabase.functions.invoke('send-email', {
+          const { data, error } = await supabase.functions.invoke('send-email', {
             body: {
               to: user.email,
               subject: personalizedSubject,
@@ -1526,9 +1541,24 @@ export default function EmailManagement() {
             },
           });
 
-          if (error) throw error;
-          successCount++;
-        } catch (err) {
+          if (error) {
+            await logEmailSend(user.email, personalizedSubject, 'bulk', false, undefined, error.message);
+            throw error;
+          }
+          
+          if (data?.success) {
+            await logEmailSend(user.email, personalizedSubject, 'bulk', true, data.messageId);
+            successCount++;
+          } else {
+            await logEmailSend(user.email, personalizedSubject, 'bulk', false, undefined, data?.error);
+            throw new Error(data?.error || 'Failed to send');
+          }
+          
+          // Add 5 second delay between bulk emails to prevent IONOS rate limiting
+          if (selectedUserData.indexOf(user) < selectedUserData.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          }
+        } catch (err: any) {
           console.error(`Failed to send to ${user.email}:`, err);
           failCount++;
         }
