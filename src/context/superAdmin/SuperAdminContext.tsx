@@ -117,6 +117,8 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
   const checkSuperAdminStatus = useCallback(async (userId: string): Promise<boolean> => {
     try {
+      console.log('[SuperAdmin] Querying super_admins table for user_id:', userId);
+      
       const { data, error } = await supabase
         .from('super_admins')
         .select('*')
@@ -124,16 +126,23 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .eq('is_active', true)
         .maybeSingle();
 
+      console.log('[SuperAdmin] Query result - data:', data, 'error:', error);
+
       if (error) {
+        console.error('[SuperAdmin] Query error:', error.code, error.message);
         // Suppress RLS permission errors - just log and return false
         if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
-          console.log('[SuperAdmin] No permission to check status (expected for some roles)');
+          console.log('[SuperAdmin] No permission to check status (RLS blocked)');
           return false;
         }
         throw error;
       }
-      return !!data;
+      
+      const result = !!data;
+      console.log('[SuperAdmin] Final status:', result);
+      return result;
     } catch (error: any) {
+      console.error('[SuperAdmin] Exception in checkSuperAdminStatus:', error);
       // Suppress permission-related errors silently
       if (!error.message?.includes('permission') && !error.message?.includes('RLS') && error.code !== '42501') {
         console.error('Failed to check super-admin status:', error);
@@ -143,9 +152,20 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const refreshSuperAdmins = useCallback(async () => {
-    // Only admins should fetch super-admin data
+    // Allow admins OR active super_admins to fetch super-admin data
     const userRole = currentUser?.role?.toLowerCase();
-    if (!currentUser || (userRole !== 'admin' && userRole !== 'superadmin')) {
+    const isAdminRole = userRole === 'admin' || userRole === 'superadmin' || userRole === 'super_admin';
+    
+    // If not admin role, check if they are a super_admin in the table
+    if (!currentUser) {
+      setSuperAdmins([]);
+      setStats(null);
+      setLoading(false);
+      return;
+    }
+    
+    // Skip role check if user is already confirmed as super_admin
+    if (!isAdminRole && !isSuperAdmin) {
       setSuperAdmins([]);
       setStats(null);
       setLoading(false);
@@ -231,12 +251,27 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   useEffect(() => {
-    if (currentUser) {
-      checkSuperAdminStatus(currentUser.id).then(setIsSuperAdmin);
-      refreshSuperAdmins();
-      refreshDeletionLogs();
-    }
-  }, [currentUser, checkSuperAdminStatus, refreshSuperAdmins, refreshDeletionLogs]);
+    const initSuperAdmin = async () => {
+      if (currentUser) {
+        console.log('[SuperAdmin] Checking status for user:', currentUser.id, currentUser.email);
+        
+        // First check super admin status
+        const isSuper = await checkSuperAdminStatus(currentUser.id);
+        console.log('[SuperAdmin] Status check result:', isSuper);
+        setIsSuperAdmin(isSuper);
+        
+        // Then refresh data (now isSuperAdmin is set correctly)
+        if (isSuper || currentUser.role?.toLowerCase() === 'admin') {
+          await refreshSuperAdmins();
+          await refreshDeletionLogs();
+        } else {
+          setLoading(false);
+        }
+      }
+    };
+    
+    initSuperAdmin();
+  }, [currentUser, checkSuperAdminStatus]);
 
   useRealtimeTable('super_admins', refreshSuperAdmins, {
     enabled: !!currentUser,
