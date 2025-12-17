@@ -286,8 +286,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const deactivateSuperAdmin = async (data: DeactivateSuperAdmin): Promise<boolean> => {
+    console.log('[SuperAdmin] Deactivating super-admin:', data.superAdminId);
     try {
-      const { error } = await supabase
+      const { data: updateData, error } = await supabase
         .from('super_admins')
         .update({
           is_active: false,
@@ -296,9 +297,35 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           deactivation_reason: data.deactivationReason,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', data.superAdminId);
+        .eq('id', data.superAdminId)
+        .select();
 
-      if (error) throw error;
+      console.log('[SuperAdmin] Deactivation result:', { updateData, error });
+
+      if (error) {
+        // Handle RLS permission errors specifically
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.error('[SuperAdmin] RLS permission denied:', error);
+          toast({
+            title: 'Permission Denied',
+            description: 'You do not have permission to deactivate this super-admin. Please check RLS policies in Supabase.',
+            variant: 'destructive',
+          });
+          return false;
+        }
+        throw error;
+      }
+
+      // Check if any row was actually updated
+      if (!updateData || updateData.length === 0) {
+        console.warn('[SuperAdmin] No rows updated - record may not exist or RLS blocked');
+        toast({
+          title: 'Warning',
+          description: 'No record was updated. The super-admin may not exist or you lack permission.',
+          variant: 'destructive',
+        });
+        return false;
+      }
 
       toast({
         title: 'Super-Admin Deactivated',
@@ -308,7 +335,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       await refreshSuperAdmins();
       return true;
     } catch (error: any) {
-      console.error('Failed to deactivate super-admin:', error);
+      console.error('[SuperAdmin] Failed to deactivate super-admin:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to deactivate super-admin',
