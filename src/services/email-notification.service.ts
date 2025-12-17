@@ -440,6 +440,89 @@ export const EmailNotificationService = {
   },
 
   // ============================================
+  // TEMPLATE 6A: New User Registration Notification (to Admins)
+  // ============================================
+  async sendNewUserRegistrationNotification(
+    userName: string,
+    userEmail: string,
+    userRole: string,
+    hubName?: string
+  ): Promise<EmailNotificationResult> {
+    try {
+      // Get all admin emails (admin and superAdmin)
+      const { data: admins } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .in('role', ['admin', 'superAdmin', 'Admin', 'SuperAdmin', 'super_admin'])
+        .eq('status', 'approved');
+
+      if (!admins || admins.length === 0) {
+        console.log('[EMAIL] No admins found to notify about new registration');
+        return { success: true, messageId: 'no-admins' };
+      }
+
+      const subject = 'New User Registration | تسجيل مستخدم جديد';
+      const results: EmailNotificationResult[] = [];
+
+      for (const admin of admins) {
+        if (!admin.email) continue;
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('send-email', {
+            body: {
+              to: admin.email,
+              subject,
+              type: 'notification',
+              recipientName: admin.full_name || 'Admin',
+              title_en: 'New User Registration - Approval Required',
+              title_ar: 'تسجيل مستخدم جديد - يتطلب الموافقة',
+              message_en: `A new user "${userName}" (${userEmail}) has registered as ${userRole}${hubName ? ` in ${hubName}` : ''}. Please review and approve their account.`,
+              message_ar: `قام المستخدم "${userName}" (${userEmail}) بالتسجيل كـ ${userRole}${hubName ? ` في ${hubName}` : ''}. يرجى مراجعة حسابه والموافقة عليه.`,
+              actionUrl: '/users?tab=pending',
+              details: [
+                { label: 'Name', value: userName },
+                { label: 'Email', value: userEmail },
+                { label: 'Role', value: userRole },
+                ...(hubName ? [{ label: 'Hub', value: hubName }] : [])
+              ],
+            },
+          });
+
+          if (error) {
+            console.error(`[EMAIL] Failed to notify admin ${admin.email}:`, error);
+            await logEmailSend(admin.email, subject, 'notification', false, undefined, error.message);
+            results.push({ success: false, error: error.message });
+          } else if (data && !data.success) {
+            await logEmailSend(admin.email, subject, 'notification', false, undefined, data.error);
+            results.push({ success: false, error: data.error });
+          } else {
+            const messageId = data?.messageId || `newuser-${Date.now()}`;
+            await logEmailSend(admin.email, subject, 'notification', true, messageId);
+            results.push({ success: true, messageId });
+          }
+
+          // Add small delay between emails to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (err: any) {
+          console.error(`[EMAIL] Error notifying admin ${admin.email}:`, err);
+          results.push({ success: false, error: err.message });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      console.log(`[EMAIL] New user registration notification: ${successCount}/${admins.length} admins notified`);
+      
+      return { 
+        success: successCount > 0, 
+        messageId: `newuser-batch-${Date.now()}` 
+      };
+    } catch (error: any) {
+      console.error('[EMAIL] New user registration notification error:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ============================================
   // TEMPLATE 6B: MMP Forwarded to FOM - Compact Payload
   // ============================================
   async sendMMPForwardedToFOM(

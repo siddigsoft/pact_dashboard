@@ -832,6 +832,19 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "Your account is pending approval by an administrator.",
       });
       
+      // Notify admins about the new registration
+      try {
+        await EmailNotificationService.sendNewUserRegistrationNotification(
+          userData.name || 'New User',
+          userData.email || '',
+          userData.role || 'DataCollector',
+          userData.hubId || undefined
+        );
+      } catch (emailError) {
+        console.error('Failed to send admin notification:', emailError);
+        // Don't fail registration if email fails
+      }
+      
       await refreshUsers();
       return true;
     } catch (error) {
