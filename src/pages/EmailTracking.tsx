@@ -661,6 +661,45 @@ export default function EmailTracking() {
         </Card>
       </div>
 
+      {/* SMTP Configuration Info */}
+      <Card className="border-blue-500/30 bg-blue-500/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wifi className="h-4 w-4 text-blue-500" />
+            IONOS SMTP Configuration (Required in Supabase Edge Function Secrets)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_HOST</p>
+              <p className="font-mono font-medium">smtp.ionos.com</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_PORT</p>
+              <p className="font-mono font-medium text-green-600">465 (SSL)</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_USER</p>
+              <p className="font-mono font-medium text-xs">noreply@pactorg.com</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_PASSWORD</p>
+              <p className="font-mono font-medium">(Your IONOS password)</p>
+            </div>
+          </div>
+          <div className="mt-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+            <p className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+              <span className="font-medium">Important:</span> Set these in Supabase Dashboard → Edge Functions → send-email → Secrets
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Port must be 465 (not 587). The Edge Function uses SSL for port 465 automatically.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Test Email Section */}
       <Card>
         <CardHeader className="pb-3">
