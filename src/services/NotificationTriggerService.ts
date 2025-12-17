@@ -68,6 +68,29 @@ interface QuietHoursSettings {
   timezone?: string;
 }
 
+/**
+ * Helper function to get CC emails for super admins only
+ * Returns only approved super admin emails
+ */
+const getSuperAdminCcEmails = async (): Promise<string[]> => {
+  try {
+    const { data: superAdmins } = await supabase
+      .from('profiles')
+      .select('email')
+      .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
+      .eq('status', 'approved');
+    
+    if (!superAdmins) return [];
+    
+    return superAdmins
+      .filter(sa => sa.email)
+      .map(sa => sa.email as string);
+  } catch (error) {
+    console.error('Error fetching super admin CC emails:', error);
+    return [];
+  }
+};
+
 const isWithinQuietHours = (quietHours: QuietHoursSettings): boolean => {
   if (!quietHours.enabled) return false;
   
@@ -957,36 +980,8 @@ export const NotificationTriggerService = {
       let successCount = 0;
       const sender = forwarderName || 'Field Operations Manager';
 
-      // 1. Build CC list: Hub Supervisors + ONE Super Admin for accountability
-      const ccEmails: string[] = [];
-      
-      // Get hub supervisors
-      if (hubId) {
-        const { data: supervisors } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('hub_id', hubId)
-          .eq('role', 'supervisor');
-        
-        if (supervisors) {
-          supervisors.forEach(s => {
-            if (s.email && !ccEmails.includes(s.email)) {
-              ccEmails.push(s.email);
-            }
-          });
-        }
-      }
-      
-      // Add ONE Super Admin
-      const { data: superAdmins } = await supabase
-        .from('profiles')
-        .select('email')
-        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
-        .limit(1);
-      
-      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
-        ccEmails.push(superAdmins[0].email);
-      }
+      // 1. Build CC list: Only approved Super Admins
+      const ccEmails = await getSuperAdminCcEmails();
 
       // 2. If specific coordinators provided, notify them directly
       if (coordinatorUserIds && coordinatorUserIds.length > 0) {
@@ -1015,7 +1010,7 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email to coordinator (CC Hub Supervisors + Super Admin)
+          // Send bilingual email to coordinator (CC Super Admins only)
           if (coord.email) {
             try {
               const roleInfo = formatRoleName(coord.role);
@@ -1067,36 +1062,8 @@ export const NotificationTriggerService = {
     try {
       let successCount = 0;
 
-      // 1. Build CC list: Hub Supervisors + ONE Super Admin for accountability
-      const ccEmails: string[] = [];
-      
-      // Get hub supervisors
-      if (hubId) {
-        const { data: supervisors } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('hub_id', hubId)
-          .eq('role', 'supervisor');
-        
-        if (supervisors) {
-          supervisors.forEach(s => {
-            if (s.email && !ccEmails.includes(s.email)) {
-              ccEmails.push(s.email);
-            }
-          });
-        }
-      }
-      
-      // Add ONE Super Admin
-      const { data: superAdmins } = await supabase
-        .from('profiles')
-        .select('email')
-        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
-        .limit(1);
-      
-      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
-        ccEmails.push(superAdmins[0].email);
-      }
+      // 1. Build CC list: Only approved Super Admins
+      const ccEmails = await getSuperAdminCcEmails();
 
       // 2. If specific FOM provided, notify them directly
       if (fomUserId) {
@@ -1121,7 +1088,7 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email to FOM (CC Hub Supervisors + Super Admin)
+          // Send bilingual email to FOM (CC Super Admins only)
           if (fomUser.email) {
             try {
               const roleInfo = formatRoleName(fomUser.role);
