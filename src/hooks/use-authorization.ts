@@ -2,6 +2,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { ResourceType, ActionType } from '@/types/roles';
+import { normalizeRole } from '@/utils/roleMapping';
 
 export const useAuthorization = () => {
   const { currentUser } = useAppContext();
@@ -17,12 +18,16 @@ export const useAuthorization = () => {
 
   /**
    * Check if the current user is a SuperAdmin (highest role with all permissions)
+   * Supports all variants: superAdmin, SuperAdmin, super_admin
    */
   const isSuperAdmin = (): boolean => {
     if (!currentUser) return false;
     if (isSuperAdminUser) return true;
     const roles = [currentUser.role, ...(Array.isArray(currentUser.roles) ? currentUser.roles : [])];
-    return roles.some(r => r === 'SuperAdmin' || r === 'super_admin');
+    return roles.some(r => {
+      const normalized = normalizeRole(r);
+      return normalized === 'superAdmin';
+    });
   };
 
   /**
@@ -37,22 +42,26 @@ export const useAuthorization = () => {
 
   /**
    * Check if the current user has any of the specified roles
+   * Uses role normalization to handle different naming conventions
    */
   const hasAnyRole = (roles: string[]): boolean => {
     if (!currentUser) return false;
-    const primary = currentUser.role;
-    const extras = Array.isArray(currentUser.roles) ? currentUser.roles : [];
-    return roles.some(r => r === primary || extras.includes(r as any));
+    const userRoles = [currentUser.role, ...(Array.isArray(currentUser.roles) ? currentUser.roles : [])];
+    const normalizedUserRoles = userRoles.map(r => normalizeRole(r)).filter(Boolean);
+    const normalizedCheckRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
+    return normalizedCheckRoles.some(checkRole => normalizedUserRoles.includes(checkRole));
   };
 
   /**
    * Check if the current user has all of the specified roles
+   * Uses role normalization to handle different naming conventions
    */
   const hasAllRoles = (roles: string[]): boolean => {
     if (!currentUser) return false;
-    const primary = currentUser.role;
-    const extras = Array.isArray(currentUser.roles) ? currentUser.roles : [];
-    return roles.every(r => r === primary || extras.includes(r as any));
+    const userRoles = [currentUser.role, ...(Array.isArray(currentUser.roles) ? currentUser.roles : [])];
+    const normalizedUserRoles = userRoles.map(r => normalizeRole(r)).filter(Boolean);
+    const normalizedCheckRoles = roles.map(r => normalizeRole(r)).filter(Boolean);
+    return normalizedCheckRoles.every(checkRole => normalizedUserRoles.includes(checkRole));
   };
 
   /**
