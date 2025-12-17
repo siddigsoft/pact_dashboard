@@ -41,6 +41,28 @@ export interface NotificationEmailOptions {
   recipientRole?: { en: string; ar: string };
 }
 
+/**
+ * Helper to detect transient SMTP/network errors that can be retried
+ * Normalizes error message to lowercase for case-insensitive matching
+ */
+const isTransientSmtpError = (errorMsg: string | undefined): boolean => {
+  if (!errorMsg) return false;
+  const msg = errorMsg.toLowerCase();
+  return (
+    msg.includes('450') ||       // Rate limit / temporary rejection
+    msg.includes('421') ||       // Service temporarily unavailable  
+    msg.includes('451') ||       // Temporary local error
+    msg.includes('connection') ||// Connection issues
+    msg.includes('timeout') ||   // Timeouts
+    msg.includes('econnreset') ||// Connection reset
+    msg.includes('etimedout') || // Connection timed out
+    msg.includes('econnrefused') || // Connection refused
+    msg.includes('enotfound') || // DNS lookup failed
+    msg.includes('socket') ||    // Socket errors
+    msg.includes('network')      // Network errors
+  );
+};
+
 // Role display names for email footers
 const roleDisplayNames: Record<string, { en: string; ar: string }> = {
   'super_admin': { en: 'Super Administrator', ar: 'المسؤول الأعلى' },
@@ -293,14 +315,18 @@ export const EmailNotificationService = {
   async sendNotification(
     email: string,
     recipientName: string,
-    options: NotificationEmailOptions
+    options: NotificationEmailOptions,
+    retryCount: number = 0
   ): Promise<EmailNotificationResult> {
+    const MAX_RETRIES = 2; // Reduced to avoid excessive delays
+    const BASE_DELAY = 3000; // 3 seconds base delay
+    
     try {
       const priorityPrefix = options.type === 'error' ? '[URGENT | عاجل] ' : 
                             options.type === 'warning' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
       const subject = priorityPrefix + options.title;
       
-      console.log(`[EMAIL] Sending notification to ${email}: ${subject}`);
+      console.log(`[EMAIL] Sending notification to ${email}: ${subject} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
 
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
@@ -320,21 +346,49 @@ export const EmailNotificationService = {
 
       if (error) {
         console.error('[EMAIL] Edge Function error:', error);
+        
+        // Only retry on transient errors
+        if (isTransientSmtpError(error.message) && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount); // Exponential backoff: 3s, 6s
+          console.log(`[EMAIL] Transient error detected, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.sendNotification(email, recipientName, options, retryCount + 1);
+        }
+        
         await logEmailSend(email, subject, 'notification', false, undefined, error.message);
         return { success: false, error: error.message };
       }
 
       if (data && !data.success) {
         console.error('[EMAIL] Email failed:', data.error);
+        
+        // Only retry on transient errors
+        if (isTransientSmtpError(data.error) && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`[EMAIL] Transient error in response, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.sendNotification(email, recipientName, options, retryCount + 1);
+        }
+        
         await logEmailSend(email, subject, 'notification', false, undefined, data.error);
         return { success: false, error: data.error };
       }
 
       const messageId = data?.messageId || `email-${Date.now()}`;
+      console.log(`[EMAIL] Successfully sent to ${email}, messageId: ${messageId}`);
       await logEmailSend(email, subject, 'notification', true, messageId);
       return { success: true, messageId, deliveredAt: data?.deliveredAt };
     } catch (error: any) {
-      console.error('[EMAIL] Error:', error);
+      console.error('[EMAIL] Exception:', error);
+      
+      // Only retry on network/transient errors, not on deterministic failures
+      if (isTransientSmtpError(error.message) && retryCount < MAX_RETRIES) {
+        const delay = BASE_DELAY * Math.pow(2, retryCount);
+        console.log(`[EMAIL] Network error, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.sendNotification(email, recipientName, options, retryCount + 1);
+      }
+      
       return { success: false, error: error.message };
     }
   },
@@ -387,8 +441,12 @@ export const EmailNotificationService = {
     forwarderName: string,
     mmpId: string,
     isRecipientFOM: boolean = true,
-    recipientRole?: { en: string; ar: string }
+    recipientRole?: { en: string; ar: string },
+    retryCount: number = 0
   ): Promise<EmailNotificationResult> {
+    const MAX_RETRIES = 2;
+    const BASE_DELAY = 3000;
+    
     const roleEn = recipientRole?.en || 'Field Operations Manager';
     const roleAr = recipientRole?.ar || 'مدير العمليات الميدانية';
     
@@ -408,6 +466,8 @@ export const EmailNotificationService = {
       : `خطة "${mmpName}" أُرسلت إلى مدير العمليات الميدانية بواسطة ${forwarderName}.`;
 
     try {
+      console.log(`[EMAIL] Sending MMP forward email to ${email} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+      
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to: email,
@@ -430,14 +490,40 @@ export const EmailNotificationService = {
 
       if (error) {
         console.error('[EMAIL] MMP forward email error:', error);
+        
+        if (isTransientSmtpError(error.message) && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`[EMAIL] Transient error on MMP email, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+        }
+        
         return { success: false, error: error.message };
       }
+      
       if (data && !data.success) {
+        if (isTransientSmtpError(data.error) && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`[EMAIL] Transient error in MMP response, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+        }
+        
         return { success: false, error: data.error };
       }
+      
+      console.log(`[EMAIL] MMP forward email sent successfully to ${email}`);
       return { success: true, messageId: data?.messageId };
     } catch (error: any) {
-      console.error('[EMAIL] MMP forward email error:', error);
+      console.error('[EMAIL] MMP forward email exception:', error);
+      
+      if (isTransientSmtpError(error.message) && retryCount < MAX_RETRIES) {
+        const delay = BASE_DELAY * Math.pow(2, retryCount);
+        console.log(`[EMAIL] Network error on MMP email, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+      }
+      
       return { success: false, error: error.message };
     }
   },

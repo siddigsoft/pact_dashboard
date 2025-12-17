@@ -113,6 +113,16 @@ interface EmailStats {
   emails: number;
   otpSent: number;
   otpVerified: number;
+  todayTotal: number;
+  todaySuccessful: number;
+  todayFailed: number;
+  errorBreakdown: {
+    rateLimit: number;
+    invalidMailbox: number;
+    connectionError: number;
+    authError: number;
+    other: number;
+  };
 }
 
 const safeParseDateForDisplay = (dateString: string | null | undefined): string => {
@@ -141,6 +151,16 @@ export default function EmailTracking() {
     emails: 0,
     otpSent: 0,
     otpVerified: 0,
+    todayTotal: 0,
+    todaySuccessful: 0,
+    todayFailed: 0,
+    errorBreakdown: {
+      rateLimit: 0,
+      invalidMailbox: 0,
+      connectionError: 0,
+      authError: 0,
+      other: 0,
+    },
   });
   const [testEmail, setTestEmail] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
@@ -172,13 +192,53 @@ export default function EmailTracking() {
       setEmailLogs(logs);
 
       // Calculate stats
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayLogs = logs.filter(l => {
+        try {
+          const logDate = new Date(l.timestamp);
+          return logDate >= today;
+        } catch {
+          return false;
+        }
+      });
+
+      // Categorize error types
+      const failedLogs = logs.filter(l => !l.success);
+      const errorBreakdown = {
+        rateLimit: 0,
+        invalidMailbox: 0,
+        connectionError: 0,
+        authError: 0,
+        other: 0,
+      };
+
+      failedLogs.forEach(log => {
+        const errorMsg = (log.error_message || '').toLowerCase();
+        if (errorMsg.includes('450') || errorMsg.includes('limit') || errorMsg.includes('rate')) {
+          errorBreakdown.rateLimit++;
+        } else if (errorMsg.includes('550') || errorMsg.includes('mailbox') || errorMsg.includes('unavailable') || errorMsg.includes('rejected')) {
+          errorBreakdown.invalidMailbox++;
+        } else if (errorMsg.includes('connection') || errorMsg.includes('timeout') || errorMsg.includes('econnreset') || errorMsg.includes('network')) {
+          errorBreakdown.connectionError++;
+        } else if (errorMsg.includes('auth') || errorMsg.includes('535') || errorMsg.includes('credential') || errorMsg.includes('password')) {
+          errorBreakdown.authError++;
+        } else {
+          errorBreakdown.other++;
+        }
+      });
+
       const newStats: EmailStats = {
         total: logs.length,
         successful: logs.filter(l => l.success).length,
-        failed: logs.filter(l => !l.success).length,
+        failed: failedLogs.length,
         emails: logs.filter(l => l.entity_type === 'email').length,
         otpSent: logs.filter(l => l.entity_type === 'otp' && l.metadata?.purpose !== 'verification').length,
         otpVerified: logs.filter(l => l.entity_type === 'otp' && l.tags?.includes('verification')).length,
+        todayTotal: todayLogs.length,
+        todaySuccessful: todayLogs.filter(l => l.success).length,
+        todayFailed: todayLogs.filter(l => !l.success).length,
+        errorBreakdown,
       };
       setStats(newStats);
     } catch (error: any) {
@@ -248,6 +308,20 @@ export default function EmailTracking() {
       }, 5000);
       
       // Update stats
+      const errorMsg = (newLog.error_message || '').toLowerCase();
+      let errorType: keyof EmailStats['errorBreakdown'] = 'other';
+      if (!newLog.success) {
+        if (errorMsg.includes('450') || errorMsg.includes('limit') || errorMsg.includes('rate')) {
+          errorType = 'rateLimit';
+        } else if (errorMsg.includes('550') || errorMsg.includes('mailbox') || errorMsg.includes('unavailable') || errorMsg.includes('rejected')) {
+          errorType = 'invalidMailbox';
+        } else if (errorMsg.includes('connection') || errorMsg.includes('timeout') || errorMsg.includes('econnreset') || errorMsg.includes('network')) {
+          errorType = 'connectionError';
+        } else if (errorMsg.includes('auth') || errorMsg.includes('535') || errorMsg.includes('credential') || errorMsg.includes('password')) {
+          errorType = 'authError';
+        }
+      }
+
       setStats((prev) => ({
         total: prev.total + 1,
         successful: newLog.success ? prev.successful + 1 : prev.successful,
@@ -259,6 +333,13 @@ export default function EmailTracking() {
         otpVerified: newLog.entity_type === 'otp' && newLog.tags?.includes('verification') 
           ? prev.otpVerified + 1 
           : prev.otpVerified,
+        todayTotal: prev.todayTotal + 1,
+        todaySuccessful: newLog.success ? prev.todaySuccessful + 1 : prev.todaySuccessful,
+        todayFailed: !newLog.success ? prev.todayFailed + 1 : prev.todayFailed,
+        errorBreakdown: {
+          ...prev.errorBreakdown,
+          [errorType]: !newLog.success ? prev.errorBreakdown[errorType] + 1 : prev.errorBreakdown[errorType],
+        },
       }));
       
       setLastUpdate(new Date());
@@ -660,6 +741,178 @@ export default function EmailTracking() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Daily Usage & Error Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Daily Email Counter */}
+        <Card className="border-orange-500/30 bg-orange-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-orange-500" />
+              Today's Email Usage (IONOS Limit ~500/day)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Emails sent today</span>
+                <span className="text-2xl font-bold" data-testid="stat-today-total">
+                  {stats.todayTotal} <span className="text-sm font-normal text-muted-foreground">/ ~500</span>
+                </span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-3">
+                <div 
+                  className={`h-3 rounded-full transition-all ${
+                    stats.todayTotal >= 450 ? 'bg-red-500' : 
+                    stats.todayTotal >= 300 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`}
+                  style={{ width: `${Math.min((stats.todayTotal / 500) * 100, 100)}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="text-center p-2 rounded bg-green-500/10">
+                  <p className="text-lg font-bold text-green-600" data-testid="stat-today-success">{stats.todaySuccessful}</p>
+                  <p className="text-xs text-muted-foreground">Successful</p>
+                </div>
+                <div className="text-center p-2 rounded bg-red-500/10">
+                  <p className="text-lg font-bold text-red-600" data-testid="stat-today-failed">{stats.todayFailed}</p>
+                  <p className="text-xs text-muted-foreground">Failed</p>
+                </div>
+              </div>
+              {stats.todayTotal >= 450 && (
+                <div className="p-2 bg-red-500/10 rounded border border-red-500/30 text-sm text-red-600 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Approaching IONOS daily limit! Consider spreading emails over multiple days.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Error Breakdown */}
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-red-500" />
+              Failed Emails Breakdown ({stats.failed} total)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {/* Rate Limit Errors */}
+              <div className="flex items-center justify-between p-2 rounded bg-orange-500/10 border border-orange-500/20">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-orange-500" />
+                  <div>
+                    <p className="text-sm font-medium">Rate Limit (450)</p>
+                    <p className="text-xs text-muted-foreground">IONOS sending limit exceeded</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
+                  {stats.errorBreakdown.rateLimit}
+                </Badge>
+              </div>
+
+              {/* Invalid Mailbox */}
+              <div className="flex items-center justify-between p-2 rounded bg-red-500/10 border border-red-500/20">
+                <div className="flex items-center gap-2">
+                  <MailX className="h-4 w-4 text-red-500" />
+                  <div>
+                    <p className="text-sm font-medium">Invalid Mailbox (550)</p>
+                    <p className="text-xs text-muted-foreground">Recipient doesn't exist</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">
+                  {stats.errorBreakdown.invalidMailbox}
+                </Badge>
+              </div>
+
+              {/* Connection Errors */}
+              <div className="flex items-center justify-between p-2 rounded bg-yellow-500/10 border border-yellow-500/20">
+                <div className="flex items-center gap-2">
+                  <WifiOff className="h-4 w-4 text-yellow-500" />
+                  <div>
+                    <p className="text-sm font-medium">Connection Error</p>
+                    <p className="text-xs text-muted-foreground">Network/timeout issues</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+                  {stats.errorBreakdown.connectionError}
+                </Badge>
+              </div>
+
+              {/* Auth Errors */}
+              <div className="flex items-center justify-between p-2 rounded bg-purple-500/10 border border-purple-500/20">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-purple-500" />
+                  <div>
+                    <p className="text-sm font-medium">Authentication Error</p>
+                    <p className="text-xs text-muted-foreground">SMTP credentials issue</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+                  {stats.errorBreakdown.authError}
+                </Badge>
+              </div>
+
+              {/* Other Errors */}
+              {stats.errorBreakdown.other > 0 && (
+                <div className="flex items-center justify-between p-2 rounded bg-muted border">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Other Errors</p>
+                      <p className="text-xs text-muted-foreground">Miscellaneous failures</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline">
+                    {stats.errorBreakdown.other}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* SMTP Configuration Info */}
+      <Card className="border-blue-500/30 bg-blue-500/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wifi className="h-4 w-4 text-blue-500" />
+            IONOS SMTP Configuration (Required in Supabase Edge Function Secrets)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_HOST</p>
+              <p className="font-mono font-medium">smtp.ionos.com</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_PORT</p>
+              <p className="font-mono font-medium text-green-600">465 (SSL)</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_USER</p>
+              <p className="font-mono font-medium text-xs">noreply@pactorg.com</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_PASSWORD</p>
+              <p className="font-mono font-medium">(Your IONOS password)</p>
+            </div>
+          </div>
+          <div className="mt-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+            <p className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+              <span className="font-medium">Important:</span> Set these in Supabase Dashboard → Edge Functions → send-email → Secrets
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Port must be 465 (not 587). The Edge Function uses SSL for port 465 automatically.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Test Email Section */}
       <Card>
