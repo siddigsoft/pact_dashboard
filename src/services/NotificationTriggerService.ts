@@ -1439,41 +1439,21 @@ export const NotificationTriggerService = {
         console.error('Error fetching FOM user details:', fomError);
       }
 
-      // 2. Build CC list: Hub Supervisors + ONE Super Admin for accountability
+      // 2. CC only ONE Super Admin (no hub supervisors for FOM forwarding)
       const ccEmails: string[] = [];
       
-      // Get hubId from first FOM if not provided
-      const effectiveHubId = hubId || fomUsers?.[0]?.hub_id;
-      
-      // Get hub supervisors
-      if (effectiveHubId) {
-        const { data: supervisors } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('hub_id', effectiveHubId)
-          .eq('role', 'supervisor');
-        
-        if (supervisors) {
-          supervisors.forEach(s => {
-            if (s.email && !ccEmails.includes(s.email)) {
-              ccEmails.push(s.email);
-            }
-          });
-        }
-      }
-      
-      // Add ONE Super Admin
+      // Add ONE Super Admin only
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('email')
         .in('role', ['super_admin', 'SuperAdmin'])
         .limit(1);
       
-      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+      if (superAdmins?.[0]?.email) {
         ccEmails.push(superAdmins[0].email);
       }
 
-      // 3. Notify all selected FOMs with bilingual email (CC Hub Supervisors + Super Admin)
+      // 3. Notify all selected FOMs with bilingual email (CC Super Admin only)
       for (const fomId of fomUserIds) {
         const fomUser = fomUsers?.find(u => u.id === fomId);
         const recipientName = fomUser?.full_name || 'Field Operations Manager';
@@ -1494,7 +1474,7 @@ export const NotificationTriggerService = {
         });
         if (sent) successCount++;
 
-        // Send bilingual email directly to FOM only (CC Hub Supervisors + Super Admin)
+        // Send bilingual email directly to FOM only (CC Super Admin only, no supervisors)
         if (recipientEmail) {
           try {
             console.log(`[NOTIFICATION] Sending email to FOM: ${recipientEmail}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
@@ -1507,7 +1487,7 @@ export const NotificationTriggerService = {
               true, // isRecipientFOM
               undefined, // recipientRole
               0, // retryCount
-              ccEmails.length > 0 ? ccEmails : undefined // CC Hub Supervisors + Super Admin
+              ccEmails.length > 0 ? ccEmails : undefined // CC Super Admin only
             );
             if (emailResult.success) {
               console.log(`[NOTIFICATION] Email sent successfully to FOM: ${recipientEmail}, messageId: ${emailResult.messageId}`);
