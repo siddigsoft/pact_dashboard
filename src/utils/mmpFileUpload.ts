@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { validateCSV, CSVValidationError } from '@/utils/csvValidator';
 import { validateSitesAgainstRegistry, SiteMatchResult, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
 import { insertNotifications } from '@/services/mmpActions';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
@@ -94,20 +95,28 @@ async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?:
 
     if (userIds.length === 0) return;
 
-    const rows = userIds.map(uid => ({
-      recipient_id: uid,
-      title_en: 'New MMP uploaded',
-      title_ar: 'تم رفع خطة مراقبة شهرية جديدة',
-      message_en: `${mmp.name} has been uploaded and is ready for verification`,
-      message_ar: `تم رفع ${mmp.name} وهي جاهزة للتحقق`,
-      action_url: `/mmp/${mmp.id}`,
-      entity_id: mmp.id,
-      entity_type: 'mmpFile',
-      type: 'info' // Use 'info' for system notifications
-    }));
-    // Use insertNotifications helper which properly maps to database schema
-    await insertNotifications(rows);
-  } catch {}
+    // Send notifications with email enabled using NotificationTriggerService
+    const notificationPromises = userIds.map(uid => 
+      NotificationTriggerService.send({
+        userId: uid,
+        title: 'New MMP uploaded',
+        titleAr: 'تم رفع خطة مراقبة شهرية جديدة',
+        message: `${mmp.name} has been uploaded and is ready for verification`,
+        messageAr: `تم رفع ${mmp.name} وهي جاهزة للتحقق`,
+        type: 'info',
+        category: 'system',
+        priority: 'normal',
+        link: `/mmp/${mmp.id}`,
+        relatedEntityId: mmp.id,
+        relatedEntityType: 'mmpFile',
+        sendEmail: true // Enable email sending for MMP upload notifications
+      })
+    );
+
+    await Promise.all(notificationPromises);
+  } catch (error) {
+    console.error('[notifyStakeholdersOnUpload] Error sending notifications:', error);
+  }
 }
 
 // Update workflow to awaitingPermits after initial upload and sharing

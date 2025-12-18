@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, CheckCircle2, Upload, ArrowRight, ArrowLeft, Send } from 'lucide-react';
 import { StatePermitUpload } from './StatePermitUpload';
-import { LocalityPermitUpload } from './LocalityPermitUpload';
 
 export type PermitRequirementOption = 
   | 'required_have_it' 
@@ -44,9 +43,6 @@ type Step =
   | 'state_question' 
   | 'state_upload' 
   | 'state_follow_up' 
-  | 'locality_question' 
-  | 'locality_upload' 
-  | 'locality_follow_up' 
   | 'complete';
 
 export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsProps> = ({
@@ -60,15 +56,11 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
   existingLocalityPermit = false,
   onMoveSitesToCategory,
 }) => {
-  const [step, setStep] = useState<Step>(existingStatePermit ? 'locality_question' : 'state_question');
+  const [step, setStep] = useState<Step>('state_question');
   
   const [statePermitRequirement, setStatePermitRequirement] = useState<PermitRequirementOption | null>(null);
   const [stateCanWorkWithout, setStateCanWorkWithout] = useState<WorkWithoutPermitOption | null>(null);
   const [statePermitUploaded, setStatePermitUploaded] = useState(existingStatePermit);
-  
-  const [localityPermitRequirement, setLocalityPermitRequirement] = useState<PermitRequirementOption | null>(null);
-  const [localityCanWorkWithout, setLocalityCanWorkWithout] = useState<WorkWithoutPermitOption | null>(null);
-  const [localityPermitUploaded, setLocalityPermitUploaded] = useState(existingLocalityPermit);
 
   const handleStatePermitNext = () => {
     if (!statePermitRequirement) return;
@@ -78,69 +70,27 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
     } else if (statePermitRequirement === 'required_dont_have_it') {
       setStep('state_follow_up');
     } else {
-      // Not required - proceed to locality question
-      setStep('locality_question');
+      // Not required - complete with decision (parent will handle moving to locality permit status tab)
+      handleComplete();
     }
   };
 
   const handleStateFollowUpNext = () => {
+    console.log('handleStateFollowUpNext called, stateCanWorkWithout:', stateCanWorkWithout);
     if (!stateCanWorkWithout) return;
     
     if (stateCanWorkWithout === 'yes') {
-      // Can work without state permit - proceed to locality
-      setStep('locality_question');
+      // Can work without state permit - complete with decision (parent will handle moving to locality permit status tab)
+      handleComplete();
     } else {
       // Cannot work without - send back to FOM
+      console.log('Calling onSendBackToFOM...');
       onSendBackToFOM(`State permit is required for ${state} but coordinator does not have it and cannot proceed without it.`);
     }
   };
 
   const handleStatePermitUploaded = () => {
     setStatePermitUploaded(true);
-    // Instead of proceeding to locality questions, complete the verification with state permit uploaded
-    // and locality marked as not required (to close the dialog)
-    const decision: PermitDecision = {
-      statePermit: {
-        requirement: 'required_have_it',
-        canWorkWithout: null,
-        uploaded: true,
-      },
-      localityPermit: {
-        requirement: 'not_required',
-        canWorkWithout: null,
-        uploaded: false,
-      },
-    };
-    onComplete(decision);
-  };
-
-  const handleLocalityPermitNext = () => {
-    if (!localityPermitRequirement) return;
-    
-    if (localityPermitRequirement === 'required_have_it') {
-      setStep('locality_upload');
-    } else if (localityPermitRequirement === 'required_dont_have_it') {
-      setStep('locality_follow_up');
-    } else {
-      // Not required - complete verification
-      handleComplete();
-    }
-  };
-
-  const handleLocalityFollowUpNext = () => {
-    if (!localityCanWorkWithout) return;
-    
-    if (localityCanWorkWithout === 'yes') {
-      // Can work without locality permit - complete
-      handleComplete();
-    } else {
-      // Cannot work without - send back to FOM
-      onSendBackToFOM(`Locality permit is required for ${locality}, ${state} but coordinator does not have it and cannot proceed without it.`);
-    }
-  };
-
-  const handleLocalityPermitUploaded = () => {
-    setLocalityPermitUploaded(true);
     handleComplete();
   };
 
@@ -152,19 +102,11 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
         uploaded: statePermitUploaded,
       },
       localityPermit: {
-        requirement: localityPermitRequirement,
-        canWorkWithout: localityCanWorkWithout,
-        uploaded: localityPermitUploaded,
+        requirement: null,
+        canWorkWithout: null,
+        uploaded: existingLocalityPermit,
       },
     };
-    // Check for the specific scenario: state uploaded, locality required but not available and can work without
-    if (
-      decision.statePermit.uploaded &&
-      decision.localityPermit.requirement === 'required_dont_have_it' &&
-      decision.localityPermit.canWorkWithout === 'yes'
-    ) {
-      onMoveSitesToCategory?.('permits_attached');
-    }
     onComplete(decision);
   };
 
@@ -320,179 +262,6 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
     </div>
   );
 
-  const renderLocalityQuestion = () => (
-    <Card className="border-green-200 bg-gradient-to-br from-green-50/50 to-white">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-green-800">
-          <CheckCircle2 className="h-5 w-5 text-green-600" />
-          Locality Permit Verification
-        </CardTitle>
-        <CardDescription>
-          Verify locality permit requirements for <strong>{locality}, {state}</strong>
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {statePermitUploaded && (
-          <Alert className="border-green-200 bg-green-50">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">
-              State permit for {state} has been uploaded successfully.
-            </AlertDescription>
-          </Alert>
-        )}
-        
-        <div className="text-base font-medium text-gray-800">
-          Do you require a Locality permit for this location?
-        </div>
-        
-        <RadioGroup
-          value={localityPermitRequirement || ''}
-          onValueChange={(value) => setLocalityPermitRequirement(value as PermitRequirementOption)}
-          className="space-y-3"
-        >
-          <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-green-50/50 transition-colors">
-            <RadioGroupItem value="required_have_it" id="locality-required-have" />
-            <Label htmlFor="locality-required-have" className="flex-1 cursor-pointer">
-              <div className="font-medium text-gray-900">Yes, it's required and I will upload it</div>
-              <div className="text-sm text-gray-600">I have the locality permit and will upload it now</div>
-            </Label>
-          </div>
-          
-          <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-green-50/50 transition-colors">
-            <RadioGroupItem value="required_dont_have_it" id="locality-required-dont-have" />
-            <Label htmlFor="locality-required-dont-have" className="flex-1 cursor-pointer">
-              <div className="font-medium text-gray-900">Yes, it's required but I don't have it</div>
-              <div className="text-sm text-gray-600">The locality permit is required but not available</div>
-            </Label>
-          </div>
-          
-          <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-green-50/50 transition-colors">
-            <RadioGroupItem value="not_required" id="locality-not-required" />
-            <Label htmlFor="locality-not-required" className="flex-1 cursor-pointer">
-              <div className="font-medium text-gray-900">No, it's not a requirement</div>
-              <div className="text-sm text-gray-600">Locality permit is not required for this area</div>
-            </Label>
-          </div>
-        </RadioGroup>
-        
-        <div className="flex gap-3 pt-4">
-          {!existingStatePermit && (
-            <Button variant="outline" onClick={() => setStep('state_question')}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-          )}
-          <Button 
-            onClick={handleLocalityPermitNext}
-            disabled={!localityPermitRequirement}
-            className="flex-1"
-          >
-            {localityPermitRequirement === 'not_required' ? (
-              <>
-                Complete Verification
-                <CheckCircle2 className="h-4 w-4 ml-2" />
-              </>
-            ) : (
-              <>
-                Next
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </>
-            )}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
-  const renderLocalityFollowUp = () => (
-    <Card className="border-orange-200 bg-gradient-to-br from-orange-50/50 to-white">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-orange-800">
-          <AlertTriangle className="h-5 w-5 text-orange-600" />
-          Locality Permit Not Available
-        </CardTitle>
-        <CardDescription>
-          You indicated the locality permit for <strong>{locality}, {state}</strong> is required but not available
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <Alert className="border-orange-200 bg-orange-50">
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
-          <AlertDescription className="text-orange-800">
-            The locality permit is required but you don't have it. Can you proceed with the verification without it?
-          </AlertDescription>
-        </Alert>
-        
-        <div className="text-base font-medium text-gray-800">
-          Are you able to work without the locality permit?
-        </div>
-        
-        <RadioGroup
-          value={localityCanWorkWithout || ''}
-          onValueChange={(value) => setLocalityCanWorkWithout(value as WorkWithoutPermitOption)}
-          className="space-y-3"
-        >
-          <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-green-50/50 transition-colors">
-            <RadioGroupItem value="yes" id="locality-work-yes" />
-            <Label htmlFor="locality-work-yes" className="flex-1 cursor-pointer">
-              <div className="font-medium text-gray-900">Yes, I can proceed without it</div>
-              <div className="text-sm text-gray-600">I will complete the CP verification</div>
-            </Label>
-          </div>
-          
-          <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-red-50/50 transition-colors">
-            <RadioGroupItem value="no" id="locality-work-no" />
-            <Label htmlFor="locality-work-no" className="flex-1 cursor-pointer">
-              <div className="font-medium text-gray-900">No, I cannot proceed without it</div>
-              <div className="text-sm text-gray-600">Send the MMP back to FOM for action</div>
-            </Label>
-          </div>
-        </RadioGroup>
-        
-        <div className="flex gap-3 pt-4">
-          <Button variant="outline" onClick={() => setStep('locality_question')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <Button 
-            onClick={handleLocalityFollowUpNext}
-            disabled={!localityCanWorkWithout}
-            className="flex-1"
-            variant={localityCanWorkWithout === 'no' ? 'destructive' : 'default'}
-          >
-            {localityCanWorkWithout === 'no' ? (
-              <>
-                <Send className="h-4 w-4 mr-2" />
-                Send Back to FOM
-              </>
-            ) : (
-              <>
-                Complete Verification
-                <CheckCircle2 className="h-4 w-4 ml-2" />
-              </>
-            )}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
-  const renderLocalityUpload = () => (
-    <div className="space-y-4">
-      <Button variant="outline" onClick={() => setStep('locality_question')}>
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Questions
-      </Button>
-      <LocalityPermitUpload
-        state={state}
-        locality={locality}
-        mmpFileId={mmpFileId}
-        onPermitUploaded={handleLocalityPermitUploaded}
-        onCancel={() => setStep('locality_question')}
-      />
-    </div>
-  );
-
   switch (step) {
     case 'state_question':
       return renderStateQuestion();
@@ -500,12 +269,6 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
       return renderStateUpload();
     case 'state_follow_up':
       return renderStateFollowUp();
-    case 'locality_question':
-      return renderLocalityQuestion();
-    case 'locality_upload':
-      return renderLocalityUpload();
-    case 'locality_follow_up':
-      return renderLocalityFollowUp();
     default:
       return null;
   }

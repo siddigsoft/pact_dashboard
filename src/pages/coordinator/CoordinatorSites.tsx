@@ -606,6 +606,9 @@ const CoordinatorSites: React.FC = () => {
         // Filter by forwarded_to_user_id
         if (entry.forwardedToUserId !== currentUser.id) return;
         
+        // Exclude sites that have been returned to FOM
+        if (entry.status === 'returned_to_fom') return;
+        
         // For non-admins, also check project membership
         if (!isAdminOrSuperUser) {
           const projectId = mmp.projectId;
@@ -929,11 +932,14 @@ const CoordinatorSites: React.FC = () => {
         permitUploadedAt: null
       }));
 
-      // Check if any site has state permit flag
+      // Check if any site has state permit flag or state permit not required
       let anySiteHasStatePermitFlag = false;
       try {
         const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
-        anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
+        anySiteHasStatePermitFlag = allSitesInState.some((s: any) => 
+          s?.additional_data?.state_permit_attached === true || 
+          s?.additional_data?.state_permit_not_required === true
+        );
       } catch {}
 
       return {
@@ -994,14 +1000,14 @@ const CoordinatorSites: React.FC = () => {
       .filter((locality: any) => !locality.hasPermit)
       .filter((locality: any) => {
         return locality.sites.some((site: SiteVisit) => 
-          site.status === 'Pending' || site.status === 'Dispatched' || 
+          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
           site.status === 'assigned' || site.status === 'inProgress' || 
           site.status === 'in_progress'
         );
       })
       .reduce((total: number, locality: any) => {
         const pendingSites = locality.sites.filter((site: SiteVisit) => 
-          site.status === 'Pending' || site.status === 'Dispatched' || 
+          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
           site.status === 'assigned' || site.status === 'inProgress' || 
           site.status === 'in_progress'
         );
@@ -1259,12 +1265,27 @@ const CoordinatorSites: React.FC = () => {
 
   // Handle sending site back to FOM when coordinator cannot proceed without permit
   const handleSendBackToFOM = async (reason: string) => {
+    console.log('handleSendBackToFOM called with reason:', reason);
+    console.log('bulkVerificationMode:', bulkVerificationMode);
+    console.log('bulkSitesForPermitVerification:', bulkSitesForPermitVerification);
+    console.log('siteForPermitVerification:', siteForPermitVerification);
+    
     // Handle bulk mode
     const sitesToReturn = bulkVerificationMode !== 'single' && bulkSitesForPermitVerification.length > 0
       ? bulkSitesForPermitVerification
       : siteForPermitVerification ? [siteForPermitVerification] : [];
     
-    if (sitesToReturn.length === 0) return;
+    console.log('sitesToReturn:', sitesToReturn);
+    
+    if (sitesToReturn.length === 0) {
+      console.error('No sites to return!');
+      toast({
+        title: 'Error',
+        description: 'No sites selected to return.',
+        variant: 'destructive'
+      });
+      return;
+    }
     
     try {
       const siteIds = sitesToReturn.map(s => s.id);
@@ -1380,15 +1401,23 @@ const CoordinatorSites: React.FC = () => {
       const verifiedBy = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
       const verifiedAt = new Date().toISOString();
       
+      // Check if state permit is not required or user can proceed without it
+      const statePermitNotRequired = decision.statePermit.requirement === 'not_required' || 
+        (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
+      
       // Update all sites with permit decision
       for (const site of sitesToVerify) {
         const additionalData = {
           ...(site.additional_data || {}),
           permit_decision: decision,
           ...(pendingVerificationData?.additional_data || {}),
+          ...(statePermitNotRequired ? { state_permit_not_required: true } : {}),
         };
 
-        const updateData: any = {
+        // If state permit not required, don't change status to verified - just update additional_data
+        const updateData: any = statePermitNotRequired ? {
+          additional_data: additionalData,
+        } : {
           ...(pendingVerificationData || {}),
           status: 'verified',
           verified_at: verifiedAt,
@@ -1462,12 +1491,25 @@ const CoordinatorSites: React.FC = () => {
         console.warn('Failed to notify supervisors about verification:', notifyErr);
       }
 
-      toast({
-        title: sitesToVerify.length > 1 ? 'Sites Verified' : 'Site Verified',
-        description: sitesToVerify.length > 1 
-          ? `${sitesToVerify.length} sites have been verified successfully.`
-          : 'The site has been verified successfully.',
-      });
+      // Check if state permit is not required or user can proceed without it
+      const statePermitNotRequiredForToast = decision.statePermit.requirement === 'not_required' || 
+        (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
+
+      if (statePermitNotRequiredForToast) {
+        toast({
+          title: 'State Permit Not Required',
+          description: sitesToVerify.length > 1 
+            ? `${sitesToVerify.length} sites moved to Locality Permit Status.`
+            : 'Site moved to Locality Permit Status.',
+        });
+      } else {
+        toast({
+          title: sitesToVerify.length > 1 ? 'Sites Verified' : 'Site Verified',
+          description: sitesToVerify.length > 1 
+            ? `${sitesToVerify.length} sites have been verified successfully.`
+            : 'The site has been verified successfully.',
+        });
+      }
 
       // Close dialogs and reload
       setPermitVerificationDialogOpen(false);
@@ -1479,8 +1521,14 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSiteForEdit(null);
       setSelectedSites(new Set());
       setBulkVerifyDialogOpen(false);
-                  await refreshMMPFiles();
-      setActiveTab('verified');
+      await refreshMMPFiles();
+      
+      // Switch to appropriate tab
+      if (statePermitNotRequiredForToast) {
+        setNewSitesSubTab('local_required');
+      } else {
+        setActiveTab('verified');
+      }
     } catch (error) {
       console.error('Error completing verification:', error);
       toast({
@@ -1658,7 +1706,6 @@ const CoordinatorSites: React.FC = () => {
                   currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
                   lastUpdated: new Date().toISOString()
                 };
-
                 await supabase
                   .from('mmp_files')
                   .update({
@@ -2026,8 +2073,12 @@ const CoordinatorSites: React.FC = () => {
           return ad.assigned_to === userId;
         });
         
-        const permitsAttachedCount = { count: userEntries.filter((e: any) => e.status?.toLowerCase() === 'permits_attached').length };
-        const verifiedCount = { count: userEntries.filter((e: any) => e.status?.toLowerCase() === 'verified').length };
+        const permitsAttachedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'permits_attached'
+        ).length };
+        const verifiedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'verified'
+        ).length };
         
         setPermitsAttachedCount(permitsAttachedCount.count || 0);
         setVerifiedSitesCount(verifiedCount.count || 0);
@@ -2840,27 +2891,39 @@ const CoordinatorSites: React.FC = () => {
         <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 gap-1 h-auto p-1">
           <TabsTrigger value="new" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>New</span>
-            <Badge variant="secondary" className="text-xs">{newSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {newSitesCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="permits_attached" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>CP Verification</span>
-            <Badge variant="secondary" className="text-xs">{permitsAttachedCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {permitsAttachedCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="verified" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Verified</span>
-            <Badge variant="secondary" className="text-xs">{verifiedSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {verifiedSitesCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="approved" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Approved</span>
-            <Badge variant="secondary" className="text-xs">{approvedSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {approvedSitesCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="completed" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Completed</span>
-            <Badge variant="secondary" className="text-xs">{completedSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {completedSitesCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="rejected" className={`flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'} text-xs sm:text-sm`}>
             <span>Rejected</span>
-            <Badge variant="secondary" className="text-xs">{rejectedSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {rejectedSitesCount}
+            </Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -2957,24 +3020,24 @@ const CoordinatorSites: React.FC = () => {
                       <p className="text-muted-foreground">Loading localities...</p>
                     </div>
                   ) : (() => {
-        // Get all localities from states that have state permits
-        const localRequiredLocalities = localitiesData
-          .filter((state: any) => state.hasStatePermit)
-          .flatMap((state: any) => 
-            state.localities.map((locality: any) => ({
-              ...locality,
-              stateName: state.state
-            }))
-          )
-          .filter((locality: any) => !locality.hasPermit) // Only show localities without local permits
-          .filter((locality: any) => {
-            // Only show localities that have pending sites
-            return locality.sites.some((site: SiteVisit) => 
-              site.status === 'Pending' || site.status === 'Dispatched' || 
-              site.status === 'assigned' || site.status === 'inProgress' || 
-              site.status === 'in_progress'
-            );
-          });                    const filteredLocalities = localRequiredLocalities.filter((locality: any) => 
+                    // Get all localities from states that have state permits
+                    const localRequiredLocalities = localitiesData
+                      .filter((state: any) => state.hasStatePermit)
+                      .flatMap((state: any) => 
+                        state.localities.map((locality: any) => ({
+                          ...locality,
+                          stateName: state.state
+                        }))
+                      )
+                      .filter((locality: any) => !locality.hasPermit) // Only show localities without local permits
+                      .filter((locality: any) => {
+                        // Only show localities that have pending sites
+                        return locality.sites.some((site: SiteVisit) => 
+                          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
+                          site.status === 'assigned' || site.status === 'inProgress' || 
+                          site.status === 'in_progress'
+                        );
+                      });                    const filteredLocalities = localRequiredLocalities.filter((locality: any) => 
                       locality.locality.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
                       locality.stateName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
                     );
@@ -3710,6 +3773,7 @@ const CoordinatorSites: React.FC = () => {
               }}
               existingStatePermit={false}
               existingLocalityPermit={false}
+              onMoveSitesToCategory={() => setNewSitesSubTab('local_required')}
             />
           )}
         </DialogContent>
@@ -4023,16 +4087,60 @@ const CoordinatorSites: React.FC = () => {
               state={selectedStateForWorkflow.state}
               locality={selectedStateForWorkflow.localities?.[0]?.locality || ''}
               mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
-              onComplete={(decision: PermitDecision) => {
+              onComplete={async (decision: PermitDecision) => {
                 setStatePermitQuestionDialogOpen(false);
                 
                 // Check if state permit is required and can work without it
                 const statePermit = decision.statePermit;
                 if (statePermit.requirement === 'not_required' || (statePermit.requirement === 'required_dont_have_it' && statePermit.canWorkWithout === 'yes')) {
-                  // Can proceed without state permit
+                  // Update all sites in this state with state_permit_not_required flag
+                  try {
+                    const allSitesInState = selectedStateForWorkflow.localities?.flatMap((loc: any) => loc.sites || []) || [];
+                    const siteIds = allSitesInState.map((s: any) => s.id);
+                    
+                    // Batch update all sites in one query
+                    for (const site of allSitesInState) {
+                      const currentAdditionalData = site.additional_data || {};
+                      await supabase
+                        .from('mmp_site_entries')
+                        .update({
+                          additional_data: {
+                            ...currentAdditionalData,
+                            state_permit_not_required: true,
+                            permit_decision: decision
+                          }
+                        })
+                        .eq('id', site.id);
+                    }
+                    
+                    // Update context for each affected MMP to reflect changes immediately
+                    const mmpIds = new Set(allSitesInState.map((s: any) => s.mmp_file_id));
+                    for (const mmpId of mmpIds) {
+                      const mmp = contextMmpFiles.find((m: any) => m.id === mmpId);
+                      if (mmp) {
+                        const updatedSiteEntries = mmp.siteEntries?.map((entry: any) => {
+                          if (siteIds.includes(entry.id)) {
+                            return {
+                              ...entry,
+                              additionalData: {
+                                ...(entry.additionalData || {}),
+                                state_permit_not_required: true,
+                                permit_decision: decision
+                              }
+                            };
+                          }
+                          return entry;
+                        });
+                        await updateMMP(mmpId, { siteEntries: updatedSiteEntries });
+                      }
+                    }
+                  } catch (err) {
+                    console.error('Error updating sites:', err);
+                  }
+                  
                   toast({
-                    title: 'Success',
-                    description: `Proceeding without state permit for ${selectedStateForWorkflow.state}. Localities are now accessible.`
+                    title: 'State Permit Not Required',
+                    description: `Sites in ${selectedStateForWorkflow.state} moved to Locality Permit Status.`
                   });
                   setSelectedStateForWorkflow(null);
                   // Switch to local permit tab
@@ -4045,12 +4153,93 @@ const CoordinatorSites: React.FC = () => {
                   setSelectedStateForWorkflow(null);
                 }
               }}
-              onSendBackToFOM={(reason: string) => {
+              onSendBackToFOM={async (reason: string) => {
+                // Get sites for this state and update their status
+                if (selectedStateForWorkflow) {
+                  const allSitesInState = selectedStateForWorkflow.localities?.flatMap((loc: any) => loc.sites || []) || [];
+                  if (allSitesInState.length > 0) {
+                    try {
+                      const siteIds = allSitesInState.map((s: any) => s.id);
+                      const { error } = await supabase
+                        .from('mmp_site_entries')
+                        .update({
+                          status: 'returned_to_fom',
+                          verification_notes: reason,
+                          verified_at: new Date().toISOString(),
+                          verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+                        })
+                        .in('id', siteIds);
+                      
+                      if (error) throw error;
+                      
+                      // Send notifications to FOM users
+                      const uniqueMmpIds = [...new Set(allSitesInState.map((s: any) => s.mmp_file_id))];
+                      for (const mmpFileId of uniqueMmpIds) {
+                        try {
+                          const { data: mmpData } = await supabase
+                            .from('mmp_files')
+                            .select('uploaded_by')
+                            .eq('id', mmpFileId)
+                            .single();
+
+                          if (mmpData?.uploaded_by) {
+                            const sitesForThisMmp = allSitesInState.filter((s: any) => s.mmp_file_id === mmpFileId);
+                            await supabase.from('notifications').insert({
+                              recipient_id: mmpData.uploaded_by,
+                              title_en: 'Sites Returned by Coordinator',
+                              title_ar: 'تم إرجاع المواقع من المنسق',
+                              message_en: `${sitesForThisMmp.length} site(s) in ${selectedStateForWorkflow.state} have been returned. Reason: ${reason}`,
+                              message_ar: `تم إرجاع ${sitesForThisMmp.length} موقع في ${selectedStateForWorkflow.state}. السبب: ${reason}`,
+                              event_type: 'approvals',
+                              status: 'pending',
+                              priority: 'high'
+                            });
+                          }
+                        } catch (notifErr) {
+                          console.warn('Failed to send notification to FOM:', notifErr);
+                        }
+                      }
+
+                      // Notify hub supervisor
+                      const hubOffice = allSitesInState[0]?.hub_office;
+                      if (hubOffice) {
+                        try {
+                          const { data: hubData } = await supabase
+                            .from('hubs')
+                            .select('id')
+                            .eq('name', hubOffice)
+                            .single();
+
+                          if (hubData?.id) {
+                            await NotificationTriggerService.siteReturnedToFOM(
+                              hubData.id,
+                              `${allSitesInState.length} sites in ${selectedStateForWorkflow.state}`,
+                              allSitesInState.length,
+                              reason,
+                              currentUser?.fullName || currentUser?.username || 'Coordinator'
+                            );
+                          }
+                        } catch (supervisorErr) {
+                          console.warn('Failed to notify hub supervisor:', supervisorErr);
+                        }
+                      }
+                      
+                      toast({
+                        title: 'Sites Returned to FOM',
+                        description: `${allSitesInState.length} sites in ${selectedStateForWorkflow.state} have been sent back to FOM.`
+                      });
+                      await refreshMMPFiles();
+                    } catch (err) {
+                      console.error('Error returning sites to FOM:', err);
+                      toast({
+                        title: 'Error',
+                        description: 'Failed to return sites to FOM.',
+                        variant: 'destructive'
+                      });
+                    }
+                  }
+                }
                 setStatePermitQuestionDialogOpen(false);
-                toast({
-                  title: 'Request Sent',
-                  description: `Request sent to FOM to upload state permit for ${selectedStateForWorkflow?.state}. Reason: ${reason}`
-                });
                 setSelectedStateForWorkflow(null);
               }}
               onCancel={() => {
@@ -4098,7 +4287,7 @@ const CoordinatorSites: React.FC = () => {
                   // Now show the local permit question dialog
                   setSelectedLocalityForWorkflow(selectedStateForWorkflow);
                   setPermitQuestionDialogOpen(true);
-                  setSelectedStateForWorkflow(null);
+                  setSelectedStateForSequentialUpload(null);
                 }}
               />
             </div>
@@ -4177,7 +4366,7 @@ const CoordinatorSites: React.FC = () => {
                 onComplete={() => {
                   setSequentialPermitDialogOpen(false);
                   setSelectedStateForSequentialUpload(null);
-                  loadSites();
+                  refreshMMPFiles();
                   toast({
                     title: "Permits uploaded",
                     description: `Permits for ${selectedStateForSequentialUpload.state} have been processed.`,
@@ -4204,7 +4393,7 @@ const CoordinatorSites: React.FC = () => {
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-muted-foreground">
-              If you can proceed without the local permit, this site will be moved to "Permits Attached" and you can verify it immediately.
+              If you can proceed without the local permit, this site will be moved to "Permits Attached" and allow immediate verification.
               If you cannot proceed without the permit, the site will remain in this locality and wait for the local permit to be uploaded.
             </p>
           </div>
