@@ -1601,8 +1601,11 @@ const MMP = () => {
         return false;
       } else if (isAdmin || isICT) {
         // For admin/ICT: New MMPs are those uploaded but not forwarded to any FOM yet
-        return mmp.status === 'pending' && 
-               (!(mmp.workflow as any)?.forwardedToFomIds || (mmp.workflow as any)?.forwardedToFomIds.length === 0);
+        // Include both 'pending' and 'active' status, or any status when not forwarded
+        const notForwarded = !(mmp.workflow as any)?.forwardedToFomIds || (mmp.workflow as any)?.forwardedToFomIds.length === 0;
+        const status = mmp.status as string;
+        const isNewStatus = status === 'pending' || status === 'active' || !status;
+        return isNewStatus && notForwarded;
       }
       return false;
     });
