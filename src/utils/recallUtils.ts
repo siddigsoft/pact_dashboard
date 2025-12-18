@@ -9,8 +9,10 @@ import type {
   RecallEvent,
   RecallAuditLog,
   TransportAdvanceRecovery,
-  RecoveryMethod
+  RecoveryMethod,
+  RecallImpactPreview
 } from '@/types/recall';
+import { RECALL_SCOPE_LABELS, RECALL_TIER_LABELS } from '@/types/recall';
 
 export interface LegacyRecallCheckResult {
   canRecall: boolean;
@@ -781,18 +783,42 @@ export async function rejectRecall(
   }
 }
 
+export interface ProcessRecoveryOptions {
+  siteEntryId: string;
+  processedBy: string;
+  method: RecoveryMethod;
+  amount: number;
+  notes?: string;
+  walletTransactionId?: string;
+  receiptReference?: string;
+}
+
 export async function processRecovery(
-  siteEntryId: string,
-  processedBy: string,
-  method: RecoveryMethod,
-  amount: number,
+  siteEntryIdOrOptions: string | ProcessRecoveryOptions,
+  processedBy?: string,
+  method?: RecoveryMethod,
+  amount?: number,
   notes?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    let options: ProcessRecoveryOptions;
+    
+    if (typeof siteEntryIdOrOptions === 'string') {
+      options = {
+        siteEntryId: siteEntryIdOrOptions,
+        processedBy: processedBy || 'Unknown',
+        method: method || 'deduct_future',
+        amount: amount || 0,
+        notes
+      };
+    } else {
+      options = siteEntryIdOrOptions;
+    }
+
     const { data: entry, error: fetchError } = await supabase
       .from('mmp_site_entries')
       .select('transport_advance_amount, transport_advance_recovered')
-      .eq('id', siteEntryId)
+      .eq('id', options.siteEntryId)
       .single();
 
     if (fetchError) throw fetchError;
@@ -800,24 +826,30 @@ export async function processRecovery(
 
     const originalAmount = entry.transport_advance_amount || 0;
     const currentRecovered = entry.transport_advance_recovered || 0;
-    const newRecovered = currentRecovered + amount;
+    const newRecovered = currentRecovered + options.amount;
     const isFullyRecovered = newRecovered >= originalAmount;
 
-    const status = method === 'write_off' 
+    const status = options.method === 'write_off' 
       ? 'written_off' 
       : (isFullyRecovered ? 'recovered' : 'in_progress');
+
+    const recoveryNotes = [
+      options.notes,
+      options.walletTransactionId ? `Wallet TX: ${options.walletTransactionId}` : null,
+      options.receiptReference ? `Receipt: ${options.receiptReference}` : null
+    ].filter(Boolean).join(' | ') || null;
 
     const { error: updateError } = await supabase
       .from('mmp_site_entries')
       .update({
         transport_advance_recovered: newRecovered,
-        recall_recovery_method: method,
+        recall_recovery_method: options.method,
         recall_recovery_status: status,
-        recall_recovery_notes: notes || null,
-        recall_recovery_processed_by: processedBy,
+        recall_recovery_notes: recoveryNotes,
+        recall_recovery_processed_by: options.processedBy,
         recall_recovery_processed_at: new Date().toISOString()
       })
-      .eq('id', siteEntryId);
+      .eq('id', options.siteEntryId);
 
     if (updateError) throw updateError;
 
@@ -846,4 +878,108 @@ export function getRecallTierForRole(userRole: string): RecallTier | null {
 
 export function canForceRecall(userRole: string): boolean {
   return userRole === 'super_admin' || userRole === 'admin';
+}
+
+export async function computeRecallImpact(
+  request: RecallRequest
+): Promise<RecallImpactPreview> {
+  const warnings: string[] = [];
+
+  let query = supabase
+    .from('mmp_site_entries')
+    .select('*')
+    .eq('mmp_id', request.mmpId);
+
+  if (request.scopeType !== 'full_mmp' && request.scopeFilters) {
+    const filters = request.scopeFilters;
+    if (filters.siteIds?.length) query = query.in('id', filters.siteIds);
+    if (filters.siteNames?.length) query = query.in('site_name', filters.siteNames);
+    if (filters.localities?.length) query = query.in('locality', filters.localities);
+    if (filters.states?.length) query = query.in('state', filters.states);
+    if (filters.activityIds?.length) query = query.in('activity_id', filters.activityIds);
+    if (filters.hubs?.length) query = query.in('hub', filters.hubs);
+    if (filters.cpIds?.length) query = query.in('cp_id', filters.cpIds);
+  }
+
+  const { data: sites, error } = await query;
+  if (error) {
+    console.error('Error computing recall impact:', error);
+    return {
+      affectedSiteCount: 0,
+      affectedCollectorCount: 0,
+      affectedCollectors: [],
+      hasFinancialImpact: false,
+      financialAmount: 0,
+      sitesWithAdvances: 0,
+      scopeSummary: 'Unable to compute impact',
+      warnings: ['Error fetching site data']
+    };
+  }
+
+  const affectedSites = sites || [];
+  const affectedSiteCount = affectedSites.length;
+
+  const collectorMap = new Map<string, { id: string; name: string; email?: string }>();
+  let financialAmount = 0;
+  let sitesWithAdvances = 0;
+
+  for (const site of affectedSites) {
+    if (site.assigned_to || site.claimed_by) {
+      const collectorId = site.assigned_to || site.claimed_by;
+      if (!collectorMap.has(collectorId)) {
+        collectorMap.set(collectorId, {
+          id: collectorId,
+          name: site.assigned_to_name || site.claimed_by_name || 'Unknown',
+          email: site.assigned_to_email || site.claimed_by_email
+        });
+      }
+    }
+
+    if (site.transport_advance_paid && site.transport_advance_amount) {
+      financialAmount += Number(site.transport_advance_amount) || 0;
+      sitesWithAdvances++;
+    }
+  }
+
+  const affectedCollectors = Array.from(collectorMap.values());
+  const hasFinancialImpact = request.tier === 'coordinator_to_collector' && sitesWithAdvances > 0;
+
+  let scopeSummary = RECALL_SCOPE_LABELS[request.scopeType]?.en || 'Unknown scope';
+  if (request.scopeType !== 'full_mmp' && request.scopeFilters) {
+    const filterValues = Object.values(request.scopeFilters).flat().filter(Boolean);
+    if (filterValues.length > 0) {
+      scopeSummary += `: ${filterValues.slice(0, 3).join(', ')}`;
+      if (filterValues.length > 3) {
+        scopeSummary += ` (+${filterValues.length - 3} more)`;
+      }
+    }
+  }
+
+  if (hasFinancialImpact) {
+    warnings.push(`Transportation advances of ${financialAmount.toLocaleString()} SDG will need recovery`);
+  }
+
+  if (affectedSiteCount === 0) {
+    warnings.push('No sites match the selected criteria');
+  }
+
+  if (request.isForceRecall) {
+    warnings.push('Force recall will bypass normal approval workflow');
+  }
+
+  const completedSites = affectedSites.filter(s => s.status === 'completed' || s.status === 'verified');
+  if (completedSites.length > 0) {
+    warnings.push(`${completedSites.length} site(s) have already been completed/verified`);
+  }
+
+  return {
+    affectedSiteCount,
+    affectedCollectorCount: collectorMap.size,
+    affectedCollectors,
+    hasFinancialImpact,
+    financialAmount,
+    sitesWithAdvances,
+    scopeSummary,
+    warnings
+  };
 }

@@ -48,8 +48,10 @@ import {
   checkTieredRecallAllowed,
   performTieredRecall,
   getRecallTierForRole,
-  canForceRecall
+  canForceRecall,
+  computeRecallImpact
 } from '@/utils/recallUtils';
+import { RecallImpactPreview } from '@/types/recall';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -77,6 +79,10 @@ export function RecallDialog({
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+  const [step, setStep] = useState<'configure' | 'preview'>('configure');
+  const [impactPreview, setImpactPreview] = useState<RecallImpactPreview | null>(null);
 
   const [tier, setTier] = useState<RecallTier>('admin_to_fom');
   const [scopeType, setScopeType] = useState<RecallScopeType>('full_mmp');
@@ -265,12 +271,61 @@ export function RecallDialog({
   };
 
   const resetForm = () => {
+    setStep('configure');
+    setImpactPreview(null);
     setReason('');
     setScopeType('full_mmp');
     setScopeFilters({});
     setSelectedItems([]);
     setIsForceRecall(false);
     setRecoveryMethod('deduct_future');
+  };
+
+  const handleShowPreview = async () => {
+    if (!reason.trim()) {
+      toast({
+        title: 'Reason Required',
+        description: 'Please provide a reason for the recall',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (scopeType !== 'full_mmp' && selectedItems.length === 0) {
+      toast({
+        title: 'Selection Required',
+        description: 'Please select at least one item to recall',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsLoadingPreview(true);
+    try {
+      const request: RecallRequest = {
+        mmpId: mmpFile.id,
+        tier,
+        scopeType,
+        scopeFilters,
+        reason: reason.trim(),
+        isForceRecall,
+        isCancellationRecall: false,
+        recoveryMethod: tier === 'coordinator_to_collector' ? recoveryMethod : undefined
+      };
+
+      const preview = await computeRecallImpact(request);
+      setImpactPreview(preview);
+      setStep('preview');
+    } catch (error: any) {
+      console.error('Preview error:', error);
+      toast({
+        title: 'Preview Failed',
+        description: 'Unable to compute recall impact',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
   };
 
   const scopeOptions = getScopeOptions();
@@ -290,6 +345,7 @@ export function RecallDialog({
         </DialogHeader>
 
         <ScrollArea className="flex-1 pr-4">
+          {step === 'configure' ? (
           <div className="space-y-6 py-4">
             <div className="space-y-2">
               <Label>Recall Tier</Label>
@@ -521,36 +577,174 @@ export function RecallDialog({
               </Alert>
             )}
           </div>
+          ) : (
+          <div className="space-y-6 py-4">
+            <div className="text-center mb-4">
+              <Badge variant="outline" className="text-sm">
+                Review Impact Before Confirming
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 border rounded-md bg-muted/30">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <MapPin className="h-4 w-4" />
+                  Affected Sites
+                </div>
+                <div className="text-2xl font-bold">
+                  {impactPreview?.affectedSiteCount || 0}
+                </div>
+              </div>
+
+              <div className="p-4 border rounded-md bg-muted/30">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Users className="h-4 w-4" />
+                  Affected Collectors
+                </div>
+                <div className="text-2xl font-bold">
+                  {impactPreview?.affectedCollectorCount || 0}
+                </div>
+              </div>
+            </div>
+
+            {impactPreview?.hasFinancialImpact && (
+              <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+                <DollarSign className="h-4 w-4 text-amber-600" />
+                <AlertDescription>
+                  <div className="font-medium text-amber-800 dark:text-amber-200">
+                    Financial Impact: {impactPreview.financialAmount.toLocaleString()} SDG
+                  </div>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    {impactPreview.sitesWithAdvances} site(s) have transportation advances that will require recovery
+                  </p>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {impactPreview?.warnings && impactPreview.warnings.length > 0 && (
+              <div className="space-y-2">
+                {impactPreview.warnings.map((warning, i) => (
+                  <Alert key={i} variant={warning.includes('bypass') || warning.includes('completed') ? 'destructive' : 'default'}>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">
+                      {warning}
+                    </AlertDescription>
+                  </Alert>
+                ))}
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Tier:</span>
+                <Badge variant="secondary">{RECALL_TIER_LABELS[tier].en}</Badge>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Scope:</span>
+                <span>{impactPreview?.scopeSummary}</span>
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Reason:</span>
+                <p className="mt-1 p-2 border rounded-md bg-muted/30">{reason}</p>
+              </div>
+              {tier === 'coordinator_to_collector' && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Recovery Method:</span>
+                  <Badge variant="outline">{RECOVERY_METHOD_LABELS[recoveryMethod].en}</Badge>
+                </div>
+              )}
+            </div>
+
+            {impactPreview?.affectedCollectors && impactPreview.affectedCollectors.length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <Label>Affected Data Collectors ({impactPreview.affectedCollectorCount})</Label>
+                  <div className="border rounded-md p-2 max-h-32 overflow-y-auto space-y-1">
+                    {impactPreview.affectedCollectors.slice(0, 10).map((collector, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm p-1">
+                        <Users className="h-3 w-3 text-muted-foreground" />
+                        <span>{collector.name}</span>
+                        {collector.email && (
+                          <span className="text-muted-foreground text-xs">({collector.email})</span>
+                        )}
+                      </div>
+                    ))}
+                    {impactPreview.affectedCollectors.length > 10 && (
+                      <p className="text-xs text-muted-foreground p-1">
+                        +{impactPreview.affectedCollectors.length - 10} more collectors
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          )}
         </ScrollArea>
 
         <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isLoading}
-            data-testid="button-cancel-recall"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={isLoading || (!recallCheck.canRecall && !isForceRecall)}
-            className="gap-2"
-            variant={isForceRecall ? 'destructive' : 'default'}
-            data-testid="button-confirm-recall"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <RotateCcw className="h-4 w-4" />
-                {isForceRecall ? 'Force Recall' : 'Initiate Recall'}
-              </>
-            )}
-          </Button>
+          {step === 'configure' ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isLoadingPreview}
+                data-testid="button-cancel-recall"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleShowPreview}
+                disabled={isLoadingPreview || (!recallCheck.canRecall && !isForceRecall)}
+                className="gap-2"
+                data-testid="button-preview-recall"
+              >
+                {isLoadingPreview ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Computing Impact...
+                  </>
+                ) : (
+                  <>
+                    Review Impact
+                  </>
+                )}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setStep('configure')}
+                disabled={isLoading}
+                data-testid="button-back-recall"
+              >
+                Back
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={isLoading || (impactPreview?.affectedSiteCount === 0)}
+                className="gap-2"
+                variant={isForceRecall ? 'destructive' : 'default'}
+                data-testid="button-confirm-recall"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="h-4 w-4" />
+                    {isForceRecall ? 'Force Recall' : 'Confirm Recall'}
+                  </>
+                )}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
