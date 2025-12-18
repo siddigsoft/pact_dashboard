@@ -175,11 +175,16 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           let emailFailCount = 0;
           const coordinatorsWithoutEmail: string[] = [];
           
+          console.log(`[COORDINATOR_EMAIL] Starting email send for ${coordinatorIds.length} coordinators`);
+          console.log(`[COORDINATOR_EMAIL] All coordinators data:`, JSON.stringify(coordinators.map(c => ({ id: c.id, name: c.full_name, email: c.email })), null, 2));
+          
           for (const coordId of coordinatorIds) {
             const coord = coordinators.find(c => c.id === coordId);
+            console.log(`[COORDINATOR_EMAIL] Processing coordinator ${coordId}:`, coord ? { name: coord.full_name, email: coord.email } : 'NOT FOUND');
+            
             if (coord?.email) {
               try {
-                console.log(`[EMAIL] Sending sites forwarded email to coordinator: ${coord.email}`);
+                console.log(`[COORDINATOR_EMAIL] Sending email to: ${coord.email}`);
                 const result = await EmailNotificationService.sendSitesForwardedToCoordinator(
                   coord.email,
                   coord.full_name || coord.username || 'Coordinator',
@@ -207,7 +212,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               }
             } else {
               coordinatorsWithoutEmail.push(coord?.full_name || coord?.username || coordId);
-              console.warn(`[EMAIL] Coordinator ${coordId} has no email address`);
+              console.error(`[COORDINATOR_EMAIL] *** PROBLEM: Coordinator ${coordId} (${coord?.full_name || 'unknown'}) has NO email address! ***`);
             }
           }
           
