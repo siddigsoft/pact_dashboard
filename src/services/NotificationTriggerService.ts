@@ -48,6 +48,8 @@ interface TriggerNotificationOptions {
   userId: string;
   title: string;
   message: string;
+  titleAr?: string;
+  messageAr?: string;
   type?: 'info' | 'success' | 'warning' | 'error';
   category?: NotificationCategory;
   priority?: NotificationPriority;
@@ -148,6 +150,8 @@ export const NotificationTriggerService = {
       userId,
       title,
       message,
+      titleAr,
+      messageAr,
       type = 'info',
       category = 'system',
       priority = 'normal',
@@ -178,9 +182,9 @@ export const NotificationTriggerService = {
       const notificationData = {
         recipient_id: userId,
         title_en: title || 'Notification',
-        title_ar: title || 'إشعار',
+        title_ar: titleAr || title || 'إشعار',
         message_en: message || '',
-        message_ar: message || '',
+        message_ar: messageAr || message || '',
         priority: safePriority,
         action_url: link || null,
         entity_id: relatedEntityId || null,
@@ -214,6 +218,8 @@ export const NotificationTriggerService = {
           const emailResult = await EmailNotificationService.sendToUser(userId, {
             title,
             message,
+            titleAr: titleAr || title,
+            messageAr: messageAr || message,
             type,
             actionUrl: emailActionUrl || (link ? `${baseUrl}${link}` : undefined),
             actionLabel: emailActionLabel || 'View Details'

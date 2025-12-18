@@ -929,11 +929,14 @@ const CoordinatorSites: React.FC = () => {
         permitUploadedAt: null
       }));
 
-      // Check if any site has state permit flag
+      // Check if any site has state permit flag or state permit not required
       let anySiteHasStatePermitFlag = false;
       try {
         const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
-        anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
+        anySiteHasStatePermitFlag = allSitesInState.some((s: any) => 
+          s?.additional_data?.state_permit_attached === true || 
+          s?.additional_data?.state_permit_not_required === true
+        );
       } catch {}
 
       return {
@@ -994,14 +997,14 @@ const CoordinatorSites: React.FC = () => {
       .filter((locality: any) => !locality.hasPermit)
       .filter((locality: any) => {
         return locality.sites.some((site: SiteVisit) => 
-          site.status === 'Pending' || site.status === 'Dispatched' || 
+          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
           site.status === 'assigned' || site.status === 'inProgress' || 
           site.status === 'in_progress'
         );
       })
       .reduce((total: number, locality: any) => {
         const pendingSites = locality.sites.filter((site: SiteVisit) => 
-          site.status === 'Pending' || site.status === 'Dispatched' || 
+          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
           site.status === 'assigned' || site.status === 'inProgress' || 
           site.status === 'in_progress'
         );
@@ -1380,15 +1383,23 @@ const CoordinatorSites: React.FC = () => {
       const verifiedBy = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
       const verifiedAt = new Date().toISOString();
       
+      // Check if state permit is not required or user can proceed without it
+      const statePermitNotRequired = decision.statePermit.requirement === 'not_required' || 
+        (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
+      
       // Update all sites with permit decision
       for (const site of sitesToVerify) {
         const additionalData = {
           ...(site.additional_data || {}),
           permit_decision: decision,
           ...(pendingVerificationData?.additional_data || {}),
+          ...(statePermitNotRequired ? { state_permit_not_required: true } : {}),
         };
 
-        const updateData: any = {
+        // If state permit not required, don't change status to verified - just update additional_data
+        const updateData: any = statePermitNotRequired ? {
+          additional_data: additionalData,
+        } : {
           ...(pendingVerificationData || {}),
           status: 'verified',
           verified_at: verifiedAt,
@@ -1462,12 +1473,25 @@ const CoordinatorSites: React.FC = () => {
         console.warn('Failed to notify supervisors about verification:', notifyErr);
       }
 
-      toast({
-        title: sitesToVerify.length > 1 ? 'Sites Verified' : 'Site Verified',
-        description: sitesToVerify.length > 1 
-          ? `${sitesToVerify.length} sites have been verified successfully.`
-          : 'The site has been verified successfully.',
-      });
+      // Check if state permit is not required or user can proceed without it
+      const statePermitNotRequiredForToast = decision.statePermit.requirement === 'not_required' || 
+        (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
+
+      if (statePermitNotRequiredForToast) {
+        toast({
+          title: 'State Permit Not Required',
+          description: sitesToVerify.length > 1 
+            ? `${sitesToVerify.length} sites moved to Locality Permit Status.`
+            : 'Site moved to Locality Permit Status.',
+        });
+      } else {
+        toast({
+          title: sitesToVerify.length > 1 ? 'Sites Verified' : 'Site Verified',
+          description: sitesToVerify.length > 1 
+            ? `${sitesToVerify.length} sites have been verified successfully.`
+            : 'The site has been verified successfully.',
+        });
+      }
 
       // Close dialogs and reload
       setPermitVerificationDialogOpen(false);
@@ -1479,8 +1503,14 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSiteForEdit(null);
       setSelectedSites(new Set());
       setBulkVerifyDialogOpen(false);
-                  await refreshMMPFiles();
-      setActiveTab('verified');
+      await refreshMMPFiles();
+      
+      // Switch to appropriate tab
+      if (statePermitNotRequiredForToast) {
+        setNewSitesSubTab('local_required');
+      } else {
+        setActiveTab('verified');
+      }
     } catch (error) {
       console.error('Error completing verification:', error);
       toast({
@@ -2985,7 +3015,7 @@ const CoordinatorSites: React.FC = () => {
                       .filter((locality: any) => {
                         // Only show localities that have pending sites
                         return locality.sites.some((site: SiteVisit) => 
-                          site.status === 'Pending' || site.status === 'Dispatched' || 
+                          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
                           site.status === 'assigned' || site.status === 'inProgress' || 
                           site.status === 'in_progress'
                         );
@@ -3725,6 +3755,7 @@ const CoordinatorSites: React.FC = () => {
               }}
               existingStatePermit={false}
               existingLocalityPermit={false}
+              onMoveSitesToCategory={() => setNewSitesSubTab('local_required')}
             />
           )}
         </DialogContent>
@@ -4038,16 +4069,60 @@ const CoordinatorSites: React.FC = () => {
               state={selectedStateForWorkflow.state}
               locality={selectedStateForWorkflow.localities?.[0]?.locality || ''}
               mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
-              onComplete={(decision: PermitDecision) => {
+              onComplete={async (decision: PermitDecision) => {
                 setStatePermitQuestionDialogOpen(false);
                 
                 // Check if state permit is required and can work without it
                 const statePermit = decision.statePermit;
                 if (statePermit.requirement === 'not_required' || (statePermit.requirement === 'required_dont_have_it' && statePermit.canWorkWithout === 'yes')) {
-                  // Can proceed without state permit
+                  // Update all sites in this state with state_permit_not_required flag
+                  try {
+                    const allSitesInState = selectedStateForWorkflow.localities?.flatMap((loc: any) => loc.sites || []) || [];
+                    const siteIds = allSitesInState.map((s: any) => s.id);
+                    
+                    // Batch update all sites in one query
+                    for (const site of allSitesInState) {
+                      const currentAdditionalData = site.additional_data || {};
+                      await supabase
+                        .from('mmp_site_entries')
+                        .update({
+                          additional_data: {
+                            ...currentAdditionalData,
+                            state_permit_not_required: true,
+                            permit_decision: decision
+                          }
+                        })
+                        .eq('id', site.id);
+                    }
+                    
+                    // Update context for each affected MMP to reflect changes immediately
+                    const mmpIds = new Set(allSitesInState.map((s: any) => s.mmp_file_id));
+                    for (const mmpId of mmpIds) {
+                      const mmp = contextMmpFiles.find((m: any) => m.id === mmpId);
+                      if (mmp) {
+                        const updatedSiteEntries = mmp.siteEntries?.map((entry: any) => {
+                          if (siteIds.includes(entry.id)) {
+                            return {
+                              ...entry,
+                              additionalData: {
+                                ...(entry.additionalData || {}),
+                                state_permit_not_required: true,
+                                permit_decision: decision
+                              }
+                            };
+                          }
+                          return entry;
+                        });
+                        await updateMMP(mmpId, { siteEntries: updatedSiteEntries });
+                      }
+                    }
+                  } catch (err) {
+                    console.error('Error updating sites:', err);
+                  }
+                  
                   toast({
-                    title: 'Success',
-                    description: `Proceeding without state permit for ${selectedStateForWorkflow.state}. Localities are now accessible.`
+                    title: 'State Permit Not Required',
+                    description: `Sites in ${selectedStateForWorkflow.state} moved to Locality Permit Status.`
                   });
                   setSelectedStateForWorkflow(null);
                   // Switch to local permit tab
