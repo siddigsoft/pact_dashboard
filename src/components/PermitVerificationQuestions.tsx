@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertTriangle, CheckCircle2, Upload, ArrowRight, ArrowLeft, Send } from 'lucide-react';
 import { StatePermitUpload } from './StatePermitUpload';
 
@@ -62,6 +63,11 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
   const [stateCanWorkWithout, setStateCanWorkWithout] = useState<WorkWithoutPermitOption | null>(null);
   const [statePermitUploaded, setStatePermitUploaded] = useState(existingStatePermit);
 
+  // New state for confirmation dialogue
+  const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState('');
+  const [pendingDecision, setPendingDecision] = useState<PermitDecision | null>(null);
+
   const handleStatePermitNext = () => {
     if (!statePermitRequirement) return;
     
@@ -70,7 +76,7 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
     } else if (statePermitRequirement === 'required_dont_have_it') {
       setStep('state_follow_up');
     } else {
-      // Not required - complete with decision (parent will handle moving to locality permit status tab)
+      // Not required - complete with decision
       handleComplete();
     }
   };
@@ -80,7 +86,7 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
     if (!stateCanWorkWithout) return;
     
     if (stateCanWorkWithout === 'yes') {
-      // Can work without state permit - complete with decision (parent will handle moving to locality permit status tab)
+      // Can work without state permit - complete with decision
       handleComplete();
     } else {
       // Cannot work without - send back to FOM
@@ -107,7 +113,30 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
         uploaded: existingLocalityPermit,
       },
     };
-    onComplete(decision);
+
+    // Generate summary message based on decision
+    let message = '';
+    if (statePermitRequirement === 'not_required') {
+      message = `State permit is not required for ${state}. Proceeding to next step.`;
+    } else if (statePermitRequirement === 'required_have_it' && statePermitUploaded) {
+      message = `State permit uploaded successfully for ${state}. Proceeding to next step.`;
+    } else if (statePermitRequirement === 'required_dont_have_it' && stateCanWorkWithout === 'yes') {
+      message = `State permit is required but you can proceed without it for ${state}. Proceeding to next step.`;
+    } else if (statePermitRequirement === 'required_dont_have_it' && stateCanWorkWithout === 'no') {
+      message = `MMP sent back to FOM because state permit is required and cannot proceed without it for ${state}.`;
+    }
+
+    setConfirmationMessage(message);
+    setPendingDecision(decision);
+    setConfirmationDialogOpen(true);
+  };
+
+  const handleConfirmationOkay = () => {
+    if (pendingDecision) {
+      onComplete(pendingDecision);
+    }
+    setConfirmationDialogOpen(false);
+    setPendingDecision(null);
   };
 
   const renderStateQuestion = () => (
@@ -262,16 +291,34 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
     </div>
   );
 
-  switch (step) {
-    case 'state_question':
-      return renderStateQuestion();
-    case 'state_upload':
-      return renderStateUpload();
-    case 'state_follow_up':
-      return renderStateFollowUp();
-    default:
-      return null;
-  }
+  return (
+    <>
+      {/* Existing content */}
+      {step === 'state_question' && renderStateQuestion()}
+      {step === 'state_upload' && renderStateUpload()}
+      {step === 'state_follow_up' && renderStateFollowUp()}
+
+      {/* New confirmation dialogue */}
+      <Dialog open={confirmationDialogOpen} onOpenChange={setConfirmationDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              Process Completed
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">{confirmationMessage}</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleConfirmationOkay}>
+              Okay
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 };
 
 export default PermitVerificationQuestions;
