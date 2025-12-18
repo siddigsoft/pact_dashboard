@@ -396,12 +396,81 @@ export const useMMPProvider = () => {
 
       const mapped = (rows || []).map(transformDBToMMPFile);
       setMMPFiles(mapped);
+      setLoading(false);
+
+      // Background load: fetch site entries for all MMPs slowly
+      if (mapped.length > 0) {
+        loadSiteEntriesInBackground(mapped.map(m => m.id));
+      }
     } catch (err) {
       console.error('Error loading MMP files:', err);
       setError('Failed to load MMP files');
       setMMPFiles([]);
-    } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // Load site entries in the background one MMP at a time
+  const loadSiteEntriesInBackground = useCallback(async (mmpIds: string[]) => {
+    for (const mmpId of mmpIds) {
+      try {
+        const { data, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('mmp_file_id', mmpId)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Background load error for MMP:', mmpId, error);
+          continue;
+        }
+
+        const entries = (data || []).map((entry: any) => {
+          const migrated = migrateAdditionalDataToColumns(entry);
+          return {
+            id: migrated.id,
+            siteCode: migrated.site_code,
+            hubOffice: migrated.hub_office,
+            state: migrated.state,
+            locality: migrated.locality,
+            siteName: migrated.site_name,
+            cpName: migrated.cp_name,
+            visitType: migrated.visit_type,
+            visitDate: migrated.visit_date,
+            mainActivity: migrated.main_activity,
+            siteActivity: migrated.activity_at_site,
+            monitoringBy: migrated.monitoring_by,
+            surveyTool: migrated.survey_tool,
+            useMarketDiversion: migrated.use_market_diversion,
+            useWarehouseMonitoring: migrated.use_warehouse_monitoring,
+            comments: migrated.comments,
+            cost: migrated.cost,
+            enumerator_fee: migrated.enumerator_fee,
+            transport_fee: migrated.transport_fee,
+            verified_by: migrated.verified_by,
+            verified_at: migrated.verified_at,
+            verification_notes: migrated.verification_notes,
+            dispatched_by: migrated.dispatched_by,
+            dispatched_at: migrated.dispatched_at,
+            accepted_by: migrated.accepted_by,
+            accepted_at: migrated.accepted_at,
+            claimed_by: migrated.claimed_by,
+            claimed_at: migrated.claimed_at,
+            cost_acknowledged: migrated.cost_acknowledged ?? (migrated.additional_data || {})?.cost_acknowledged,
+            additionalData: migrated.additional_data || {},
+            status: migrated.status,
+            forwardedToUserId: migrated.forwarded_to_user_id,
+          };
+        });
+
+        setMMPFiles((prev: MMPFile[]) =>
+          prev.map((mmp) =>
+            mmp.id === mmpId ? { ...mmp, siteEntries: entries } : mmp
+          )
+        );
+      } catch (e) {
+        console.error('Background load failed for MMP:', mmpId, e);
+      }
     }
   }, []);
 
