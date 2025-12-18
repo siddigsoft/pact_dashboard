@@ -193,7 +193,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                           Uploaded {format(new Date(mmp.uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}
                         </span>
                         <span>•</span>
-                        <span>by {mmp.uploadedBy || 'Unknown'}</span>
+                        <span>by {(mmp.uploadedBy || 'Unknown').replace(/\s*\([^)]*\)\s*$/, '')}</span>
                         <span>•</span>
                         <span className="font-semibold">{mmp.entries} sites</span>
                       </div>
