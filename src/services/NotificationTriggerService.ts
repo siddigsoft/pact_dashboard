@@ -1570,6 +1570,205 @@ export const NotificationTriggerService = {
       console.error('Failed to send MMP forwarded to FOM notifications:', error);
       return 0;
     }
+  },
+
+  async recallInitiated(
+    initiatorName: string,
+    mmpName: string,
+    mmpId: string,
+    tier: string,
+    affectedSiteCount: number,
+    approverUserIds: string[],
+    hubId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+      const tierLabel = tier === 'admin_to_fom' ? 'Admin to FOM' 
+        : tier === 'fom_to_coordinator' ? 'FOM to Coordinator' 
+        : 'Coordinator to Data Collector';
+
+      for (const approverId of approverUserIds) {
+        const sent = await this.send({
+          userId: approverId,
+          title: 'Recall Approval Required',
+          titleAr: 'مطلوب موافقة على الاستدعاء',
+          message: `${initiatorName} has initiated a ${tierLabel} recall for MMP "${mmpName}" affecting ${affectedSiteCount} site(s). Your approval is required.`,
+          messageAr: `قام ${initiatorName} ببدء استدعاء ${tierLabel} لخطة المراقبة "${mmpName}" يؤثر على ${affectedSiteCount} موقع/مواقع. مطلوب موافقتك.`,
+          type: 'warning',
+          category: 'recall',
+          priority: 'urgent',
+          link: `/mmp/${mmpId}?tab=recalls`,
+          relatedEntityId: mmpId,
+          relatedEntityType: 'recall'
+        });
+        if (sent) successCount++;
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send recall initiated notifications:', error);
+      return 0;
+    }
+  },
+
+  async recallApproved(
+    initiatorUserId: string,
+    approverName: string,
+    mmpName: string,
+    mmpId: string,
+    affectedSiteCount: number,
+    notes?: string
+  ): Promise<boolean> {
+    try {
+      const sent = await this.send({
+        userId: initiatorUserId,
+        title: 'Recall Approved',
+        titleAr: 'تمت الموافقة على الاستدعاء',
+        message: `Your recall request for MMP "${mmpName}" (${affectedSiteCount} sites) has been approved by ${approverName}.${notes ? ` Notes: ${notes}` : ''}`,
+        messageAr: `تمت الموافقة على طلب الاستدعاء الخاص بك لخطة المراقبة "${mmpName}" (${affectedSiteCount} موقع) بواسطة ${approverName}.${notes ? ` ملاحظات: ${notes}` : ''}`,
+        type: 'success',
+        category: 'recall',
+        priority: 'high',
+        link: `/mmp/${mmpId}`,
+        relatedEntityId: mmpId,
+        relatedEntityType: 'recall'
+      });
+      return sent;
+    } catch (error) {
+      console.error('Failed to send recall approved notification:', error);
+      return false;
+    }
+  },
+
+  async recallRejected(
+    initiatorUserId: string,
+    rejecterName: string,
+    mmpName: string,
+    mmpId: string,
+    reason?: string
+  ): Promise<boolean> {
+    try {
+      const sent = await this.send({
+        userId: initiatorUserId,
+        title: 'Recall Rejected',
+        titleAr: 'تم رفض الاستدعاء',
+        message: `Your recall request for MMP "${mmpName}" has been rejected by ${rejecterName}.${reason ? ` Reason: ${reason}` : ''}`,
+        messageAr: `تم رفض طلب الاستدعاء الخاص بك لخطة المراقبة "${mmpName}" بواسطة ${rejecterName}.${reason ? ` السبب: ${reason}` : ''}`,
+        type: 'error',
+        category: 'recall',
+        priority: 'high',
+        link: `/mmp/${mmpId}`,
+        relatedEntityId: mmpId,
+        relatedEntityType: 'recall'
+      });
+      return sent;
+    } catch (error) {
+      console.error('Failed to send recall rejected notification:', error);
+      return false;
+    }
+  },
+
+  async recallCompleted(
+    affectedUserIds: string[],
+    recallerName: string,
+    mmpName: string,
+    mmpId: string,
+    reason?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+
+      for (const userId of affectedUserIds) {
+        const sent = await this.send({
+          userId,
+          title: 'Sites Recalled',
+          titleAr: 'تم استدعاء المواقع',
+          message: `Your assigned sites from MMP "${mmpName}" have been recalled by ${recallerName}.${reason ? ` Reason: ${reason}` : ''}`,
+          messageAr: `تم استدعاء المواقع المسندة إليك من خطة المراقبة "${mmpName}" بواسطة ${recallerName}.${reason ? ` السبب: ${reason}` : ''}`,
+          type: 'warning',
+          category: 'recall',
+          priority: 'high',
+          link: `/mmp/${mmpId}`,
+          relatedEntityId: mmpId,
+          relatedEntityType: 'recall'
+        });
+        if (sent) successCount++;
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send recall completed notifications:', error);
+      return 0;
+    }
+  },
+
+  async recoveryProcessed(
+    dataCollectorUserId: string,
+    siteName: string,
+    amount: number,
+    currency: string,
+    method: string,
+    processedBy: string,
+    mmpId?: string
+  ): Promise<boolean> {
+    try {
+      const methodLabel = method === 'deduct_future' ? 'deducted from future payments'
+        : method === 'cash_return' ? 'received as cash return'
+        : 'written off';
+
+      const sent = await this.send({
+        userId: dataCollectorUserId,
+        title: 'Recovery Processed',
+        titleAr: 'تم معالجة الاسترداد',
+        message: `Recovery of ${amount.toLocaleString()} ${currency} for site "${siteName}" has been ${methodLabel} by ${processedBy}.`,
+        messageAr: `تم ${methodLabel} استرداد مبلغ ${amount.toLocaleString()} ${currency} لموقع "${siteName}" بواسطة ${processedBy}.`,
+        type: 'info',
+        category: 'financial',
+        priority: 'normal',
+        link: mmpId ? `/mmp/${mmpId}` : '/finance',
+        relatedEntityId: mmpId,
+        relatedEntityType: 'recovery'
+      });
+      return sent;
+    } catch (error) {
+      console.error('Failed to send recovery processed notification:', error);
+      return false;
+    }
+  },
+
+  async recallOverdueReminder(
+    approverUserIds: string[],
+    mmpName: string,
+    mmpId: string,
+    hoursPending: number,
+    recallEventId: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+      const urgency = hoursPending > 48 ? 'critical' : 'high';
+
+      for (const approverId of approverUserIds) {
+        const sent = await this.send({
+          userId: approverId,
+          title: hoursPending > 48 ? 'Recall Approval Overdue' : 'Recall Approval Pending',
+          titleAr: hoursPending > 48 ? 'تأخر في الموافقة على الاستدعاء' : 'الموافقة على الاستدعاء معلقة',
+          message: `A recall for MMP "${mmpName}" has been pending approval for ${Math.round(hoursPending)} hours. Please review and take action.`,
+          messageAr: `استدعاء لخطة المراقبة "${mmpName}" معلق للموافقة منذ ${Math.round(hoursPending)} ساعة. يرجى المراجعة واتخاذ إجراء.`,
+          type: 'warning',
+          category: 'recall',
+          priority: urgency,
+          link: `/mmp/${mmpId}?tab=recalls`,
+          relatedEntityId: recallEventId,
+          relatedEntityType: 'recall'
+        });
+        if (sent) successCount++;
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send recall overdue reminder notifications:', error);
+      return 0;
+    }
   }
 };
 
