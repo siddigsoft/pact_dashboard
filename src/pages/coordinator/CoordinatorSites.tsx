@@ -4172,6 +4172,58 @@ const CoordinatorSites: React.FC = () => {
                       
                       if (error) throw error;
                       
+                      // Send notifications to FOM users
+                      const uniqueMmpIds = [...new Set(allSitesInState.map((s: any) => s.mmp_file_id))];
+                      for (const mmpFileId of uniqueMmpIds) {
+                        try {
+                          const { data: mmpData } = await supabase
+                            .from('mmp_files')
+                            .select('uploaded_by')
+                            .eq('id', mmpFileId)
+                            .single();
+
+                          if (mmpData?.uploaded_by) {
+                            const sitesForThisMmp = allSitesInState.filter((s: any) => s.mmp_file_id === mmpFileId);
+                            await supabase.from('notifications').insert({
+                              recipient_id: mmpData.uploaded_by,
+                              title_en: 'Sites Returned by Coordinator',
+                              title_ar: 'تم إرجاع المواقع من المنسق',
+                              message_en: `${sitesForThisMmp.length} site(s) in ${selectedStateForWorkflow.state} have been returned. Reason: ${reason}`,
+                              message_ar: `تم إرجاع ${sitesForThisMmp.length} موقع في ${selectedStateForWorkflow.state}. السبب: ${reason}`,
+                              event_type: 'approvals',
+                              status: 'pending',
+                              priority: 'high'
+                            });
+                          }
+                        } catch (notifErr) {
+                          console.warn('Failed to send notification to FOM:', notifErr);
+                        }
+                      }
+
+                      // Notify hub supervisor
+                      const hubOffice = allSitesInState[0]?.hub_office;
+                      if (hubOffice) {
+                        try {
+                          const { data: hubData } = await supabase
+                            .from('hubs')
+                            .select('id')
+                            .eq('name', hubOffice)
+                            .single();
+
+                          if (hubData?.id) {
+                            await NotificationTriggerService.siteReturnedToFOM(
+                              hubData.id,
+                              `${allSitesInState.length} sites in ${selectedStateForWorkflow.state}`,
+                              allSitesInState.length,
+                              reason,
+                              currentUser?.fullName || currentUser?.username || 'Coordinator'
+                            );
+                          }
+                        } catch (supervisorErr) {
+                          console.warn('Failed to notify hub supervisor:', supervisorErr);
+                        }
+                      }
+                      
                       toast({
                         title: 'Sites Returned to FOM',
                         description: `${allSitesInState.length} sites in ${selectedStateForWorkflow.state} have been sent back to FOM.`
