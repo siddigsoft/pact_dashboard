@@ -1603,12 +1603,12 @@ const MMP = () => {
         // For Coordinator: They don't see "new" MMPs, only verified ones with sites to verify
         return false;
       } else if (isAdmin || isICT) {
-        // For admin/ICT: New MMPs are those uploaded but not forwarded to any FOM yet
-        // Include both 'pending' and 'active' status, or any status when not forwarded
-        const notForwarded = !(mmp.workflow as any)?.forwardedToFomIds || (mmp.workflow as any)?.forwardedToFomIds.length === 0;
-        const status = mmp.status as string;
-        const isNewStatus = status === 'pending' || status === 'active' || !status;
-        return isNewStatus && notForwarded;
+        // For admin/ICT: New MMPs are those not forwarded to any FOM
+        // Accept any status when not forwarded (including recalled MMPs with 'approved' status)
+        const workflow = mmp.workflow as any;
+        const forwardedToFomIds = workflow?.forwardedToFomIds || [];
+        const notForwarded = !forwardedToFomIds || forwardedToFomIds.length === 0;
+        return notForwarded;
       }
       return false;
     });
