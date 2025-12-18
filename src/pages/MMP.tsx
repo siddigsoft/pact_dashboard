@@ -7,6 +7,7 @@ import { Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, E
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
 import { useMMP } from '@/context/mmp/MMPContext';
+import { useAppContext } from '@/context/AppContext';
 import { MMPList } from '@/components/mmp/MMPList';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -34,6 +35,10 @@ import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 import { useWallet } from '@/context/wallet/WalletContext';
+import { StatePermitUpload } from '@/components/StatePermitUpload';
+import { DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -360,6 +365,14 @@ const MMP = () => {
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified' | 'returned'>('pending');
   // Expanded states for returned sites view
   const [expandedReturnedStates, setExpandedReturnedStates] = useState<Set<string>>(new Set());
+  // State permit upload dialog for returned sites
+  const [returnedStatePermitDialogOpen, setReturnedStatePermitDialogOpen] = useState(false);
+  const [selectedReturnedState, setSelectedReturnedState] = useState<{ state: string; sites: any[]; mmpFileId?: string; stateId?: string } | null>(null);
+  const [selectedCoordinatorForReturned, setSelectedCoordinatorForReturned] = useState<string>('');
+  const [selectedSupervisorForReturned, setSelectedSupervisorForReturned] = useState<string>('');
+  const [coordinatorsList, setCoordinatorsList] = useState<any[]>([]);
+  const [supervisorsList, setSupervisorsList] = useState<any[]>([]);
+  const [hubStatesList, setHubStatesList] = useState<any[]>([]);
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
     exists: boolean;
     hasCosted: boolean;
@@ -1477,6 +1490,49 @@ const MMP = () => {
     }
   }, [canClaimSites]);
 
+  // Get users from context for coordinator/supervisor selection
+  const { users: contextUsers } = useAppContext();
+  
+  // Derive coordinators and supervisors from context users
+  useEffect(() => {
+    if (!isFOM && !isAdmin && !isICT) return;
+    
+    // Filter coordinators from context users
+    const coords = contextUsers.filter(u => u.role === 'coordinator');
+    setCoordinatorsList(coords.map(c => ({
+      id: c.id,
+      fullName: c.fullName || c.name || c.email,
+      email: c.email,
+      stateId: c.stateId,
+      localityId: c.localityId,
+      hubId: c.hubId
+    })));
+    
+    // Filter supervisors from context users
+    const sups = contextUsers.filter(u => u.role === 'supervisor');
+    setSupervisorsList(sups.map(s => ({
+      id: s.id,
+      fullName: s.fullName || s.name || s.email,
+      email: s.email,
+      hubId: s.hubId
+    })));
+    
+    // Load hub-state relationships
+    const loadHubStates = async () => {
+      try {
+        const { data: hubStatesData } = await supabase
+          .from('hub_states')
+          .select('hub_id, state_id, state_name');
+        if (hubStatesData) {
+          setHubStatesList(hubStatesData);
+        }
+      } catch (err) {
+        console.error('Failed to load hub states:', err);
+      }
+    };
+    loadHubStates();
+  }, [isFOM, isAdmin, isICT, contextUsers]);
+
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
     let filteredMMPs = mmpFiles;
@@ -1602,9 +1658,9 @@ const MMP = () => {
     return { pending, verified };
   }, [categorizedMMPs.forwarded]);
 
-  // New MMP subcategories for FOM (Removed Rejected)
+  // New MMP subcategories for FOM and Admin (Removed Rejected)
   const newFomSubcategories = useMemo(() => {
-    if (!isFOM) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
+    if (!isFOM && !isAdmin && !isICT) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
     const base = categorizedMMPs.new || [];
     const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
     const verified = base.filter(mmp => mmp.status === 'approved');
@@ -1613,7 +1669,7 @@ const MMP = () => {
       mmp.siteEntries?.some(site => site.status === 'returned_to_fom')
     );
     return { pending, verified, returned };
-  }, [isFOM, categorizedMMPs.new, mmpFiles]);
+  }, [isFOM, isAdmin, isICT, categorizedMMPs.new, mmpFiles]);
 
   // Returned sites grouped by state for FOM view
   const returnedSitesByState = useMemo(() => {
@@ -2697,18 +2753,22 @@ const MMP = () => {
 
             {!canClaimSites && (
               <TabsContent value="new">
-                {isFOM && (
+                {(isFOM || isAdmin || isICT) && (
                   <div className="mb-4 overflow-x-auto pb-2">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
                     <div className="flex gap-2 min-w-max">
-                        <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
-                          MMPs Pending Verification
-                          <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
-                        </Button>
-                        <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={`${newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
-                          Verified MMPs
-                          <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
-                        </Button>
+                        {isFOM && (
+                          <>
+                            <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                              MMPs Pending Verification
+                              <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
+                            </Button>
+                            <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={`${newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                              Verified MMPs
+                              <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
+                            </Button>
+                          </>
+                        )}
                         <Button variant={newFomSubTab === 'returned' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('returned')} className={`${newFomSubTab === 'returned' ? 'bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-300' : ''} flex-shrink-0 whitespace-nowrap`}>
                           Returned Sites
                           <Badge variant="secondary" className="ml-2">{returnedSitesByState.reduce((sum, g) => sum + g.totalSites, 0)}</Badge>
@@ -2718,7 +2778,7 @@ const MMP = () => {
                       </div>
                   </div>
                 )}
-                {newFomSubTab === 'returned' ? (
+                {(isFOM || isAdmin || isICT) && newFomSubTab === 'returned' ? (
                   <Card>
                     <CardHeader>
                       <CardTitle>Returned Sites by State</CardTitle>
@@ -2777,7 +2837,35 @@ const MMP = () => {
                                           size="sm"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            // TODO: Handle upload permits action
+                                            // Get mmp_file_id from one of the sites
+                                            const mmpFileId = stateGroup.sites[0]?.mmp_file_id;
+                                            // Find stateId from hubStatesList
+                                            const stateMatch = hubStatesList.find(hs => 
+                                              hs.state_name?.toLowerCase() === stateGroup.state.toLowerCase()
+                                            );
+                                            const stateId = stateMatch?.state_id;
+                                            
+                                            setSelectedReturnedState({
+                                              state: stateGroup.state,
+                                              sites: stateGroup.sites,
+                                              mmpFileId,
+                                              stateId
+                                            });
+                                            
+                                            // Auto-select coordinator for this state
+                                            const recommendedCoord = coordinatorsList.find(c => c.stateId === stateId);
+                                            setSelectedCoordinatorForReturned(recommendedCoord?.id || '');
+                                            
+                                            // Auto-select supervisor for the hub that has this state
+                                            if (stateId) {
+                                              const hubForState = hubStatesList.find(hs => hs.state_id === stateId);
+                                              if (hubForState) {
+                                                const supervisorForHub = supervisorsList.find(s => s.hubId === hubForState.hub_id);
+                                                setSelectedSupervisorForReturned(supervisorForHub?.id || '');
+                                              }
+                                            }
+                                            
+                                            setReturnedStatePermitDialogOpen(true);
                                           }}
                                         >
                                           <Upload className="h-3 w-3 mr-1" />
@@ -2820,7 +2908,7 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
+                  <MMPList mmpFiles={(isFOM || isAdmin || isICT) ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
                 )}
               </TabsContent>
             )}
@@ -4442,6 +4530,177 @@ const MMP = () => {
         onSubmit={handleSubmitVisitReport}
         isSubmitting={submittingReport}
       />
+
+      {/* State Permit Upload Dialog for Returned Sites */}
+      <Dialog open={returnedStatePermitDialogOpen} onOpenChange={setReturnedStatePermitDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Upload State Permit & Forward Sites</DialogTitle>
+            <DialogDescription>
+              Upload a state permit for {selectedReturnedState?.state} and select a coordinator to forward the sites to.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReturnedState && (
+            <div className="space-y-6 py-4">
+              {/* Sites Summary */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-medium mb-2">{selectedReturnedState.sites.length} site(s) in {selectedReturnedState.state}</h4>
+                <p className="text-sm text-muted-foreground">
+                  These sites were returned by the coordinator and require a state permit before being forwarded again.
+                </p>
+              </div>
+
+              {/* Coordinator Selection */}
+              <div className="space-y-2">
+                <Label>Select Coordinator</Label>
+                <Select 
+                  value={selectedCoordinatorForReturned} 
+                  onValueChange={(val) => {
+                    setSelectedCoordinatorForReturned(val);
+                    // Auto-select supervisor for the hub that has the coordinator's state
+                    const coord = coordinatorsList.find(c => c.id === val);
+                    if (coord && coord.stateId) {
+                      const hubForState = hubStatesList.find(hs => hs.state_id === coord.stateId);
+                      if (hubForState) {
+                        const supervisorForHub = supervisorsList.find(s => s.hubId === hubForState.hub_id);
+                        if (supervisorForHub) {
+                          setSelectedSupervisorForReturned(supervisorForHub.id);
+                        }
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select coordinator..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {coordinatorsList.map(coord => (
+                      <SelectItem key={coord.id} value={coord.id}>
+                        {coord.fullName || coord.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Supervisor Selection */}
+              <div className="space-y-2">
+                <Label>Select Supervisor (optional - for notifications)</Label>
+                <Select value={selectedSupervisorForReturned} onValueChange={setSelectedSupervisorForReturned}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select supervisor (optional)..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supervisorsList.map(sup => (
+                      <SelectItem key={sup.id} value={sup.id}>
+                        {sup.fullName || sup.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* State Permit Upload */}
+              <div className="space-y-2">
+                <Label>Attach State Permit</Label>
+                <div className="border rounded-lg p-4">
+                  <StatePermitUpload
+                    state={selectedReturnedState.state}
+                    mmpFileId={selectedReturnedState.mmpFileId}
+                    userType="fom"
+                    onPermitUploaded={async () => {
+                      // After permit uploaded, forward sites to coordinator
+                      if (!selectedCoordinatorForReturned) {
+                        toast({
+                          title: 'Select Coordinator',
+                          description: 'Please select a coordinator to forward the sites to.',
+                          variant: 'destructive'
+                        });
+                        return;
+                      }
+
+                      try {
+                        const siteIds = selectedReturnedState.sites.map(s => s.id);
+                        const now = new Date().toISOString();
+                        
+                        // Update sites: clear returned status and forward to new coordinator
+                        const { error } = await supabase
+                          .from('mmp_site_entries')
+                          .update({
+                            status: 'Pending',
+                            forwarded_to_user_id: selectedCoordinatorForReturned,
+                            forwarded_at: now,
+                            forwarded_by_user_id: currentUser?.id,
+                            verification_notes: null, // Clear old notes
+                            updated_at: now
+                          })
+                          .in('id', siteIds);
+
+                        if (error) throw error;
+
+                        // Create notifications
+                        const notifications: any[] = [{
+                          user_id: selectedCoordinatorForReturned,
+                          title: 'Sites Forwarded to You',
+                          message: `${siteIds.length} site(s) in ${selectedReturnedState.state} have been forwarded to you with state permit attached.`,
+                          type: 'info',
+                          link: '/coordinator/sites'
+                        }];
+
+                        // Also notify supervisor if selected
+                        if (selectedSupervisorForReturned) {
+                          const coordName = coordinatorsList.find(c => c.id === selectedCoordinatorForReturned)?.fullName || 'Coordinator';
+                          notifications.push({
+                            user_id: selectedSupervisorForReturned,
+                            title: 'Sites Assigned to Coordinator',
+                            message: `${siteIds.length} site(s) in ${selectedReturnedState.state} have been assigned to ${coordName} for verification (State permit attached).`,
+                            type: 'info',
+                            link: '/supervisor/sites'
+                          });
+                        }
+
+                        await insertNotifications(notifications);
+
+                        const coordName = coordinatorsList.find(c => c.id === selectedCoordinatorForReturned)?.fullName || 'Coordinator';
+                        toast({
+                          title: 'Sites Forwarded',
+                          description: `${siteIds.length} site(s) have been forwarded to ${coordName} with state permit attached.${selectedSupervisorForReturned ? ' Supervisor notified.' : ''}`,
+                          variant: 'default'
+                        });
+
+                        setReturnedStatePermitDialogOpen(false);
+                        setSelectedReturnedState(null);
+                        setSelectedCoordinatorForReturned('');
+                        setSelectedSupervisorForReturned('');
+                        
+                        // Refresh data
+                        await refreshMMPFiles();
+                      } catch (err: any) {
+                        console.error('Failed to forward sites:', err);
+                        toast({
+                          title: 'Forward Failed',
+                          description: err.message || 'Failed to forward sites. Please try again.',
+                          variant: 'destructive'
+                        });
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setReturnedStatePermitDialogOpen(false);
+              setSelectedReturnedState(null);
+              setSelectedCoordinatorForReturned('');
+              setSelectedSupervisorForReturned('');
+            }}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
