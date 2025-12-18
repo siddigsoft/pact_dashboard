@@ -191,7 +191,9 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             
             if (coord?.email) {
               try {
-                console.log(`[COORDINATOR_EMAIL] Sending email to: ${coord.email}`);
+                console.log(`%c[COORDINATOR_EMAIL] 📧 SENDING EMAIL to: ${coord.email}`, 'background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px;');
+                console.log(`[COORDINATOR_EMAIL] Email params: name=${coord.full_name}, sites=${siteNamesInGroup.length}, mmp=${mmpName}, forwarder=${forwarderName}`);
+                
                 const result = await EmailNotificationService.sendSitesForwardedToCoordinator(
                   coord.email,
                   coord.full_name || coord.username || 'Coordinator',
@@ -201,11 +203,14 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
                   locationInfo,
                   mmpId
                 );
+                
+                console.log(`[COORDINATOR_EMAIL] Email result for ${coord.email}:`, JSON.stringify(result));
+                
                 if (result.success) {
-                  console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
+                  console.log(`%c[EMAIL] ✅ SUCCESS - Sent to: ${coord.email}`, 'background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px;');
                   emailSuccessCount++;
                 } else {
-                  console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
+                  console.error(`%c[EMAIL] ❌ FAILED - ${coord.email}: ${result.error}`, 'background: #f44336; color: white; padding: 2px 6px; border-radius: 3px;');
                   emailFailCount++;
                   toast({ 
                     title: 'Email Warning', 
@@ -213,8 +218,9 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
                     variant: 'destructive'
                   });
                 }
-              } catch (emailError) {
-                console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
+              } catch (emailError: any) {
+                console.error(`%c[EMAIL] 💥 EXCEPTION for ${coord.email}`, 'background: #f44336; color: white; padding: 2px 6px; border-radius: 3px;', emailError);
+                console.error(`[EMAIL] Exception details:`, emailError?.message, emailError?.stack);
                 emailFailCount++;
               }
             } else {
