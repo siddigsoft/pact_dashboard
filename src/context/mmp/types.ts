@@ -38,4 +38,5 @@ export interface MMPContextType {
   resetMMP: (id?: string) => Promise<boolean>;
   attachPermitsToMMP: (id: string, permits: { federal: File | null; state?: File | null; local?: File | null }) => Promise<void>;
   refreshMMPFiles: () => Promise<void>;
+  fetchSiteEntriesForMMP: (mmpId: string) => Promise<any[]>;
 }
