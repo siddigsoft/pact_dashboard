@@ -861,13 +861,16 @@ export async function processRecovery(
 }
 
 export function getRecallTierForRole(userRole: string): RecallTier | null {
-  switch (userRole) {
+  const role = userRole.toLowerCase().replace(/\s+/g, '_');
+  switch (role) {
     case 'super_admin':
+    case 'superadmin':
     case 'admin':
     case 'ict':
       return 'admin_to_fom';
     case 'fom':
     case 'hub_supervisor':
+    case 'hubsupervisor':
       return 'fom_to_coordinator';
     case 'coordinator':
       return 'coordinator_to_collector';
@@ -877,7 +880,8 @@ export function getRecallTierForRole(userRole: string): RecallTier | null {
 }
 
 export function canForceRecall(userRole: string): boolean {
-  return userRole === 'super_admin' || userRole === 'admin';
+  const role = userRole.toLowerCase().replace(/\s+/g, '_');
+  return role === 'super_admin' || role === 'superadmin' || role === 'admin';
 }
 
 export async function computeRecallImpact(
