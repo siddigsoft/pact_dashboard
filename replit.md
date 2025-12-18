@@ -118,8 +118,12 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - Comprehensive audit logging with before/after snapshots
     - Bilingual notifications (English/Arabic) to all affected users
     - Components: `RecallDialog`, `RecallHistory`, `RecoveryDashboard`, `PendingRecallApprovals`
-    - Types defined in `src/types/recall.ts`
+    - Types defined in `src/types/recall.ts`, `src/types/recall-database.ts`
     - Utils in `src/utils/recallUtils.ts` with `checkTieredRecallAllowed()`, `performTieredRecall()`, `computeRecallImpact()`
+    
+    **Edge Functions (Dec 2024):**
+    - `process-recall`: Role-based authorization (super_admin, admin, ict, fom, hub_supervisor, coordinator), tier-based permission validation, force recall restricted to super_admin/admin, persists affected_site_ids array for safe scoping
+    - `approve-recall`: Uses affected_site_ids as primary scoping mechanism, falls back to scopeFilters, rejects approvals without scope data to prevent over-scoping, logs scope used in MMP audit trail
     
     **Recall UX Improvements (Dec 2024):**
     - **Impact Preview:** Two-step recall flow (configure → preview) with `computeRecallImpact()` showing affected sites, collectors, financial exposure, and warnings before confirmation
