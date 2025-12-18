@@ -110,10 +110,19 @@ export async function performRecall(
     const previousFomIds = [...(workflow.forwardedToFomIds || [])];
     const mmpName = mmpData?.name || 'Unknown MMP';
 
+    // Reset all forwarding-related workflow fields
     workflow.forwardedToFomIds = [];
     delete workflow.forwardedAt;
+    delete workflow.forwardedToCoordinators;
+    delete workflow.forwardedToCoordinatorIds;
+    delete workflow.currentStage;
+    delete workflow.coordinatorVerified;
+    delete workflow.locked;
+    
+    // Add recall tracking
     workflow.recalledAt = new Date().toISOString();
     workflow.recalledBy = recallerName;
+    workflow.lastRecallReason = reason || null;
 
     const recallLog: RecallAuditLog = {
       action: 'recall',
@@ -146,15 +155,17 @@ export async function performRecall(
         if (fomUsers) {
           for (const fom of fomUsers) {
             await supabase.from('notifications').insert({
-              user_id: fom.id,
-              title: 'MMP Recalled',
-              message: `MMP "${mmpName}" has been recalled by ${recallerName}. ${reason ? `Reason: ${reason}` : ''}`,
-              type: 'warning',
-              category: 'assignments',
-              priority: 'high',
-              link: `/mmp/${mmpId}`,
-              related_entity_id: mmpId,
-              related_entity_type: 'mmpFile'
+              recipient_id: fom.id,
+              title_en: 'MMP Recalled',
+              title_ar: 'تم سحب خطة المراقبة الشهرية',
+              message_en: `MMP "${mmpName}" has been recalled by ${recallerName}. ${reason ? `Reason: ${reason}` : ''}`,
+              message_ar: `تم سحب خطة المراقبة "${mmpName}" بواسطة ${recallerName}. ${reason ? `السبب: ${reason}` : ''}`,
+              action_url: `/mmp/${mmpId}`,
+              entity_id: mmpId,
+              entity_type: 'mmpFile',
+              event_type: 'assignments',
+              status: 'pending',
+              priority: 'high'
             });
           }
         }

@@ -395,6 +395,15 @@ export const useMMPProvider = () => {
       }
 
       const mapped = (rows || []).map(transformDBToMMPFile);
+      console.log('[MMP Context] Loaded MMP files:', mapped.length, 'files');
+      if (mapped.length > 0) {
+        console.log('[MMP Context] First MMP:', { 
+          id: mapped[0].id, 
+          name: mapped[0].name, 
+          status: mapped[0].status,
+          workflow: mapped[0].workflow 
+        });
+      }
       setMMPFiles(mapped);
       setLoading(false);
 
@@ -403,7 +412,7 @@ export const useMMPProvider = () => {
         loadSiteEntriesInBackground(mapped.map(m => m.id));
       }
     } catch (err) {
-      console.error('Error loading MMP files:', err);
+      console.error('[MMP Context] Error loading MMP files:', err);
       setError('Failed to load MMP files');
       setMMPFiles([]);
       setLoading(false);
@@ -508,11 +517,12 @@ export const useMMPProvider = () => {
           if (status === 'SUBSCRIBED') {
             console.log('✅ MMP context real-time subscription active');
           } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ MMP context real-time subscription error - Check if replication is enabled in Supabase');
+            // Non-blocking warning - real-time is optional, data still loads normally
+            console.warn('[MMP] Real-time subscription unavailable - data will load but won\'t auto-refresh');
           } else if (status === 'TIMED_OUT') {
-            console.warn('⏱️ MMP context real-time subscription timed out');
+            console.warn('[MMP] Real-time subscription timed out - using manual refresh');
           } else {
-            console.log('MMP context subscription status:', status);
+            console.log('[MMP] Subscription status:', status);
           }
         });
     };

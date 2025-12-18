@@ -69,11 +69,15 @@ const ReviewAssignCoordinators: React.FC = () => {
         // Step 1: Get MMP file
         const mmp = getMmpById(id);
         if (!mmp) {
+          console.log('[ReviewAssignCoordinators] MMP not found in context, might still be loading');
           toast({
             title: "MMP Not Found",
             description: "The requested MMP file could not be found.",
             variant: "destructive"
           });
+          setLoading(false);
+          setLoadingForwardedStates(false);
+          setLoadingLocations(false);
           navigate('/mmp');
           return;
         }
