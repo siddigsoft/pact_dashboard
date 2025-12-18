@@ -70,7 +70,7 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
     } else if (statePermitRequirement === 'required_dont_have_it') {
       setStep('state_follow_up');
     } else {
-      // Not required - complete verification
+      // Not required - complete with decision (parent will handle moving to locality permit status tab)
       handleComplete();
     }
   };
@@ -79,7 +79,7 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
     if (!stateCanWorkWithout) return;
     
     if (stateCanWorkWithout === 'yes') {
-      // Can work without state permit - complete
+      // Can work without state permit - complete with decision (parent will handle moving to locality permit status tab)
       handleComplete();
     } else {
       // Cannot work without - send back to FOM

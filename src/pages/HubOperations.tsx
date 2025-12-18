@@ -311,6 +311,7 @@ export default function HubOperations() {
       setProjectScopes([]);
     }
   };
+  
 
   const fetchMmpEntryDataForSite = async (site: SiteRegistry): Promise<any> => {
     try {
