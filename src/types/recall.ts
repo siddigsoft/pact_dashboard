@@ -119,12 +119,26 @@ export interface RecallAuditLog {
   by: string;
   byEmail?: string;
   date: string;
-  scopeType: RecallScopeType;
-  affectedSites: number;
+  scopeType?: RecallScopeType;
+  scopeFilters?: RecallScopeFilter;
+  affectedSites?: number;
   financialAmount?: number;
   previousState?: any;
   newState?: any;
   reason?: string;
+  notes?: string;
+  isForceRecall?: boolean;
+}
+
+export interface RecallImpactPreview {
+  affectedSiteCount: number;
+  affectedCollectorCount: number;
+  affectedCollectors: { id: string; name: string; email?: string }[];
+  hasFinancialImpact: boolean;
+  financialAmount: number;
+  sitesWithAdvances: number;
+  scopeSummary: string;
+  warnings: string[];
 }
 
 export interface RecallSummary {

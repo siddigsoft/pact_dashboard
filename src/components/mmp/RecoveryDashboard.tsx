@@ -29,6 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
 import {
   DollarSign,
   Clock,
@@ -37,9 +39,13 @@ import {
   AlertTriangle,
   Loader2,
   User,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Upload,
+  Receipt,
+  Wallet,
+  RefreshCw
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -49,7 +55,7 @@ import type {
   RecoveryStatus,
   RECOVERY_METHOD_LABELS
 } from '@/types/recall';
-import { processRecovery as executeProcessRecovery } from '@/utils/recallUtils';
+import { processRecovery as executeProcessRecovery, ProcessRecoveryOptions } from '@/utils/recallUtils';
 
 interface RecoveryDashboardProps {
   mmpId?: string;
@@ -101,6 +107,8 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
   const [processAmount, setProcessAmount] = useState('');
   const [processNotes, setProcessNotes] = useState('');
   const [processMethod, setProcessMethod] = useState<RecoveryMethod>('deduct_future');
+  const [walletTransactionId, setWalletTransactionId] = useState('');
+  const [receiptReference, setReceiptReference] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const isSuperAdmin = profile?.role === 'super_admin';
@@ -191,8 +199,22 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
     setProcessAmount(recovery.pending_amount.toString());
     setProcessMethod(recovery.recovery_method);
     setProcessNotes('');
+    setWalletTransactionId('');
+    setReceiptReference('');
     setProcessDialogOpen(true);
   };
+
+  const getAgeStatus = (createdAt: string) => {
+    const days = differenceInDays(new Date(), new Date(createdAt));
+    if (days < 7) return { color: 'text-green-600', label: 'Recent', urgent: false };
+    if (days < 14) return { color: 'text-amber-600', label: 'Aging', urgent: false };
+    return { color: 'text-red-600', label: 'Overdue', urgent: true };
+  };
+
+  const overdueCount = recoveries.filter(r => 
+    (r.status === 'pending' || r.status === 'in_progress') && 
+    getAgeStatus(r.created_at).urgent
+  ).length;
 
   const handleProcessSubmit = async () => {
     if (!selectedRecovery) return;
@@ -216,15 +238,28 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
       return;
     }
 
+    if (processMethod === 'cash_return' && !receiptReference.trim()) {
+      toast({
+        title: 'Receipt Required',
+        description: 'Please provide a receipt reference for cash returns',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      const result = await executeProcessRecovery(
-        selectedRecovery.site_entry_id,
-        profile?.fullName || 'Unknown',
-        processMethod,
+      const options: ProcessRecoveryOptions = {
+        siteEntryId: selectedRecovery.site_entry_id,
+        processedBy: profile?.fullName || 'Unknown',
+        method: processMethod,
         amount,
-        processNotes || undefined
-      );
+        notes: processNotes || undefined,
+        walletTransactionId: walletTransactionId || undefined,
+        receiptReference: receiptReference || undefined
+      };
+
+      const result = await executeProcessRecovery(options);
 
       if (!result.success) {
         throw new Error(result.error || 'Processing failed');
@@ -259,13 +294,26 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <DollarSign className="h-5 w-5" />
-          Recovery Dashboard
-        </CardTitle>
-        <CardDescription>
-          Manage transportation advance recoveries from recalled sites
-        </CardDescription>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 flex-wrap">
+              <DollarSign className="h-5 w-5" />
+              Recovery Dashboard
+              {overdueCount > 0 && (
+                <Badge variant="outline" className="text-red-600 border-red-300">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  {overdueCount} overdue
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Manage transportation advance recoveries from recalled sites
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="icon" onClick={loadRecoveries} disabled={isLoading} data-testid="button-refresh-recoveries">
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
@@ -442,6 +490,44 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
                 />
               </div>
 
+              {processMethod === 'cash_return' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-reference" className="flex items-center gap-2">
+                      <Receipt className="h-4 w-4" />
+                      Receipt Reference
+                    </Label>
+                    <Input
+                      id="receipt-reference"
+                      value={receiptReference}
+                      onChange={(e) => setReceiptReference(e.target.value)}
+                      placeholder="e.g., REC-2024-001234"
+                      data-testid="input-receipt-reference"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter the receipt number or reference for this cash return
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="wallet-transaction" className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4" />
+                      Wallet Transaction ID
+                    </Label>
+                    <Input
+                      id="wallet-transaction"
+                      value={walletTransactionId}
+                      onChange={(e) => setWalletTransactionId(e.target.value)}
+                      placeholder="e.g., TXN-XXXXXXXX"
+                      data-testid="input-wallet-transaction"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Link to the wallet transaction if applicable
+                    </p>
+                  </div>
+                </>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="process-notes">Notes</Label>
                 <Textarea
@@ -453,6 +539,16 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
                   data-testid="textarea-process-notes"
                 />
               </div>
+
+              {selectedRecovery && getAgeStatus(selectedRecovery.created_at).urgent && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    This recovery is overdue ({differenceInDays(new Date(), new Date(selectedRecovery.created_at))} days old). 
+                    Expedited processing recommended.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             <DialogFooter>

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -18,8 +19,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   RotateCcw,
   Clock,
@@ -29,9 +38,12 @@ import {
   Loader2,
   DollarSign,
   MapPin,
-  Shield
+  Shield,
+  Filter,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow, differenceInHours } from 'date-fns';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -66,6 +78,17 @@ const TIER_COLORS: Record<RecallTier, string> = {
   coordinator_to_collector: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
 };
 
+function getSlaStatus(createdAt: string): { color: string; label: string; urgent: boolean } {
+  const hours = differenceInHours(new Date(), new Date(createdAt));
+  if (hours < 24) {
+    return { color: 'text-green-600', label: 'On Time', urgent: false };
+  } else if (hours < 48) {
+    return { color: 'text-amber-600', label: 'Approaching SLA', urgent: false };
+  } else {
+    return { color: 'text-red-600', label: 'Overdue', urgent: true };
+  }
+}
+
 export function PendingRecallApprovals() {
   const { currentUser } = useAuthorization();
   const { toast } = useToast();
@@ -78,10 +101,48 @@ export function PendingRecallApprovals() {
   const [notes, setNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [tierFilter, setTierFilter] = useState<RecallTier | 'all'>('all');
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkActionType, setBulkActionType] = useState<'approve' | 'reject'>('approve');
+  const [bulkNotes, setBulkNotes] = useState('');
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+
   const isSuperAdmin = currentUser?.role === 'super_admin';
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'ict';
   const isFOM = currentUser?.role === 'fom';
   const canApprove = isSuperAdmin || isAdmin || isFOM;
+
+  const filteredRecalls = useMemo(() => {
+    if (tierFilter === 'all') return pendingRecalls;
+    return pendingRecalls.filter(r => r.tier === tierFilter);
+  }, [pendingRecalls, tierFilter]);
+
+  const urgentCount = useMemo(() => {
+    return pendingRecalls.filter(r => getSlaStatus(r.created_at).urgent).length;
+  }, [pendingRecalls]);
+
+  const allSelected = filteredRecalls.length > 0 && filteredRecalls.every(r => selectedIds.has(r.id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredRecalls.map(r => r.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (canApprove) {
@@ -206,6 +267,80 @@ export function PendingRecallApprovals() {
     }
   };
 
+  const handleBulkAction = (type: 'approve' | 'reject') => {
+    if (selectedIds.size === 0) return;
+    setBulkActionType(type);
+    setBulkNotes('');
+    setBulkDialogOpen(true);
+  };
+
+  const handleBulkSubmit = async () => {
+    if (selectedIds.size === 0) return;
+
+    if (bulkActionType === 'reject' && !bulkNotes.trim()) {
+      toast({
+        title: 'Reason Required',
+        description: 'Please provide a reason for rejection',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsBulkProcessing(true);
+    const selectedRecalls = filteredRecalls.filter(r => selectedIds.has(r.id));
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const recall of selectedRecalls) {
+      try {
+        let result: { success: boolean; error?: string };
+
+        if (bulkActionType === 'approve') {
+          result = await approveRecall(
+            recall.mmp_id,
+            recall.recall_event_id,
+            currentUser?.id || '',
+            currentUser?.fullName || 'Unknown',
+            currentUser?.email,
+            bulkNotes || undefined
+          );
+        } else {
+          result = await rejectRecall(
+            recall.mmp_id,
+            recall.recall_event_id,
+            currentUser?.id || '',
+            currentUser?.fullName || 'Unknown',
+            currentUser?.email,
+            bulkNotes
+          );
+        }
+
+        if (result.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (error) {
+        failCount++;
+      }
+    }
+
+    toast({
+      title: `Bulk ${bulkActionType === 'approve' ? 'Approval' : 'Rejection'} Complete`,
+      description: `${successCount} succeeded, ${failCount} failed`,
+      variant: failCount > 0 ? 'destructive' : 'default'
+    });
+
+    setPendingRecalls(prev => prev.filter(r => !selectedIds.has(r.id) || failCount > 0));
+    setSelectedIds(new Set());
+    setBulkDialogOpen(false);
+    setIsBulkProcessing(false);
+
+    if (failCount > 0) {
+      loadPendingRecalls();
+    }
+  };
+
   if (!canApprove) {
     return null;
   }
@@ -213,35 +348,84 @@ export function PendingRecallApprovals() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <RotateCcw className="h-5 w-5" />
-          Pending Recall Approvals
-          {pendingRecalls.length > 0 && (
-            <Badge variant="destructive" className="ml-2">
-              {pendingRecalls.length}
-            </Badge>
-          )}
-        </CardTitle>
-        <CardDescription>
-          Review and approve or reject pending MMP recall requests
-        </CardDescription>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 flex-wrap">
+              <RotateCcw className="h-5 w-5" />
+              Pending Recall Approvals
+              {pendingRecalls.length > 0 && (
+                <Badge variant="destructive">
+                  {pendingRecalls.length}
+                </Badge>
+              )}
+              {urgentCount > 0 && (
+                <Badge variant="outline" className="text-red-600 border-red-300">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  {urgentCount} overdue
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Review and approve or reject pending MMP recall requests
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Select value={tierFilter} onValueChange={(v) => setTierFilter(v as RecallTier | 'all')}>
+              <SelectTrigger className="w-[180px]" data-testid="select-tier-filter">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filter by tier" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tiers</SelectItem>
+                <SelectItem value="admin_to_fom">{RECALL_TIER_LABELS.admin_to_fom.en}</SelectItem>
+                <SelectItem value="fom_to_coordinator">{RECALL_TIER_LABELS.fom_to_coordinator.en}</SelectItem>
+                <SelectItem value="coordinator_to_collector">{RECALL_TIER_LABELS.coordinator_to_collector.en}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="icon" onClick={loadPendingRecalls} disabled={isLoading} data-testid="button-refresh-recalls">
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2 mt-4 p-3 bg-muted rounded-md">
+            <span className="text-sm font-medium">{selectedIds.size} selected</span>
+            <div className="flex-1" />
+            <Button size="sm" variant="outline" onClick={() => handleBulkAction('reject')} data-testid="button-bulk-reject">
+              <XCircle className="h-4 w-4 mr-1" />
+              Reject Selected
+            </Button>
+            <Button size="sm" onClick={() => handleBulkAction('approve')} data-testid="button-bulk-approve">
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              Approve Selected
+            </Button>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : pendingRecalls.length === 0 ? (
+        ) : filteredRecalls.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
-            No pending recall approvals
+            {pendingRecalls.length === 0 ? 'No pending recall approvals' : 'No recalls match the selected filter'}
           </div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox 
+                    checked={allSelected} 
+                    onCheckedChange={toggleSelectAll}
+                    data-testid="checkbox-select-all"
+                  />
+                </TableHead>
                 <TableHead>MMP</TableHead>
                 <TableHead>Tier</TableHead>
-                <TableHead>Scope</TableHead>
+                <TableHead>Pending</TableHead>
                 <TableHead>Requested By</TableHead>
                 <TableHead>Sites</TableHead>
                 <TableHead>Financial</TableHead>
@@ -249,12 +433,20 @@ export function PendingRecallApprovals() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pendingRecalls.map((recall) => (
-                <TableRow key={recall.id}>
+              {filteredRecalls.map((recall) => {
+                const sla = getSlaStatus(recall.created_at);
+                return (
+                <TableRow key={recall.id} className={sla.urgent ? 'bg-red-50 dark:bg-red-900/10' : ''}>
+                  <TableCell>
+                    <Checkbox 
+                      checked={selectedIds.has(recall.id)} 
+                      onCheckedChange={() => toggleSelect(recall.id)}
+                      data-testid={`checkbox-recall-${recall.id}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="font-medium">{recall.mmp_name}</div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
+                    <div className="text-xs text-muted-foreground">
                       {format(new Date(recall.created_at), 'MMM d, h:mm a')}
                     </div>
                   </TableCell>
@@ -264,9 +456,14 @@ export function PendingRecallApprovals() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      {RECALL_SCOPE_LABELS[recall.scope_type].en}
+                    <div className={`flex items-center gap-1 ${sla.color}`}>
+                      <Clock className="h-3 w-3" />
+                      <span className="text-sm">
+                        {formatDistanceToNow(new Date(recall.created_at), { addSuffix: true })}
+                      </span>
+                    </div>
+                    <Badge variant="outline" className={`text-xs mt-1 ${sla.urgent ? 'border-red-300 text-red-600' : ''}`}>
+                      {sla.label}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -319,7 +516,7 @@ export function PendingRecallApprovals() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+              );})}
             </TableBody>
           </Table>
         )}
@@ -407,6 +604,84 @@ export function PendingRecallApprovals() {
                   <>
                     <XCircle className="h-4 w-4 mr-2" />
                     Reject Recall
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {bulkActionType === 'approve' ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                ) : (
+                  <XCircle className="h-5 w-5 text-red-600" />
+                )}
+                Bulk {bulkActionType === 'approve' ? 'Approve' : 'Reject'} Recalls
+              </DialogTitle>
+              <DialogDescription>
+                You are about to {bulkActionType} {selectedIds.size} recall request(s)
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <Alert variant={bulkActionType === 'approve' ? 'default' : 'destructive'}>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  {bulkActionType === 'approve'
+                    ? `This will execute ${selectedIds.size} recalls and notify all affected users`
+                    : `This will reject ${selectedIds.size} recall requests and notify the requesters`}
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulk-notes">
+                  {bulkActionType === 'approve' ? 'Notes (Optional)' : 'Rejection Reason *'}
+                </Label>
+                <Textarea
+                  id="bulk-notes"
+                  value={bulkNotes}
+                  onChange={(e) => setBulkNotes(e.target.value)}
+                  placeholder={bulkActionType === 'approve'
+                    ? 'Add notes for all selected recalls...'
+                    : 'Explain why these recalls are being rejected...'}
+                  rows={3}
+                  data-testid="textarea-bulk-notes"
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setBulkDialogOpen(false)}
+                disabled={isBulkProcessing}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBulkSubmit}
+                disabled={isBulkProcessing}
+                variant={bulkActionType === 'approve' ? 'default' : 'destructive'}
+                data-testid="button-confirm-bulk-action"
+              >
+                {isBulkProcessing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Processing {selectedIds.size}...
+                  </>
+                ) : bulkActionType === 'approve' ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Approve {selectedIds.size} Recalls
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Reject {selectedIds.size} Recalls
                   </>
                 )}
               </Button>
