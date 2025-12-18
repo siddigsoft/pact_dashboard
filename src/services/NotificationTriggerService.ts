@@ -91,6 +91,54 @@ const getSuperAdminCcEmails = async (): Promise<string[]> => {
   }
 };
 
+/**
+ * Helper function to get hub supervisor emails for a specific hub
+ * Returns emails of supervisors assigned to the hub for accountability
+ */
+const getHubSupervisorEmails = async (hubId: string): Promise<string[]> => {
+  if (!hubId) return [];
+  
+  try {
+    const { data: supervisors } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('role', 'supervisor')
+      .eq('hub_id', hubId)
+      .eq('status', 'approved');
+    
+    if (!supervisors) return [];
+    
+    const emails = supervisors
+      .filter(s => s.email)
+      .map(s => s.email as string);
+    
+    if (emails.length > 0) {
+      console.log(`[NOTIFICATION] Found ${emails.length} hub supervisor(s) for hub ${hubId}: ${emails.join(', ')}`);
+    }
+    
+    return emails;
+  } catch (error) {
+    console.error('Error fetching hub supervisor emails:', error);
+    return [];
+  }
+};
+
+/**
+ * Helper function to get all CC emails (Super Admins + Hub Supervisor for the MMP's hub)
+ * Used for MMP-related notifications to ensure accountability
+ */
+const getAllCcEmails = async (hubId?: string): Promise<string[]> => {
+  const superAdminEmails = await getSuperAdminCcEmails();
+  const hubSupervisorEmails = hubId ? await getHubSupervisorEmails(hubId) : [];
+  
+  // Combine and deduplicate
+  const allEmails = [...new Set([...superAdminEmails, ...hubSupervisorEmails])];
+  
+  console.log(`[NOTIFICATION] CC list - Super Admins: ${superAdminEmails.length}, Hub Supervisors: ${hubSupervisorEmails.length}, Total: ${allEmails.length}`);
+  
+  return allEmails;
+};
+
 const isWithinQuietHours = (quietHours: QuietHoursSettings): boolean => {
   if (!quietHours.enabled) return false;
   
@@ -968,8 +1016,8 @@ export const NotificationTriggerService = {
       let successCount = 0;
       const sender = forwarderName || 'Field Operations Manager';
 
-      // 1. Build CC list: Only approved Super Admins
-      const ccEmails = await getSuperAdminCcEmails();
+      // 1. Build CC list: Super Admins + Hub Supervisor for accountability
+      const ccEmails = await getAllCcEmails(hubId);
 
       // 2. If specific coordinators provided, notify them directly
       if (coordinatorUserIds && coordinatorUserIds.length > 0) {
@@ -1050,8 +1098,8 @@ export const NotificationTriggerService = {
     try {
       let successCount = 0;
 
-      // 1. Build CC list: Only approved Super Admins
-      const ccEmails = await getSuperAdminCcEmails();
+      // 1. Build CC list: Super Admins + Hub Supervisor for accountability
+      const ccEmails = await getAllCcEmails(hubId);
 
       // 2. If specific FOM provided, notify them directly
       if (fomUserId) {
@@ -1434,23 +1482,24 @@ export const NotificationTriggerService = {
         }
       }
 
-      // 3. Fetch only approved Super Admins (no regular admins)
-      const { data: superAdminUsers, error: saError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('role', ['super_admin', 'superAdmin', 'SuperAdmin'])
-        .eq('status', 'approved');
-
-      if (saError) {
-        console.error('Error fetching super admins for MMP forward notification:', saError);
-      } else if (superAdminUsers && superAdminUsers.length > 0) {
-        // 4. Notify only approved Super Admins with bilingual email
-        for (const superAdmin of superAdminUsers) {
-          const recipientName = superAdmin.full_name || 'Super Administrator';
+      // 3. Build CC list: Super Admins + Hub Supervisor for accountability
+      const ccEmails = await getAllCcEmails(hubId);
+      
+      // 4. Notify CC recipients (super admins + hub supervisor) with bilingual email
+      for (const ccEmail of ccEmails) {
+        // Find user details for the CC recipient
+        const { data: ccUser } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, role')
+          .eq('email', ccEmail)
+          .single();
+        
+        if (ccUser) {
+          const recipientName = ccUser.full_name || (ccUser.role === 'supervisor' ? 'Hub Supervisor' : 'Super Administrator');
           
           // Create in-app notification
           const sent = await this.send({
-            userId: superAdmin.id,
+            userId: ccUser.id,
             title: 'MMP Forwarded to FOM',
             message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s) by ${sender}`,
             type: 'info',
@@ -1463,21 +1512,19 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email directly to super admin
-          if (superAdmin.email) {
-            try {
-              await EmailNotificationService.sendMMPForwardedToFOM(
-                superAdmin.email,
-                recipientName,
-                mmpName,
-                sender,
-                mmpId,
-                false // isRecipientFOM (super admin gets info notification, not action required)
-              );
-              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to Super Admin: ${superAdmin.email}`);
-            } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to Super Admin ${superAdmin.email}:`, emailError);
-            }
+          // Send bilingual email directly
+          try {
+            await EmailNotificationService.sendMMPForwardedToFOM(
+              ccEmail,
+              recipientName,
+              mmpName,
+              sender,
+              mmpId,
+              false // Not the direct recipient
+            );
+            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to ${ccUser.role}: ${ccEmail}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${ccEmail}:`, emailError);
           }
         }
       }
