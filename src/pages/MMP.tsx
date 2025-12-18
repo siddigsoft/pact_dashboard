@@ -1630,15 +1630,19 @@ const MMP = () => {
         return status === 'verified';
       });
       
+      // Check if MMP has at least one site with approved/costed status (for approved tab)
+      const hasApprovedSites = (mmp.siteEntries || []).some(entry => {
+        const status = ((entry as any).status || '').toLowerCase();
+        return status === 'approved' || status === 'approved and costed';
+      });
+      
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
         return (mmp.workflow as any)?.forwardedToCoordinators === true;
-      } else if (isFOM) {
-        // For FOM: Verified means MMPs with actual verified sites
-        return hasVerifiedSites || mmp.type === 'verified-template' || mmp.status === 'approved';
       } else {
-        // For admin/other roles: Only show if has verified sites, or is approved/verified-template
-        return hasVerifiedSites || mmp.status === 'approved' || mmp.type === 'verified-template';
+        // For all other roles: Only show if has verified OR approved sites
+        // Don't show empty MMPs or those without actual verified/approved site entries
+        return hasVerifiedSites || hasApprovedSites;
       }
     });
 
