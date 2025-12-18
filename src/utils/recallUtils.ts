@@ -110,10 +110,19 @@ export async function performRecall(
     const previousFomIds = [...(workflow.forwardedToFomIds || [])];
     const mmpName = mmpData?.name || 'Unknown MMP';
 
+    // Reset all forwarding-related workflow fields
     workflow.forwardedToFomIds = [];
     delete workflow.forwardedAt;
+    delete workflow.forwardedToCoordinators;
+    delete workflow.forwardedToCoordinatorIds;
+    delete workflow.currentStage;
+    delete workflow.coordinatorVerified;
+    delete workflow.locked;
+    
+    // Add recall tracking
     workflow.recalledAt = new Date().toISOString();
     workflow.recalledBy = recallerName;
+    workflow.lastRecallReason = reason || null;
 
     const recallLog: RecallAuditLog = {
       action: 'recall',
