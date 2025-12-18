@@ -48,6 +48,8 @@ interface TriggerNotificationOptions {
   userId: string;
   title: string;
   message: string;
+  titleAr?: string;
+  messageAr?: string;
   type?: 'info' | 'success' | 'warning' | 'error';
   category?: NotificationCategory;
   priority?: NotificationPriority;
@@ -196,6 +198,8 @@ export const NotificationTriggerService = {
       userId,
       title,
       message,
+      titleAr,
+      messageAr,
       type = 'info',
       category = 'system',
       priority = 'normal',
@@ -226,9 +230,9 @@ export const NotificationTriggerService = {
       const notificationData = {
         recipient_id: userId,
         title_en: title || 'Notification',
-        title_ar: title || 'إشعار',
+        title_ar: titleAr || title || 'إشعار',
         message_en: message || '',
-        message_ar: message || '',
+        message_ar: messageAr || message || '',
         priority: safePriority,
         action_url: link || null,
         entity_id: relatedEntityId || null,
@@ -262,6 +266,8 @@ export const NotificationTriggerService = {
           const emailResult = await EmailNotificationService.sendToUser(userId, {
             title,
             message,
+            titleAr: titleAr || title,
+            messageAr: messageAr || message,
             type,
             actionUrl: emailActionUrl || (link ? `${baseUrl}${link}` : undefined),
             actionLabel: emailActionLabel || 'View Details'
@@ -1199,7 +1205,8 @@ export const NotificationTriggerService = {
   },
 
   /**
-   * Notify supervisor when sites are sent back to FOM
+   * Notify supervisor and FOM users when sites are sent back to FOM
+   * Sends both in-app notifications and emails
    */
   async siteReturnedToFOM(
     hubId: string,
@@ -1208,18 +1215,59 @@ export const NotificationTriggerService = {
     reason: string,
     coordinatorName?: string
   ): Promise<number> {
-    const message = siteCount > 1
+    const messageEn = siteCount > 1
       ? `${siteCount} sites including "${siteName}" have been sent back to FOM${coordinatorName ? ` by ${coordinatorName}` : ''}. Reason: ${reason}`
       : `Site "${siteName}" has been sent back to FOM${coordinatorName ? ` by ${coordinatorName}` : ''}. Reason: ${reason}`;
+    
+    const messageAr = siteCount > 1
+      ? `تم إرجاع ${siteCount} مواقع بما في ذلك "${siteName}" إلى مدير العمليات الميدانية${coordinatorName ? ` بواسطة ${coordinatorName}` : ''}. السبب: ${reason}`
+      : `تم إرجاع الموقع "${siteName}" إلى مدير العمليات الميدانية${coordinatorName ? ` بواسطة ${coordinatorName}` : ''}. السبب: ${reason}`;
 
-    return await this.notifyHubSupervisor(hubId, {
+    let successCount = 0;
+
+    // 1. Notify hub supervisors (in-app only)
+    successCount += await this.notifyHubSupervisor(hubId, {
       title: 'Sites Returned to FOM',
-      message,
+      message: messageEn,
       type: 'warning',
       category: 'assignments',
       priority: 'high',
       link: '/mmp'
     });
+
+    // 2. Find and notify FOM users with email
+    try {
+      const { data: fomUsers } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .or('role.ilike.%fom%,role.eq.FOM,role.eq.fom')
+        .eq('status', 'approved');
+
+      if (fomUsers && fomUsers.length > 0) {
+        for (const fom of fomUsers) {
+          // Send in-app notification with email
+          await this.send({
+            userId: fom.id,
+            title: 'Sites Returned by Coordinator',
+            message: messageEn,
+            titleAr: 'تم إرجاع المواقع من المنسق',
+            messageAr: messageAr,
+            type: 'warning',
+            category: 'assignments',
+            priority: 'high',
+            link: '/mmp',
+            sendEmail: true,
+            emailActionUrl: '/mmp',
+            emailActionLabel: 'View Returned Sites'
+          });
+          successCount++;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to notify FOM users:', err);
+    }
+
+    return successCount;
   },
 
   /**
