@@ -665,8 +665,8 @@ export const NotificationTriggerService = {
         // If table doesn't exist (404), fall back to all users in the project scope
         if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
           console.debug('[Notifications] team_members table not found, falling back to all users');
-          // Fall back: send to admins/FOMs who might be interested
-          return await this.sendToRoles(['super_admin', 'admin', 'fom'], {
+          // Fall back: send to super admins/FOMs who might be interested (no regular admins)
+          return await this.sendToRoles(['super_admin', 'fom'], {
             ...options,
           });
         }
@@ -741,9 +741,9 @@ export const NotificationTriggerService = {
       let additionalUserIds: string[] = [];
 
       if (isDataCollector) {
-        targetRoles = ['coordinator', 'supervisor', 'admin', 'super_admin'];
+        targetRoles = ['coordinator', 'supervisor', 'super_admin'];
       } else if (isCoordinator) {
-        targetRoles = ['admin', 'super_admin'];
+        targetRoles = ['super_admin'];
         
         if (hubId) {
           const { data: hubSupervisors } = await supabase
@@ -757,7 +757,7 @@ export const NotificationTriggerService = {
           }
         }
       } else {
-        targetRoles = ['admin', 'super_admin'];
+        targetRoles = ['super_admin'];
       }
 
       const notificationOptions = {
