@@ -241,7 +241,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'Sites forwarded', description: `Forwarded sites to coordinators by locality` });
 
-        // Notify hub supervisors for each group
+        // Notify hub supervisors for each group (coordinator emails already sent above)
         for (const group of siteGroups!) {
           const groupKey = `${group.stateId}|${group.localityId}`;
           const selectedCoordinators = groupSelections[groupKey] || new Set();
@@ -254,12 +254,15 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               .single();
             
             if (stateData?.hub_id) {
+              // Pass coordinator IDs to also send emails via NotificationTriggerService (backup)
+              const coordinatorIdArray = Array.from(selectedCoordinators) as string[];
               await NotificationTriggerService.mmpForwardedToCoordinators(
                 stateData.hub_id,
                 mmpName || 'MMP',
                 selectedCoordinators.size,
                 mmpId,
-                (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager'
+                (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager',
+                coordinatorIdArray // Pass coordinator IDs to trigger email sending
               );
             }
           }
@@ -382,7 +385,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'Sites forwarded', description: `Forwarded to ${ids.length} Coordinator(s)` });
 
-        // Notify hub supervisors - get hub from first selected coordinator
+        // Notify hub supervisors and send emails via NotificationTriggerService (backup)
         try {
           const firstCoord = coordinators.find(c => selected.has(c.id));
           if (firstCoord?.hub_id) {
@@ -391,7 +394,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               mmpName || 'MMP',
               ids.length,
               mmpId,
-              (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager'
+              (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager',
+              ids // Pass coordinator IDs to trigger email sending
             );
           }
         } catch (e) {
@@ -488,7 +492,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'MMP forwarded', description: `Forwarded to ${ids.length} Coordinator(s)` });
 
-        // Notify hub supervisors - get hub from first selected coordinator
+        // Notify hub supervisors and send emails via NotificationTriggerService (backup)
         try {
           const firstCoord = coordinators.find(c => selected.has(c.id));
           if (firstCoord?.hub_id) {
@@ -497,7 +501,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               mmpName || 'MMP',
               ids.length,
               mmpId,
-              (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager'
+              (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager',
+              ids // Pass coordinator IDs to trigger email sending
             );
           }
         } catch (e) {
