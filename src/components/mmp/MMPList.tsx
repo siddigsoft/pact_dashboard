@@ -234,8 +234,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         </>
                       )}
 
-                      {/* Added Recall MMP option for consistency */}
-                      {isForwarded && (
+                      {/* Added Recall MMP option for consistency - restricted to Admin/ICT only */}
+                      {(isAdmin || isICT) && isForwarded && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
