@@ -59,7 +59,16 @@ const isTransientSmtpError = (errorMsg: string | undefined): boolean => {
     msg.includes('econnrefused') || // Connection refused
     msg.includes('enotfound') || // DNS lookup failed
     msg.includes('socket') ||    // Socket errors
-    msg.includes('network')      // Network errors
+    msg.includes('network') ||   // Network errors
+    msg.includes('verify') ||    // SMTP verification failed
+    msg.includes('tls') ||       // TLS/SSL errors
+    msg.includes('certificate') || // Certificate errors
+    msg.includes('handshake') || // TLS handshake errors
+    msg.includes('smtp') ||      // Any SMTP errors
+    msg.includes('mail') ||      // Mail sending errors
+    msg.includes('closed') ||    // Connection closed
+    msg.includes('reset') ||     // Connection reset
+    msg.includes('abort')        // Aborted connection
   );
 };
 
