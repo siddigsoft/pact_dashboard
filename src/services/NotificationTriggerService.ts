@@ -1443,8 +1443,13 @@ export const NotificationTriggerService = {
         console.error('Error fetching FOM user details:', fomError);
       }
 
+      // Helper function to add delay between emails to avoid IONOS rate limiting
+      const emailDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+      const EMAIL_SPACING_DELAY = 3000; // 3 seconds between emails to avoid rate limiting
+
       // 2. Notify all selected FOMs with bilingual email
-      for (const fomId of fomUserIds) {
+      for (let i = 0; i < fomUserIds.length; i++) {
+        const fomId = fomUserIds[i];
         const fomUser = fomUsers?.find(u => u.id === fomId);
         const recipientName = fomUser?.full_name || 'Field Operations Manager';
         const recipientEmail = fomUser?.email;
@@ -1476,6 +1481,11 @@ export const NotificationTriggerService = {
               true // isRecipientFOM
             );
             console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
+            
+            // Add delay before next email to avoid IONOS rate limiting
+            if (i < fomUserIds.length - 1) {
+              await emailDelay(EMAIL_SPACING_DELAY);
+            }
           } catch (emailError) {
             console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailError);
           }
@@ -1485,8 +1495,14 @@ export const NotificationTriggerService = {
       // 3. Build CC list: Super Admins + Hub Supervisor for accountability
       const ccEmails = await getAllCcEmails(hubId);
       
+      // Add delay before CC emails if FOMs were notified
+      if (fomUserIds.length > 0 && ccEmails.length > 0) {
+        await emailDelay(EMAIL_SPACING_DELAY);
+      }
+      
       // 4. Notify CC recipients (super admins + hub supervisor) with bilingual email
-      for (const ccEmail of ccEmails) {
+      for (let i = 0; i < ccEmails.length; i++) {
+        const ccEmail = ccEmails[i];
         // Find user details for the CC recipient
         const { data: ccUser } = await supabase
           .from('profiles')
@@ -1523,6 +1539,11 @@ export const NotificationTriggerService = {
               false // Not the direct recipient
             );
             console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to ${ccUser.role}: ${ccEmail}`);
+            
+            // Add delay before next email to avoid IONOS rate limiting
+            if (i < ccEmails.length - 1) {
+              await emailDelay(EMAIL_SPACING_DELAY);
+            }
           } catch (emailError) {
             console.error(`[NOTIFICATION] Failed to send bilingual email to ${ccEmail}:`, emailError);
           }
