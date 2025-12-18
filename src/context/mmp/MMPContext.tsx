@@ -448,11 +448,12 @@ export const useMMPProvider = () => {
           if (status === 'SUBSCRIBED') {
             console.log('✅ MMP context real-time subscription active');
           } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ MMP context real-time subscription error - Check if replication is enabled in Supabase');
+            // Non-blocking warning - real-time is optional, data still loads normally
+            console.warn('[MMP] Real-time subscription unavailable - data will load but won\'t auto-refresh');
           } else if (status === 'TIMED_OUT') {
-            console.warn('⏱️ MMP context real-time subscription timed out');
+            console.warn('[MMP] Real-time subscription timed out - using manual refresh');
           } else {
-            console.log('MMP context subscription status:', status);
+            console.log('[MMP] Subscription status:', status);
           }
         });
     };
