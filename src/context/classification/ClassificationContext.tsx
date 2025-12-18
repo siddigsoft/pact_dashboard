@@ -115,12 +115,8 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         setUserClassifications(data.map(transformUserClassificationFromDB));
       }
     } catch (error: any) {
-      console.error('Error fetching user classifications:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load user classifications',
-        variant: 'destructive',
-      });
+      // Silent error - table might not exist or be empty (optional feature)
+      console.warn('[Classification] Could not load user classifications:', error?.message || error);
     } finally {
       setLoading(false);
     }
@@ -141,12 +137,8 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         setFeeStructures(data.map(transformFeeStructureFromDB));
       }
     } catch (error: any) {
-      console.error('Error fetching fee structures:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load fee structures',
-        variant: 'destructive',
-      });
+      // Silent error - table might not exist or be empty (optional feature)
+      console.warn('[Classification] Could not load fee structures:', error?.message || error);
     } finally {
       setLoading(false);
     }

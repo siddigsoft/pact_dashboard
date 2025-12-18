@@ -156,6 +156,9 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           const isForwarded = forwardedMMPs.has(mmp.id);
           const workflow = mmp.workflow as any;
           const forwardedCount = workflow?.forwardedToFomIds?.length || 0;
+          const wasRecalled = Boolean(workflow?.recalledAt);
+          const logs = (mmp.logs as any[]) || [];
+          const recallCount = logs.filter((log: any) => log.action === 'recall').length;
           
           return (
             <Card
@@ -190,7 +193,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                           Uploaded {format(new Date(mmp.uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}
                         </span>
                         <span>•</span>
-                        <span>by {mmp.uploadedBy || 'Unknown'}</span>
+                        <span>by {(mmp.uploadedBy || 'Unknown').replace(/\s*\([^)]*\)\s*$/, '')}</span>
                         <span>•</span>
                         <span className="font-semibold">{mmp.entries} sites</span>
                       </div>
@@ -203,6 +206,12 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         {isForwarded && (
                           <Badge variant="secondary" className="bg-green-100 text-green-800">
                             Forwarded to {forwardedCount} FOM(s)
+                          </Badge>
+                        )}
+                        {wasRecalled && (
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                            Recalled{recallCount > 1 ? ` (${recallCount}x)` : ''}
                           </Badge>
                         )}
                       </div>

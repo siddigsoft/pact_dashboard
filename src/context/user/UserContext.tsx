@@ -107,6 +107,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [appUsers, setAppUsers] = useState<User[]>(loadUsersFromStorage);
   const [authReady, setAuthReady] = useState(false);
   
+  // Debug: Track authReady changes
+  useEffect(() => {
+    console.log('[Auth] authReady state changed:', authReady);
+  }, [authReady]);
+  
   const { toast } = useToast();
   const { roles, hasRole, addRole, removeRole } = useRoles(currentUser?.id);
 
@@ -602,11 +607,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // If we're not in an OAuth callback context, auth is ready now.
       // If we are, allow a short window for Supabase to process URL and emit SIGNED_IN.
-      if (!isOAuthCallback) {
-        setAuthReady(true);
-      } else {
-        readyTimeout = setTimeout(() => setAuthReady(true), 2000);
-      }
+      // Always set auth ready quickly - OAuth will trigger state change event anyway
+      console.log('[Auth] Setting authReady=true immediately');
+      setAuthReady(true);
     })();
 
     return () => {

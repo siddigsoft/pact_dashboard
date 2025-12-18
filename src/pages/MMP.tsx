@@ -27,6 +27,7 @@ import { MMPTabsSkeleton } from '@/components/ui/skeletons';
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
 import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
+import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
 import { sudanStates } from '@/data/sudanStates';
 import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
 import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
@@ -1445,6 +1446,7 @@ const MMP = () => {
   };
 
   const isAdmin = hasRole(['Admin', 'admin', 'Super Admin', 'superadmin', 'super admin']);
+  const isSuperAdmin = hasRole(['Super Admin', 'superadmin', 'super admin']);
   const isICT = hasRole(['ICT', 'ict']);
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
@@ -1536,6 +1538,9 @@ const MMP = () => {
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
     let filteredMMPs = mmpFiles;
+    
+    console.log('[MMP Page] Starting categorization with', mmpFiles.length, 'MMPs');
+    console.log('[MMP Page] User roles:', { isAdmin, isICT, isFOM, isCoordinator, isAdminOrSuperUser });
 
     // PROJECT TEAM MEMBERSHIP FILTER
     // Only show MMPs from projects the user belongs to (unless admin/superuser).
@@ -1600,9 +1605,12 @@ const MMP = () => {
         // For Coordinator: They don't see "new" MMPs, only verified ones with sites to verify
         return false;
       } else if (isAdmin || isICT) {
-        // For admin/ICT: New MMPs are those uploaded but not forwarded to any FOM yet
-        return mmp.status === 'pending' && 
-               (!(mmp.workflow as any)?.forwardedToFomIds || (mmp.workflow as any)?.forwardedToFomIds.length === 0);
+        // For admin/ICT: New MMPs are those not forwarded to any FOM
+        // Accept any status when not forwarded (including recalled MMPs with 'approved' status)
+        const workflow = mmp.workflow as any;
+        const forwardedToFomIds = workflow?.forwardedToFomIds || [];
+        const notForwarded = !forwardedToFomIds || forwardedToFomIds.length === 0;
+        return notForwarded;
       }
       return false;
     });
@@ -1624,28 +1632,41 @@ const MMP = () => {
     });
     
     const verifiedMMPs = filteredMMPs.filter(mmp => {
+      // Check if MMP has at least one site with verified status
+      const hasVerifiedSites = (mmp.siteEntries || []).some(entry => {
+        const status = ((entry as any).status || '').toLowerCase();
+        return status === 'verified';
+      });
+      
+      // Check if MMP has at least one site with approved/costed status (for approved tab)
+      const hasApprovedSites = (mmp.siteEntries || []).some(entry => {
+        const status = ((entry as any).status || '').toLowerCase();
+        return status === 'approved' || status === 'approved and costed';
+      });
+      
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
         return (mmp.workflow as any)?.forwardedToCoordinators === true;
-      } else if (isFOM) {
-        // For FOM: Verified means MMPs with sites available for verification
-        return mmp.type === 'verified-template' || 
-               mmp.status === 'approved' ||
-               ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
       } else {
-        // For admin/other roles: keep existing logic
-        return mmp.status === 'approved' || 
-               mmp.type === 'verified-template' ||
-               ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
+        // For all other roles: Only show if has verified OR approved sites
+        // Don't show empty MMPs or those without actual verified/approved site entries
+        return hasVerifiedSites || hasApprovedSites;
       }
     });
 
+    console.log('[MMP Page] Categorization results:', { 
+      new: newMMPs.length, 
+      forwarded: forwardedMMPs.length, 
+      verified: verifiedMMPs.length,
+      totalFiltered: filteredMMPs.length
+    });
+    
     return {
       new: newMMPs,
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites]);
+  }, [mmpFiles, isFOM, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, isAdmin, isICT]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
@@ -2746,6 +2767,12 @@ const MMP = () => {
                   <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
                     Verified Sites
                     <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
+                  </TabsTrigger>
+                )}
+                {isSuperAdmin && (
+                  <TabsTrigger value="tracker" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                    Workflow Tracker
+                    <Badge variant="secondary">{mmpFiles.length}</Badge>
                   </TabsTrigger>
                 )}
               </TabsList>
@@ -3984,6 +4011,12 @@ const MMP = () => {
                     })()}
                   </div>
                 ) : null}
+              </TabsContent>
+            )}
+
+            {isSuperAdmin && (
+              <TabsContent value="tracker">
+                <WorkflowTrackerTab mmpFiles={mmpFiles} />
               </TabsContent>
             )}
           </Tabs>

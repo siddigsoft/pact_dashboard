@@ -112,6 +112,13 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
     try {
       const isSiteForwarding = siteIds && siteIds.length > 0;
       const isGroupedForwarding = siteGroups && siteGroups.length > 0;
+      
+      console.log(`[COORDINATOR_EMAIL] === Forward to Coordinators Started ===`);
+      console.log(`[COORDINATOR_EMAIL] Mode: ${isGroupedForwarding ? 'GROUPED' : isSiteForwarding ? 'SITE' : 'MMP'}`);
+      console.log(`[COORDINATOR_EMAIL] MMP ID: ${mmpId}, MMP Name: ${mmpName}`);
+      console.log(`[COORDINATOR_EMAIL] Selected coordinators: ${selected.size > 0 ? Array.from(selected).join(', ') : 'none selected directly'}`);
+      console.log(`[COORDINATOR_EMAIL] Total coordinators loaded: ${coordinators.length}`);
+      console.log(`[COORDINATOR_EMAIL] All coordinators:`, JSON.stringify(coordinators.map(c => ({ id: c.id, name: c.full_name, email: c.email })), null, 2));
 
       if (isGroupedForwarding) {
         // Forward grouped sites to coordinators
@@ -171,11 +178,22 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           const forwarderName = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
           const locationInfo = `${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}`;
           
+          let emailSuccessCount = 0;
+          let emailFailCount = 0;
+          const coordinatorsWithoutEmail: string[] = [];
+          
+          console.log(`[COORDINATOR_EMAIL] Starting email send for ${coordinatorIds.length} coordinators`);
+          console.log(`[COORDINATOR_EMAIL] All coordinators data:`, JSON.stringify(coordinators.map(c => ({ id: c.id, name: c.full_name, email: c.email })), null, 2));
+          
           for (const coordId of coordinatorIds) {
             const coord = coordinators.find(c => c.id === coordId);
+            console.log(`[COORDINATOR_EMAIL] Processing coordinator ${coordId}:`, coord ? { name: coord.full_name, email: coord.email } : 'NOT FOUND');
+            
             if (coord?.email) {
               try {
-                console.log(`[EMAIL] Sending sites forwarded email to coordinator: ${coord.email}`);
+                console.log(`%c[COORDINATOR_EMAIL] 📧 SENDING EMAIL to: ${coord.email}`, 'background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px;');
+                console.log(`[COORDINATOR_EMAIL] Email params: name=${coord.full_name}, sites=${siteNamesInGroup.length}, mmp=${mmpName}, forwarder=${forwarderName}`);
+                
                 const result = await EmailNotificationService.sendSitesForwardedToCoordinator(
                   coord.email,
                   coord.full_name || coord.username || 'Coordinator',
@@ -185,15 +203,36 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
                   locationInfo,
                   mmpId
                 );
+                
+                console.log(`[COORDINATOR_EMAIL] Email result for ${coord.email}:`, JSON.stringify(result));
+                
                 if (result.success) {
-                  console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
+                  console.log(`%c[EMAIL] ✅ SUCCESS - Sent to: ${coord.email}`, 'background: #4CAF50; color: white; padding: 2px 6px; border-radius: 3px;');
+                  emailSuccessCount++;
                 } else {
-                  console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
+                  console.error(`%c[EMAIL] ❌ FAILED - ${coord.email}: ${result.error}`, 'background: #f44336; color: white; padding: 2px 6px; border-radius: 3px;');
+                  emailFailCount++;
+                  toast({ 
+                    title: 'Email Warning', 
+                    description: `Failed to send email to ${coord.full_name || coord.email}: ${result.error}`,
+                    variant: 'destructive'
+                  });
                 }
-              } catch (emailError) {
-                console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
+              } catch (emailError: any) {
+                console.error(`%c[EMAIL] 💥 EXCEPTION for ${coord.email}`, 'background: #f44336; color: white; padding: 2px 6px; border-radius: 3px;', emailError);
+                console.error(`[EMAIL] Exception details:`, emailError?.message, emailError?.stack);
+                emailFailCount++;
               }
+            } else {
+              coordinatorsWithoutEmail.push(coord?.full_name || coord?.username || coordId);
+              console.error(`[COORDINATOR_EMAIL] *** PROBLEM: Coordinator ${coordId} (${coord?.full_name || 'unknown'}) has NO email address! ***`);
             }
+          }
+          
+          // Log email status summary
+          console.log(`[EMAIL] Group ${group.stateName}: ${emailSuccessCount} sent, ${emailFailCount} failed, ${coordinatorsWithoutEmail.length} without email`);
+          if (coordinatorsWithoutEmail.length > 0) {
+            console.warn(`[EMAIL] Coordinators without email: ${coordinatorsWithoutEmail.join(', ')}`);
           }
 
           // Notify the forwarder
@@ -220,7 +259,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'Sites forwarded', description: `Forwarded sites to coordinators by locality` });
 
-        // Notify hub supervisors for each group
+        // Notify hub supervisors for each group (coordinator emails already sent above)
         for (const group of siteGroups!) {
           const groupKey = `${group.stateId}|${group.localityId}`;
           const selectedCoordinators = groupSelections[groupKey] || new Set();
@@ -233,12 +272,15 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               .single();
             
             if (stateData?.hub_id) {
+              // Pass coordinator IDs to also send emails via NotificationTriggerService (backup)
+              const coordinatorIdArray = Array.from(selectedCoordinators) as string[];
               await NotificationTriggerService.mmpForwardedToCoordinators(
                 stateData.hub_id,
                 mmpName || 'MMP',
                 selectedCoordinators.size,
                 mmpId,
-                (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager'
+                (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager',
+                coordinatorIdArray // Pass coordinator IDs to trigger email sending
               );
             }
           }
@@ -292,6 +334,10 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         // Send email notifications directly to coordinators
         const forwarderNameNonGrouped = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
         
+        let emailSuccessCountNonGrouped = 0;
+        let emailFailCountNonGrouped = 0;
+        const coordinatorsWithoutEmailNonGrouped: string[] = [];
+        
         for (const coordId of ids) {
           const coord = coordinators.find(c => c.id === coordId);
           if (coord?.email) {
@@ -308,13 +354,30 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               );
               if (result.success) {
                 console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
+                emailSuccessCountNonGrouped++;
               } else {
                 console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
+                emailFailCountNonGrouped++;
+                toast({ 
+                  title: 'Email Warning', 
+                  description: `Failed to send email to ${coord.full_name || coord.email}: ${result.error}`,
+                  variant: 'destructive'
+                });
               }
             } catch (emailError) {
               console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
+              emailFailCountNonGrouped++;
             }
+          } else {
+            coordinatorsWithoutEmailNonGrouped.push(coord?.full_name || coord?.username || coordId);
+            console.warn(`[EMAIL] Coordinator ${coordId} has no email address`);
           }
+        }
+        
+        // Log email status summary
+        console.log(`[EMAIL] Non-grouped: ${emailSuccessCountNonGrouped} sent, ${emailFailCountNonGrouped} failed, ${coordinatorsWithoutEmailNonGrouped.length} without email`);
+        if (coordinatorsWithoutEmailNonGrouped.length > 0) {
+          console.warn(`[EMAIL] Coordinators without email: ${coordinatorsWithoutEmailNonGrouped.join(', ')}`);
         }
 
         // Notify the forwarder
@@ -340,7 +403,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'Sites forwarded', description: `Forwarded to ${ids.length} Coordinator(s)` });
 
-        // Notify hub supervisors - get hub from first selected coordinator
+        // Notify hub supervisors and send emails via NotificationTriggerService (backup)
         try {
           const firstCoord = coordinators.find(c => selected.has(c.id));
           if (firstCoord?.hub_id) {
@@ -349,7 +412,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               mmpName || 'MMP',
               ids.length,
               mmpId,
-              (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager'
+              (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager',
+              ids // Pass coordinator IDs to trigger email sending
             );
           }
         } catch (e) {
@@ -357,8 +421,12 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         }
       } else if (mmpId) {
         // Forward MMP to coordinators (existing logic)
+        console.log(`[COORDINATOR_EMAIL] === MMP-level Forward Path ===`);
+        
         // Insert notifications
         const ids = Array.from(selected);
+        console.log(`[COORDINATOR_EMAIL] Forwarding MMP to ${ids.length} coordinators: ${ids.join(', ')}`);
+        
         const rows = ids.map(uid => ({
           recipient_id: uid,
           title_en: 'MMP forwarded to you',
@@ -377,12 +445,16 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         // Send email notifications directly to coordinators
         const forwarderNameMMP = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
+        console.log(`[COORDINATOR_EMAIL] Forwarder name: ${forwarderNameMMP}`);
+        console.log(`[COORDINATOR_EMAIL] Starting email loop for ${ids.length} coordinators...`);
         
         for (const coordId of ids) {
           const coord = coordinators.find(c => c.id === coordId);
+          console.log(`[COORDINATOR_EMAIL] Processing coordinator ${coordId}:`, coord ? { name: coord.full_name, email: coord.email } : 'NOT FOUND');
+          
           if (coord?.email) {
             try {
-              console.log(`[EMAIL] Sending MMP forwarded email to coordinator: ${coord.email}`);
+              console.log(`[COORDINATOR_EMAIL] Sending email to: ${coord.email}`);
               const result = await EmailNotificationService.sendSitesForwardedToCoordinator(
                 coord.email,
                 coord.full_name || coord.username || 'Coordinator',
@@ -393,13 +465,15 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
                 mmpId
               );
               if (result.success) {
-                console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
+                console.log(`[COORDINATOR_EMAIL] SUCCESS - Email sent to: ${coord.email}`);
               } else {
-                console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
+                console.error(`[COORDINATOR_EMAIL] FAILED - Email to ${coord.email}:`, result.error);
               }
             } catch (emailError) {
-              console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
+              console.error(`[COORDINATOR_EMAIL] ERROR - Email to ${coord.email}:`, emailError);
             }
+          } else {
+            console.error(`[COORDINATOR_EMAIL] *** NO EMAIL ADDRESS for coordinator ${coordId} (${coord?.full_name || 'unknown'}) ***`);
           }
         }
 
@@ -446,7 +520,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'MMP forwarded', description: `Forwarded to ${ids.length} Coordinator(s)` });
 
-        // Notify hub supervisors - get hub from first selected coordinator
+        // Notify hub supervisors and send emails via NotificationTriggerService (backup)
         try {
           const firstCoord = coordinators.find(c => selected.has(c.id));
           if (firstCoord?.hub_id) {
@@ -455,7 +529,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               mmpName || 'MMP',
               ids.length,
               mmpId,
-              (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager'
+              (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager',
+              ids // Pass coordinator IDs to trigger email sending
             );
           }
         } catch (e) {
