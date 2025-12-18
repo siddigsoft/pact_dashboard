@@ -171,6 +171,10 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           const forwarderName = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
           const locationInfo = `${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}`;
           
+          let emailSuccessCount = 0;
+          let emailFailCount = 0;
+          const coordinatorsWithoutEmail: string[] = [];
+          
           for (const coordId of coordinatorIds) {
             const coord = coordinators.find(c => c.id === coordId);
             if (coord?.email) {
@@ -187,13 +191,30 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
                 );
                 if (result.success) {
                   console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
+                  emailSuccessCount++;
                 } else {
                   console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
+                  emailFailCount++;
+                  toast({ 
+                    title: 'Email Warning', 
+                    description: `Failed to send email to ${coord.full_name || coord.email}: ${result.error}`,
+                    variant: 'destructive'
+                  });
                 }
               } catch (emailError) {
                 console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
+                emailFailCount++;
               }
+            } else {
+              coordinatorsWithoutEmail.push(coord?.full_name || coord?.username || coordId);
+              console.warn(`[EMAIL] Coordinator ${coordId} has no email address`);
             }
+          }
+          
+          // Log email status summary
+          console.log(`[EMAIL] Group ${group.stateName}: ${emailSuccessCount} sent, ${emailFailCount} failed, ${coordinatorsWithoutEmail.length} without email`);
+          if (coordinatorsWithoutEmail.length > 0) {
+            console.warn(`[EMAIL] Coordinators without email: ${coordinatorsWithoutEmail.join(', ')}`);
           }
 
           // Notify the forwarder
@@ -292,6 +313,10 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         // Send email notifications directly to coordinators
         const forwarderNameNonGrouped = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
         
+        let emailSuccessCountNonGrouped = 0;
+        let emailFailCountNonGrouped = 0;
+        const coordinatorsWithoutEmailNonGrouped: string[] = [];
+        
         for (const coordId of ids) {
           const coord = coordinators.find(c => c.id === coordId);
           if (coord?.email) {
@@ -308,13 +333,30 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               );
               if (result.success) {
                 console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
+                emailSuccessCountNonGrouped++;
               } else {
                 console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
+                emailFailCountNonGrouped++;
+                toast({ 
+                  title: 'Email Warning', 
+                  description: `Failed to send email to ${coord.full_name || coord.email}: ${result.error}`,
+                  variant: 'destructive'
+                });
               }
             } catch (emailError) {
               console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
+              emailFailCountNonGrouped++;
             }
+          } else {
+            coordinatorsWithoutEmailNonGrouped.push(coord?.full_name || coord?.username || coordId);
+            console.warn(`[EMAIL] Coordinator ${coordId} has no email address`);
           }
+        }
+        
+        // Log email status summary
+        console.log(`[EMAIL] Non-grouped: ${emailSuccessCountNonGrouped} sent, ${emailFailCountNonGrouped} failed, ${coordinatorsWithoutEmailNonGrouped.length} without email`);
+        if (coordinatorsWithoutEmailNonGrouped.length > 0) {
+          console.warn(`[EMAIL] Coordinators without email: ${coordinatorsWithoutEmailNonGrouped.join(', ')}`);
         }
 
         // Notify the forwarder
