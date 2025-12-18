@@ -112,6 +112,13 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
     try {
       const isSiteForwarding = siteIds && siteIds.length > 0;
       const isGroupedForwarding = siteGroups && siteGroups.length > 0;
+      
+      console.log(`[COORDINATOR_EMAIL] === Forward to Coordinators Started ===`);
+      console.log(`[COORDINATOR_EMAIL] Mode: ${isGroupedForwarding ? 'GROUPED' : isSiteForwarding ? 'SITE' : 'MMP'}`);
+      console.log(`[COORDINATOR_EMAIL] MMP ID: ${mmpId}, MMP Name: ${mmpName}`);
+      console.log(`[COORDINATOR_EMAIL] Selected coordinators: ${selected.size > 0 ? Array.from(selected).join(', ') : 'none selected directly'}`);
+      console.log(`[COORDINATOR_EMAIL] Total coordinators loaded: ${coordinators.length}`);
+      console.log(`[COORDINATOR_EMAIL] All coordinators:`, JSON.stringify(coordinators.map(c => ({ id: c.id, name: c.full_name, email: c.email })), null, 2));
 
       if (isGroupedForwarding) {
         // Forward grouped sites to coordinators
@@ -408,8 +415,12 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         }
       } else if (mmpId) {
         // Forward MMP to coordinators (existing logic)
+        console.log(`[COORDINATOR_EMAIL] === MMP-level Forward Path ===`);
+        
         // Insert notifications
         const ids = Array.from(selected);
+        console.log(`[COORDINATOR_EMAIL] Forwarding MMP to ${ids.length} coordinators: ${ids.join(', ')}`);
+        
         const rows = ids.map(uid => ({
           recipient_id: uid,
           title_en: 'MMP forwarded to you',
@@ -428,12 +439,16 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         // Send email notifications directly to coordinators
         const forwarderNameMMP = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
+        console.log(`[COORDINATOR_EMAIL] Forwarder name: ${forwarderNameMMP}`);
+        console.log(`[COORDINATOR_EMAIL] Starting email loop for ${ids.length} coordinators...`);
         
         for (const coordId of ids) {
           const coord = coordinators.find(c => c.id === coordId);
+          console.log(`[COORDINATOR_EMAIL] Processing coordinator ${coordId}:`, coord ? { name: coord.full_name, email: coord.email } : 'NOT FOUND');
+          
           if (coord?.email) {
             try {
-              console.log(`[EMAIL] Sending MMP forwarded email to coordinator: ${coord.email}`);
+              console.log(`[COORDINATOR_EMAIL] Sending email to: ${coord.email}`);
               const result = await EmailNotificationService.sendSitesForwardedToCoordinator(
                 coord.email,
                 coord.full_name || coord.username || 'Coordinator',
@@ -444,13 +459,15 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
                 mmpId
               );
               if (result.success) {
-                console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
+                console.log(`[COORDINATOR_EMAIL] SUCCESS - Email sent to: ${coord.email}`);
               } else {
-                console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
+                console.error(`[COORDINATOR_EMAIL] FAILED - Email to ${coord.email}:`, result.error);
               }
             } catch (emailError) {
-              console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
+              console.error(`[COORDINATOR_EMAIL] ERROR - Email to ${coord.email}:`, emailError);
             }
+          } else {
+            console.error(`[COORDINATOR_EMAIL] *** NO EMAIL ADDRESS for coordinator ${coordId} (${coord?.full_name || 'unknown'}) ***`);
           }
         }
 
