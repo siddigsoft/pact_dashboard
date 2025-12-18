@@ -395,9 +395,18 @@ export const useMMPProvider = () => {
       }
 
       const mapped = (rows || []).map(transformDBToMMPFile);
+      console.log('[MMP Context] Loaded MMP files:', mapped.length, 'files');
+      if (mapped.length > 0) {
+        console.log('[MMP Context] First MMP:', { 
+          id: mapped[0].id, 
+          name: mapped[0].name, 
+          status: mapped[0].status,
+          workflow: mapped[0].workflow 
+        });
+      }
       setMMPFiles(mapped);
     } catch (err) {
-      console.error('Error loading MMP files:', err);
+      console.error('[MMP Context] Error loading MMP files:', err);
       setError('Failed to load MMP files');
       setMMPFiles([]);
     } finally {
