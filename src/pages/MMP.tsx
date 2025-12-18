@@ -1446,6 +1446,7 @@ const MMP = () => {
   };
 
   const isAdmin = hasRole(['Admin', 'admin', 'Super Admin', 'superadmin', 'super admin']);
+  const isSuperAdmin = hasRole(['Super Admin', 'superadmin', 'super admin']);
   const isICT = hasRole(['ICT', 'ict']);
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
@@ -2768,7 +2769,7 @@ const MMP = () => {
                     <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
                   </TabsTrigger>
                 )}
-                {(isAdmin || isICT) && (
+                {isSuperAdmin && (
                   <TabsTrigger value="tracker" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
                     Workflow Tracker
                     <Badge variant="secondary">{mmpFiles.length}</Badge>
@@ -4013,7 +4014,7 @@ const MMP = () => {
               </TabsContent>
             )}
 
-            {(isAdmin || isICT) && (
+            {isSuperAdmin && (
               <TabsContent value="tracker">
                 <WorkflowTrackerTab mmpFiles={mmpFiles} />
               </TabsContent>
