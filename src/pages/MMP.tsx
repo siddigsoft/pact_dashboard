@@ -1624,19 +1624,21 @@ const MMP = () => {
     });
     
     const verifiedMMPs = filteredMMPs.filter(mmp => {
+      // Check if MMP has at least one site with verified status
+      const hasVerifiedSites = (mmp.siteEntries || []).some(entry => {
+        const status = ((entry as any).status || '').toLowerCase();
+        return status === 'verified';
+      });
+      
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
         return (mmp.workflow as any)?.forwardedToCoordinators === true;
       } else if (isFOM) {
-        // For FOM: Verified means MMPs with sites available for verification
-        return mmp.type === 'verified-template' || 
-               mmp.status === 'approved' ||
-               ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
+        // For FOM: Verified means MMPs with actual verified sites
+        return hasVerifiedSites || mmp.type === 'verified-template' || mmp.status === 'approved';
       } else {
-        // For admin/other roles: keep existing logic
-        return mmp.status === 'approved' || 
-               mmp.type === 'verified-template' ||
-               ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
+        // For admin/other roles: Only show if has verified sites, or is approved/verified-template
+        return hasVerifiedSites || mmp.status === 'approved' || mmp.type === 'verified-template';
       }
     });
 
