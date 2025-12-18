@@ -2,15 +2,14 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { FileCheck, Edit, RotateCcw, AlertTriangle } from 'lucide-react';
+import { FileCheck, Edit, RotateCcw } from 'lucide-react';
 import { MMPFile } from '@/types';
 import { getTotalSiteCount, getActualSiteCount } from '@/utils/mmpUtils';
 import { format } from 'date-fns';
 import { useMMP } from '@/context/mmp/MMPContext';
-import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { checkRecallAllowed, performRecall } from '@/utils/recallUtils';
+import { getRecallTierForRole } from '@/utils/recallUtils';
+import { RecallDialog } from './RecallDialog';
 
 interface MMPOverviewCardProps {
   mmpFile: MMPFile;
@@ -24,16 +23,15 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
   const totalEntries = getTotalSiteCount(mmpFile);
   const processedEntries = mmpFile?.processedEntries || 0;
 
-  // Use uploadedAt or approvedAt (these exist on MMPFile) - avoid createdAt/created_at
   const displayDate = mmpFile.approvedAt || mmpFile.uploadedAt || undefined;
 
-  // --- Recall logic ---
-  const [recalling, setRecalling] = React.useState(false);
   const [isForwarded, setIsForwarded] = React.useState(false);
   const [recallDialogOpen, setRecallDialogOpen] = React.useState(false);
   const { refreshMMPFiles } = useMMP();
-  const { toast } = useToast();
   const { currentUser } = useAuthorization();
+
+  const userRole = currentUser?.role || '';
+  const canRecall = getRecallTierForRole(userRole) !== null;
 
   React.useEffect(() => {
     const wf = (mmpFile.workflow as any) || {};
@@ -42,47 +40,15 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
     setIsForwarded(forwarded && !verified);
   }, [mmpFile.workflow, mmpFile.status]);
 
-  const recallCheck = checkRecallAllowed(mmpFile);
-
-  const handleRecall = async () => {
-    if (!recallCheck.canRecall) {
-      toast({
-        title: 'Cannot recall MMP',
-        description: recallCheck.reason || 'Work has already started on this MMP',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    setRecalling(true);
-    try {
-      const recallerName = currentUser?.fullName || currentUser?.email || 'Unknown User';
-      const recallerEmail = currentUser?.email;
-
-      const result = await performRecall(mmpFile.id, recallerName, recallerEmail);
-
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-
-      await refreshMMPFiles();
-      setIsForwarded(false);
-      setRecallDialogOpen(false);
-      toast({
-        title: 'MMP recalled successfully',
-        description: 'FOMs have been notified that the MMP has been recalled.'
-      });
-    } catch (e: any) {
-      toast({ title: 'Recall failed', description: e?.message || 'Unexpected error', variant: 'destructive' });
-    } finally {
-      setRecalling(false);
-    }
+  const handleRecallComplete = async () => {
+    await refreshMMPFiles();
+    setIsForwarded(false);
   };
 
   return (
     <div className="relative">
       <Card className="border-l-4 border-l-blue-500">
-        <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-900/20 dark:to-transparent">
           <CardTitle>MMP Overview</CardTitle>
           <div className="text-sm text-muted-foreground">
             Total entries: {totalEntries} • Site entries: {actualSiteCount} • Processed: {processedEntries}
@@ -106,14 +72,14 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
                   const localities = Object.keys(stateGroups[state]).sort();
                   const totalStateSites = localities.reduce((s, l) => s + stateGroups[state][l], 0);
                   return (
-                    <div key={state} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 mb-3">
+                    <div key={state} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg p-4 mb-3">
                       <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-medium text-blue-700">{state}</h4>
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-800">{totalStateSites} sites</Badge>
+                        <h4 className="font-medium text-blue-700 dark:text-blue-400">{state}</h4>
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">{totalStateSites} sites</Badge>
                       </div>
                       <div className="space-y-2">
                         {localities.map(locality => (
-                          <div key={locality} className="flex justify-between text-sm p-2 bg-white rounded">
+                          <div key={locality} className="flex justify-between text-sm p-2 bg-white dark:bg-gray-800 rounded">
                             <span>{locality}</span>
                             <span className="text-muted-foreground">{stateGroups[state][locality]} sites</span>
                           </div>
@@ -124,77 +90,39 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
                 });
               })()
             ) : (
-              <div className="bg-amber-50 p-4 rounded-lg text-center">No site entries available for distribution display</div>
+              <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg text-center">No site entries available for distribution display</div>
             )}
           </div>
         </CardContent>
 
-        <CardFooter className="flex justify-between">
+        <CardFooter className="flex justify-between flex-wrap gap-2">
           <div className="text-sm text-muted-foreground">{displayDate ? `Last: ${format(new Date(displayDate), 'MMM d, yyyy')}` : 'No date available'}</div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={onEditMMP}>
               <Edit className="h-4 w-4 mr-2" />
               Edit MMP Data
             </Button>
-            {isForwarded && (
-              <AlertDialog open={recallDialogOpen} onOpenChange={setRecallDialogOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={recalling || !recallCheck.canRecall}
-                    data-testid="button-recall-mmp-overview"
-                  >
-                    <RotateCcw className="h-4 w-4 mr-1" />
-                    {recalling ? 'Recalling...' : 'Recall MMP'}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2">
-                      <AlertTriangle className="h-5 w-5 text-destructive" />
-                      Recall MMP
-                    </AlertDialogTitle>
-                    <AlertDialogDescription className="space-y-2">
-                      {recallCheck.canRecall ? (
-                        <>
-                          <p>Are you sure you want to recall this MMP? This will:</p>
-                          <ul className="list-disc list-inside text-sm space-y-1 mt-2">
-                            <li>Remove the MMP from all assigned FOMs</li>
-                            <li>Send a notification to affected FOMs</li>
-                            <li>Log this action for audit purposes</li>
-                          </ul>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-destructive font-medium">This MMP cannot be recalled because:</p>
-                          <ul className="list-disc list-inside text-sm space-y-1 mt-2">
-                            {recallCheck.blockers.map((blocker, i) => (
-                              <li key={i}>{blocker}</li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    {recallCheck.canRecall && (
-                      <AlertDialogAction
-                        onClick={handleRecall}
-                        disabled={recalling}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        {recalling ? 'Recalling...' : 'Yes, Recall MMP'}
-                      </AlertDialogAction>
-                    )}
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+            {(isForwarded || canRecall) && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setRecallDialogOpen(true)}
+                data-testid="button-recall-mmp-overview"
+              >
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Recall MMP
+              </Button>
             )}
           </div>
         </CardFooter>
       </Card>
+
+      <RecallDialog
+        open={recallDialogOpen}
+        onOpenChange={setRecallDialogOpen}
+        mmpFile={mmpFile}
+        onRecallComplete={handleRecallComplete}
+      />
     </div>
   );
 };

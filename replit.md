@@ -105,6 +105,21 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - Site Verified by Coordinator: Email sent to FOM only, CC: Hub Supervisors (of coordinator's hub) + 1 Super Admin
     - 2-second delay between emails when sending to multiple recipients
     - Hub Supervisors included for accountability only on coordinator-related workflow emails
+*   **Multi-Tier MMP Recall System (Dec 2024):**
+    - Three-tier recall hierarchy: Admin→FOM, FOM→Coordinator, Coordinator→Data Collector
+    - Scope-based filtering: Full MMP, by activity, site, locality, state, hub, CP, or date range
+    - Force recall capability for Super Admin and Admin to bypass normal restrictions
+    - Financial recovery system for transportation advances with two options:
+      - Deduct from future payments
+      - Cash return required
+      - Write-off (Super Admin only)
+    - Approval workflow for recalls requiring supervisor review
+    - WFP cancellation handling with automatic recall triggers
+    - Comprehensive audit logging with before/after snapshots
+    - Bilingual notifications (English/Arabic) to all affected users
+    - Components: `RecallDialog`, `RecallHistory`, `RecoveryDashboard`, `PendingRecallApprovals`
+    - Types defined in `src/types/recall.ts`
+    - Utils in `src/utils/recallUtils.ts` with `checkTieredRecallAllowed()`, `performTieredRecall()`
 
 ### System Design Choices
 The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure.
