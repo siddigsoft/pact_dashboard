@@ -606,6 +606,9 @@ const CoordinatorSites: React.FC = () => {
         // Filter by forwarded_to_user_id
         if (entry.forwardedToUserId !== currentUser.id) return;
         
+        // Exclude sites that have been returned to FOM
+        if (entry.status === 'returned_to_fom') return;
+        
         // For non-admins, also check project membership
         if (!isAdminOrSuperUser) {
           const projectId = mmp.projectId;
