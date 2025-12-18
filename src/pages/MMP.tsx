@@ -27,6 +27,7 @@ import { MMPTabsSkeleton } from '@/components/ui/skeletons';
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
 import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
+import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
 import { sudanStates } from '@/data/sudanStates';
 import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
 import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
@@ -2767,6 +2768,12 @@ const MMP = () => {
                     <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
                   </TabsTrigger>
                 )}
+                {(isAdmin || isICT) && (
+                  <TabsTrigger value="tracker" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                    Workflow Tracker
+                    <Badge variant="secondary">{mmpFiles.length}</Badge>
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -4003,6 +4010,12 @@ const MMP = () => {
                     })()}
                   </div>
                 ) : null}
+              </TabsContent>
+            )}
+
+            {(isAdmin || isICT) && (
+              <TabsContent value="tracker">
+                <WorkflowTrackerTab mmpFiles={mmpFiles} />
               </TabsContent>
             )}
           </Tabs>
