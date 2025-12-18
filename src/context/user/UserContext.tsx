@@ -607,17 +607,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // If we're not in an OAuth callback context, auth is ready now.
       // If we are, allow a short window for Supabase to process URL and emit SIGNED_IN.
-      console.log('[Auth] isOAuthCallback:', isOAuthCallback, 'URL:', window.location.href);
-      if (!isOAuthCallback) {
-        console.log('[Auth] Setting authReady=true (not OAuth callback)');
-        setAuthReady(true);
-      } else {
-        console.log('[Auth] Waiting for OAuth callback, will set authReady in 2s');
-        readyTimeout = setTimeout(() => {
-          console.log('[Auth] Timeout reached, setting authReady=true');
-          setAuthReady(true);
-        }, 2000);
-      }
+      // Always set auth ready quickly - OAuth will trigger state change event anyway
+      console.log('[Auth] Setting authReady=true immediately');
+      setAuthReady(true);
     })();
 
     return () => {
