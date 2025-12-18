@@ -32,6 +32,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { checkRecallAllowed, performRecall } from '@/utils/recallUtils';
+import { RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface MMPListProps {
   mmpFiles: MMPFile[];
@@ -91,31 +93,50 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     }
   };
 
-  // Added recall handler consistent with MMPFileManagement.tsx
-  const handleRecall = async (mmpId: string) => {
-    setRecallingId(mmpId);
+  // Recall handler with status-based restrictions and audit logging
+  const handleRecall = async (mmp: MMPFile) => {
+    const recallCheck = checkRecallAllowed(mmp);
+    
+    if (!recallCheck.canRecall) {
+      toast({
+        title: 'Cannot recall MMP',
+        description: recallCheck.reason || 'Work has already started on this MMP',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setRecallingId(mmp.id);
     try {
-      const { data, error } = await supabase
-        .from('mmp_files')
-        .select('workflow')
-        .eq('id', mmpId)
-        .single();
-      if (error) throw error;
-      const wf = (data?.workflow as any) || {};
-      wf.forwardedToFomIds = [];
-      await supabase.from('mmp_files').update({ workflow: wf }).eq('id', mmpId);
+      const recallerName = currentUser?.fullName || currentUser?.email || 'Unknown User';
+      const recallerEmail = currentUser?.email;
+
+      const result = await performRecall(mmp.id, recallerName, recallerEmail);
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
       await refreshMMPFiles();
       setForwardedMMPs(prev => {
         const newSet = new Set(prev);
-        newSet.delete(mmpId);
+        newSet.delete(mmp.id);
         return newSet;
       });
-      toast({ title: 'MMP recalled', description: 'Forwarding to FOMs has been recalled.' });
+      toast({
+        title: 'MMP recalled successfully',
+        description: 'FOMs have been notified that the MMP has been recalled.'
+      });
     } catch (e: any) {
       toast({ title: 'Recall failed', description: e?.message || 'Unexpected error', variant: 'destructive' });
     } finally {
       setRecallingId(null);
     }
+  };
+
+  // Check if MMP can be recalled
+  const canRecallMMP = (mmp: MMPFile) => {
+    return checkRecallAllowed(mmp).canRecall;
   };
 
   if (!mmpFiles.length) {
@@ -234,16 +255,18 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         </>
                       )}
 
-                      {/* Added Recall MMP option for consistency */}
+                      {/* Recall MMP option with status-based restrictions */}
                       {isForwarded && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            onClick={() => handleRecall(mmp.id)}
-                            disabled={recallingId === mmp.id}
+                            onClick={() => handleRecall(mmp)}
+                            disabled={recallingId === mmp.id || !canRecallMMP(mmp)}
                             className="text-destructive"
                           >
+                            <RotateCcw className="h-4 w-4 mr-2" />
                             {recallingId === mmp.id ? 'Recalling...' : 'Recall MMP'}
+                            {!canRecallMMP(mmp) && <span className="ml-1 text-xs">(blocked)</span>}
                           </DropdownMenuItem>
                         </>
                       )}

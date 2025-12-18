@@ -34,6 +34,7 @@ import MMPDetailHeader from "@/components/mmp/MMPDetailHeader";
 import MMPOverviewCard from "@/components/mmp/MMPOverviewCard";
 import MMPSiteEntriesTable from "@/components/mmp/MMPSiteEntriesTable";
 import MMPFileManagement from "@/components/mmp/MMPFileManagement";
+import RecallHistory from "@/components/mmp/RecallHistory";
 import { useAuthorization } from "@/hooks/use-authorization";
 import ForwardToFOMDialog from "@/components/mmp/ForwardToFOMDialog";
 import ForwardToCoordinatorsDialog from "@/components/mmp/ForwardToCoordinatorsDialog";
@@ -731,6 +732,10 @@ const MMPDetailView = () => {
         </div>
       )}
 
+      {/* Recall History - shows if any recalls have occurred */}
+      <div className="mb-6">
+        <RecallHistory mmpFile={mmpFile} />
+      </div>
       
       <Dialog open={showAuditTrail} onOpenChange={setShowAuditTrail}>
         <DialogContent className="max-w-3xl">
