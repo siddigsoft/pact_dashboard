@@ -1418,9 +1418,9 @@ export const NotificationTriggerService = {
 
   /**
    * Notify FOM when MMP is forwarded to them
-   * - Sends in-app notification to FOM(s) and CC recipients
-   * - Sends ONE bilingual email to FOM with CC to Super Admins + Hub Supervisor
-   * - Uses single SMTP transaction to avoid IONOS rate limiting
+   * - Sends in-app notification and bilingual email to selected FOM(s) only
+   * - CC one Super Admin on email (not all admins)
+   * - Simplified to reduce email volume and avoid rate limiting
    */
   async mmpForwardedToFOM(
     fomUserIds: string[],
@@ -1443,8 +1443,13 @@ export const NotificationTriggerService = {
         console.error('Error fetching FOM user details:', fomError);
       }
 
-      // 2. Create in-app notifications for all FOMs
+      // 2. Notify all selected FOMs with bilingual email
       for (const fomId of fomUserIds) {
+        const fomUser = fomUsers?.find(u => u.id === fomId);
+        const recipientName = fomUser?.full_name || 'Field Operations Manager';
+        const recipientEmail = fomUser?.email;
+
+        // Create in-app notification
         const sent = await this.send({
           userId: fomId,
           title: 'MMP Forwarded to You',
@@ -1458,20 +1463,41 @@ export const NotificationTriggerService = {
           sendEmail: false // We send bilingual email separately
         });
         if (sent) successCount++;
+
+        // Send bilingual email directly
+        if (recipientEmail) {
+          try {
+            await EmailNotificationService.sendMMPForwardedToFOM(
+              recipientEmail,
+              recipientName,
+              mmpName,
+              sender,
+              mmpId,
+              true // isRecipientFOM
+            );
+            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailError);
+          }
+        }
       }
 
       // 3. Build CC list: Super Admins + Hub Supervisor for accountability
       const ccEmails = await getAllCcEmails(hubId);
-
-      // 4. Create in-app notifications for CC recipients
+      
+      // 4. Notify CC recipients (super admins + hub supervisor) with bilingual email
       for (const ccEmail of ccEmails) {
+        // Find user details for the CC recipient
         const { data: ccUser } = await supabase
           .from('profiles')
-          .select('id, full_name, role')
+          .select('id, full_name, email, role')
           .eq('email', ccEmail)
           .single();
         
         if (ccUser) {
+          const recipientName = ccUser.full_name || (ccUser.role === 'supervisor' ? 'Hub Supervisor' : 'Super Administrator');
+          
+          // Create in-app notification
           const sent = await this.send({
             userId: ccUser.id,
             title: 'MMP Forwarded to FOM',
@@ -1482,40 +1508,24 @@ export const NotificationTriggerService = {
             link: `/mmp/${mmpId}`,
             relatedEntityId: mmpId,
             relatedEntityType: 'mmpFile',
-            sendEmail: false
+            sendEmail: false // We send bilingual email separately
           });
           if (sent) successCount++;
-        }
-      }
 
-      // 5. Send ONE email to first FOM with all others in CC (avoids IONOS rate limiting)
-      const fomEmails = fomUsers?.map(u => u.email).filter(Boolean) || [];
-      if (fomEmails.length > 0) {
-        const primaryRecipient = fomEmails[0];
-        const primaryFom = fomUsers?.find(u => u.email === primaryRecipient);
-        const recipientName = primaryFom?.full_name || 'Field Operations Manager';
-        
-        // Combine additional FOMs + CC recipients into one CC list
-        const allCcEmails = [
-          ...fomEmails.slice(1), // Other FOMs (if any)
-          ...ccEmails            // Super Admins + Hub Supervisor
-        ];
-
-        try {
-          await EmailNotificationService.sendMMPForwardedToFOM(
-            primaryRecipient,
-            recipientName,
-            mmpName,
-            sender,
-            mmpId,
-            true, // isRecipientFOM
-            undefined, // recipientRole
-            0, // retryCount
-            allCcEmails.length > 0 ? allCcEmails : undefined
-          );
-          console.log(`[NOTIFICATION] Sent MMP forwarded email to ${primaryRecipient} with ${allCcEmails.length} CC recipients`);
-        } catch (emailError) {
-          console.error(`[NOTIFICATION] Failed to send MMP forwarded email:`, emailError);
+          // Send bilingual email directly
+          try {
+            await EmailNotificationService.sendMMPForwardedToFOM(
+              ccEmail,
+              recipientName,
+              mmpName,
+              sender,
+              mmpId,
+              false // Not the direct recipient
+            );
+            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to ${ccUser.role}: ${ccEmail}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${ccEmail}:`, emailError);
+          }
         }
       }
 
