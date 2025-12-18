@@ -139,41 +139,6 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 };
 
-// Deferred providers - loaded after user is authenticated to reduce initial load
-const DeferredProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, authReady } = useUser();
-  const [mounted, setMounted] = React.useState(false);
-  
-  // Defer heavy providers until after initial render
-  React.useEffect(() => {
-    if (authReady && currentUser) {
-      // Small delay to let UI render first
-      const timer = setTimeout(() => setMounted(true), 100);
-      return () => clearTimeout(timer);
-    }
-  }, [authReady, currentUser]);
-  
-  // If not authenticated yet, just render children without heavy providers
-  if (!authReady || !currentUser || !mounted) {
-    return <>{children}</>;
-  }
-  
-  // Load heavy providers only after auth is ready
-  return (
-    <ChatProvider>
-      <CallProvider>
-        <CommunicationProvider>
-          <GlobalPresenceProvider>
-            <BrowserNotificationListener />
-            <GlobalCallOverlay />
-            <MobilePushNotificationOverlay />
-            {children}
-          </GlobalPresenceProvider>
-        </CommunicationProvider>
-      </CallProvider>
-    </ChatProvider>
-  );
-};
 
 export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
@@ -197,9 +162,18 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                       <AuditProvider>
                                         <ApprovalProvider>
                                           <ActiveVisitProvider>
-                                            <DeferredProviders>
-                                              {children}
-                                            </DeferredProviders>
+                                            <ChatProvider>
+                                              <CallProvider>
+                                                <CommunicationProvider>
+                                                  <GlobalPresenceProvider>
+                                                    <BrowserNotificationListener />
+                                                    <GlobalCallOverlay />
+                                                    <MobilePushNotificationOverlay />
+                                                    {children}
+                                                  </GlobalPresenceProvider>
+                                                </CommunicationProvider>
+                                              </CallProvider>
+                                            </ChatProvider>
                                           </ActiveVisitProvider>
                                         </ApprovalProvider>
                                       </AuditProvider>
