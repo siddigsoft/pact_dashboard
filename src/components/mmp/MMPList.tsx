@@ -32,8 +32,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { checkRecallAllowed, performRecall } from '@/utils/recallUtils';
+import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
 import { RotateCcw, AlertTriangle } from 'lucide-react';
+import { RecallDialog } from './RecallDialog';
 
 interface MMPListProps {
   mmpFiles: MMPFile[];
@@ -53,10 +54,13 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const { refreshMMPFiles } = useMMP();
   const { toast } = useToast();
   const [recallingId, setRecallingId] = useState<string | null>(null);
+  const [recallDialogOpen, setRecallDialogOpen] = useState(false);
+  const [selectedMMPForRecall, setSelectedMMPForRecall] = useState<MMPFile | null>(null);
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
   const isICT = hasAnyRole(['ICT', 'ict']);
+  const isSuperAdmin = hasAnyRole(['Super Admin', 'super_admin']);
   const isFOM = hasAnyRole([
     'Field Operation Manager (FOM)',
     'FOM',
@@ -65,6 +69,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     'Field Ops Manager',
     'field ops manager'
   ]);
+  const userRole = isSuperAdmin ? 'super_admin' : isAdmin ? 'admin' : isICT ? 'ict' : isFOM ? 'fom' : 'user';
+  const userCanForceRecall = canForceRecall(userRole);
   const canDeleteMMP = checkPermission('mmp', 'delete') || isAdmin || isICT;
   const canEditMMP = checkPermission('mmp', 'update') || isAdmin || isICT;
   // Allow forwarding if user can update OR has admin/ict role
@@ -93,50 +99,35 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     }
   };
 
-  // Recall handler with status-based restrictions and audit logging
-  const handleRecall = async (mmp: MMPFile) => {
-    const recallCheck = checkRecallAllowed(mmp);
-    
-    if (!recallCheck.canRecall) {
-      toast({
-        title: 'Cannot recall MMP',
-        description: recallCheck.reason || 'Work has already started on this MMP',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    setRecallingId(mmp.id);
-    try {
-      const recallerName = currentUser?.fullName || currentUser?.email || 'Unknown User';
-      const recallerEmail = currentUser?.email;
-
-      const result = await performRecall(mmp.id, recallerName, recallerEmail);
-
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-
-      await refreshMMPFiles();
+  // Open recall dialog
+  const handleRecall = (mmp: MMPFile) => {
+    setSelectedMMPForRecall(mmp);
+    setRecallDialogOpen(true);
+  };
+  
+  // Handle recall completion
+  const handleRecallComplete = async () => {
+    await refreshMMPFiles();
+    if (selectedMMPForRecall) {
       setForwardedMMPs(prev => {
         const newSet = new Set(prev);
-        newSet.delete(mmp.id);
+        newSet.delete(selectedMMPForRecall.id);
         return newSet;
       });
-      toast({
-        title: 'MMP recalled successfully',
-        description: 'FOMs have been notified that the MMP has been recalled.'
-      });
-    } catch (e: any) {
-      toast({ title: 'Recall failed', description: e?.message || 'Unexpected error', variant: 'destructive' });
-    } finally {
-      setRecallingId(null);
     }
+    setRecallDialogOpen(false);
+    setSelectedMMPForRecall(null);
   };
 
-  // Check if MMP can be recalled
+  // Check if MMP can be recalled (or if user can force recall)
   const canRecallMMP = (mmp: MMPFile) => {
-    return checkRecallAllowed(mmp).canRecall;
+    const recallCheck = checkRecallAllowed(mmp);
+    return recallCheck.canRecall || userCanForceRecall;
+  };
+  
+  // Check if recall is blocked (for showing indicator)
+  const isRecallBlocked = (mmp: MMPFile) => {
+    return !checkRecallAllowed(mmp).canRecall;
   };
 
   if (!mmpFiles.length) {
@@ -264,18 +255,24 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         </>
                       )}
 
-                      {/* Recall MMP option - restricted to Admin/ICT only */}
-                      {(isAdmin || isICT) && isForwarded && (
+                      {/* Recall MMP option - restricted to Super Admin/Admin/ICT only */}
+                      {(isSuperAdmin || isAdmin || isICT) && isForwarded && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handleRecall(mmp)}
                             disabled={recallingId === mmp.id || !canRecallMMP(mmp)}
                             className="text-destructive"
+                            data-testid={`button-recall-mmp-${mmp.id}`}
                           >
                             <RotateCcw className="h-4 w-4 mr-2" />
                             {recallingId === mmp.id ? 'Recalling...' : 'Recall MMP'}
-                            {!canRecallMMP(mmp) && <span className="ml-1 text-xs">(blocked)</span>}
+                            {isRecallBlocked(mmp) && userCanForceRecall && (
+                              <span className="ml-1 text-xs">(force available)</span>
+                            )}
+                            {isRecallBlocked(mmp) && !userCanForceRecall && (
+                              <span className="ml-1 text-xs">(blocked)</span>
+                            )}
                           </DropdownMenuItem>
                         </>
                       )}
@@ -312,6 +309,19 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           mmpId={selectedMMPForForward.id}
           mmpName={selectedMMPForForward.name}
           onForwarded={handleForwardComplete}
+        />
+      )}
+
+      {/* Recall Dialog */}
+      {selectedMMPForRecall && (
+        <RecallDialog
+          open={recallDialogOpen}
+          onOpenChange={(open) => {
+            setRecallDialogOpen(open);
+            if (!open) setSelectedMMPForRecall(null);
+          }}
+          mmpFile={selectedMMPForRecall}
+          onRecallComplete={handleRecallComplete}
         />
       )}
 
