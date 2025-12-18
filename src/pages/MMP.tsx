@@ -1602,9 +1602,9 @@ const MMP = () => {
     return { pending, verified };
   }, [categorizedMMPs.forwarded]);
 
-  // New MMP subcategories for FOM (Removed Rejected)
+  // New MMP subcategories for FOM and Admin (Removed Rejected)
   const newFomSubcategories = useMemo(() => {
-    if (!isFOM) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
+    if (!isFOM && !isAdmin && !isICT) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
     const base = categorizedMMPs.new || [];
     const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
     const verified = base.filter(mmp => mmp.status === 'approved');
@@ -1613,7 +1613,7 @@ const MMP = () => {
       mmp.siteEntries?.some(site => site.status === 'returned_to_fom')
     );
     return { pending, verified, returned };
-  }, [isFOM, categorizedMMPs.new, mmpFiles]);
+  }, [isFOM, isAdmin, isICT, categorizedMMPs.new, mmpFiles]);
 
   // Returned sites grouped by state for FOM view
   const returnedSitesByState = useMemo(() => {
@@ -2697,18 +2697,22 @@ const MMP = () => {
 
             {!canClaimSites && (
               <TabsContent value="new">
-                {isFOM && (
+                {(isFOM || isAdmin || isICT) && (
                   <div className="mb-4 overflow-x-auto pb-2">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
                     <div className="flex gap-2 min-w-max">
-                        <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
-                          MMPs Pending Verification
-                          <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
-                        </Button>
-                        <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={`${newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
-                          Verified MMPs
-                          <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
-                        </Button>
+                        {isFOM && (
+                          <>
+                            <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                              MMPs Pending Verification
+                              <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
+                            </Button>
+                            <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={`${newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                              Verified MMPs
+                              <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
+                            </Button>
+                          </>
+                        )}
                         <Button variant={newFomSubTab === 'returned' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('returned')} className={`${newFomSubTab === 'returned' ? 'bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-300' : ''} flex-shrink-0 whitespace-nowrap`}>
                           Returned Sites
                           <Badge variant="secondary" className="ml-2">{returnedSitesByState.reduce((sum, g) => sum + g.totalSites, 0)}</Badge>
@@ -2718,7 +2722,7 @@ const MMP = () => {
                       </div>
                   </div>
                 )}
-                {newFomSubTab === 'returned' ? (
+                {(isFOM || isAdmin || isICT) && newFomSubTab === 'returned' ? (
                   <Card>
                     <CardHeader>
                       <CardTitle>Returned Sites by State</CardTitle>
@@ -2820,7 +2824,7 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
+                  <MMPList mmpFiles={(isFOM || isAdmin || isICT) ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
                 )}
               </TabsContent>
             )}
