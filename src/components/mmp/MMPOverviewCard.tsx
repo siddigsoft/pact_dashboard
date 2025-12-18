@@ -2,13 +2,15 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileCheck, Edit } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { FileCheck, Edit, RotateCcw, AlertTriangle } from 'lucide-react';
 import { MMPFile } from '@/types';
 import { getTotalSiteCount, getActualSiteCount } from '@/utils/mmpUtils';
 import { format } from 'date-fns';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { checkRecallAllowed, performRecall } from '@/utils/recallUtils';
 
 interface MMPOverviewCardProps {
   mmpFile: MMPFile;
@@ -28,31 +30,48 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
   // --- Recall logic ---
   const [recalling, setRecalling] = React.useState(false);
   const [isForwarded, setIsForwarded] = React.useState(false);
+  const [recallDialogOpen, setRecallDialogOpen] = React.useState(false);
   const { refreshMMPFiles } = useMMP();
   const { toast } = useToast();
+  const { currentUser } = useAuthorization();
 
   React.useEffect(() => {
     const wf = (mmpFile.workflow as any) || {};
     const forwarded = Array.isArray(wf.forwardedToFomIds) && wf.forwardedToFomIds.length > 0;
-    const verified = mmpFile.status === 'approved'; // FIX: Use 'approved' instead of 'verified' to match MMPStatus type
+    const verified = mmpFile.status === 'approved';
     setIsForwarded(forwarded && !verified);
   }, [mmpFile.workflow, mmpFile.status]);
 
+  const recallCheck = checkRecallAllowed(mmpFile);
+
   const handleRecall = async () => {
+    if (!recallCheck.canRecall) {
+      toast({
+        title: 'Cannot recall MMP',
+        description: recallCheck.reason || 'Work has already started on this MMP',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setRecalling(true);
     try {
-      const { data, error } = await supabase
-        .from('mmp_files')
-        .select('workflow')
-        .eq('id', mmpFile.id)
-        .single();
-      if (error) throw error;
-      const wf = (data?.workflow as any) || {};
-      wf.forwardedToFomIds = [];
-      await supabase.from('mmp_files').update({ workflow: wf }).eq('id', mmpFile.id);
+      const recallerName = currentUser?.fullName || currentUser?.email || 'Unknown User';
+      const recallerEmail = currentUser?.email;
+
+      const result = await performRecall(mmpFile.id, recallerName, recallerEmail);
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
       await refreshMMPFiles();
       setIsForwarded(false);
-      toast({ title: 'MMP recalled', description: 'Forwarding to FOMs has been recalled.' });
+      setRecallDialogOpen(false);
+      toast({
+        title: 'MMP recalled successfully',
+        description: 'FOMs have been notified that the MMP has been recalled.'
+      });
     } catch (e: any) {
       toast({ title: 'Recall failed', description: e?.message || 'Unexpected error', variant: 'destructive' });
     } finally {
@@ -118,14 +137,60 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
               Edit MMP Data
             </Button>
             {isForwarded && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleRecall}
-                disabled={recalling}
-              >
-                {recalling ? 'Recalling MMP…' : 'Recall MMP'}
-              </Button>
+              <AlertDialog open={recallDialogOpen} onOpenChange={setRecallDialogOpen}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={recalling || !recallCheck.canRecall}
+                    data-testid="button-recall-mmp-overview"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    {recalling ? 'Recalling...' : 'Recall MMP'}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-destructive" />
+                      Recall MMP
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="space-y-2">
+                      {recallCheck.canRecall ? (
+                        <>
+                          <p>Are you sure you want to recall this MMP? This will:</p>
+                          <ul className="list-disc list-inside text-sm space-y-1 mt-2">
+                            <li>Remove the MMP from all assigned FOMs</li>
+                            <li>Send a notification to affected FOMs</li>
+                            <li>Log this action for audit purposes</li>
+                          </ul>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-destructive font-medium">This MMP cannot be recalled because:</p>
+                          <ul className="list-disc list-inside text-sm space-y-1 mt-2">
+                            {recallCheck.blockers.map((blocker, i) => (
+                              <li key={i}>{blocker}</li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    {recallCheck.canRecall && (
+                      <AlertDialogAction
+                        onClick={handleRecall}
+                        disabled={recalling}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        {recalling ? 'Recalling...' : 'Yes, Recall MMP'}
+                      </AlertDialogAction>
+                    )}
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </div>
         </CardFooter>
