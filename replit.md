@@ -109,9 +109,9 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - Three-tier recall hierarchy: Admin→FOM, FOM→Coordinator, Coordinator→Data Collector
     - Scope-based filtering: Full MMP, by activity, site, locality, state, hub, CP, or date range
     - Force recall capability for Super Admin and Admin to bypass normal restrictions
-    - Financial recovery system for transportation advances with two options:
+    - Financial recovery system for transportation advances with three options:
       - Deduct from future payments
-      - Cash return required
+      - Cash return required (with receipt validation)
       - Write-off (Super Admin only)
     - Approval workflow for recalls requiring supervisor review
     - WFP cancellation handling with automatic recall triggers
@@ -119,7 +119,14 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - Bilingual notifications (English/Arabic) to all affected users
     - Components: `RecallDialog`, `RecallHistory`, `RecoveryDashboard`, `PendingRecallApprovals`
     - Types defined in `src/types/recall.ts`
-    - Utils in `src/utils/recallUtils.ts` with `checkTieredRecallAllowed()`, `performTieredRecall()`
+    - Utils in `src/utils/recallUtils.ts` with `checkTieredRecallAllowed()`, `performTieredRecall()`, `computeRecallImpact()`
+    
+    **Recall UX Improvements (Dec 2024):**
+    - **Impact Preview:** Two-step recall flow (configure → preview) with `computeRecallImpact()` showing affected sites, collectors, financial exposure, and warnings before confirmation
+    - **Approval Queue Enhancements:** Bulk approve/reject actions, SLA indicators (on time/approaching/overdue with color coding), tier-based filtering, and refresh capability
+    - **Recovery Dashboard Improvements:** Wallet transaction ID and receipt reference tracking for cash returns, overdue alerts with age-based escalation (7/14 days), evidence persistence in audit logs, required receipt validation for cash return method
+    - **RecallImpactPreview interface:** Returns affectedSiteCount, affectedCollectorCount, affectedCollectors list, hasFinancialImpact, financialAmount, sitesWithAdvances, scopeSummary, and warnings
+    - **ProcessRecoveryOptions interface:** Supports siteEntryId, processedBy, method, amount, notes, walletTransactionId, receiptReference
 
 ### System Design Choices
 The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure.
