@@ -59,16 +59,7 @@ const isTransientSmtpError = (errorMsg: string | undefined): boolean => {
     msg.includes('econnrefused') || // Connection refused
     msg.includes('enotfound') || // DNS lookup failed
     msg.includes('socket') ||    // Socket errors
-    msg.includes('network') ||   // Network errors
-    msg.includes('verify') ||    // SMTP verification failed
-    msg.includes('tls') ||       // TLS/SSL errors
-    msg.includes('certificate') || // Certificate errors
-    msg.includes('handshake') || // TLS handshake errors
-    msg.includes('smtp') ||      // Any SMTP errors
-    msg.includes('mail') ||      // Mail sending errors
-    msg.includes('closed') ||    // Connection closed
-    msg.includes('reset') ||     // Connection reset
-    msg.includes('abort')        // Aborted connection
+    msg.includes('network')      // Network errors
   );
 };
 
@@ -327,8 +318,8 @@ export const EmailNotificationService = {
     options: NotificationEmailOptions,
     retryCount: number = 0
   ): Promise<EmailNotificationResult> {
-    const MAX_RETRIES = 3; // Increased for better reliability
-    const BASE_DELAY = 5000; // 5 seconds base delay for exponential backoff: 5s, 10s, 20s
+    const MAX_RETRIES = 2; // Reduced to avoid excessive delays
+    const BASE_DELAY = 3000; // 3 seconds base delay
     
     try {
       const priorityPrefix = options.type === 'error' ? '[URGENT | عاجل] ' : 
@@ -545,8 +536,8 @@ export const EmailNotificationService = {
     retryCount: number = 0,
     cc?: string[]
   ): Promise<EmailNotificationResult> {
-    const MAX_RETRIES = 3; // Increased for better reliability
-    const BASE_DELAY = 5000; // 5 seconds base delay for exponential backoff: 5s, 10s, 20s
+    const MAX_RETRIES = 2;
+    const BASE_DELAY = 3000;
     
     const roleEn = recipientRole?.en || 'Field Operations Manager';
     const roleAr = recipientRole?.ar || 'مدير العمليات الميدانية';
