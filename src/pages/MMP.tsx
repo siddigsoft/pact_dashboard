@@ -1536,6 +1536,9 @@ const MMP = () => {
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
     let filteredMMPs = mmpFiles;
+    
+    console.log('[MMP Page] Starting categorization with', mmpFiles.length, 'MMPs');
+    console.log('[MMP Page] User roles:', { isAdmin, isICT, isFOM, isCoordinator, isAdminOrSuperUser });
 
     // PROJECT TEAM MEMBERSHIP FILTER
     // Only show MMPs from projects the user belongs to (unless admin/superuser).
@@ -1649,12 +1652,19 @@ const MMP = () => {
       }
     });
 
+    console.log('[MMP Page] Categorization results:', { 
+      new: newMMPs.length, 
+      forwarded: forwardedMMPs.length, 
+      verified: verifiedMMPs.length,
+      totalFiltered: filteredMMPs.length
+    });
+    
     return {
       new: newMMPs,
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites]);
+  }, [mmpFiles, isFOM, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, isAdmin, isICT]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
