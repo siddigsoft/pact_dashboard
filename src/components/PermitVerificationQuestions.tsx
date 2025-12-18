@@ -76,6 +76,7 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
   };
 
   const handleStateFollowUpNext = () => {
+    console.log('handleStateFollowUpNext called, stateCanWorkWithout:', stateCanWorkWithout);
     if (!stateCanWorkWithout) return;
     
     if (stateCanWorkWithout === 'yes') {
@@ -83,6 +84,7 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
       handleComplete();
     } else {
       // Cannot work without - send back to FOM
+      console.log('Calling onSendBackToFOM...');
       onSendBackToFOM(`State permit is required for ${state} but coordinator does not have it and cannot proceed without it.`);
     }
   };

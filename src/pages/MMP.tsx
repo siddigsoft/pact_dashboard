@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3 } from 'lucide-react';
+import { Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle } from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
 import { useMMP } from '@/context/mmp/MMPContext';
@@ -357,7 +357,9 @@ const MMP = () => {
   // Sub-subcategory state for My Sites (Data Collector)
   const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'ongoing' | 'completed' | 'all'>('pending');
   // Subcategory state for New MMPs (FOM only)
-  const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified'>('pending');
+  const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified' | 'returned'>('pending');
+  // Expanded states for returned sites view
+  const [expandedReturnedStates, setExpandedReturnedStates] = useState<Set<string>>(new Set());
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
     exists: boolean;
     hasCosted: boolean;
@@ -1602,12 +1604,38 @@ const MMP = () => {
 
   // New MMP subcategories for FOM (Removed Rejected)
   const newFomSubcategories = useMemo(() => {
-    if (!isFOM) return { pending: [], verified: [] } as Record<string, typeof categorizedMMPs.new>;
+    if (!isFOM) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
     const base = categorizedMMPs.new || [];
     const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
     const verified = base.filter(mmp => mmp.status === 'approved');
-    return { pending, verified };
-  }, [isFOM, categorizedMMPs.new]);
+    // Returned: Search ALL mmpFiles for any MMP that has sites with 'returned_to_fom' status
+    const returned = mmpFiles.filter(mmp => 
+      mmp.siteEntries?.some(site => site.status === 'returned_to_fom')
+    );
+    return { pending, verified, returned };
+  }, [isFOM, categorizedMMPs.new, mmpFiles]);
+
+  // Returned sites grouped by state for FOM view
+  const returnedSitesByState = useMemo(() => {
+    const allReturnedSites = mmpFiles.flatMap(mmp => 
+      (mmp.siteEntries || [])
+        .filter(site => site.status === 'returned_to_fom')
+        .map(site => ({ ...site, mmp_file_id: mmp.id, mmpName: mmp.name }))
+    );
+    
+    // Group by state
+    const grouped: Record<string, { state: string; sites: any[]; totalSites: number }> = {};
+    allReturnedSites.forEach(site => {
+      const state = site.state || 'Unknown';
+      if (!grouped[state]) {
+        grouped[state] = { state, sites: [], totalSites: 0 };
+      }
+      grouped[state].sites.push(site);
+      grouped[state].totalSites++;
+    });
+    
+    return Object.values(grouped);
+  }, [mmpFiles]);
 
   // Calculate all counts from context using useMemo
   const siteEntryCounts = useMemo(() => {
@@ -2681,16 +2709,115 @@ const MMP = () => {
                           Verified MMPs
                           <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
                         </Button>
-                        <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={`${newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
-                          Returned MMPs
-                          <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
+                        <Button variant={newFomSubTab === 'returned' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('returned')} className={`${newFomSubTab === 'returned' ? 'bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                          Returned Sites
+                          <Badge variant="secondary" className="ml-2">{returnedSitesByState.reduce((sum, g) => sum + g.totalSites, 0)}</Badge>
                         </Button>
 
                       
                       </div>
                   </div>
                 )}
-                <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
+                {newFomSubTab === 'returned' ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Returned Sites by State</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        These sites were returned by coordinators and require action.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {returnedSitesByState.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          No returned sites found.
+                        </div>
+                      ) : (
+                        returnedSitesByState.map(stateGroup => {
+                          const isExpanded = expandedReturnedStates.has(stateGroup.state);
+                          // Group sites by locality within state
+                          const sitesByLocality: Record<string, any[]> = {};
+                          stateGroup.sites.forEach((site: any) => {
+                            const loc = site.locality || 'Unknown';
+                            if (!sitesByLocality[loc]) sitesByLocality[loc] = [];
+                            sitesByLocality[loc].push(site);
+                          });
+                          const localityCount = Object.keys(sitesByLocality).length;
+                          
+                          return (
+                            <Card 
+                              key={stateGroup.state}
+                              className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer border-orange-200"
+                              onClick={() => {
+                                setExpandedReturnedStates(prev => {
+                                  const newSet = new Set(prev);
+                                  if (newSet.has(stateGroup.state)) {
+                                    newSet.delete(stateGroup.state);
+                                  } else {
+                                    newSet.add(stateGroup.state);
+                                  }
+                                  return newSet;
+                                });
+                              }}
+                            >
+                              <CardContent className="pt-4">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex-1">
+                                        <h3 className="font-semibold text-lg">{stateGroup.state}</h3>
+                                        <p className="text-sm text-muted-foreground">{localityCount} localit{localityCount !== 1 ? 'ies' : 'y'}</p>
+                                        <p className="text-sm text-muted-foreground">{stateGroup.totalSites} site{stateGroup.totalSites !== 1 ? 's' : ''} returned</p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                                          <AlertTriangle className="h-3 w-3 mr-1" />
+                                          Returned from Coordinator
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Show sites when state is expanded */}
+                                    {isExpanded && (
+                                      <div className="mt-4" onClick={(e) => e.stopPropagation()}>
+                                        <div className="text-sm text-muted-foreground mb-2">
+                                          Sites in this state:
+                                        </div>
+                                        <div className="space-y-2">
+                                          {stateGroup.sites.map((site: any) => (
+                                            <div 
+                                              key={site.id}
+                                              className="flex items-center justify-between p-3 bg-orange-50 rounded"
+                                            >
+                                              <div>
+                                                <span className="font-medium">{site.site_name || site.siteName || 'Unknown Site'}</span>
+                                                <span className="text-muted-foreground ml-2">({site.site_code || site.siteCode || 'N/A'})</span>
+                                                <div className="text-sm text-muted-foreground">{site.locality || 'Unknown Locality'}</div>
+                                                {site.verification_notes && (
+                                                  <div className="text-xs text-orange-700 mt-1">
+                                                    Reason: {site.verification_notes}
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300 text-xs">
+                                                Returned
+                                              </Badge>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
+                )}
               </TabsContent>
             )}
 
