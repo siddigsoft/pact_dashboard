@@ -2726,7 +2726,7 @@ const MMP = () => {
                         These sites were returned by coordinators and require action.
                       </p>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-4">
                       {returnedSitesByState.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
                           No returned sites found.
@@ -2746,7 +2746,7 @@ const MMP = () => {
                           return (
                             <Card 
                               key={stateGroup.state}
-                              className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer border-orange-200"
+                              className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
                               onClick={() => {
                                 setExpandedReturnedStates(prev => {
                                   const newSet = new Set(prev);
@@ -2766,37 +2766,41 @@ const MMP = () => {
                                       <div className="flex-1">
                                         <h3 className="font-semibold text-lg">{stateGroup.state}</h3>
                                         <p className="text-sm text-muted-foreground">{localityCount} localit{localityCount !== 1 ? 'ies' : 'y'}</p>
-                                        <p className="text-sm text-muted-foreground">{stateGroup.totalSites} site{stateGroup.totalSites !== 1 ? 's' : ''} returned</p>
+                                        <p className="text-sm text-muted-foreground">{stateGroup.totalSites} site{stateGroup.totalSites !== 1 ? 's' : ''} assigned</p>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                                        <Badge variant="outline">
                                           <AlertTriangle className="h-3 w-3 mr-1" />
-                                          Returned from Coordinator
+                                          State Permit Required
                                         </Badge>
+                                        <Button
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            // TODO: Handle upload permits action
+                                          }}
+                                        >
+                                          <Upload className="h-3 w-3 mr-1" />
+                                          Upload Permits
+                                        </Button>
                                       </div>
                                     </div>
                                     
-                                    {/* Show sites when state is expanded */}
+                                    {/* Show localities when state is expanded */}
                                     {isExpanded && (
                                       <div className="mt-4" onClick={(e) => e.stopPropagation()}>
                                         <div className="text-sm text-muted-foreground mb-2">
-                                          Sites in this state:
+                                          Localities in this state:
                                         </div>
                                         <div className="space-y-2">
-                                          {stateGroup.sites.map((site: any) => (
+                                          {Object.entries(sitesByLocality).map(([locality, sites]) => (
                                             <div 
-                                              key={site.id}
-                                              className="flex items-center justify-between p-3 bg-orange-50 rounded"
+                                              key={locality}
+                                              className="flex items-center justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
                                             >
                                               <div>
-                                                <span className="font-medium">{site.site_name || site.siteName || 'Unknown Site'}</span>
-                                                <span className="text-muted-foreground ml-2">({site.site_code || site.siteCode || 'N/A'})</span>
-                                                <div className="text-sm text-muted-foreground">{site.locality || 'Unknown Locality'}</div>
-                                                {site.verification_notes && (
-                                                  <div className="text-xs text-orange-700 mt-1">
-                                                    Reason: {site.verification_notes}
-                                                  </div>
-                                                )}
+                                                <span className="font-medium">{locality}</span>
+                                                <span className="text-muted-foreground ml-2">({sites.length} sites)</span>
                                               </div>
                                               <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300 text-xs">
                                                 Returned
