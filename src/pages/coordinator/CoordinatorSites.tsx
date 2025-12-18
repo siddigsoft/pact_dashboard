@@ -606,6 +606,9 @@ const CoordinatorSites: React.FC = () => {
         // Filter by forwarded_to_user_id
         if (entry.forwardedToUserId !== currentUser.id) return;
         
+        // Exclude sites that have been returned to FOM
+        if (entry.status === 'returned_to_fom') return;
+        
         // For non-admins, also check project membership
         if (!isAdminOrSuperUser) {
           const projectId = mmp.projectId;
@@ -1262,12 +1265,27 @@ const CoordinatorSites: React.FC = () => {
 
   // Handle sending site back to FOM when coordinator cannot proceed without permit
   const handleSendBackToFOM = async (reason: string) => {
+    console.log('handleSendBackToFOM called with reason:', reason);
+    console.log('bulkVerificationMode:', bulkVerificationMode);
+    console.log('bulkSitesForPermitVerification:', bulkSitesForPermitVerification);
+    console.log('siteForPermitVerification:', siteForPermitVerification);
+    
     // Handle bulk mode
     const sitesToReturn = bulkVerificationMode !== 'single' && bulkSitesForPermitVerification.length > 0
       ? bulkSitesForPermitVerification
       : siteForPermitVerification ? [siteForPermitVerification] : [];
     
-    if (sitesToReturn.length === 0) return;
+    console.log('sitesToReturn:', sitesToReturn);
+    
+    if (sitesToReturn.length === 0) {
+      console.error('No sites to return!');
+      toast({
+        title: 'Error',
+        description: 'No sites selected to return.',
+        variant: 'destructive'
+      });
+      return;
+    }
     
     try {
       const siteIds = sitesToReturn.map(s => s.id);
@@ -4135,12 +4153,41 @@ const CoordinatorSites: React.FC = () => {
                   setSelectedStateForWorkflow(null);
                 }
               }}
-              onSendBackToFOM={(reason: string) => {
+              onSendBackToFOM={async (reason: string) => {
+                // Get sites for this state and update their status
+                if (selectedStateForWorkflow) {
+                  const allSitesInState = selectedStateForWorkflow.localities?.flatMap((loc: any) => loc.sites || []) || [];
+                  if (allSitesInState.length > 0) {
+                    try {
+                      const siteIds = allSitesInState.map((s: any) => s.id);
+                      const { error } = await supabase
+                        .from('mmp_site_entries')
+                        .update({
+                          status: 'returned_to_fom',
+                          verification_notes: reason,
+                          verified_at: new Date().toISOString(),
+                          verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+                        })
+                        .in('id', siteIds);
+                      
+                      if (error) throw error;
+                      
+                      toast({
+                        title: 'Sites Returned to FOM',
+                        description: `${allSitesInState.length} sites in ${selectedStateForWorkflow.state} have been sent back to FOM.`
+                      });
+                      await refreshMMPFiles();
+                    } catch (err) {
+                      console.error('Error returning sites to FOM:', err);
+                      toast({
+                        title: 'Error',
+                        description: 'Failed to return sites to FOM.',
+                        variant: 'destructive'
+                      });
+                    }
+                  }
+                }
                 setStatePermitQuestionDialogOpen(false);
-                toast({
-                  title: 'Request Sent',
-                  description: `Request sent to FOM to upload state permit for ${selectedStateForWorkflow?.state}. Reason: ${reason}`
-                });
                 setSelectedStateForWorkflow(null);
               }}
               onCancel={() => {
