@@ -449,11 +449,11 @@ export const EmailNotificationService = {
     hubName?: string
   ): Promise<EmailNotificationResult> {
     try {
-      // Get all admin emails (admin and superAdmin)
+      // Get only super admin emails (no regular admins)
       const { data: admins } = await supabase
         .from('profiles')
         .select('email, full_name')
-        .in('role', ['admin', 'superAdmin', 'Admin', 'SuperAdmin', 'super_admin'])
+        .in('role', ['superAdmin', 'SuperAdmin', 'super_admin'])
         .eq('status', 'approved');
 
       if (!admins || admins.length === 0) {
