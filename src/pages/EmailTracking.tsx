@@ -170,14 +170,54 @@ export default function EmailTracking() {
   const fetchEmailLogs = async () => {
     setLoading(true);
     try {
-      // Try to fetch from database first
-      const { data, error } = await supabase
+      // Fetch all email-related logs from database
+      // Query 1: Standard email logs (module=notification, entity_type=email/otp)
+      const { data: notificationData, error: notificationError } = await supabase
         .from('audit_logs')
         .select('*')
         .eq('module', 'notification')
         .in('entity_type', ['email', 'otp'])
         .order('timestamp', { ascending: false })
         .limit(500);
+
+      // Query 2: Any logs with entity_type='email' regardless of module
+      const { data: emailTypeData, error: emailTypeError } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .eq('entity_type', 'email')
+        .order('timestamp', { ascending: false })
+        .limit(500);
+
+      // Query 3: Logs with action='send' that might be emails
+      const { data: sendActionData, error: sendActionError } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .eq('action', 'send')
+        .order('timestamp', { ascending: false })
+        .limit(500);
+
+      // Combine and deduplicate results
+      const allData = [
+        ...(notificationData || []),
+        ...(emailTypeData || []),
+        ...(sendActionData || [])
+      ];
+      
+      // Deduplicate by id
+      const uniqueMap = new Map();
+      allData.forEach(item => {
+        if (!uniqueMap.has(item.id)) {
+          uniqueMap.set(item.id, item);
+        }
+      });
+      
+      const data = Array.from(uniqueMap.values())
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 500);
+      
+      const error = notificationError && emailTypeError && sendActionError 
+        ? notificationError 
+        : null;
 
       let logs: EmailLog[] = [];
 
