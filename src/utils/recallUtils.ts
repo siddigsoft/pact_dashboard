@@ -770,6 +770,7 @@ export async function approveRecall(
     if (fetchError) throw fetchError;
     if (!mmpData) throw new Error('MMP not found');
 
+    const mmpName = mmpData.name || 'Unknown MMP';
     const workflow = (mmpData.workflow as any) || {};
     const existingLogs = (workflow.recallHistory as any[]) || [];
 
@@ -783,6 +784,7 @@ export async function approveRecall(
 
     const tier = initiationLog.tier as RecallTier;
     const scopeType = initiationLog.scopeType as RecallScopeType;
+    const initiatorName = initiationLog.by || 'Unknown';
 
     const request: RecallRequest = {
       mmpId,
@@ -820,6 +822,19 @@ export async function approveRecall(
 
     if (updateError) throw updateError;
 
+    // Send notifications after approval
+    await sendRecallApprovalNotifications(
+      mmpId,
+      mmpName,
+      tier,
+      initiatorName,
+      initiationLog.byEmail,
+      approverName,
+      affectedSites.length,
+      initiationLog.reason,
+      notes
+    );
+
     return { success: true };
   } catch (error: any) {
     console.error('[RECALL] Approval error:', error);
@@ -838,13 +853,14 @@ export async function rejectRecall(
   try {
     const { data: mmpData, error: fetchError } = await supabase
       .from('mmp_files')
-      .select('workflow')
+      .select('workflow, name')
       .eq('id', mmpId)
       .single();
 
     if (fetchError) throw fetchError;
     if (!mmpData) throw new Error('MMP not found');
 
+    const mmpName = mmpData.name || 'Unknown MMP';
     const workflow = (mmpData.workflow as any) || {};
     const existingLogs = (workflow.recallHistory as any[]) || [];
     const initiationLog = existingLogs.find(
@@ -854,6 +870,9 @@ export async function rejectRecall(
     if (!initiationLog) {
       throw new Error('Recall event not found');
     }
+
+    const initiatorName = initiationLog.by || 'Unknown';
+    const initiatorEmail = initiationLog.byEmail;
 
     const rejectionLog: RecallAuditLog = {
       action: 'recall_rejected',
@@ -874,10 +893,229 @@ export async function rejectRecall(
 
     if (updateError) throw updateError;
 
+    // Send rejection notification to initiator
+    await sendRecallRejectionNotification(
+      mmpId,
+      mmpName,
+      initiationLog.tier as RecallTier,
+      initiatorEmail,
+      rejecterName,
+      initiationLog.reason,
+      reason
+    );
+
     return { success: true };
   } catch (error: any) {
     console.error('[RECALL] Rejection error:', error);
     return { success: false, error: error.message };
+  }
+}
+
+async function sendRecallApprovalNotifications(
+  mmpId: string,
+  mmpName: string,
+  tier: RecallTier,
+  initiatorName: string,
+  initiatorEmail: string | undefined,
+  approverName: string,
+  affectedSitesCount: number,
+  originalReason: string,
+  approvalNotes?: string
+): Promise<void> {
+  const tierLabels: Record<RecallTier, string> = {
+    admin_to_fom: 'from FOM',
+    fom_to_coordinator: 'from Coordinators',
+    coordinator_to_collector: 'from Data Collectors',
+    super_admin_approved: 'from Approved Status'
+  };
+
+  // Find initiator by email to send notification
+  if (initiatorEmail) {
+    try {
+      const { data: initiator } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', initiatorEmail)
+        .single();
+
+      if (initiator) {
+        await supabase.from('notifications').insert({
+          recipient_id: initiator.id,
+          title_en: 'Recall Request Approved',
+          title_ar: 'تمت الموافقة على طلب السحب',
+          message_en: `Your recall request for MMP "${mmpName}" ${tierLabels[tier]} has been approved by ${approverName}. ${affectedSitesCount} site(s) affected.${approvalNotes ? ` Notes: ${approvalNotes}` : ''}`,
+          message_ar: `تمت الموافقة على طلب سحب خطة المراقبة "${mmpName}" بواسطة ${approverName}. ${affectedSitesCount} موقع(مواقع) متأثرة.${approvalNotes ? ` ملاحظات: ${approvalNotes}` : ''}`,
+          action_url: `/mmp/${mmpId}`,
+          entity_id: mmpId,
+          entity_type: 'mmpFile',
+          event_type: 'recall',
+          status: 'pending',
+          priority: 'high'
+        });
+      }
+    } catch (err) {
+      console.error('[RECALL] Failed to notify initiator:', err);
+    }
+  }
+
+  // Get all affected users based on tier and notify them that recall was executed
+  try {
+    const affectedUserIds: string[] = [];
+
+    if (tier === 'fom_to_coordinator' || tier === 'coordinator_to_collector') {
+      // Notify coordinators
+      const { data: coordinators } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'coordinator');
+      
+      if (coordinators) {
+        affectedUserIds.push(...coordinators.map(c => c.id));
+      }
+    }
+
+    if (tier === 'coordinator_to_collector') {
+      // Also notify data collectors
+      const { data: collectors } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'data_collector');
+      
+      if (collectors) {
+        affectedUserIds.push(...collectors.map(c => c.id));
+      }
+    }
+
+    // Notify hub supervisors
+    const { data: supervisors } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'hub_supervisor');
+    
+    if (supervisors) {
+      affectedUserIds.push(...supervisors.map(s => s.id));
+    }
+
+    // Send notifications to unique affected users
+    const uniqueUserIds = [...new Set(affectedUserIds)];
+    for (const userId of uniqueUserIds) {
+      await supabase.from('notifications').insert({
+        recipient_id: userId,
+        title_en: 'MMP Recall Executed',
+        title_ar: 'تم تنفيذ سحب خطة المراقبة',
+        message_en: `MMP "${mmpName}" has been recalled ${tierLabels[tier]}. Initiated by ${initiatorName}, approved by ${approverName}. ${affectedSitesCount} site(s) affected.${originalReason ? ` Reason: ${originalReason}` : ''}`,
+        message_ar: `تم سحب خطة المراقبة "${mmpName}". بدأها ${initiatorName}، وافق عليها ${approverName}. ${affectedSitesCount} موقع(مواقع) متأثرة.${originalReason ? ` السبب: ${originalReason}` : ''}`,
+        action_url: `/mmp/${mmpId}`,
+        entity_id: mmpId,
+        entity_type: 'mmpFile',
+        event_type: 'recall',
+        status: 'pending',
+        priority: 'medium'
+      });
+    }
+
+    // CC Super Admins
+    const { data: superAdmins } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'super_admin')
+      .limit(2);
+
+    if (superAdmins) {
+      for (const admin of superAdmins) {
+        if (!uniqueUserIds.includes(admin.id)) {
+          await supabase.from('notifications').insert({
+            recipient_id: admin.id,
+            title_en: 'MMP Recall Executed',
+            title_ar: 'تم تنفيذ سحب خطة المراقبة',
+            message_en: `[CC] MMP "${mmpName}" recall ${tierLabels[tier]} has been approved and executed by ${approverName}. ${affectedSitesCount} site(s) affected.`,
+            message_ar: `[نسخة] تم تنفيذ سحب خطة المراقبة "${mmpName}" بواسطة ${approverName}. ${affectedSitesCount} موقع(مواقع) متأثرة.`,
+            action_url: `/mmp/${mmpId}`,
+            entity_id: mmpId,
+            entity_type: 'mmpFile',
+            event_type: 'recall',
+            status: 'pending',
+            priority: 'low'
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[RECALL] Failed to send approval notifications:', err);
+  }
+}
+
+async function sendRecallRejectionNotification(
+  mmpId: string,
+  mmpName: string,
+  tier: RecallTier,
+  initiatorEmail: string | undefined,
+  rejecterName: string,
+  originalReason: string,
+  rejectionReason?: string
+): Promise<void> {
+  const tierLabels: Record<RecallTier, string> = {
+    admin_to_fom: 'from FOM',
+    fom_to_coordinator: 'from Coordinators',
+    coordinator_to_collector: 'from Data Collectors',
+    super_admin_approved: 'from Approved Status'
+  };
+
+  // Notify initiator that their recall was rejected
+  if (initiatorEmail) {
+    try {
+      const { data: initiator } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', initiatorEmail)
+        .single();
+
+      if (initiator) {
+        await supabase.from('notifications').insert({
+          recipient_id: initiator.id,
+          title_en: 'Recall Request Rejected',
+          title_ar: 'تم رفض طلب السحب',
+          message_en: `Your recall request for MMP "${mmpName}" ${tierLabels[tier]} has been rejected by ${rejecterName}.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}${originalReason ? ` (Your original reason: ${originalReason})` : ''}`,
+          message_ar: `تم رفض طلب سحب خطة المراقبة "${mmpName}" بواسطة ${rejecterName}.${rejectionReason ? ` السبب: ${rejectionReason}` : ''}${originalReason ? ` (سببك الأصلي: ${originalReason})` : ''}`,
+          action_url: `/mmp/${mmpId}`,
+          entity_id: mmpId,
+          entity_type: 'mmpFile',
+          event_type: 'recall',
+          status: 'pending',
+          priority: 'high'
+        });
+      }
+    } catch (err) {
+      console.error('[RECALL] Failed to notify initiator of rejection:', err);
+    }
+  }
+
+  // Notify hub supervisors about the rejection
+  try {
+    const { data: supervisors } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'hub_supervisor');
+    
+    if (supervisors) {
+      for (const supervisor of supervisors) {
+        await supabase.from('notifications').insert({
+          recipient_id: supervisor.id,
+          title_en: 'MMP Recall Request Rejected',
+          title_ar: 'تم رفض طلب سحب خطة المراقبة',
+          message_en: `[Info] A recall request for MMP "${mmpName}" ${tierLabels[tier]} has been rejected by ${rejecterName}.${rejectionReason ? ` Reason: ${rejectionReason}` : ''}`,
+          message_ar: `[معلومات] تم رفض طلب سحب خطة المراقبة "${mmpName}" بواسطة ${rejecterName}.${rejectionReason ? ` السبب: ${rejectionReason}` : ''}`,
+          action_url: `/mmp/${mmpId}`,
+          entity_id: mmpId,
+          entity_type: 'mmpFile',
+          event_type: 'recall',
+          status: 'pending',
+          priority: 'low'
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[RECALL] Failed to notify supervisors of rejection:', err);
   }
 }
 
