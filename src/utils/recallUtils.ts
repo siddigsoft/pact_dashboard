@@ -473,7 +473,7 @@ async function getAffectedSites(request: RecallRequest): Promise<any[]> {
   let query = supabase
     .from('mmp_site_entries')
     .select('*')
-    .eq('mmp_id', request.mmpId);
+    .eq('mmp_file_id', request.mmpId);
 
   if (request.scopeType !== 'full_mmp' && request.scopeFilters) {
     const filters = request.scopeFilters;
@@ -950,7 +950,7 @@ export async function computeRecallImpact(
   let query = supabase
     .from('mmp_site_entries')
     .select('*')
-    .eq('mmp_id', request.mmpId);
+    .eq('mmp_file_id', request.mmpId);
 
   if (request.scopeType !== 'full_mmp' && request.scopeFilters) {
     const filters = request.scopeFilters;
