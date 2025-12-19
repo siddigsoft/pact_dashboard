@@ -128,7 +128,7 @@ export function RecallDialog({
       const { data: siteEntries } = await supabase
         .from('mmp_site_entries')
         .select('*')
-        .eq('mmp_id', mmpFile.id);
+        .eq('mmp_file_id', mmpFile.id);
 
       if (siteEntries) {
         const activitySet = new Map<string, number>();
@@ -139,8 +139,9 @@ export function RecallDialog({
         const cpSet = new Map<string, number>();
 
         siteEntries.forEach((entry: any) => {
-          if (entry.activity_name) {
-            activitySet.set(entry.activity_name, (activitySet.get(entry.activity_name) || 0) + 1);
+          const activity = entry.main_activity || entry.activity_at_site;
+          if (activity) {
+            activitySet.set(activity, (activitySet.get(activity) || 0) + 1);
           }
           if (entry.site_name) {
             siteSet.set(entry.site_name, (siteSet.get(entry.site_name) || 0) + 1);
@@ -151,8 +152,8 @@ export function RecallDialog({
           if (entry.state) {
             stateSet.set(entry.state, (stateSet.get(entry.state) || 0) + 1);
           }
-          if (entry.hub) {
-            hubSet.set(entry.hub, (hubSet.get(entry.hub) || 0) + 1);
+          if (entry.hub_office) {
+            hubSet.set(entry.hub_office, (hubSet.get(entry.hub_office) || 0) + 1);
           }
           if (entry.cp_name) {
             cpSet.set(entry.cp_name, (cpSet.get(entry.cp_name) || 0) + 1);

@@ -491,7 +491,13 @@ async function getAffectedSites(request: RecallRequest): Promise<any[]> {
       query = query.in('state', filters.states);
     }
     if (filters.activityIds?.length) {
-      query = query.in('activity_id', filters.activityIds);
+      query = query.in('main_activity', filters.activityIds);
+    }
+    if (filters.hubs?.length) {
+      query = query.in('hub_office', filters.hubs);
+    }
+    if (filters.cpIds?.length) {
+      query = query.in('cp_name', filters.cpIds);
     }
   }
 
@@ -958,9 +964,9 @@ export async function computeRecallImpact(
     if (filters.siteNames?.length) query = query.in('site_name', filters.siteNames);
     if (filters.localities?.length) query = query.in('locality', filters.localities);
     if (filters.states?.length) query = query.in('state', filters.states);
-    if (filters.activityIds?.length) query = query.in('activity_id', filters.activityIds);
-    if (filters.hubs?.length) query = query.in('hub', filters.hubs);
-    if (filters.cpIds?.length) query = query.in('cp_id', filters.cpIds);
+    if (filters.activityIds?.length) query = query.in('main_activity', filters.activityIds);
+    if (filters.hubs?.length) query = query.in('hub_office', filters.hubs);
+    if (filters.cpIds?.length) query = query.in('cp_name', filters.cpIds);
   }
 
   const { data: sites, error } = await query;
