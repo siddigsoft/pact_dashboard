@@ -31,8 +31,18 @@ import {
   Calendar,
   Building2,
   Shield,
-  Loader2
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Activity,
+  Globe
 } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { MMPFile } from '@/types';
 import {
   RecallTier,
@@ -99,6 +109,7 @@ export function RecallDialog({
   const [cps, setCps] = useState<ScopeOption[]>([]);
 
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [showDetails, setShowDetails] = useState(false);
 
   const userRole = profile?.role || '';
   const canForce = canForceRecall(userRole);
@@ -349,25 +360,130 @@ export function RecallDialog({
         <div className="pr-2">
           {step === 'configure' ? (
           <div className="space-y-6 py-4">
-            <div className="p-3 border rounded-md bg-muted/50 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Current MMP Status</span>
-                <Badge variant={mmpFile.status === 'approved' ? 'default' : 'secondary'}>
-                  {mmpFile.status?.replace(/_/g, ' ').toUpperCase() || 'UNKNOWN'}
-                </Badge>
-              </div>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p className="font-medium">How Recall Works:</p>
-                <ul className="list-disc list-inside space-y-0.5">
-                  <li><strong>Admin to FOM:</strong> Recall from FOM back to Admin level</li>
-                  <li><strong>FOM to Coordinator:</strong> Recall from Coordinators back to FOM</li>
-                  <li><strong>Coordinator to Collector:</strong> Recall from Data Collectors back to Coordinator (may have financial impact)</li>
-                  {isSuperAdmin && mmpFile.status === 'approved' && (
-                    <li><strong>Approved MMP (Super Admin):</strong> Recall an approved MMP for revision (has financial impact)</li>
+            <Collapsible open={showDetails} onOpenChange={setShowDetails}>
+              <div className="p-3 border rounded-md bg-muted/50 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">MMP Details</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={mmpFile.status === 'approved' ? 'default' : 'secondary'}>
+                      {mmpFile.status?.replace(/_/g, ' ').toUpperCase() || 'UNKNOWN'}
+                    </Badge>
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="icon" data-testid="button-toggle-mmp-details">
+                        {showDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-1">
+                    <Building2 className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Hub:</span>
+                    <span className="font-medium">{mmpFile.hub || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Period:</span>
+                    <span className="font-medium">{mmpFile.month} {mmpFile.year}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Sites:</span>
+                    <span className="font-medium">{sites.length || mmpFile.entries || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Activity className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">Activities:</span>
+                    <span className="font-medium">{activities.length || 0}</span>
+                  </div>
+                </div>
+
+                <CollapsibleContent className="space-y-3">
+                  <Separator />
+                  
+                  {states.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Globe className="h-3 w-3" />
+                        <span>States ({states.length}):</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {states.map((state) => (
+                          <Badge key={state.value} variant="outline" className="text-xs">
+                            {state.label} ({state.count})
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </ul>
+
+                  {localities.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3" />
+                        <span>Localities ({localities.length}):</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                        {localities.map((loc) => (
+                          <Badge key={loc.value} variant="outline" className="text-xs">
+                            {loc.label} ({loc.count})
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {cps.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Users className="h-3 w-3" />
+                        <span>Cooperating Partners ({cps.length}):</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {cps.map((cp) => (
+                          <Badge key={cp.value} variant="outline" className="text-xs">
+                            {cp.label} ({cp.count})
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activities.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Activity className="h-3 w-3" />
+                        <span>Activities ({activities.length}):</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {activities.map((act) => (
+                          <Badge key={act.value} variant="outline" className="text-xs">
+                            {act.label} ({act.count})
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium">How Recall Works:</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li><strong>Admin to FOM:</strong> Recall from FOM back to Admin level</li>
+                      <li><strong>FOM to Coordinator:</strong> Recall from Coordinators back to FOM</li>
+                      <li><strong>Coordinator to Collector:</strong> Recall from Data Collectors back to Coordinator (may have financial impact)</li>
+                      {isSuperAdmin && mmpFile.status === 'approved' && (
+                        <li><strong>Approved MMP (Super Admin):</strong> Recall an approved MMP for revision (has financial impact)</li>
+                      )}
+                    </ul>
+                  </div>
+                </CollapsibleContent>
               </div>
-            </div>
+            </Collapsible>
 
             <div className="space-y-2">
               <Label>Recall Tier</Label>
