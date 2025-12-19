@@ -254,14 +254,14 @@ export async function performRecall(
   try {
     const { data: mmpData, error: fetchError } = await supabase
       .from('mmp_files')
-      .select('workflow, logs, name')
+      .select('workflow, name')
       .eq('id', mmpId)
       .single();
 
     if (fetchError) throw fetchError;
 
     const workflow = (mmpData?.workflow as any) || {};
-    const existingLogs = (mmpData?.logs as any[]) || [];
+    const existingLogs = (workflow.recallHistory as any[]) || [];
     const previousFomIds = [...(workflow.forwardedToFomIds || [])];
     const mmpName = mmpData?.name || 'Unknown MMP';
 
@@ -286,14 +286,11 @@ export async function performRecall(
       reason
     };
 
-    const updatedLogs = [...existingLogs, recallLog];
+    workflow.recallHistory = [...existingLogs, recallLog];
 
     const { error: updateError } = await supabase
       .from('mmp_files')
-      .update({
-        workflow,
-        logs: updatedLogs
-      })
+      .update({ workflow })
       .eq('id', mmpId);
 
     if (updateError) throw updateError;
@@ -355,7 +352,7 @@ export async function performTieredRecall(
     if (!mmpData) throw new Error('MMP not found');
 
     const workflow = (mmpData.workflow as any) || {};
-    const existingLogs = (mmpData.logs as any[]) || [];
+    const existingLogs = (workflow.recallHistory as any[]) || [];
     const mmpName = mmpData.name || 'Unknown MMP';
 
     const affectedSites = await getAffectedSites(request);
@@ -396,14 +393,12 @@ export async function performTieredRecall(
       isForceRecall: request.isForceRecall
     } as any;
 
-    const updatedLogs = [...existingLogs, recallLog];
+    const updatedWorkflow = request.isForceRecall ? workflow : (mmpData.workflow as any) || {};
+    updatedWorkflow.recallHistory = [...existingLogs, recallLog];
 
     const { error: updateError } = await supabase
       .from('mmp_files')
-      .update({
-        logs: updatedLogs,
-        workflow: request.isForceRecall ? workflow : mmpData.workflow
-      })
+      .update({ workflow: updatedWorkflow })
       .eq('id', request.mmpId);
 
     if (updateError) throw updateError;
@@ -734,8 +729,8 @@ export async function approveRecall(
     if (fetchError) throw fetchError;
     if (!mmpData) throw new Error('MMP not found');
 
-    const existingLogs = (mmpData.logs as any[]) || [];
     const workflow = (mmpData.workflow as any) || {};
+    const existingLogs = (workflow.recallHistory as any[]) || [];
 
     const initiationLog = existingLogs.find(
       (log: any) => log.recallEventId === recallEventId && log.action === 'recall_initiated'
@@ -775,14 +770,11 @@ export async function approveRecall(
       notes
     };
 
-    const updatedLogs = [...existingLogs, approvalLog];
+    workflow.recallHistory = [...existingLogs, approvalLog];
 
     const { error: updateError } = await supabase
       .from('mmp_files')
-      .update({
-        logs: updatedLogs,
-        workflow
-      })
+      .update({ workflow })
       .eq('id', mmpId);
 
     if (updateError) throw updateError;
@@ -805,14 +797,15 @@ export async function rejectRecall(
   try {
     const { data: mmpData, error: fetchError } = await supabase
       .from('mmp_files')
-      .select('logs')
+      .select('workflow')
       .eq('id', mmpId)
       .single();
 
     if (fetchError) throw fetchError;
     if (!mmpData) throw new Error('MMP not found');
 
-    const existingLogs = (mmpData.logs as any[]) || [];
+    const workflow = (mmpData.workflow as any) || {};
+    const existingLogs = (workflow.recallHistory as any[]) || [];
     const initiationLog = existingLogs.find(
       (log: any) => log.recallEventId === recallEventId && log.action === 'recall_initiated'
     );
@@ -831,11 +824,11 @@ export async function rejectRecall(
       notes: reason
     };
 
-    const updatedLogs = [...existingLogs, rejectionLog];
+    workflow.recallHistory = [...existingLogs, rejectionLog];
 
     const { error: updateError } = await supabase
       .from('mmp_files')
-      .update({ logs: updatedLogs })
+      .update({ workflow })
       .eq('id', mmpId);
 
     if (updateError) throw updateError;
