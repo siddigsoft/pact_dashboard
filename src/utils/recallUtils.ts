@@ -362,7 +362,11 @@ export async function performTieredRecall(
 
     const recallEventId = generateRecallEventId();
 
-    if (request.isForceRecall) {
+    const shouldExecuteImmediately = request.isForceRecall || 
+      request.tier === 'admin_to_fom' || 
+      request.tier === 'super_admin_approved';
+
+    if (shouldExecuteImmediately) {
       await executeRecall(request, mmpData, workflow, affectedSites, recallerName, recallEventId);
       
       if (hasFinancialImpact && request.recoveryMethod) {
@@ -376,7 +380,7 @@ export async function performTieredRecall(
     }
 
     const recallLog: RecallAuditLog = {
-      action: request.isForceRecall ? 'recall_completed' : 'recall_initiated',
+      action: shouldExecuteImmediately ? 'recall_completed' : 'recall_initiated',
       recallEventId,
       tier: request.tier,
       by: recallerName,
@@ -387,21 +391,13 @@ export async function performTieredRecall(
       financialAmount,
       reason: request.reason,
       previousState: {
-        forwardedToFomIds: workflow.forwardedToFomIds,
-        forwardedToCoordinatorIds: workflow.forwardedToCoordinatorIds
+        forwardedToFomIds: (mmpData.workflow as any)?.forwardedToFomIds,
+        forwardedToCoordinatorIds: (mmpData.workflow as any)?.forwardedToCoordinatorIds
       },
       isForceRecall: request.isForceRecall
     } as any;
 
-    const updatedWorkflow = request.isForceRecall ? workflow : (mmpData.workflow as any) || {};
-    updatedWorkflow.recallHistory = [...existingLogs, recallLog];
-
-    const { error: updateError } = await supabase
-      .from('mmp_files')
-      .update({ workflow: updatedWorkflow })
-      .eq('id', request.mmpId);
-
-    if (updateError) throw updateError;
+    workflow.recallHistory = [...existingLogs, recallLog];
 
     // Log to audit_logs table for comprehensive tracking
     try {
@@ -543,6 +539,7 @@ async function executeRecall(
   recallEventId: string
 ): Promise<void> {
   const now = new Date().toISOString();
+  let newStatus: string | null = null;
 
   switch (request.tier) {
     case 'admin_to_fom':
@@ -550,10 +547,13 @@ async function executeRecall(
       delete workflow.forwardedAt;
       delete workflow.forwardedToCoordinators;
       delete workflow.forwardedToCoordinatorIds;
+      delete workflow.coordinatorVerified;
+      delete workflow.locked;
       workflow.recalledAt = now;
       workflow.recalledBy = recallerName;
       workflow.lastRecallReason = request.reason;
       workflow.lastRecallEventId = recallEventId;
+      newStatus = 'uploaded';
       break;
 
     case 'fom_to_coordinator':
@@ -578,6 +578,7 @@ async function executeRecall(
       workflow.fomRecalledAt = now;
       workflow.fomRecalledBy = recallerName;
       workflow.lastRecallEventId = recallEventId;
+      newStatus = 'forwarded';
       break;
 
     case 'coordinator_to_collector':
@@ -600,11 +601,51 @@ async function executeRecall(
       workflow.collectorRecalledAt = new Date().toISOString();
       workflow.collectorRecalledBy = recallerName;
       break;
+
+    case 'super_admin_approved':
+      workflow.forwardedToFomIds = [];
+      workflow.forwardedToCoordinatorIds = [];
+      delete workflow.forwardedAt;
+      delete workflow.forwardedToCoordinators;
+      delete workflow.coordinatorVerified;
+      delete workflow.locked;
+      delete workflow.approvedAt;
+      delete workflow.approvedBy;
+      workflow.recalledAt = now;
+      workflow.recalledBy = recallerName;
+      workflow.lastRecallReason = request.reason;
+      workflow.lastRecallEventId = recallEventId;
+      workflow.recalledFromApproved = true;
+      newStatus = 'uploaded';
+      
+      const allSiteIds = affectedSites.map(s => s.id);
+      if (allSiteIds.length > 0) {
+        await supabase
+          .from('mmp_site_entries')
+          .update({
+            assigned_to: null,
+            claimed_by: null,
+            assignment_status: 'recalled',
+            claim_status: 'recalled',
+            dispatch_status: 'recalled',
+            recall_status: 'recalled',
+            recall_event_id: recallEventId,
+            recalled_at: now,
+            recalled_by: recallerName
+          })
+          .in('id', allSiteIds);
+      }
+      break;
+  }
+
+  const updatePayload: any = { workflow };
+  if (newStatus) {
+    updatePayload.status = newStatus;
   }
 
   await supabase
     .from('mmp_files')
-    .update({ workflow })
+    .update(updatePayload)
     .eq('id', request.mmpId);
 }
 
