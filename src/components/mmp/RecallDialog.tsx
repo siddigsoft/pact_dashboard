@@ -329,7 +329,9 @@ export function RecallDialog({
   };
 
   const scopeOptions = getScopeOptions();
-  const showFinancialOptions = tier === 'coordinator_to_collector';
+  const showFinancialOptions = tier === 'coordinator_to_collector' || tier === 'super_admin_approved';
+  const isSuperAdmin = userRole.toLowerCase().replace(/\s+/g, '_') === 'super_admin' || 
+                       userRole.toLowerCase() === 'superadmin';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -367,6 +369,11 @@ export function RecallDialog({
                   <SelectItem value="coordinator_to_collector">
                     {RECALL_TIER_LABELS.coordinator_to_collector.en}
                   </SelectItem>
+                  {isSuperAdmin && mmpFile.status === 'approved' && (
+                    <SelectItem value="super_admin_approved">
+                      {RECALL_TIER_LABELS.super_admin_approved.en}
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               {!canForce && (
