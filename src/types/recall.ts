@@ -1,4 +1,4 @@
-export type RecallTier = 'admin_to_fom' | 'fom_to_coordinator' | 'coordinator_to_collector';
+export type RecallTier = 'admin_to_fom' | 'fom_to_coordinator' | 'coordinator_to_collector' | 'super_admin_approved';
 
 export type RecallScopeType = 
   | 'full_mmp' 
@@ -153,7 +153,8 @@ export interface RecallSummary {
 export const RECALL_TIER_LABELS: Record<RecallTier, { en: string; ar: string }> = {
   admin_to_fom: { en: 'Admin to FOM', ar: 'من المسؤول إلى مسؤول العمليات الميدانية' },
   fom_to_coordinator: { en: 'FOM to Coordinator', ar: 'من مسؤول العمليات إلى المنسق' },
-  coordinator_to_collector: { en: 'Coordinator to Data Collector', ar: 'من المنسق إلى جامع البيانات' }
+  coordinator_to_collector: { en: 'Coordinator to Data Collector', ar: 'من المنسق إلى جامع البيانات' },
+  super_admin_approved: { en: 'Approved MMP (Super Admin)', ar: 'خطة معتمدة (المسؤول الأعلى)' }
 };
 
 export const RECALL_SCOPE_LABELS: Record<RecallScopeType, { en: string; ar: string }> = {

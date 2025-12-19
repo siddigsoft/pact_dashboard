@@ -125,6 +125,9 @@ export function checkTieredRecallAllowed(
     case 'coordinator_to_collector':
       return checkCoordinatorToCollectorRecall(mmpFile, blockers);
     
+    case 'super_admin_approved':
+      return checkSuperAdminApprovedRecall(mmpFile, blockers, userRole);
+    
     default:
       return {
         canRecall: false,
@@ -215,6 +218,28 @@ function checkCoordinatorToCollectorRecall(mmpFile: MMPFile, blockers: string[])
     blockers,
     tier: 'coordinator_to_collector',
     requiresApproval: true,
+    hasFinancialImpact: true
+  };
+}
+
+function checkSuperAdminApprovedRecall(mmpFile: MMPFile, blockers: string[], userRole?: string): RecallCheckResult {
+  const role = (userRole || '').toLowerCase().replace(/\s+/g, '_');
+  const isSuperAdmin = role === 'super_admin' || role === 'superadmin';
+
+  if (!isSuperAdmin) {
+    blockers.push('Only Super Admin can recall approved MMPs');
+  }
+
+  if (mmpFile.status !== 'approved') {
+    blockers.push('MMP is not approved - use a different recall tier');
+  }
+
+  return {
+    canRecall: blockers.length === 0,
+    reason: blockers.length > 0 ? blockers.join('; ') : undefined,
+    blockers,
+    tier: 'super_admin_approved',
+    requiresApproval: false,
     hasFinancialImpact: true
   };
 }
@@ -635,7 +660,8 @@ async function sendRecallNotifications(
   const tierLabels: Record<RecallTier, string> = {
     admin_to_fom: 'from FOM',
     fom_to_coordinator: 'from Coordinators',
-    coordinator_to_collector: 'from Data Collectors'
+    coordinator_to_collector: 'from Data Collectors',
+    super_admin_approved: 'from Approved Status'
   };
 
   const messageEn = `MMP "${mmpName}" has been recalled ${tierLabels[tier]} by ${recallerName}. ${reason ? `Reason: ${reason}` : ''}`;
