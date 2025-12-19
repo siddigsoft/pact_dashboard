@@ -75,7 +75,8 @@ interface PendingRecall {
 const TIER_COLORS: Record<RecallTier, string> = {
   admin_to_fom: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   fom_to_coordinator: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  coordinator_to_collector: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+  coordinator_to_collector: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  super_admin_approved: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
 };
 
 function getSlaStatus(createdAt: string): { color: string; label: string; urgent: boolean } {
@@ -155,7 +156,7 @@ export function PendingRecallApprovals() {
     try {
       const { data: mmpFiles, error } = await supabase
         .from('mmp_files')
-        .select('id, name, logs, workflow')
+        .select('id, name, workflow')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -163,7 +164,8 @@ export function PendingRecallApprovals() {
       const pending: PendingRecall[] = [];
 
       for (const mmp of mmpFiles || []) {
-        const logs = (mmp.logs as any[]) || [];
+        const workflow = (mmp.workflow as any) || {};
+        const logs = (workflow.recallHistory as any[]) || [];
         
         const pendingRecallLogs = logs.filter((log: any) => 
           log.action === 'recall_initiated' && 

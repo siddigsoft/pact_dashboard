@@ -148,8 +148,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           const workflow = mmp.workflow as any;
           const forwardedCount = workflow?.forwardedToFomIds?.length || 0;
           const wasRecalled = Boolean(workflow?.recalledAt);
-          const logs = (mmp.logs as any[]) || [];
-          const recallCount = logs.filter((log: any) => log.action === 'recall').length;
+          const recallHistory = (workflow?.recallHistory as any[]) || [];
+          const recallCount = recallHistory.filter((log: any) => log.action === 'recall' || log.action?.startsWith('recall_')).length;
           
           return (
             <Card

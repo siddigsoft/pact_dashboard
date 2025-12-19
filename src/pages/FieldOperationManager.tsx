@@ -67,7 +67,7 @@ const FieldOperationManagerPage = () => {
         mmpId: mmp.mmpId || mmp.mmp_id || mmp.id,
         status: mmp.status,
         siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.siteEntries) ? mmp.siteEntries.length : 0),
-        logs: mmp.workflow?.logs || [],
+        logs: mmp.workflow?.recallHistory || [],
       }));
       setMmpFiles(mapped);
       setLoading(contextLoading);

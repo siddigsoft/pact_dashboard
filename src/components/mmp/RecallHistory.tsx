@@ -32,7 +32,8 @@ interface RecallLog {
 const TIER_COLORS: Record<RecallTier, string> = {
   admin_to_fom: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   fom_to_coordinator: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  coordinator_to_collector: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+  coordinator_to_collector: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  super_admin_approved: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
 };
 
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
@@ -44,8 +45,9 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export function RecallHistory({ mmpFile }: RecallHistoryProps) {
-  const logs = (mmpFile.logs as any[]) || [];
-  const recallLogs = logs.filter((log): log is RecallLog => 
+  const workflow = (mmpFile.workflow as any) || {};
+  const recallHistory = (workflow.recallHistory as any[]) || [];
+  const recallLogs = recallHistory.filter((log): log is RecallLog => 
     log.action === 'recall' || 
     log.action?.startsWith('recall_')
   );
