@@ -349,6 +349,26 @@ export function RecallDialog({
         <div className="pr-2">
           {step === 'configure' ? (
           <div className="space-y-6 py-4">
+            <div className="p-3 border rounded-md bg-muted/50 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Current MMP Status</span>
+                <Badge variant={mmpFile.status === 'approved' ? 'default' : 'secondary'}>
+                  {mmpFile.status?.replace(/_/g, ' ').toUpperCase() || 'UNKNOWN'}
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p className="font-medium">How Recall Works:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li><strong>Admin to FOM:</strong> Recall from FOM back to Admin level</li>
+                  <li><strong>FOM to Coordinator:</strong> Recall from Coordinators back to FOM</li>
+                  <li><strong>Coordinator to Collector:</strong> Recall from Data Collectors back to Coordinator (may have financial impact)</li>
+                  {isSuperAdmin && mmpFile.status === 'approved' && (
+                    <li><strong>Approved MMP (Super Admin):</strong> Recall an approved MMP for revision (has financial impact)</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Recall Tier</Label>
               <Select
