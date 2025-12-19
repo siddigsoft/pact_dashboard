@@ -391,6 +391,46 @@ export async function performTieredRecall(
 
     if (updateError) throw updateError;
 
+    // Log to audit_logs table for comprehensive tracking
+    try {
+      await supabase.from('audit_logs').insert({
+        module: 'mmp',
+        action: request.isForceRecall ? 'force_recall' : 'recall',
+        entity_type: 'mmp',
+        entity_id: request.mmpId,
+        entity_name: mmpName,
+        description: request.isForceRecall 
+          ? `Force recall executed on MMP "${mmpName}" by ${recallerName}` 
+          : `Recall initiated on MMP "${mmpName}" by ${recallerName}`,
+        success: true,
+        actor_id: recallerUserId,
+        actor_name: recallerName,
+        actor_email: recallerEmail,
+        severity: request.isForceRecall ? 'warning' : 'info',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          recallEventId,
+          tier: request.tier,
+          scopeType: request.scopeType,
+          scopeFilters: request.scopeFilters,
+          affectedSitesCount: affectedSites.length,
+          affectedUserIds,
+          hasFinancialImpact,
+          financialAmount,
+          recoveryMethod: request.recoveryMethod,
+          reason: request.reason,
+          isForceRecall: request.isForceRecall,
+          previousState: {
+            forwardedToFomIds: workflow.forwardedToFomIds,
+            forwardedToCoordinatorIds: workflow.forwardedToCoordinatorIds
+          }
+        },
+        tags: ['mmp', 'recall', request.tier, request.isForceRecall ? 'force_recall' : 'standard_recall']
+      });
+    } catch (auditError) {
+      console.warn('[TIERED_RECALL] Audit log failed:', auditError);
+    }
+
     await sendRecallNotifications(
       request.tier,
       mmpName,
@@ -881,7 +921,7 @@ export function getRecallTierForRole(userRole: string): RecallTier | null {
 
 export function canForceRecall(userRole: string): boolean {
   const role = userRole.toLowerCase().replace(/\s+/g, '_');
-  return role === 'super_admin' || role === 'superadmin' || role === 'admin';
+  return role === 'super_admin' || role === 'superadmin' || role === 'admin' || role === 'ict';
 }
 
 export async function computeRecallImpact(
