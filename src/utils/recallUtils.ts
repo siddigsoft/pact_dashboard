@@ -149,16 +149,8 @@ function checkAdminToFomRecall(mmpFile: MMPFile, blockers: string[]): RecallChec
     blockers.push('MMP has not been forwarded to FOMs');
   }
 
-  if (mmpFile.status === 'approved') {
-    blockers.push('MMP is already approved');
-  }
-
-  if (permits.documents?.length > 0) {
-    blockers.push('FOM has attached permits');
-  }
-
   if (workflow.forwardedToCoordinators || workflow.forwardedToCoordinatorIds?.length > 0) {
-    blockers.push('MMP has been forwarded to coordinators');
+    blockers.push('MMP has been forwarded to coordinators - use FOM to Coordinator tier');
   }
 
   if (workflow.coordinatorVerified) {
