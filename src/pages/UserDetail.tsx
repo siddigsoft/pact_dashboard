@@ -26,7 +26,7 @@ import { useAuthorization } from "@/hooks/use-authorization";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
 import type { ClassificationHistory } from "@/types/classification";
-import { VISIBLE_ROLE_CODES } from "@/utils/roleMapping";
+import { VISIBLE_ROLE_CODES, normalizeRole, toRoleLabel } from "@/utils/roleMapping";
 
 // Use centralized visible role codes (excludes superAdmin)
 const availableRoles = VISIBLE_ROLE_CODES;
@@ -76,7 +76,9 @@ const UserDetail: React.FC = () => {
       const foundUser = users.find(u => u.id === id);
       if (foundUser) {
         setUser(foundUser);
-        setEditForm(foundUser);
+        // Normalize role to canonical code for dropdown matching
+        const normalizedRole = foundUser.role ? (normalizeRole(foundUser.role as string) || foundUser.role) : '';
+        setEditForm({ ...foundUser, role: normalizedRole as any });
         setIsLoadingUser(false);
       } else {
         toast({
@@ -449,7 +451,7 @@ const UserDetail: React.FC = () => {
                   >
                     <option value="" disabled>Select role</option>
                     {availableRoles.map(role => (
-                      <option key={role} value={role}>{role}</option>
+                      <option key={role} value={role}>{toRoleLabel(role) || role}</option>
                     ))}
                   </select>
                 ) : (
@@ -694,7 +696,7 @@ const UserDetail: React.FC = () => {
                       >
                         <option value="" disabled>Select role</option>
                         {availableRoles.map(role => (
-                          <option key={role} value={role}>{role}</option>
+                          <option key={role} value={role}>{toRoleLabel(role) || role}</option>
                         ))}
                       </select>
                     ) : (
