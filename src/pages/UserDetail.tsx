@@ -39,8 +39,10 @@ const UserDetail: React.FC = () => {
   const { toast } = useToast();
   const [bankAccountFormOpen, setBankAccountFormOpen] = useState(false);
 
-  const canEditBankAccount = currentUser?.role === "admin" || currentUser?.role === "Admin" || currentUser?.role === "ict" || currentUser?.role === "ICT" || currentUser?.role === "super_admin" || (currentUser?.role as string) === "superAdmin";
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "Admin" || currentUser?.role === "super_admin" || (currentUser?.role as string) === "superAdmin" || currentUser?.role === "ict" || currentUser?.role === "ICT" || (currentUser?.roles && (currentUser.roles.includes("admin" as any) || currentUser.roles.includes("Admin") || currentUser.roles.includes("super_admin" as any) || (currentUser.roles as string[]).includes("superAdmin")));
+  const roleStr = (currentUser?.role || '').toLowerCase();
+  const isAdminRole = roleStr === 'admin' || roleStr === 'super_admin' || roleStr === 'superadmin' || roleStr === 'ict';
+  const canEditBankAccount = isAdminRole;
+  const isAdmin = isAdminRole || (currentUser?.roles && currentUser.roles.some((r: any) => ['admin', 'super_admin', 'superadmin', 'ict'].includes(String(r).toLowerCase())));
 
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
