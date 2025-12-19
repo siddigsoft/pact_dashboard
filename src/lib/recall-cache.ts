@@ -20,15 +20,15 @@ export function usePendingRecalls(options?: { enabled?: boolean }) {
     queryFn: async () => {
       const { data: mmpFiles, error } = await supabase
         .from('mmp_files')
-        .select('id, name, logs, workflow')
-        .not('logs', 'is', null);
+        .select('id, name, workflow');
 
       if (error) throw error;
 
       const pendingRecalls: any[] = [];
       
       for (const mmp of mmpFiles || []) {
-        const logs = (mmp.logs as any[]) || [];
+        const workflow = (mmp.workflow as any) || {};
+        const logs = (workflow.recallHistory as any[]) || [];
         const initiatedRecalls = logs.filter(
           (log: any) => log.action === 'recall_initiated' && !log.resolvedAt
         );
@@ -64,13 +64,14 @@ export function useRecallHistory(mmpId: string, options?: { enabled?: boolean })
     queryFn: async () => {
       const { data, error } = await supabase
         .from('mmp_files')
-        .select('logs')
+        .select('workflow')
         .eq('id', mmpId)
         .single();
 
       if (error) throw error;
 
-      const logs = (data?.logs as any[]) || [];
+      const workflow = (data?.workflow as any) || {};
+      const logs = (workflow.recallHistory as any[]) || [];
       return logs.filter((log: any) => 
         ['recall_initiated', 'recall_approved', 'recall_rejected', 'recall_completed'].includes(log.action)
       ).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
