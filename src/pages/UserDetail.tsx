@@ -547,15 +547,15 @@ const UserDetail: React.FC = () => {
                     <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <Select
-                        value={editForm.localityId || ""}
-                        onValueChange={(value) => handleEditChange("localityId", value)}
+                        value={editForm.localityId || "__none__"}
+                        onValueChange={(value) => handleEditChange("localityId", value === "__none__" ? undefined : value)}
                         disabled={!editForm.stateId}
                       >
                         <SelectTrigger className="h-10 text-sm sm:text-base">
                           <SelectValue placeholder="Select locality (optional)" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="__none__">None</SelectItem>
                           {availableLocalities.map((locality) => (
                             <SelectItem key={locality.id} value={locality.id}>
                               {locality.name}
@@ -788,15 +788,15 @@ const UserDetail: React.FC = () => {
                     <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Locality</h3>
                     {editMode ? (
                       <Select
-                        value={editForm.localityId || ""}
-                        onValueChange={(value) => handleEditChange("localityId", value || undefined)}
+                        value={editForm.localityId || "__none__"}
+                        onValueChange={(value) => handleEditChange("localityId", value === "__none__" ? undefined : value)}
                         disabled={!editForm.stateId}
                       >
                         <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
                           <SelectValue placeholder="Select locality (optional)" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="__none__">None</SelectItem>
                           {availableLocalities.map((locality) => (
                             <SelectItem key={locality.id} value={locality.id}>
                               {locality.name}
