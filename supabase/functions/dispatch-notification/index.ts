@@ -340,6 +340,32 @@ serve(async (req) => {
           emailResults.push({ recipient: recipient.email, success: true, messageId: info.messageId })
           console.log(`Email sent to ${recipient.email}`)
 
+          // Log successful email to audit_logs for Email Tracking page
+          try {
+            await supabase.from('audit_logs').insert({
+              module: 'notification',
+              action: 'send',
+              entity_type: 'email',
+              entity_id: info.messageId || `email-${Date.now()}`,
+              entity_name: `[${priority.toUpperCase()}] ${finalTitleEn}`,
+              description: `Email sent to ${recipient.email}: ${finalTitleEn}`,
+              success: true,
+              actor_id: triggered_by || 'system',
+              actor_name: triggered_by_name || 'System',
+              metadata: {
+                recipient: recipient.email,
+                subject: `[${priority.toUpperCase()}] ${finalTitleEn}`,
+                emailType: 'notification',
+                messageId: info.messageId,
+                deliveredAt: new Date().toISOString(),
+                event_type,
+                priority
+              }
+            })
+          } catch (logErr) {
+            console.warn('Failed to log email to audit:', logErr)
+          }
+
         } catch (emailError) {
           const errMsg = (emailError as Error)?.message || 'Unknown email error'
           console.error(`Failed to send email to ${recipient.email}:`, errMsg)
@@ -350,6 +376,32 @@ serve(async (req) => {
               .from('notifications')
               .update({ email_error: errMsg })
               .eq('id', inserted.id)
+          }
+
+          // Log failed email to audit_logs for Email Tracking page
+          try {
+            await supabase.from('audit_logs').insert({
+              module: 'notification',
+              action: 'send',
+              entity_type: 'email',
+              entity_id: `email-${Date.now()}`,
+              entity_name: `[${priority.toUpperCase()}] ${finalTitleEn}`,
+              description: `Failed to send email to ${recipient.email}: ${finalTitleEn}`,
+              success: false,
+              error_message: errMsg,
+              actor_id: triggered_by || 'system',
+              actor_name: triggered_by_name || 'System',
+              metadata: {
+                recipient: recipient.email,
+                subject: `[${priority.toUpperCase()}] ${finalTitleEn}`,
+                emailType: 'notification',
+                event_type,
+                priority,
+                errorMessage: errMsg
+              }
+            })
+          } catch (logErr) {
+            console.warn('Failed to log email error to audit:', logErr)
           }
 
           emailResults.push({ recipient: recipient.email, success: false, error: errMsg })
