@@ -3176,11 +3176,10 @@ const MMP = () => {
       </div>
 
       {/* Body */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-blue-100 dark:border-blue-900/30 p-2 sm:p-4 md:p-6">
-        {loading ? (
-          <MMPTabsSkeleton />
-        ) : (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      {loading ? (
+        <MMPTabsSkeleton />
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="overflow-x-auto mb-6">
               <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1 min-h-[44px]">
                 {canClaimSites && (
@@ -4454,7 +4453,6 @@ const MMP = () => {
             )}
           </Tabs>
         )}
-      </div>
       {(isAdmin || isICT) && (
         <>
         <BulkClearForwardedDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen} />
