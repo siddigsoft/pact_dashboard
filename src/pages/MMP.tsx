@@ -2007,9 +2007,11 @@ const MMP = () => {
       }
 
       setLoadingDispatched(true);
+      console.log('[MMP] Starting to load dispatched entries...');
       try {
         // Only show entries with status = 'Dispatched' (case-insensitive)
         // Simpler query - just filter by status containing 'dispatched' (case-insensitive)
+        console.log('[MMP] Executing dispatched entries query...');
         const { data: dispatchedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
@@ -2017,8 +2019,10 @@ const MMP = () => {
           .order('dispatched_at', { ascending: false, nullsFirst: false })
           .limit(1000);
 
+        console.log('[MMP] Dispatched query result:', { count: dispatchedEntries?.length, error: allError });
+
         if (allError) {
-          console.error('Failed to query dispatched entries:', allError);
+          console.error('[MMP] Failed to query dispatched entries:', allError);
           throw allError;
         }
 
