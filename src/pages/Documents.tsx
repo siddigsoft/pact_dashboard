@@ -556,8 +556,10 @@ const DocumentsPage = () => {
   }, [loadingMore, pageSize]);
   
   useEffect(() => {
+    // Clear stale cache on mount and force fresh fetch
+    clearCache();
     // Fetch filter options and documents in parallel for speed
-    Promise.all([fetchFilterOptions(), fetchDocuments()]);
+    Promise.all([fetchFilterOptions(), fetchDocuments(true)]);
   }, []);
 
   // Reset all filters
