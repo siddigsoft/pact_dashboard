@@ -1,7 +1,7 @@
 # PACT Command Center
 
 ## Overview
-**PACT Command Center** is the centralized Field Operations Command Center designed for comprehensive management of humanitarian and development field operations. The platform serves as a unified command hub that enables organizations to plan, coordinate, execute, and monitor all field activities from a single integrated interface. It streamlines Monthly Monitoring Plans (MMPs), site visits, and field team coordination while enhancing efficiency, transparency, and accountability through multi-tier user management, robust role-based access control (12 specialized roles), real-time collaboration with voice/video calling, detailed MMP and site visit workflows, real-time GPS location sharing, advanced financial tracking with Bank of Khartoum integration, comprehensive reporting, and a mobile-responsive Mission Control Dashboard with role-aware navigation. The platform features IONOS SMTP email notifications (noreply@pactorg.com), popup notifications with action buttons, and complete offline mobile capability for field teams in remote areas.
+PACT Command Center is a centralized Field Operations Command Center for managing humanitarian and development field operations. It provides a unified interface for planning, coordinating, executing, and monitoring field activities, including Monthly Monitoring Plans (MMPs) and site visits. The platform aims to enhance efficiency, transparency, and accountability through multi-tier user management, robust role-based access control, real-time collaboration, detailed workflows, GPS location sharing, advanced financial tracking, comprehensive reporting, and a mobile-responsive Mission Control Dashboard. Key capabilities include IONOS SMTP email notifications, popup notifications, and complete offline mobile functionality.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -9,131 +9,33 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### UI/UX Decisions
-The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, features a responsive, component-based design with dual-theme support and a custom color palette. It follows mobile-first design principles, including separate mobile/desktop components, touch-friendly UI, and PWA readiness.
+The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, featuring a responsive, component-based design with dual-theme support and a custom color palette. It adheres to mobile-first principles, including separate mobile/desktop components, touch-friendly UI, and PWA readiness.
 
 ### Technical Implementations
-*   **Frontend:** Utilizes React Router DOM v6, Vite, and React Context API for global state. TanStack Query manages server state, and Supabase Realtime handles subscriptions. Data consistency between web and mobile is ensured via a shared Supabase database with real-time subscriptions and an offline queue for mobile.
-*   **Backend:** Leverages PostgreSQL via Supabase, employing Row Level Security (RLS) and real-time subscriptions. Supabase Auth provides authentication with email/password, Google OAuth, session management, role-based access control, and TOTP-based Two-Factor Authentication (2FA). The database schema supports core entities like profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions, with audit logs for financial transactions and deletions.
-*   **Mobile Offline Infrastructure:** Features IndexedDB for local storage, a Sync Manager for robust offline-to-online data synchronization with configurable conflict resolution, and a Service Worker for caching. Offline-capable features include site visit workflows, GPS capture, photo capture, cost submissions, and cached MMP lists. Online-only features include real-time dashboards, wallet operations, chat, live location maps, reports, user management, and push notifications.
-*   **Android APK Build (Optimized):** Capacitor-based mobile deployment with native plugins for app lifecycle, GPS tracking, push notifications, network monitoring, and geofencing.
-
-    **Build Optimizations:**
-    - R8/ProGuard enabled for release builds with optimized shrinking and obfuscation
-    - ABI splits for smaller APK downloads (arm64-v8a, armeabi-v7a, x86, x86_64)
-    - Automated version code from git commit count
-    - Firebase Crashlytics integration for crash reporting
-
-    **Security Hardening:**
-    - Cleartext traffic disabled by default (HTTPS only except localhost)
-    - Network security config with explicit domain rules for Supabase, Firebase, Vercel
-    - Permission rationale dialogs before requesting sensitive permissions
-
-    **FCM Push Notifications (Enhanced):**
-    - Custom monochrome notification icon for status bar
-    - Dual notification channels: default and urgent (high priority)
-    - FCM token persistence in SharedPreferences with refresh handling
-    - Data-only message handling for background sync triggers
-    - Foreground notification deduplication
-
-    **Location Foreground Service:**
-    - Android 10+ compliant foreground service for continuous GPS
-    - Configurable update intervals (30s default, 15s fastest)
-    - Minimum displacement filter (10m) to reduce battery usage
-
-    **Enhanced Offline Sync:**
-    - SyncStatusBar component with manual "Sync Now" button
-    - OfflineBanner shows connection status prominently
-    - Exponential backoff retry (1s to 60s max delay)
-    - Conflict resolution strategies: last-write-wins, server-wins, client-wins
-
-    **Mobile-Specific Authentication UI:**
-    - Custom MobileAuthScreen with minimalist city map background
-    - Touch-optimized design with large 14px height input fields (44px touch targets)
-    - Bottom-weighted layout with expandable login form
-    - Swipe-up gesture support with visual handle indicator
-    - Biometric login button (Fingerprint/Face ID ready)
-    - Dark gradient overlay for visual polish
-    - Connection status badge and feature pills
-
-### Feature Specifications
-*   **Authorization System:** Resource-action based permission model with granular permissions enforced across UI, route guards, and server-side RLS.
-*   **File Processing:** MMP Upload Workflow for CSV files includes Zod validation, parsing, and database insertion with rollback and duplicate prevention.
-*   **Real-Time Capabilities:** Live Dashboard with automatic data refresh and notifications via Supabase Realtime, and real-time GPS location sharing with privacy controls.
-*   **Financial Management:** Advanced transportation cost and down-payment system with a two-tier approval workflow and audit trails. Includes enumerator fee calculation and a Finance Approval page with real-time wallet balances, shortfall warnings, receipt support, and batch processing.
-*   **Hub & Field Operations Structure:** Geographical management for hubs, states, and localities, with a master sites registry and interactive Leaflet maps. Supports a Hub-Based Supervision Model.
-*   **Site Visits Enhancements:** Redesigned interface, data collector-specific view, geographic filtering, GPS-based proximity matching, and a first-claim dispatch system.
+*   **Frontend:** Built with React Router DOM v6, Vite, and React Context API. It uses TanStack Query for server state management and Supabase Realtime for subscriptions. Data consistency between web and mobile is maintained via a shared Supabase database with real-time subscriptions and an offline queue for mobile.
+*   **Backend:** Leverages PostgreSQL through Supabase, utilizing Row Level Security (RLS) and real-time subscriptions. Supabase Auth handles authentication (email/password, Google OAuth), session management, role-based access control, and TOTP-based 2FA. The database schema supports core entities like profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions, with audit logs for financial transactions and deletions.
+*   **Mobile Offline Infrastructure:** Features IndexedDB for local storage, a Sync Manager for robust offline-to-online data synchronization with configurable conflict resolution, and a Service Worker for caching. Offline capabilities include site visit workflows, GPS/photo capture, cost submissions, and cached MMP lists. Online-only features include real-time dashboards, wallet operations, chat, live location maps, reports, user management, and push notifications. The Android APK is Capacitor-based with native plugins, R8/ProGuard optimization, ABI splits, Firebase Crashlytics, security hardening, and enhanced FCM push notifications. It includes an Android 10+ compliant foreground service for continuous GPS tracking.
+*   **Authorization System:** Implements a resource-action based permission model with granular control enforced across the UI, route guards, and server-side RLS.
+*   **File Processing:** Includes an MMP Upload Workflow for CSV files with Zod validation, parsing, database insertion, rollback, and duplicate prevention.
+*   **Real-Time Capabilities:** Features a Live Dashboard with automatic data refresh and notifications via Supabase Realtime, and real-time GPS location sharing with privacy controls.
+*   **Financial Management:** Provides an advanced transportation cost and down-payment system with a two-tier approval workflow and audit trails. Includes enumerator fee calculation and a Finance Approval page with real-time wallet balances, shortfall warnings, receipt support, and batch processing.
+*   **Hub & Field Operations Structure:** Supports geographical management for hubs, states, and localities, a master sites registry, and interactive Leaflet maps, facilitating a Hub-Based Supervision Model.
+*   **Site Visits Enhancements:** Redesigned interface with data collector-specific views, geographic filtering, GPS-based proximity matching, and a first-claim dispatch system.
 *   **Unified Site Management System:** Prevents duplicate site entries and enables GPS enrichment.
-*   **Tracker Preparation Plan:** Analyzes planned vs. actual site coverage, provides real-time updates, and facilitates invoice preparation.
-*   **Visit Tracking:** Dedicated database columns for comprehensive tracking of visit start and completion.
-*   **GPS Accuracy Display:** Location accuracy displayed across all team location views with color-coded indicators.
-*   **Signature & Transaction Module:** Comprehensive digital signature system for wallet transactions and document signing, supporting SHA-256 hashing, cryptographically secure OTP, handwriting signatures, and audit logging. Includes mobile support, security features using Web Crypto API, and pre-verification enforcement for phone/email methods.
-*   **Task-Level Budget Tracking:** Granular budget management at individual task/activity level with variance analysis (CPI, SPI, EAC), status classification, trend detection, spending restrictions, and 80% utilization alerts.
-*   **Password Management System:**
-    - Custom password reset with 6-digit OTP via email (IONOS SMTP)
-    - Password change with MFA support via `self-change-password` edge function
-    - Admin password reset capabilities via `admin-change-password` edge function
-    - OTP verification via `verify-reset-otp` edge function
-    - Bilingual support (English/Arabic) for all password-related emails
-*   **Email Verification System:**
-    - "Resend Verification Email" button on login page when email not confirmed
-    - Admin ability to manually confirm user emails via `admin-confirm-email` edge function
-    - Button available in User Detail page for admins to confirm emails
-*   **Email Notification System:**
-    - IONOS SMTP integration (noreply@pactorg.com)
-    - `send-email` edge function for transactional emails
-    - `dispatch-notification` edge function for system notifications
-    - Bilingual email templates (English/Arabic)
-    - Password reset, OTP, and system notification emails
-*   **Realtime Status Indicators:**
-    - `RealtimeBanner` component shows connection status across all pages
-    - `DataFreshnessBadge` shows when data was last updated
-    - `RealtimeActivityIndicator` shows live activity status
-    - `RealtimeStatusDot` for compact connection indicators
-    - `useRealtimeHealth` hook for connection health monitoring
-    - `useFocusReconnect` hook for automatic reconnection on tab focus
-    - Realtime subscriptions on signatures, site visits, MMP, and chat tables
-*   **Hub Management Notification System:**
-    - Centralized notification service in `src/services/NotificationTriggerService.ts`
-    - `getHubManagementUsers(hubId)` fetches all management users: Hub Supervisors, Hub FOMs, all Super Admins, and all Admins
-    - Notifications sent for: MMP forwarding, site operations (claimed/rejected/verified/approved), financial transactions, activity coverage milestones, activity dates
-    - Deduplication via Set to prevent duplicate notifications
-    - Backward-compatible `getHubSupervisors(hubId)` method (deprecated, calls getHubManagementUsers)
-*   **Targeted Email Notification System (Optimized Dec 2024):**
-    - Reduced email volume to prevent IONOS rate limiting (450 errors)
-    - MMP Forward to FOM: Email sent to selected FOM(s) only, CC: 1 Super Admin (no supervisors)
-    - MMP Forward to Coordinators: Email sent to selected coordinators only, CC: Hub Supervisors + 1 Super Admin
-    - Site Verified by Coordinator: Email sent to FOM only, CC: Hub Supervisors (of coordinator's hub) + 1 Super Admin
-    - 2-second delay between emails when sending to multiple recipients
-    - Hub Supervisors included for accountability only on coordinator-related workflow emails
-*   **Multi-Tier MMP Recall System (Dec 2024):**
-    - Three-tier recall hierarchy: Admin→FOM, FOM→Coordinator, Coordinator→Data Collector
-    - Scope-based filtering: Full MMP, by activity, site, locality, state, hub, CP, or date range
-    - Force recall capability for Super Admin and Admin to bypass normal restrictions
-    - Financial recovery system for transportation advances with three options:
-      - Deduct from future payments
-      - Cash return required (with receipt validation)
-      - Write-off (Super Admin only)
-    - Approval workflow for recalls requiring supervisor review
-    - WFP cancellation handling with automatic recall triggers
-    - Comprehensive audit logging with before/after snapshots
-    - Bilingual notifications (English/Arabic) to all affected users
-    - Components: `RecallDialog`, `RecallHistory`, `RecoveryDashboard`, `PendingRecallApprovals`
-    - Types defined in `src/types/recall.ts`, `src/types/recall-database.ts`
-    - Utils in `src/utils/recallUtils.ts` with `checkTieredRecallAllowed()`, `performTieredRecall()`, `computeRecallImpact()`
-    
-    **Edge Functions (Dec 2024):**
-    - `process-recall`: Role-based authorization (super_admin, admin, ict, fom, hub_supervisor, coordinator), tier-based permission validation, force recall restricted to super_admin/admin, persists affected_site_ids array for safe scoping
-    - `approve-recall`: Uses affected_site_ids as primary scoping mechanism, falls back to scopeFilters, rejects approvals without scope data to prevent over-scoping, logs scope used in MMP audit trail
-    
-    **Recall UX Improvements (Dec 2024):**
-    - **Impact Preview:** Two-step recall flow (configure → preview) with `computeRecallImpact()` showing affected sites, collectors, financial exposure, and warnings before confirmation
-    - **Approval Queue Enhancements:** Bulk approve/reject actions, SLA indicators (on time/approaching/overdue with color coding), tier-based filtering, and refresh capability
-    - **Recovery Dashboard Improvements:** Wallet transaction ID and receipt reference tracking for cash returns, overdue alerts with age-based escalation (7/14 days), evidence persistence in audit logs, required receipt validation for cash return method
-    - **RecallImpactPreview interface:** Returns affectedSiteCount, affectedCollectorCount, affectedCollectors list, hasFinancialImpact, financialAmount, sitesWithAdvances, scopeSummary, and warnings
-    - **ProcessRecoveryOptions interface:** Supports siteEntryId, processedBy, method, amount, notes, walletTransactionId, receiptReference
+*   **Signature & Transaction Module:** Comprehensive digital signature system for wallet transactions and document signing, supporting SHA-256 hashing, cryptographically secure OTP, handwriting signatures, and audit logging.
+*   **Task-Level Budget Tracking:** Granular budget management at the individual task/activity level with variance analysis (CPI, SPI, EAC), status classification, trend detection, spending restrictions, and utilization alerts.
+*   **Password Management System:** Custom password reset with 6-digit OTP via email, password change with MFA, and admin password reset capabilities, all with bilingual support.
+*   **Email Verification & Notification System:** Features email verification, admin manual email confirmation, IONOS SMTP integration for transactional emails, and bilingual email templates for various notifications.
+*   **Realtime Status Indicators:** Components like `RealtimeBanner`, `DataFreshnessBadge`, `RealtimeActivityIndicator`, and `RealtimeStatusDot` provide visual feedback on connection and data freshness.
+*   **Hub Management Notification System:** Centralized service for sending notifications to relevant management users (Hub Supervisors, Hub FOMs, Admins, Super Admins) for MMP forwarding, site operations, financial transactions, and activity milestones, with deduplication.
+*   **Targeted Email Notification System:** Optimized to reduce email volume, sending notifications to specific recipients (e.g., selected FOMs, coordinators) with Super Admin CC, and including a 2-second delay for multiple recipients.
+*   **Multi-Tier MMP Recall System:** Implements a three-tier recall hierarchy (Admin→FOM, FOM→Coordinator, Coordinator→Data Collector) with scope-based filtering and force recall for Super Admins/Admins. Includes a financial recovery system for transportation advances (deduction, cash return, write-off) and an approval workflow, with comprehensive audit logging and bilingual notifications. Features an impact preview and enhanced approval queue and recovery dashboard.
+*   **Visit Postponement System:** Allows data collectors and coordinators to request visit date changes with an approval workflow and historical tracking.
+*   **Date Range Visit Support:** Enables multi-day visits with `visitDateFrom` and `visitDateTo` fields, special handling for DM/GFA activities, and deadline calculations based on the start date.
+*   **Configurable Auto-Release System:** Administrators can configure auto-release timing, confirmation deadlines, and reminder frequency presets for site visits.
 
 ### System Design Choices
-The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure.
+The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.
 
 ## External Dependencies
 *   **Supabase:** PostgreSQL database, Authentication, Realtime, Storage, Row Level Security.

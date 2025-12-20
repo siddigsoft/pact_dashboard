@@ -1,4 +1,5 @@
-import { addDays, subDays, subHours, isAfter, isBefore, formatDistanceToNow } from 'date-fns';
+import { addDays, subDays, subHours, isAfter, isBefore, formatDistanceToNow, addHours } from 'date-fns';
+import { AutoReleaseSettings, DEFAULT_AUTO_RELEASE_SETTINGS } from '@/types/postponement';
 
 export interface ConfirmationDeadlines {
   confirmation_deadline: string;
@@ -6,24 +7,81 @@ export interface ConfirmationDeadlines {
   confirmation_status: 'pending' | 'confirmed' | 'auto_released';
 }
 
+export interface DateRangeDeadlines extends ConfirmationDeadlines {
+  visitDateFrom: string;
+  visitDateTo: string;
+  effectiveVisitDate: string;
+}
+
+/**
+ * Get auto-release settings from localStorage or use defaults
+ */
+export function getAutoReleaseSettings(): AutoReleaseSettings {
+  try {
+    const stored = localStorage.getItem('autoReleaseSettings');
+    if (stored) {
+      return { ...DEFAULT_AUTO_RELEASE_SETTINGS, ...JSON.parse(stored) };
+    }
+  } catch (e) {
+    console.error('Failed to parse auto-release settings:', e);
+  }
+  return DEFAULT_AUTO_RELEASE_SETTINGS;
+}
+
+/**
+ * Save auto-release settings to localStorage
+ */
+export function saveAutoReleaseSettings(settings: Partial<AutoReleaseSettings>): void {
+  const current = getAutoReleaseSettings();
+  const updated = { ...current, ...settings };
+  localStorage.setItem('autoReleaseSettings', JSON.stringify(updated));
+}
+
 /**
  * Calculate confirmation deadlines based on scheduled visit date
- * - Confirmation deadline: 2 days before visit date
- * - Auto-release: 1 day before visit date
+ * Uses configurable timing from settings
  */
-export function calculateConfirmationDeadlines(visitDate: string | Date): ConfirmationDeadlines {
+export function calculateConfirmationDeadlines(
+  visitDate: string | Date, 
+  settings?: AutoReleaseSettings
+): ConfirmationDeadlines {
+  const config = settings || getAutoReleaseSettings();
   const visit = new Date(visitDate);
   
-  // Confirmation deadline is 2 days before the visit
-  const confirmationDeadline = subDays(visit, 2);
+  // Confirmation deadline is configurable hours before the visit
+  const confirmationDeadline = subHours(visit, config.confirmationHoursBeforeVisit);
   
-  // Auto-release triggers 1 day before the visit if not confirmed
-  const autoreleaseAt = subDays(visit, 1);
+  // Auto-release triggers configurable hours before the visit if not confirmed
+  const autoreleaseAt = subHours(visit, config.releaseHoursBeforeVisit);
   
   return {
     confirmation_deadline: confirmationDeadline.toISOString(),
     autorelease_at: autoreleaseAt.toISOString(),
     confirmation_status: 'pending',
+  };
+}
+
+/**
+ * Calculate deadlines for date range visits (DM/GFA activities)
+ * Uses the start date (dateFrom) as the effective date for deadline calculations
+ */
+export function calculateDateRangeDeadlines(
+  dateFrom: string | Date,
+  dateTo: string | Date,
+  settings?: AutoReleaseSettings
+): DateRangeDeadlines {
+  const config = settings || getAutoReleaseSettings();
+  const visitStart = new Date(dateFrom);
+  const visitEnd = new Date(dateTo);
+  
+  // For date range visits, use the start date for deadline calculations
+  const baseDeadlines = calculateConfirmationDeadlines(dateFrom, config);
+  
+  return {
+    ...baseDeadlines,
+    visitDateFrom: visitStart.toISOString(),
+    visitDateTo: visitEnd.toISOString(),
+    effectiveVisitDate: visitStart.toISOString(),
   };
 }
 
