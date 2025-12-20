@@ -6,6 +6,11 @@ export interface MMPSiteEntry {
   visitedBy?: string;
   mainActivity?: string;
   visitDate?: string;
+  visitDateFrom?: string;
+  visitDateTo?: string;
+  activityDateType?: 'single_day' | 'multi_day' | 'dm_gfa';
+  postponementHistory?: PostponementHistoryEntry[];
+  currentPostponement?: PostponementHistoryEntry;
   isFlagged?: boolean;
   flagReason?: string;
   flaggedBy?: string;
@@ -38,4 +43,23 @@ export interface MMPSiteVisit {
   resources?: string[];
   risks?: string;
   escalation?: string;
+}
+
+export interface PostponementHistoryEntry {
+  id: string;
+  originalDate: string;
+  originalDateTo?: string;
+  newDate: string;
+  newDateTo?: string;
+  isDateRange?: boolean;
+  reason: string;
+  reasonDetails?: string;
+  requestedBy: string;
+  requestedByName: string;
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
 }

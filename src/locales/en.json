@@ -86,6 +86,24 @@
       "forwarded": "MMP Forwarded",
       "forwardedDesc": "The MMP has been forwarded for review."
     },
+    "postponement": {
+      "requested": "Postponement Requested",
+      "requestedDesc": "Your postponement request has been submitted for approval.",
+      "approved": "Postponement Approved",
+      "approvedDesc": "Your postponement request has been approved.",
+      "rejected": "Postponement Rejected",
+      "rejectedDesc": "Your postponement request has been rejected.",
+      "pendingApproval": "Pending Approval",
+      "pendingApprovalDesc": "A postponement request is awaiting your review."
+    },
+    "autoRelease": {
+      "warning": "Confirmation Deadline Approaching",
+      "warningDesc": "Please confirm your site assignment before the deadline.",
+      "released": "Site Auto-Released",
+      "releasedDesc": "Your site claim has been released due to no confirmation.",
+      "settingsSaved": "Auto-Release Settings Saved",
+      "settingsSavedDesc": "Your auto-release configuration has been updated."
+    },
     "wallet": {
       "transactionSuccess": "Transaction Successful",
       "transactionSuccessDesc": "Your transaction has been processed.",

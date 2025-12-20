@@ -86,6 +86,24 @@
       "forwarded": "تم تحويل خطة الرصد",
       "forwardedDesc": "تم تحويل خطة الرصد الشهرية للمراجعة."
     },
+    "postponement": {
+      "requested": "تم طلب التأجيل",
+      "requestedDesc": "تم تقديم طلب التأجيل للموافقة.",
+      "approved": "تمت الموافقة على التأجيل",
+      "approvedDesc": "تمت الموافقة على طلب التأجيل الخاص بك.",
+      "rejected": "تم رفض التأجيل",
+      "rejectedDesc": "تم رفض طلب التأجيل الخاص بك.",
+      "pendingApproval": "في انتظار الموافقة",
+      "pendingApprovalDesc": "طلب تأجيل في انتظار مراجعتك."
+    },
+    "autoRelease": {
+      "warning": "اقتراب موعد التأكيد",
+      "warningDesc": "يرجى تأكيد تعيين الموقع قبل الموعد النهائي.",
+      "released": "تم إطلاق الموقع تلقائياً",
+      "releasedDesc": "تم إطلاق مطالبتك بالموقع بسبب عدم التأكيد.",
+      "settingsSaved": "تم حفظ إعدادات الإطلاق التلقائي",
+      "settingsSavedDesc": "تم تحديث إعدادات الإطلاق التلقائي الخاصة بك."
+    },
     "wallet": {
       "transactionSuccess": "نجحت المعاملة",
       "transactionSuccessDesc": "تمت معالجة معاملتك.",

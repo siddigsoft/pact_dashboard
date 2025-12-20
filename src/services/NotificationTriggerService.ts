@@ -852,6 +852,100 @@ export const NotificationTriggerService = {
     });
   },
 
+  async postponementRequested(
+    supervisorId: string,
+    supervisorName: string,
+    siteName: string,
+    siteId: string,
+    requestedByName: string,
+    originalDate: string,
+    newDate: string,
+    reason: string
+  ): Promise<void> {
+    await this.send({
+      userId: supervisorId,
+      title: 'Postponement Request',
+      titleAr: 'طلب تأجيل',
+      message: `${requestedByName} has requested to postpone "${siteName}" from ${originalDate} to ${newDate}. Reason: ${reason}`,
+      messageAr: `طلب ${requestedByName} تأجيل "${siteName}" من ${originalDate} إلى ${newDate}. السبب: ${reason}`,
+      type: 'info',
+      category: 'approvals',
+      priority: 'high',
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+  },
+
+  async postponementApproved(
+    userId: string,
+    siteName: string,
+    siteId: string,
+    newDate: string,
+    approvedByName: string,
+    notes?: string
+  ): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Postponement Approved',
+      titleAr: 'تمت الموافقة على التأجيل',
+      message: `Your postponement request for "${siteName}" has been approved by ${approvedByName}. New visit date: ${newDate}${notes ? `. Notes: ${notes}` : ''}`,
+      messageAr: `تمت الموافقة على طلب التأجيل الخاص بـ "${siteName}" من قبل ${approvedByName}. تاريخ الزيارة الجديد: ${newDate}`,
+      type: 'success',
+      category: 'approvals',
+      priority: 'normal',
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+  },
+
+  async postponementRejected(
+    userId: string,
+    siteName: string,
+    siteId: string,
+    rejectedByName: string,
+    reason: string
+  ): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Postponement Rejected',
+      titleAr: 'تم رفض طلب التأجيل',
+      message: `Your postponement request for "${siteName}" has been rejected by ${rejectedByName}. Reason: ${reason}`,
+      messageAr: `تم رفض طلب التأجيل الخاص بـ "${siteName}" من قبل ${rejectedByName}. السبب: ${reason}`,
+      type: 'warning',
+      category: 'approvals',
+      priority: 'high',
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+  },
+
+  async visitDateRangeReminder(
+    userId: string,
+    siteName: string,
+    siteId: string,
+    dateFrom: string,
+    dateTo: string,
+    daysUntilStart: number
+  ): Promise<void> {
+    const urgency = daysUntilStart <= 1 ? 'high' : 'normal';
+    await this.send({
+      userId,
+      title: daysUntilStart <= 1 ? 'Visit Period Starting Tomorrow' : `Visit Period in ${daysUntilStart} Days`,
+      titleAr: daysUntilStart <= 1 ? 'تبدأ فترة الزيارة غداً' : `فترة الزيارة خلال ${daysUntilStart} أيام`,
+      message: `Reminder: Your multi-day visit to "${siteName}" is scheduled from ${dateFrom} to ${dateTo}.`,
+      messageAr: `تذكير: زيارتك متعددة الأيام إلى "${siteName}" مجدولة من ${dateFrom} إلى ${dateTo}.`,
+      type: daysUntilStart <= 1 ? 'warning' : 'info',
+      category: 'assignments',
+      priority: urgency,
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+  },
+
   /**
    * Send reminder at specific intervals (24h, 12h, 6h before deadline)
    * Validates that hoursUntilDeadline is appropriate for the reminderType
