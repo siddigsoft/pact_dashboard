@@ -2009,17 +2009,26 @@ const MMP = () => {
       setLoadingDispatched(true);
       try {
         // Only show entries with status = 'Dispatched' (case-insensitive)
-        // Exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
+        // Simpler query - just filter by status containing 'dispatched' (case-insensitive)
         const { data: dispatchedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .ilike('status', 'Dispatched')
-          .not('status', 'ilike', 'accepted')
-          .is('accepted_by', null)
-          .order('dispatched_at', { ascending: false })
-          .limit(1000); // Limit to 1000 entries for performance
+          .ilike('status', '%dispatched%')
+          .order('dispatched_at', { ascending: false, nullsFirst: false })
+          .limit(1000);
 
-        if (allError) throw allError;
+        if (allError) {
+          console.error('Failed to query dispatched entries:', allError);
+          throw allError;
+        }
+
+        // Handle null/undefined case
+        if (!dispatchedEntries || dispatchedEntries.length === 0) {
+          setDispatchedSiteEntries([]);
+          setDispatchedCount(0);
+          setLoadingDispatched(false);
+          return;
+        }
 
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = dispatchedEntries.map(entry => {
@@ -2764,7 +2773,7 @@ const MMP = () => {
                 )}
                 {!canClaimSites && (
                   <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
-                    Verified Sites
+                    Verified MMP
                     <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
                   </TabsTrigger>
                 )}
