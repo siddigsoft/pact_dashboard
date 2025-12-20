@@ -365,6 +365,12 @@ export const useMMPProvider = () => {
         return;
       }
 
+      // Don't refresh if offline
+      if (!navigator.onLine) {
+        console.debug('MMP refresh skipped: device is offline');
+        return;
+      }
+
       setLoading(true);
       
       const { data: mmpData, error } = await supabase
@@ -382,6 +388,7 @@ export const useMMPProvider = () => {
 
       let rows = mmpData;
       if (error) {
+        console.warn('Error loading MMP files with relations, trying fallback:', error);
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('mmp_files')
           .select('*')
@@ -394,10 +401,13 @@ export const useMMPProvider = () => {
 
       const mapped = (rows || []).map(transformDBToMMPFile);
       setMMPFiles(mapped);
+      setError(null); // Clear any previous errors on successful refresh
     } catch (err) {
       console.error('Error loading MMP files:', err);
+      // Don't clear existing data on error, just log it
       setError('Failed to load MMP files');
-      setMMPFiles([]);
+      // Keep existing data instead of clearing it
+      // setMMPFiles([]);
     } finally {
       setLoading(false);
     }
@@ -406,6 +416,99 @@ export const useMMPProvider = () => {
   useEffect(() => {
     refreshMMPFiles();
   }, []);
+
+  // Automatic background refresh for mobile and when app becomes visible
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    let visibilityTimeout: NodeJS.Timeout | null = null;
+    let appStateListener: any = null;
+
+    const handleVisibilityChange = () => {
+      // When app becomes visible, refresh after a short delay
+      if (document.visibilityState === 'visible') {
+        // Clear any pending timeout
+        if (visibilityTimeout) {
+          clearTimeout(visibilityTimeout);
+        }
+        // Refresh after 500ms to avoid rapid refreshes when switching tabs quickly
+        visibilityTimeout = setTimeout(() => {
+          if (navigator.onLine) {
+            refreshMMPFiles();
+          }
+        }, 500);
+      }
+    };
+
+    const handleOnline = () => {
+      // When coming back online, refresh immediately
+      refreshMMPFiles();
+    };
+
+    // Set up periodic background refresh (every 30 seconds when app is visible)
+    const startPeriodicRefresh = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      
+      intervalId = setInterval(() => {
+        // Only refresh if:
+        // 1. App is visible
+        // 2. Online
+        // 3. User is authenticated (checked inside refreshMMPFiles)
+        if (document.visibilityState === 'visible' && navigator.onLine) {
+          refreshMMPFiles();
+        }
+      }, 30000); // 30 seconds
+    };
+
+    // Listen for visibility changes (app becoming visible/hidden)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Listen for online/offline status
+    window.addEventListener('online', handleOnline);
+
+    // For native mobile apps (Capacitor), also listen to app state changes
+    const setupAppStateListener = async () => {
+      try {
+        // Check if we're in a Capacitor app
+        if (typeof (window as any).Capacitor !== 'undefined') {
+          const { App } = await import('@capacitor/app');
+          
+          appStateListener = await App.addListener('appStateChange', ({ isActive }) => {
+            if (isActive && navigator.onLine) {
+              // App became active, refresh data
+              setTimeout(() => {
+                refreshMMPFiles();
+              }, 500);
+            }
+          });
+        }
+      } catch (error) {
+        // Capacitor not available or App plugin not installed, that's okay
+        console.debug('Capacitor App plugin not available, using web visibility API only');
+      }
+    };
+
+    setupAppStateListener();
+
+    // Start periodic refresh
+    startPeriodicRefresh();
+
+    // Cleanup
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      if (visibilityTimeout) {
+        clearTimeout(visibilityTimeout);
+      }
+      if (appStateListener) {
+        appStateListener.remove();
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [refreshMMPFiles]);
 
   useEffect(() => {
     let channel: any = null;
