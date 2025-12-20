@@ -3176,7 +3176,7 @@ const MMP = () => {
       </div>
 
       {/* Body */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-blue-100 dark:border-blue-900/30 p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-280px)]">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-blue-100 dark:border-blue-900/30 p-2 sm:p-4 md:p-6">
         {loading ? (
           <MMPTabsSkeleton />
         ) : (
