@@ -1,0 +1,68 @@
+[
+  {
+    "policyname": "Allow delete mmp_site_entries for authenticated",
+    "cmd": "DELETE",
+    "qual": "((auth.uid() = (accepted_by)::uuid) OR (accepted_by IS NULL))",
+    "with_check": null
+  },
+  {
+    "policyname": "mmp_site_entries_delete",
+    "cmd": "DELETE",
+    "qual": "is_admin_or_super()",
+    "with_check": null
+  },
+  {
+    "policyname": "mmp_site_entries_insert",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(( SELECT auth.uid() AS uid) IS NOT NULL)"
+  },
+  {
+    "policyname": "mmp_site_entries_select",
+    "cmd": "SELECT",
+    "qual": "(( SELECT auth.uid() AS uid) IS NOT NULL)",
+    "with_check": null
+  },
+  {
+    "policyname": "mmp_site_entries_select_authenticated",
+    "cmd": "SELECT",
+    "qual": "(auth.role() = 'authenticated'::text)",
+    "with_check": null
+  },
+  {
+    "policyname": "mmp_site_entries_update",
+    "cmd": "UPDATE",
+    "qual": "(( SELECT auth.uid() AS uid) IS NOT NULL)",
+    "with_check": null
+  },
+  {
+    "policyname": "mmp_site_entries_update_authenticated",
+    "cmd": "UPDATE",
+    "qual": "(auth.role() = 'authenticated'::text)",
+    "with_check": "(auth.role() = 'authenticated'::text)"
+  },
+  {
+    "policyname": "mse_delete_editors",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))",
+    "with_check": null
+  },
+  {
+    "policyname": "mse_insert_editors",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))"
+  },
+  {
+    "policyname": "mse_select_authenticated",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() IS NOT NULL)",
+    "with_check": null
+  },
+  {
+    "policyname": "mse_update_editors",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))"
+  }
+]
