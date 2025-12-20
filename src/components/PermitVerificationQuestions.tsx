@@ -117,11 +117,11 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
     // Generate summary message based on decision
     let message = '';
     if (statePermitRequirement === 'not_required') {
-      message = `No state permit is required for ${state}. The verification process for the state permit is complete. You will now proceed to verify the locality permit for localities.`;
+      message = `No state permit is required for ${state}. The verification process for the state permit is complete. You will now proceed to verify the permits for the localities.`;
     } else if (statePermitRequirement === 'required_have_it' && statePermitUploaded) {
-      message = `The state permit for ${state} has been uploaded successfully. The verification process for the state permit is complete. You will now proceed to verify the locality permit for localities.`;
+      message = `The state permit for ${state} has been uploaded successfully. The verification process for the state permit is complete. You will now proceed to verify the permits for the localities.`;
     } else if (statePermitRequirement === 'required_dont_have_it' && stateCanWorkWithout === 'yes') {
-      message = `A state permit is required for ${state}, but you can proceed without it. The verification process for the state permit is complete. You will now proceed to verify the locality permit for localities.`;
+      message = `A state permit is required for ${state}, but you can proceed without it. The verification process for the state permit is complete. You will now proceed to verify the permits for the localities.`;
     } else if (statePermitRequirement === 'required_dont_have_it' && stateCanWorkWithout === 'no') {
       message = `The MMP has been sent back to FOM because a state permit is required for ${state} and you cannot proceed without it. No further action is needed here.`;
     }
