@@ -234,7 +234,7 @@ const DocumentsPage = () => {
       const [mmpResult, costResult, photoResult] = await Promise.all([
         supabase
           .from('mmp_files')
-          .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
+          .select('id, name, original_filename, file_url, created_at, uploaded_at, updated_at, permits, project_id, project_name, status, uploaded_by')
           .order('created_at', { ascending: false })
           .limit(500),
         supabase
@@ -280,18 +280,19 @@ const DocumentsPage = () => {
 
         (mmpFiles || []).forEach((mmp: any) => {
           if (!mmp) return;
-          const projectName = mmp.projects?.name || 'Unknown Project';
-          const monthBucket = safeFormatDate(mmp.created_at, 'yyyy-MM');
+          const projectName = mmp.project_name || 'Unknown Project';
+          const uploadDate = mmp.uploaded_at || mmp.created_at;
+          const monthBucket = safeFormatDate(uploadDate, 'yyyy-MM');
           if (monthBucket) monthsSet.add(monthBucket);
           
           // Add the MMP file itself
           docs.push({
             id: `mmp-${mmp.id}`,
             indexNo: indexCounter++,
-            fileName: mmp.filename || 'Untitled MMP',
+            fileName: mmp.original_filename || mmp.name || 'Untitled MMP',
             fileUrl: mmp.file_url || '',
             category: 'mmp_file',
-            uploadedAt: mmp.created_at || new Date().toISOString(),
+            uploadedAt: uploadDate || new Date().toISOString(),
             uploadedBy: mmp.uploaded_by,
             projectId: mmp.project_id,
             projectName,
@@ -317,10 +318,10 @@ const DocumentsPage = () => {
                 fileName: doc.fileName || 'Federal Permit',
                 fileUrl: doc.fileUrl || '',
                 category: 'federal_permit',
-                uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
+                uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
                 projectId: mmp.project_id,
                 projectName,
-                mmpName: mmp.filename,
+                mmpName: mmp.original_filename || mmp.name,
                 monthBucket: docMonth,
                 verified: doc.validated || false,
                 status: doc.validated ? 'verified' : 'pending',
@@ -346,11 +347,11 @@ const DocumentsPage = () => {
                   fileName: doc.fileName || `State Permit - ${sp.stateName}`,
                   fileUrl: doc.fileUrl || '',
                   category: 'state_permit',
-                  uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
+                  uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
                   state: sp.stateName,
                   projectId: mmp.project_id,
                   projectName,
-                  mmpName: mmp.filename,
+                  mmpName: mmp.original_filename || mmp.name,
                   monthBucket: docMonth,
                   issueDate: doc.issueDate,
                   expiryDate: doc.expiryDate,
@@ -379,12 +380,12 @@ const DocumentsPage = () => {
                   fileName: doc.fileName || `Local Permit - ${lp.localityName}`,
                   fileUrl: doc.fileUrl || '',
                   category: 'local_permit',
-                  uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
+                  uploadedAt: doc.uploadedAt || uploadDate || new Date().toISOString(),
                   state: lp.state,
                   locality: lp.localityName,
                   projectId: mmp.project_id,
                   projectName,
-                  mmpName: mmp.filename,
+                  mmpName: mmp.original_filename || mmp.name,
                   monthBucket: docMonth,
                   issueDate: doc.issueDate,
                   expiryDate: doc.expiryDate,
@@ -410,12 +411,12 @@ const DocumentsPage = () => {
                 fileName: lp.fileName || `Locality Permit`,
                 fileUrl: lp.fileUrl || '',
                 category: 'local_permit',
-                uploadedAt: lp.uploadedAt || mmp.created_at || new Date().toISOString(),
+                uploadedAt: lp.uploadedAt || uploadDate || new Date().toISOString(),
                 state: lp.state,
                 locality: lp.locality,
                 projectId: mmp.project_id,
                 projectName,
-                mmpName: mmp.filename,
+                mmpName: mmp.original_filename || mmp.name,
                 monthBucket: docMonth,
                 issueDate: lp.issueDate,
                 expiryDate: lp.expiryDate,
