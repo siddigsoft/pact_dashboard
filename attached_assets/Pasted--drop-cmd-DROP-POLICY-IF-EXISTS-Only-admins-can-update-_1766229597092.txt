@@ -1,0 +1,358 @@
+[
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Only admins can update app versions\" ON public.app_versions;",
+    "create_cmd": "CREATE POLICY \"Only admins can update app versions\" ON public.app_versions FOR UPDATE USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = 'Admin'::text)))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can read audit logs\" ON public.audit_logs;",
+    "create_cmd": "CREATE POLICY \"Admins can read audit logs\" ON public.audit_logs FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'superAdmin'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"admin_select_all_audit_logs\" ON public.audit_logs;",
+    "create_cmd": "CREATE POLICY \"admin_select_all_audit_logs\" ON public.audit_logs FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = (SELECT auth.uid())) AND (p.role = ANY (ARRAY['admin'::text, 'super_admin'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"authenticated_select_own_audit_logs\" ON public.audit_logs;",
+    "create_cmd": "CREATE POLICY \"authenticated_select_own_audit_logs\" ON public.audit_logs FOR SELECT USING ((actor_id = ((SELECT auth.uid()))::text));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Super admins can read audit logs\" ON public.audit_logs;",
+    "create_cmd": "CREATE POLICY \"Super admins can read audit logs\" ON public.audit_logs FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = 'superAdmin'::text)))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can read all audit logs\" ON public.audit_logs;",
+    "create_cmd": "CREATE POLICY \"Admins can read all audit logs\" ON public.audit_logs FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['Super Admin'::text, 'Admin'::text, 'ICT'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"chat_message_reads_select_participant\" ON public.chat_message_reads;",
+    "create_cmd": "CREATE POLICY \"chat_message_reads_select_participant\" ON public.chat_message_reads FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM (chat_messages m\n     JOIN chat_participants cp ON ((cp.chat_id = m.chat_id)))\n  WHERE ((m.id = chat_message_reads.message_id) AND (cp.user_id = (SELECT auth.uid()))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view messages in their chats\" ON public.chat_messages;",
+    "create_cmd": "CREATE POLICY \"Users can view messages in their chats\" ON public.chat_messages FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chat_messages.chat_id) AND (cp.user_id = (SELECT auth.uid()))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"chat_messages_select_participant\" ON public.chat_messages;",
+    "create_cmd": "CREATE POLICY \"chat_messages_select_participant\" ON public.chat_messages FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chat_messages.chat_id) AND (cp.user_id = (SELECT auth.uid()))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"chat_participants_select_self\" ON public.chat_participants;",
+    "create_cmd": "CREATE POLICY \"chat_participants_select_self\" ON public.chat_participants FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"chat_participants_delete_self_or_owner\" ON public.chat_participants;",
+    "create_cmd": "CREATE POLICY \"chat_participants_delete_self_or_owner\" ON public.chat_participants FOR DELETE USING (((user_id = (SELECT auth.uid())) OR (EXISTS ( SELECT 1\n   FROM chats c\n  WHERE ((c.id = chat_participants.chat_id) AND (c.created_by = (SELECT auth.uid())))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"chat_participants_select_in_same_chat\" ON public.chat_participants;",
+    "create_cmd": "CREATE POLICY \"chat_participants_select_in_same_chat\" ON public.chat_participants FOR SELECT USING (((user_id = (SELECT auth.uid())) OR (EXISTS ( SELECT 1\n   FROM chats c\n  WHERE ((c.id = chat_participants.chat_id) AND (c.created_by = (SELECT auth.uid())))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"chats_delete_creator\" ON public.chats;",
+    "create_cmd": "CREATE POLICY \"chats_delete_creator\" ON public.chats FOR DELETE USING ((created_by = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"chats_select_creator\" ON public.chats;",
+    "create_cmd": "CREATE POLICY \"chats_select_creator\" ON public.chats FOR SELECT USING ((created_by = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"chats_select_participant\" ON public.chats;",
+    "create_cmd": "CREATE POLICY \"chats_select_participant\" ON public.chats FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chats.id) AND (cp.user_id = (SELECT auth.uid()))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admin manage classification_fee_structures\" ON public.classification_fee_structures;",
+    "create_cmd": "CREATE POLICY \"Admin manage classification_fee_structures\" ON public.classification_fee_structures FOR ALL USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'ict'::text, 'financialAdmin'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can view all checklists\" ON public.comprehensive_monitoring_checklists;",
+    "create_cmd": "CREATE POLICY \"Admins can view all checklists\" ON public.comprehensive_monitoring_checklists FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'supervisor'::text, 'coordinator'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view own checklists\" ON public.comprehensive_monitoring_checklists;",
+    "create_cmd": "CREATE POLICY \"Users can view own checklists\" ON public.comprehensive_monitoring_checklists FOR SELECT USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can delete own checklists\" ON public.comprehensive_monitoring_checklists;",
+    "create_cmd": "CREATE POLICY \"Users can delete own checklists\" ON public.comprehensive_monitoring_checklists FOR DELETE USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view relevant history\" ON public.cost_approval_history;",
+    "create_cmd": "CREATE POLICY \"Users can view relevant history\" ON public.cost_approval_history FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM site_visit_cost_submissions\n  WHERE ((site_visit_cost_submissions.id = cost_approval_history.submission_id) AND ((site_visit_cost_submissions.submitted_by = (SELECT auth.uid())) OR (EXISTS ( SELECT 1\n           FROM user_roles\n          WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (lower(user_roles.role) = ANY (ARRAY['admin'::text, 'financialadmin'::text, 'fom'::text, 'ict'::text]))))))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"dashboard_settings_delete_own\" ON public.dashboard_settings;",
+    "create_cmd": "CREATE POLICY \"dashboard_settings_delete_own\" ON public.dashboard_settings FOR DELETE USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"dashboard_settings_select_own\" ON public.dashboard_settings;",
+    "create_cmd": "CREATE POLICY \"dashboard_settings_select_own\" ON public.dashboard_settings FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"data_visibility_settings_delete_own\" ON public.data_visibility_settings;",
+    "create_cmd": "CREATE POLICY \"data_visibility_settings_delete_own\" ON public.data_visibility_settings FOR DELETE USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"data_visibility_settings_select_own\" ON public.data_visibility_settings;",
+    "create_cmd": "CREATE POLICY \"data_visibility_settings_select_own\" ON public.data_visibility_settings FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"deletion_audit_log_view\" ON public.deletion_audit_log;",
+    "create_cmd": "CREATE POLICY \"deletion_audit_log_view\" ON public.deletion_audit_log FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'financialAdmin'::text, 'ict'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"down_payment_requests_supervisor_update\" ON public.down_payment_requests;",
+    "create_cmd": "CREATE POLICY \"down_payment_requests_supervisor_update\" ON public.down_payment_requests FOR UPDATE USING (((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['supervisor'::text, 'hubSupervisor'::text])) AND ((profiles.hub_id = down_payment_requests.hub_id) OR (profiles.hub_id IS NULL))))) AND (status = ANY (ARRAY['pending_supervisor'::text, 'pending_admin'::text]))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"down_payment_requests_user_view\" ON public.down_payment_requests;",
+    "create_cmd": "CREATE POLICY \"down_payment_requests_user_view\" ON public.down_payment_requests FOR SELECT USING ((requested_by = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"down_payment_requests_admin_all\" ON public.down_payment_requests;",
+    "create_cmd": "CREATE POLICY \"down_payment_requests_admin_all\" ON public.down_payment_requests FOR ALL USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'financialAdmin'::text, 'ict'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"down_payment_requests_supervisor_view\" ON public.down_payment_requests;",
+    "create_cmd": "CREATE POLICY \"down_payment_requests_supervisor_view\" ON public.down_payment_requests FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['supervisor'::text, 'hubSupervisor'::text])) AND ((profiles.hub_id = down_payment_requests.hub_id) OR (profiles.hub_id IS NULL))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"feedback_select_own\" ON public.feedback;",
+    "create_cmd": "CREATE POLICY \"feedback_select_own\" ON public.feedback FOR SELECT USING ((((SELECT auth.uid()) = user_id) OR ((SELECT auth.uid()) IS NULL)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"feedback_select_admin\" ON public.feedback;",
+    "create_cmd": "CREATE POLICY \"feedback_select_admin\" ON public.feedback FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'superAdmin'::text, 'ictSupport'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"feedback_update_admin\" ON public.feedback;",
+    "create_cmd": "CREATE POLICY \"feedback_update_admin\" ON public.feedback FOR UPDATE USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'superAdmin'::text, 'ictSupport'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view their own signatures\" ON public.handwriting_signatures;",
+    "create_cmd": "CREATE POLICY \"Users can view their own signatures\" ON public.handwriting_signatures FOR SELECT USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can update their own signatures\" ON public.handwriting_signatures;",
+    "create_cmd": "CREATE POLICY \"Users can update their own signatures\" ON public.handwriting_signatures FOR UPDATE USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can update their own incident reports\" ON public.incident_reports;",
+    "create_cmd": "CREATE POLICY \"Users can update their own incident reports\" ON public.incident_reports FOR UPDATE USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view their own incident reports\" ON public.incident_reports;",
+    "create_cmd": "CREATE POLICY \"Users can view their own incident reports\" ON public.incident_reports FOR SELECT USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can delete their own incident reports\" ON public.incident_reports;",
+    "create_cmd": "CREATE POLICY \"Users can delete their own incident reports\" ON public.incident_reports FOR DELETE USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"location_logs_select_own\" ON public.location_logs;",
+    "create_cmd": "CREATE POLICY \"location_logs_select_own\" ON public.location_logs FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"mf_select_authenticated\" ON public.mmp_files;",
+    "create_cmd": "CREATE POLICY \"mf_select_authenticated\" ON public.mmp_files FOR SELECT USING (((SELECT auth.uid()) IS NOT NULL));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"mmp_site_entries_update\" ON public.mmp_site_entries;",
+    "create_cmd": "CREATE POLICY \"mmp_site_entries_update\" ON public.mmp_site_entries FOR UPDATE USING ((( SELECT (SELECT auth.uid()) AS uid) IS NOT NULL));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Allow delete mmp_site_entries for authenticated\" ON public.mmp_site_entries;",
+    "create_cmd": "CREATE POLICY \"Allow delete mmp_site_entries for authenticated\" ON public.mmp_site_entries FOR DELETE USING ((((SELECT auth.uid()) = (accepted_by)::uuid) OR (accepted_by IS NULL)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"mse_select_authenticated\" ON public.mmp_site_entries;",
+    "create_cmd": "CREATE POLICY \"mse_select_authenticated\" ON public.mmp_site_entries FOR SELECT USING (((SELECT auth.uid()) IS NOT NULL));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"mse_delete_editors\" ON public.mmp_site_entries;",
+    "create_cmd": "CREATE POLICY \"mse_delete_editors\" ON public.mmp_site_entries FOR DELETE USING ((EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = (SELECT auth.uid())) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"mmp_site_entries_select\" ON public.mmp_site_entries;",
+    "create_cmd": "CREATE POLICY \"mmp_site_entries_select\" ON public.mmp_site_entries FOR SELECT USING ((( SELECT (SELECT auth.uid()) AS uid) IS NOT NULL));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users update own notifications\" ON public.notifications;",
+    "create_cmd": "CREATE POLICY \"Users update own notifications\" ON public.notifications FOR UPDATE USING (((SELECT auth.uid()) = recipient_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users view own notifications\" ON public.notifications;",
+    "create_cmd": "CREATE POLICY \"Users view own notifications\" ON public.notifications FOR SELECT USING (((SELECT auth.uid()) = recipient_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users delete own notifications\" ON public.notifications;",
+    "create_cmd": "CREATE POLICY \"Users delete own notifications\" ON public.notifications FOR DELETE USING (((SELECT auth.uid()) = recipient_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can read own notifications\" ON public.notifications;",
+    "create_cmd": "CREATE POLICY \"Users can read own notifications\" ON public.notifications FOR SELECT USING (((SELECT auth.uid()) = recipient_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can update own notifications\" ON public.notifications;",
+    "create_cmd": "CREATE POLICY \"Users can update own notifications\" ON public.notifications FOR UPDATE USING (((SELECT auth.uid()) = recipient_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can delete own notifications\" ON public.notifications;",
+    "create_cmd": "CREATE POLICY \"Users can delete own notifications\" ON public.notifications FOR DELETE USING (((SELECT auth.uid()) = recipient_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Allow recipients to read their notifications\" ON public.notifications;",
+    "create_cmd": "CREATE POLICY \"Allow recipients to read their notifications\" ON public.notifications FOR SELECT USING ((((SELECT auth.uid()) = recipient_id) OR ((SELECT auth.uid()) = user_id)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"payout_select\" ON public.payout_requests;",
+    "create_cmd": "CREATE POLICY \"payout_select\" ON public.payout_requests FOR SELECT USING (((user_id = (SELECT auth.uid())) OR has_role('admin'::text) OR has_role('financialAdmin'::text)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view their own payout requests\" ON public.payout_requests;",
+    "create_cmd": "CREATE POLICY \"Users can view their own payout requests\" ON public.payout_requests FOR SELECT USING (((user_id = (SELECT auth.uid())) OR (decided_by = (SELECT auth.uid()))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can update their own pending payout requests\" ON public.payout_requests;",
+    "create_cmd": "CREATE POLICY \"Users can update their own pending payout requests\" ON public.payout_requests FOR UPDATE USING ((((user_id = (SELECT auth.uid())) AND (status = 'requested'::payout_status)) OR (EXISTS ( SELECT 1\n   FROM (user_roles ur\n     JOIN roles r ON ((ur.role_id = r.id)))\n  WHERE ((ur.user_id = (SELECT auth.uid())) AND ((r.name)::text = ANY ((ARRAY['admin'::character varying, 'financialAdmin'::character varying, 'supervisor'::character varying])::text[])))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"profiles_delete_admin\" ON public.profiles;",
+    "create_cmd": "CREATE POLICY \"profiles_delete_admin\" ON public.profiles FOR DELETE USING ((EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = (SELECT auth.uid())) AND (ur.role = 'admin'::text)))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Allow delete site_locations for authenticated\" ON public.site_locations;",
+    "create_cmd": "CREATE POLICY \"Allow delete site_locations for authenticated\" ON public.site_locations FOR DELETE USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view own submissions\" ON public.site_visit_cost_submissions;",
+    "create_cmd": "CREATE POLICY \"Users can view own submissions\" ON public.site_visit_cost_submissions FOR SELECT USING (((submitted_by = (SELECT auth.uid())) OR (EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (lower(user_roles.role) = ANY (ARRAY['admin'::text, 'financialadmin'::text, 'fom'::text, 'ict'::text])))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can delete own pending submissions\" ON public.site_visit_cost_submissions;",
+    "create_cmd": "CREATE POLICY \"Users can delete own pending submissions\" ON public.site_visit_cost_submissions FOR DELETE USING (((submitted_by = (SELECT auth.uid())) AND ((status)::text = 'pending'::text)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can update submissions\" ON public.site_visit_cost_submissions;",
+    "create_cmd": "CREATE POLICY \"Admins can update submissions\" ON public.site_visit_cost_submissions FOR UPDATE USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (lower(user_roles.role) = ANY (ARRAY['admin'::text, 'financialadmin'::text, 'fom'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view site visit costs for their assigned visits\" ON public.site_visit_costs;",
+    "create_cmd": "CREATE POLICY \"Users can view site visit costs for their assigned visits\" ON public.site_visit_costs FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM mmp_site_entries mse\n  WHERE ((mse.id = site_visit_costs.site_visit_id) AND ((mse.monitoring_by = ( SELECT profiles.email\n           FROM profiles\n          WHERE (profiles.id = (SELECT auth.uid())))) OR (EXISTS ( SELECT 1\n           FROM user_roles\n          WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = ANY (ARRAY['admin'::text, 'supervisor'::text, 'fom'::text, 'financialAdmin'::text]))))))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Supervisors can manage site visit costs\" ON public.site_visit_costs;",
+    "create_cmd": "CREATE POLICY \"Supervisors can manage site visit costs\" ON public.site_visit_costs FOR ALL USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = ANY (ARRAY['admin'::text, 'supervisor'::text, 'fom'::text, 'financialAdmin'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins and supervisors can manage site visit costs\" ON public.site_visit_costs;",
+    "create_cmd": "CREATE POLICY \"Admins and supervisors can manage site visit costs\" ON public.site_visit_costs FOR ALL USING ((EXISTS ( SELECT 1\n   FROM (user_roles ur\n     JOIN roles r ON ((ur.role_id = r.id)))\n  WHERE ((ur.user_id = (SELECT auth.uid())) AND ((r.name)::text = ANY ((ARRAY['admin'::character varying, 'supervisor'::character varying, 'coordinator'::character varying, 'financialAdmin'::character varying])::text[]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"super_admins_select_self\" ON public.super_admins;",
+    "create_cmd": "CREATE POLICY \"super_admins_select_self\" ON public.super_admins FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Allow super admin write\" ON public.super_admins;",
+    "create_cmd": "CREATE POLICY \"Allow super admin write\" ON public.super_admins FOR ALL USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['superAdmin'::text, 'SuperAdmin'::text, 'super_admin'::text, 'admin'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"super_admins_view_own\" ON public.super_admins;",
+    "create_cmd": "CREATE POLICY \"super_admins_view_own\" ON public.super_admins FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"super_admins_view_admin\" ON public.super_admins;",
+    "create_cmd": "CREATE POLICY \"super_admins_view_admin\" ON public.super_admins FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'ict'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"super_admins_select_all\" ON public.super_admins;",
+    "create_cmd": "CREATE POLICY \"super_admins_select_all\" ON public.super_admins FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM super_admins sa\n  WHERE ((sa.user_id = (SELECT auth.uid())) AND (sa.is_active = true)))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Super admins can view all super_admins\" ON public.super_admins;",
+    "create_cmd": "CREATE POLICY \"Super admins can view all super_admins\" ON public.super_admins FOR SELECT USING ((((SELECT auth.uid()) IN ( SELECT profiles.id\n   FROM profiles\n  WHERE (profiles.role = ANY (ARRAY['superAdmin'::text, 'SuperAdmin'::text, 'super_admin'::text, 'admin'::text, 'Admin'::text])))) OR ((SELECT auth.uid()) = user_id)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admin manage user_classifications\" ON public.user_classifications;",
+    "create_cmd": "CREATE POLICY \"Admin manage user_classifications\" ON public.user_classifications FOR ALL USING ((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = (SELECT auth.uid())) AND (profiles.role = ANY (ARRAY['admin'::text, 'ict'::text, 'financialAdmin'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"user_roles_select_self_or_admin\" ON public.user_roles;",
+    "create_cmd": "CREATE POLICY \"user_roles_select_self_or_admin\" ON public.user_roles FOR SELECT USING (((user_id = (SELECT auth.uid())) OR (EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = (SELECT auth.uid())) AND (p.role = ANY (ARRAY['admin'::text, 'ict'::text])))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view their own roles\" ON public.user_roles;",
+    "create_cmd": "CREATE POLICY \"Users can view their own roles\" ON public.user_roles FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"user_settings_select_own\" ON public.user_settings;",
+    "create_cmd": "CREATE POLICY \"user_settings_select_own\" ON public.user_settings FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"user_settings_delete_own\" ON public.user_settings;",
+    "create_cmd": "CREATE POLICY \"user_settings_delete_own\" ON public.user_settings FOR DELETE USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"wallet_settings_delete_own\" ON public.wallet_settings;",
+    "create_cmd": "CREATE POLICY \"wallet_settings_delete_own\" ON public.wallet_settings FOR DELETE USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"wallet_settings_select_own\" ON public.wallet_settings;",
+    "create_cmd": "CREATE POLICY \"wallet_settings_select_own\" ON public.wallet_settings FOR SELECT USING ((user_id = (SELECT auth.uid())));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can update transactions\" ON public.wallet_transactions;",
+    "create_cmd": "CREATE POLICY \"Admins can update transactions\" ON public.wallet_transactions FOR UPDATE USING ((EXISTS ( SELECT 1\n   FROM (user_roles ur\n     JOIN roles r ON ((ur.role_id = r.id)))\n  WHERE ((ur.user_id = (SELECT auth.uid())) AND ((r.name)::text = ANY ((ARRAY['admin'::character varying, 'financialAdmin'::character varying])::text[]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can manage all transactions\" ON public.wallet_transactions;",
+    "create_cmd": "CREATE POLICY \"Admins can manage all transactions\" ON public.wallet_transactions FOR ALL USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = 'admin'::text)))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can view all transactions\" ON public.wallet_transactions;",
+    "create_cmd": "CREATE POLICY \"Admins can view all transactions\" ON public.wallet_transactions FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = ANY (ARRAY['admin'::text, 'supervisor'::text, 'fom'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view their own transactions\" ON public.wallet_transactions;",
+    "create_cmd": "CREATE POLICY \"Users can view their own transactions\" ON public.wallet_transactions FOR SELECT USING ((((SELECT auth.uid()) = user_id) OR (EXISTS ( SELECT 1\n   FROM wallets\n  WHERE ((wallets.id = wallet_transactions.wallet_id) AND (wallets.user_id = (SELECT auth.uid())))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"wallet_tx_select\" ON public.wallet_transactions;",
+    "create_cmd": "CREATE POLICY \"wallet_tx_select\" ON public.wallet_transactions FOR SELECT USING (((user_id = (SELECT auth.uid())) OR has_role('admin'::text) OR has_role('financialAdmin'::text)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"wallets_select\" ON public.wallets;",
+    "create_cmd": "CREATE POLICY \"wallets_select\" ON public.wallets FOR SELECT USING (((user_id = (SELECT auth.uid())) OR has_role('admin'::text) OR has_role('financialAdmin'::text)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can view all wallets\" ON public.wallets;",
+    "create_cmd": "CREATE POLICY \"Admins can view all wallets\" ON public.wallets FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = ANY (ARRAY['admin'::text, 'supervisor'::text, 'fom'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can update their own wallet\" ON public.wallets;",
+    "create_cmd": "CREATE POLICY \"Users can update their own wallet\" ON public.wallets FOR UPDATE USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Admins can manage all wallets\" ON public.wallets;",
+    "create_cmd": "CREATE POLICY \"Admins can manage all wallets\" ON public.wallets FOR ALL USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = 'admin'::text)))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view their own wallet\" ON public.wallets;",
+    "create_cmd": "CREATE POLICY \"Users can view their own wallet\" ON public.wallets FOR SELECT USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can update their own pending withdrawal requests\" ON public.withdrawal_requests;",
+    "create_cmd": "CREATE POLICY \"Users can update their own pending withdrawal requests\" ON public.withdrawal_requests FOR UPDATE USING ((((SELECT auth.uid()) = user_id) AND (status = 'pending'::text)));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Supervisors can approve/reject withdrawal requests\" ON public.withdrawal_requests;",
+    "create_cmd": "CREATE POLICY \"Supervisors can approve/reject withdrawal requests\" ON public.withdrawal_requests FOR UPDATE USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = ANY (ARRAY['admin'::text, 'supervisor'::text, 'fom'::text, 'financialAdmin'::text]))))));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Users can view their own withdrawal requests\" ON public.withdrawal_requests;",
+    "create_cmd": "CREATE POLICY \"Users can view their own withdrawal requests\" ON public.withdrawal_requests FOR SELECT USING (((SELECT auth.uid()) = user_id));"
+  },
+  {
+    "drop_cmd": "DROP POLICY IF EXISTS \"Supervisors can view all withdrawal requests\" ON public.withdrawal_requests;",
+    "create_cmd": "CREATE POLICY \"Supervisors can view all withdrawal requests\" ON public.withdrawal_requests FOR SELECT USING ((EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = (SELECT auth.uid())) AND (user_roles.role = ANY (ARRAY['admin'::text, 'supervisor'::text, 'fom'::text, 'financialAdmin'::text]))))));"
+  }
+]
