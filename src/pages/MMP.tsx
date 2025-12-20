@@ -39,6 +39,7 @@ import { StatePermitUpload } from '@/components/StatePermitUpload';
 import { DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -352,6 +353,7 @@ const MMP = () => {
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+  const { startSiteVisit: startSiteVisitOffline } = useOfflineSiteVisit();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
@@ -797,7 +799,69 @@ const MMP = () => {
       const site = selectedSiteForVisit;
       const now = new Date().toISOString();
       const siteStatus = site.status?.toLowerCase();
+      const isOnline = navigator.onLine;
 
+      // Get current location if available
+      let location: { lat: number; lng: number; accuracy?: number } | undefined;
+      try {
+        if (navigator.geolocation) {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 5000,
+              maximumAge: 0
+            });
+          });
+          location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          };
+        }
+      } catch (locationError) {
+        console.warn('[StartVisit] Could not get location:', locationError);
+        // Continue without location - it's optional
+      }
+
+      // If offline, use offline hook to save the visit start
+      if (!isOnline) {
+        console.log('[StartVisit] Offline mode - saving visit start locally');
+        
+        const result = await startSiteVisitOffline(
+          {
+            siteEntryId: site.id,
+            siteName: site.siteName || site.site_name || 'Unknown',
+            siteCode: site.siteCode || site.site_code || site.id,
+            state: site.state || '',
+            locality: site.locality || '',
+          },
+          {
+            siteEntryId: site.id,
+            userId: currentUser?.id || '',
+            location: location ? { lat: location.lat, lng: location.lng, accuracy: location.accuracy } : undefined
+          }
+        );
+
+        if (result.success) {
+          console.log('[StartVisit] Visit start saved offline, will sync when online');
+          
+          toast({
+            title: 'Visit Started (Offline)',
+            description: 'Visit has been started and will be synced when you are back online.',
+            variant: 'default'
+          });
+
+          // Close start dialog and open visit report dialog
+          setStartVisitDialogOpen(false);
+          setVisitReportDialogOpen(true);
+          setStartingVisit(false);
+          return;
+        } else {
+          throw new Error(result.error || 'Failed to save visit start offline');
+        }
+      }
+
+      // Online mode - proceed with database update
       // Build update object - using direct columns for visit tracking
       const updateData: any = {
         status: 'In Progress',
@@ -805,6 +869,14 @@ const MMP = () => {
         visit_started_at: now,
         visit_started_by: currentUser?.id
       };
+
+      // Add location to additional_data if available
+      if (location) {
+        updateData.additional_data = {
+          ...(site.additional_data || site.additionalData || {}),
+          start_location: location
+        };
+      }
 
       // If site was 'assigned' (not yet accepted), also set acceptance fields AND ensure fees are set
       if (siteStatus === 'assigned' && !site.accepted_by) {
@@ -895,6 +967,45 @@ const MMP = () => {
 
     } catch (error: any) {
       console.error('Failed to start visit:', error);
+      
+      // If online and error occurred, try offline fallback
+      if (navigator.onLine && error) {
+        console.log('[StartVisit] Online update failed, attempting offline save...');
+        try {
+          const site = selectedSiteForVisit;
+          const location: { lat: number; lng: number; accuracy?: number } | undefined = undefined;
+          
+          const result = await startSiteVisitOffline(
+            {
+              siteEntryId: site.id,
+              siteName: site.siteName || site.site_name || 'Unknown',
+              siteCode: site.siteCode || site.site_code || site.id,
+              state: site.state || '',
+              locality: site.locality || '',
+            },
+            {
+              siteEntryId: site.id,
+              userId: currentUser?.id || '',
+              location
+            }
+          );
+
+          if (result.success) {
+            toast({
+              title: 'Visit Started (Saved Offline)',
+              description: 'Visit has been started and will be synced when connection is restored.',
+              variant: 'default'
+            });
+            setStartVisitDialogOpen(false);
+            setVisitReportDialogOpen(true);
+            setStartingVisit(false);
+            return;
+          }
+        } catch (offlineError) {
+          console.error('[StartVisit] Offline fallback also failed:', offlineError);
+        }
+      }
+      
       toast({
         title: 'Visit Start Failed',
         description: error.message || 'Failed to start the site visit. Please try again.',
