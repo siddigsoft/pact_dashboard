@@ -231,17 +231,24 @@ const DocumentsPage = () => {
 
       // Fetch all documents without date filter to ensure nothing is missed
       // Parallel fetch all document sources with limits for improved speed
+      // Wrap each query in try-catch to handle missing tables gracefully
       const [mmpResult, costResult, photoResult] = await Promise.all([
         supabase
           .from('mmp_files')
           .select('id, name, original_filename, file_url, created_at, uploaded_at, updated_at, permits, project_id, project_name, status, uploaded_by')
           .order('created_at', { ascending: false })
           .limit(500),
-        supabase
-          .from('cost_submissions')
-          .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, projects(name)')
-          .order('created_at', { ascending: false })
-          .limit(500),
+        (async () => {
+          try {
+            return await supabase
+              .from('cost_submissions')
+              .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, projects(name)')
+              .order('created_at', { ascending: false })
+              .limit(500);
+          } catch {
+            return { data: null, error: { message: 'cost_submissions table may not exist' } };
+          }
+        })(),
         (async () => {
           try {
             return await supabase
@@ -250,7 +257,7 @@ const DocumentsPage = () => {
               .order('created_at', { ascending: false })
               .limit(200);
           } catch {
-            return { data: null, error: { message: 'Table may not exist' } };
+            return { data: null, error: { message: 'report_photos table may not exist' } };
           }
         })()
       ]);
