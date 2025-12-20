@@ -14,6 +14,19 @@ SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
 -- STEP 2: HELPER FUNCTIONS (Required - Run all of these first)
 -- ============================================================================
 
+-- First, drop existing functions that might have different signatures
+DROP FUNCTION IF EXISTS public.is_super_admin();
+DROP FUNCTION IF EXISTS public.has_role(TEXT);
+DROP FUNCTION IF EXISTS public.is_admin();
+DROP FUNCTION IF EXISTS public.is_admin_or_super();
+DROP FUNCTION IF EXISTS public.is_fom();
+DROP FUNCTION IF EXISTS public.is_coordinator();
+DROP FUNCTION IF EXISTS public.is_data_collector();
+DROP FUNCTION IF EXISTS public.is_supervisor();
+DROP FUNCTION IF EXISTS public.is_financial_admin();
+DROP FUNCTION IF EXISTS public.get_user_hub_id();
+DROP FUNCTION IF EXISTS public.can_access_hub(UUID);
+
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
