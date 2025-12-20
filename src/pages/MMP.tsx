@@ -3913,7 +3913,10 @@ const MMP = () => {
                           >
                             Drafts
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.length}
+                              {enumeratorMySites.filter(site => {
+                                const status = (site.status || '').trim();
+                                return status.toLowerCase() === 'in progress';
+                              }).length}
                             </Badge>
                           </Button>
                       </div>
@@ -4078,7 +4081,7 @@ const MMP = () => {
                           {enumeratorSubTab === 'mySites' 
                             ? (mySitesSubTab === 'pending' ? 'Pending Visits' 
                                : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' 
-                               : mySitesSubTab === 'all' ? 'All My Sites'
+                               : mySitesSubTab === 'all' ? 'Drafts (In-Progress Visits)'
                                : 'Completed Sites')
                             : 'Smart Assigned Sites'
                           }
@@ -4090,7 +4093,7 @@ const MMP = () => {
                                 : mySitesSubTab === 'ongoing'
                                 ? 'Sites currently being visited or saved as drafts for offline access'
                                 : mySitesSubTab === 'all'
-                                ? 'All sites assigned to you regardless of status'
+                                ? 'In-progress site visits (drafts) - sites that have been started but not completed'
                                 : 'Sites that have been completed with submitted reports')
                             : 'Sites assigned to your area that must be visited'
                           }
@@ -4121,7 +4124,10 @@ const MMP = () => {
                                          status.includes('started');
                                 }).length
                               : mySitesSubTab === 'all'
-                              ? enumeratorMySites.length
+                              ? enumeratorMySites.filter(site => {
+                                  const status = (site.status || '').trim();
+                                  return status.toLowerCase() === 'in progress';
+                                }).length
                               : enumeratorMySites.filter(site => {
                                   const status = (site.status || '').toLowerCase();
                                   return status.includes('completed') || status.includes('finished') || status.includes('done');
@@ -4141,7 +4147,11 @@ const MMP = () => {
                       let sitesToShow: any[] = [];
                       if (enumeratorSubTab === 'mySites') {
                         if (mySitesSubTab === 'all') {
-                          sitesToShow = enumeratorMySites;
+                          // Drafts: Show only "In Progress" status site entries
+                          sitesToShow = enumeratorMySites.filter(site => {
+                            const status = (site.status || '').trim();
+                            return status.toLowerCase() === 'in progress';
+                          });
                         } else if (mySitesSubTab === 'pending') {
                           sitesToShow = enumeratorMySites.filter(site => {
                             const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
@@ -4184,7 +4194,7 @@ const MMP = () => {
                                     : mySitesSubTab === 'ongoing'
                                     ? 'No ongoing visits found.'
                                     : mySitesSubTab === 'all'
-                                    ? 'No sites assigned to you yet. Check "Available Sites" to claim new sites.'
+                                    ? 'No in-progress site visits found. Start a visit to see it here.'
                                     : 'No completed sites found.')
                                 : 'No sites assigned to you yet.'
                               }
