@@ -1,0 +1,10 @@
+drop_cmd,create_cmd
+"DROP POLICY IF EXISTS ""mf_select_authenticated"" ON public.mmp_files;","CREATE POLICY ""mf_select_authenticated"" ON public.mmp_files FOR SELECT USING (((SELECT auth.uid()) IS NOT NULL));"
+"DROP POLICY IF EXISTS ""mf_update_editors"" ON public.mmp_files;","CREATE POLICY ""mf_update_editors"" ON public.mmp_files FOR UPDATE USING ((EXISTS ( SELECT 1
+   FROM user_roles ur
+  WHERE ((ur.user_id = (SELECT auth.uid())) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text]))))));"
+"DROP POLICY IF EXISTS ""mmp_files_all_auth"" ON public.mmp_files;","CREATE POLICY ""mmp_files_all_auth"" ON public.mmp_files FOR ALL USING (((SELECT auth.role()) = 'authenticated'::text));"
+"DROP POLICY IF EXISTS ""projects_all_auth"" ON public.projects;","CREATE POLICY ""projects_all_auth"" ON public.projects FOR ALL USING (((SELECT auth.role()) = 'authenticated'::text));"
+"DROP POLICY IF EXISTS ""Allow delete report_photos for authenticated"" ON public.report_photos;","CREATE POLICY ""Allow delete report_photos for authenticated"" ON public.report_photos FOR DELETE USING (((SELECT auth.role()) = 'authenticated'::text));"
+"DROP POLICY IF EXISTS ""Allow select report_photos for authenticated"" ON public.report_photos;","CREATE POLICY ""Allow select report_photos for authenticated"" ON public.report_photos FOR SELECT USING (((SELECT auth.role()) = 'authenticated'::text));"
+"DROP POLICY IF EXISTS ""Allow update report_photos for authenticated"" ON public.report_photos;","CREATE POLICY ""Allow update report_photos for authenticated"" ON public.report_photos FOR UPDATE USING (((SELECT auth.role()) = 'authenticated'::text));"

@@ -1,0 +1,16 @@
+tablename,policyname,performance_status
+hubs,Admins can manage hubs,OK
+hubs,Anyone can read hubs,OK
+hubs,hubs_delete,OK
+hubs,hubs_insert,OK
+hubs,hubs_select,OK
+hubs,hubs_update,OK
+mmp_files,Allow read for all,OK
+mmp_files,mf_select_authenticated,SLOW - NEEDS FIX
+mmp_files,mf_update_editors,SLOW - NEEDS FIX
+mmp_files,mmp_files_all_auth,SLOW - NEEDS FIX
+projects,projects_all_auth,SLOW - NEEDS FIX
+report_photos,Allow delete report_photos for authenticated,SLOW - NEEDS FIX
+report_photos,Allow insert report_photos for authenticated,OK
+report_photos,Allow select report_photos for authenticated,SLOW - NEEDS FIX
+report_photos,Allow update report_photos for authenticated,SLOW - NEEDS FIX
