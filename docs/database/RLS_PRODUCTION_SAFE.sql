@@ -11,21 +11,19 @@
 SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
 
 -- ============================================================================
--- STEP 2: HELPER FUNCTIONS (Required - Run all of these first)
+-- STEP 2: HELPER FUNCTIONS
+-- ============================================================================
+-- IMPORTANT: If you get "cannot drop function" errors, it means these 
+-- functions already exist with policies depending on them. This is GOOD!
+-- Skip this entire section and go to Step 3.
+--
+-- First, check what functions you already have:
+-- SELECT proname FROM pg_proc WHERE pronamespace = 'public'::regnamespace 
+-- AND proname LIKE 'is_%' OR proname LIKE 'has_%' OR proname LIKE 'get_%';
 -- ============================================================================
 
--- First, drop existing functions that might have different signatures
-DROP FUNCTION IF EXISTS public.is_super_admin();
-DROP FUNCTION IF EXISTS public.has_role(TEXT);
-DROP FUNCTION IF EXISTS public.is_admin();
-DROP FUNCTION IF EXISTS public.is_admin_or_super();
-DROP FUNCTION IF EXISTS public.is_fom();
-DROP FUNCTION IF EXISTS public.is_coordinator();
-DROP FUNCTION IF EXISTS public.is_data_collector();
-DROP FUNCTION IF EXISTS public.is_supervisor();
-DROP FUNCTION IF EXISTS public.is_financial_admin();
-DROP FUNCTION IF EXISTS public.get_user_hub_id();
-DROP FUNCTION IF EXISTS public.can_access_hub(UUID);
+-- Only run these CREATE statements if the functions don't exist yet.
+-- If they already exist, skip to Step 3.
 
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS BOOLEAN AS $$
