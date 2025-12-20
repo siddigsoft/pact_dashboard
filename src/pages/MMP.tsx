@@ -2693,7 +2693,7 @@ const MMP = () => {
   }
 
   return (
-    <div className="space-y-6 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-6 px-2 sm:px-4 md:px-8">
+    <div className="space-y-6 min-h-screen bg-background py-4 sm:py-6 px-2 sm:px-4 md:px-8">
       {/* Blue Header Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 rounded-lg p-6 text-white shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -2737,7 +2737,7 @@ const MMP = () => {
       </div>
 
       {/* Body */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-blue-100 dark:border-blue-900/30 p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-280px)]">
+      <div className="bg-card rounded-xl shadow-lg border border-blue-100 dark:border-blue-900/30 p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-280px)]">
         {loading ? (
           <MMPTabsSkeleton />
         ) : (
@@ -2910,7 +2910,7 @@ const MMP = () => {
                                           {Object.entries(sitesByLocality).map(([locality, sites]) => (
                                             <div 
                                               key={locality}
-                                              className="flex items-center justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
+                                              className="flex items-center justify-between p-3 bg-muted rounded cursor-pointer hover:bg-muted/80"
                                             >
                                               <div>
                                                 <span className="font-medium">{locality}</span>
@@ -3496,7 +3496,7 @@ const MMP = () => {
                       variant={enumeratorSubTab === 'availableSites' ? 'default' : 'outline'} 
                       size="sm"
                       onClick={() => setEnumeratorSubTab('availableSites')} 
-                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'availableSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'availableSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-muted'}`}
                       data-testid="tab-available-sites"
                       aria-label="View available sites"
                     >
@@ -3507,7 +3507,7 @@ const MMP = () => {
                       variant={enumeratorSubTab === 'smartAssigned' ? 'default' : 'outline'} 
                       size="sm"
                       onClick={() => setEnumeratorSubTab('smartAssigned')} 
-                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-muted'}`}
                       data-testid="tab-smart-assigned"
                       aria-label="View smart assigned sites"
                     >
@@ -3518,7 +3518,7 @@ const MMP = () => {
                       variant={enumeratorSubTab === 'mySites' ? 'default' : 'outline'} 
                       size="sm"
                       onClick={() => setEnumeratorSubTab('mySites')} 
-                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'mySites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'mySites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-muted'}`}
                       data-testid="tab-my-sites"
                       aria-label="View my sites"
                     >
@@ -3634,7 +3634,7 @@ const MMP = () => {
                       <Accordion type="single" collapsible className="w-full">
                         {Object.entries(enumeratorGroupedByStates).map(([stateLocality, sites]) => (
                           <AccordionItem key={stateLocality} value={stateLocality}>
-                            <AccordionTrigger className="px-4 py-3 hover:bg-gray-50 rounded-lg">
+                            <AccordionTrigger className="px-4 py-3 hover:bg-muted rounded-lg">
                               <div className="flex items-center justify-between w-full mr-4">
                                 <span className="font-medium">{stateLocality}</span>
                                 <Badge variant="secondary" className="ml-2">{sites.length} sites</Badge>
@@ -4140,105 +4140,105 @@ const MMP = () => {
           {selectedSiteForAcknowledgment && (
             <div className="space-y-6">
               {/* Section 1: Site Details */}
-              <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
+              <div className="bg-muted p-5 rounded-lg border space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b">
-                  <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
+                  <div className="bg-primary text-primary-foreground rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
                     1
                   </div>
-                  <h3 className="text-base font-semibold text-gray-900">Site Details</h3>
+                  <h3 className="text-base font-semibold text-foreground">Site Details</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Site Code</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.siteCode || selectedSiteForAcknowledgment.site_code || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Site Code</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.siteCode || selectedSiteForAcknowledgment.site_code || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Site Name</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.siteName || selectedSiteForAcknowledgment.site_name || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Site Name</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.siteName || selectedSiteForAcknowledgment.site_name || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Hub Office</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.hubOffice || selectedSiteForAcknowledgment.hub_office || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Hub Office</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.hubOffice || selectedSiteForAcknowledgment.hub_office || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">State</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.state || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">State</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.state || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Locality</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.locality || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Locality</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.locality || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">CP Name</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.cpName || selectedSiteForAcknowledgment.cp_name || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">CP Name</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.cpName || selectedSiteForAcknowledgment.cp_name || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Activity at Site</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.siteActivity || selectedSiteForAcknowledgment.activity_at_site || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Activity at Site</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.siteActivity || selectedSiteForAcknowledgment.activity_at_site || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Visit Date</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.visitDate || selectedSiteForAcknowledgment.visit_date || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Visit Date</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.visitDate || selectedSiteForAcknowledgment.visit_date || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Monitoring By</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.monitoringBy || selectedSiteForAcknowledgment.monitoring_by || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Monitoring By</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.monitoringBy || selectedSiteForAcknowledgment.monitoring_by || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Survey Tool</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.surveyTool || selectedSiteForAcknowledgment.survey_tool || '—'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Survey Tool</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.surveyTool || selectedSiteForAcknowledgment.survey_tool || '—'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Market Diversion</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.useMarketDiversion || selectedSiteForAcknowledgment.use_market_diversion ? 'Yes' : 'No'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Market Diversion</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.useMarketDiversion || selectedSiteForAcknowledgment.use_market_diversion ? 'Yes' : 'No'}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Warehouse Monitoring</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.useWarehouseMonitoring || selectedSiteForAcknowledgment.use_warehouse_monitoring ? 'Yes' : 'No'}</p>
+                  <div className="bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Warehouse Monitoring</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.useWarehouseMonitoring || selectedSiteForAcknowledgment.use_warehouse_monitoring ? 'Yes' : 'No'}</p>
                   </div>
-                  <div className="sm:col-span-2 bg-white p-3 rounded border">
-                    <p className="text-xs font-medium text-gray-600 mb-1">Comments</p>
-                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.comments || 'No comments provided'}</p>
+                  <div className="sm:col-span-2 bg-card p-3 rounded border">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Comments</p>
+                    <p className="font-medium text-foreground">{selectedSiteForAcknowledgment.comments || 'No comments provided'}</p>
                   </div>
                 </div>
               </div>
 
               {/* Section 2: Site Cost Details */}
-              <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
+              <div className="bg-muted p-5 rounded-lg border space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b">
-                  <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
+                  <div className="bg-primary text-primary-foreground rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
                     2
                   </div>
-                  <h3 className="text-base font-semibold text-gray-900">Site Cost Details</h3>
+                  <h3 className="text-base font-semibold text-foreground">Site Cost Details</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-white p-4 rounded-lg border">
-                    <p className="text-xs font-medium text-gray-600 mb-2">Data Collector Fee</p>
+                  <div className="bg-card p-4 rounded-lg border">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Data Collector Fee</p>
                     {selectedSiteForAcknowledgment.enumerator_fee !== undefined && selectedSiteForAcknowledgment.enumerator_fee !== null ? (
-                      <p className="text-2xl font-semibold text-gray-900">
+                      <p className="text-2xl font-semibold text-foreground">
                         {Number(selectedSiteForAcknowledgment.enumerator_fee).toLocaleString()} SDG
                       </p>
                     ) : (
                       <div>
                         <p className="text-lg font-semibold text-amber-600">Pending</p>
-                        <p className="text-xs text-gray-500 mt-1">Calculated when claimed</p>
+                        <p className="text-xs text-muted-foreground mt-1">Calculated when claimed</p>
                       </div>
                     )}
-                    <p className="text-xs text-gray-600 mt-2">Payment for completing the site visit</p>
+                    <p className="text-xs text-muted-foreground mt-2">Payment for completing the site visit</p>
                   </div>
-                  <div className="bg-white p-4 rounded-lg border">
-                    <p className="text-xs font-medium text-gray-600 mb-2">Transport Fee</p>
+                  <div className="bg-card p-4 rounded-lg border">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Transport Fee</p>
                     {selectedSiteForAcknowledgment.transport_fee !== undefined && selectedSiteForAcknowledgment.transport_fee !== null ? (
-                      <p className="text-2xl font-semibold text-gray-900">
+                      <p className="text-2xl font-semibold text-foreground">
                         {Number(selectedSiteForAcknowledgment.transport_fee).toLocaleString()} SDG
                       </p>
                     ) : (
                       <>
-                        <p className="text-2xl font-semibold text-gray-900">0 SDG</p>
-                        <p className="text-xs text-gray-500 mt-1">(Set at dispatch)</p>
+                        <p className="text-2xl font-semibold text-foreground">0 SDG</p>
+                        <p className="text-xs text-muted-foreground mt-1">(Set at dispatch)</p>
                       </>
                     )}
-                    <p className="text-xs text-gray-600 mt-2">Transportation reimbursement</p>
+                    <p className="text-xs text-muted-foreground mt-2">Transportation reimbursement</p>
                   </div>
                   <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
                     <p className="text-xs font-medium text-blue-100 mb-2">Total Cost</p>
@@ -4256,9 +4256,9 @@ const MMP = () => {
                     <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
                   </div>
                 </div>
-                <div className="bg-white p-4 rounded-lg border">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">Payment Information</p>
-                  <p className="text-sm text-gray-700 leading-relaxed">
+                <div className="bg-card p-4 rounded-lg border">
+                  <p className="text-sm font-semibold text-foreground mb-2">Payment Information</p>
+                  <p className="text-sm text-foreground/90 leading-relaxed">
                     Upon successful completion of the site visit, the total cost amount will be credited to your wallet. 
                     Payment is processed automatically after you submit your visit report with photos and required documentation.
                   </p>
@@ -4266,7 +4266,7 @@ const MMP = () => {
               </div>
 
               {/* Acknowledgment Section */}
-              <div className="bg-gray-50 p-4 rounded-lg border">
+              <div className="bg-muted p-4 rounded-lg border">
                 <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                   <Checkbox
                     id="costAcknowledgment"
@@ -4575,7 +4575,7 @@ const MMP = () => {
           {selectedReturnedState && (
             <div className="space-y-6 py-4">
               {/* Sites Summary */}
-              <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="bg-muted p-4 rounded-lg">
                 <h4 className="font-medium mb-2">{selectedReturnedState.sites.length} site(s) in {selectedReturnedState.state}</h4>
                 <p className="text-sm text-muted-foreground">
                   These sites were returned by the coordinator and require a state permit before being forwarded again.
