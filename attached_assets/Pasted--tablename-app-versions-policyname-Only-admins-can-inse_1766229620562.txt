@@ -1,0 +1,702 @@
+[
+  {
+    "tablename": "app_versions",
+    "policyname": "Only admins can insert app versions",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = auth.uid()) AND (user_roles.role = 'Admin'::text))))"
+  },
+  {
+    "tablename": "app_versions",
+    "policyname": "Only admins can update app versions",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM user_roles\n  WHERE ((user_roles.user_id = auth.uid()) AND (user_roles.role = 'Admin'::text))))",
+    "with_check": null
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "Super admins can read audit logs",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = 'superAdmin'::text))))",
+    "with_check": null
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "authenticated_insert_own_audit_logs",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((actor_id = (auth.uid())::text) OR (actor_id = 'system'::text))"
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "Users can insert own audit logs",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(actor_id = (auth.uid())::text)"
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "Admins can read audit logs",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'superAdmin'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "admin_insert_system_audit_logs",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'super_admin'::text])))))"
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "Admins can read all audit logs",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['Super Admin'::text, 'Admin'::text, 'ICT'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "admin_select_all_audit_logs",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'super_admin'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "authenticated_select_own_audit_logs",
+    "cmd": "SELECT",
+    "qual": "(actor_id = (auth.uid())::text)",
+    "with_check": null
+  },
+  {
+    "tablename": "chat_message_reads",
+    "policyname": "chat_message_reads_update_self",
+    "cmd": "UPDATE",
+    "qual": "(user_id = auth.uid())",
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "chat_message_reads",
+    "policyname": "chat_message_reads_select_participant",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM (chat_messages m\n     JOIN chat_participants cp ON ((cp.chat_id = m.chat_id)))\n  WHERE ((m.id = chat_message_reads.message_id) AND (cp.user_id = auth.uid()))))",
+    "with_check": null
+  },
+  {
+    "tablename": "chat_message_reads",
+    "policyname": "chat_message_reads_insert_self",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "chat_messages",
+    "policyname": "Users can insert messages in their chats",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((auth.uid() = sender_id) AND (EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chat_messages.chat_id) AND (cp.user_id = auth.uid())))))"
+  },
+  {
+    "tablename": "chat_messages",
+    "policyname": "Users can update their own messages",
+    "cmd": "UPDATE",
+    "qual": "((auth.uid() = sender_id) OR (EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chat_messages.chat_id) AND (cp.user_id = auth.uid())))))",
+    "with_check": "((auth.uid() = sender_id) OR (EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chat_messages.chat_id) AND (cp.user_id = auth.uid())))))"
+  },
+  {
+    "tablename": "chat_messages",
+    "policyname": "chat_messages_select_participant",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chat_messages.chat_id) AND (cp.user_id = auth.uid()))))",
+    "with_check": null
+  },
+  {
+    "tablename": "chat_messages",
+    "policyname": "chat_messages_insert_participant",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((sender_id = auth.uid()) AND (EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chat_messages.chat_id) AND (cp.user_id = auth.uid())))))"
+  },
+  {
+    "tablename": "chat_messages",
+    "policyname": "Users can view messages in their chats",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chat_messages.chat_id) AND (cp.user_id = auth.uid()))))",
+    "with_check": null
+  },
+  {
+    "tablename": "chat_participants",
+    "policyname": "chat_participants_select_in_same_chat",
+    "cmd": "SELECT",
+    "qual": "((user_id = auth.uid()) OR (EXISTS ( SELECT 1\n   FROM chats c\n  WHERE ((c.id = chat_participants.chat_id) AND (c.created_by = auth.uid())))))",
+    "with_check": null
+  },
+  {
+    "tablename": "chat_participants",
+    "policyname": "chat_participants_delete_self_or_owner",
+    "cmd": "DELETE",
+    "qual": "((user_id = auth.uid()) OR (EXISTS ( SELECT 1\n   FROM chats c\n  WHERE ((c.id = chat_participants.chat_id) AND (c.created_by = auth.uid())))))",
+    "with_check": null
+  },
+  {
+    "tablename": "chat_participants",
+    "policyname": "chat_participants_insert_self_or_owner",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((user_id = auth.uid()) OR (EXISTS ( SELECT 1\n   FROM chats c\n  WHERE ((c.id = chat_participants.chat_id) AND (c.created_by = auth.uid())))))"
+  },
+  {
+    "tablename": "chat_participants",
+    "policyname": "Users can manage their own chat participants",
+    "cmd": "ALL",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": "(auth.uid() = user_id)"
+  },
+  {
+    "tablename": "chat_participants",
+    "policyname": "chat_participants_select_self",
+    "cmd": "SELECT",
+    "qual": "(user_id = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "chats",
+    "policyname": "chats_select_participant",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM chat_participants cp\n  WHERE ((cp.chat_id = chats.id) AND (cp.user_id = auth.uid()))))",
+    "with_check": null
+  },
+  {
+    "tablename": "chats",
+    "policyname": "chats_select_creator",
+    "cmd": "SELECT",
+    "qual": "(created_by = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "chats",
+    "policyname": "chats_delete_creator",
+    "cmd": "DELETE",
+    "qual": "(created_by = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "chats",
+    "policyname": "chats_update_creator",
+    "cmd": "UPDATE",
+    "qual": "(created_by = auth.uid())",
+    "with_check": "(created_by = auth.uid())"
+  },
+  {
+    "tablename": "chats",
+    "policyname": "chats_insert_creator",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(created_by = auth.uid())"
+  },
+  {
+    "tablename": "classification_fee_structures",
+    "policyname": "Admin manage classification_fee_structures",
+    "cmd": "ALL",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'ict'::text, 'financialAdmin'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "comprehensive_monitoring_checklists",
+    "policyname": "Users can delete own checklists",
+    "cmd": "DELETE",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "comprehensive_monitoring_checklists",
+    "policyname": "Admins can view all checklists",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'supervisor'::text, 'coordinator'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "comprehensive_monitoring_checklists",
+    "policyname": "Users can update own checklists",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": "(auth.uid() = user_id)"
+  },
+  {
+    "tablename": "comprehensive_monitoring_checklists",
+    "policyname": "Users can view own checklists",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "comprehensive_monitoring_checklists",
+    "policyname": "Users can insert own checklists",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(auth.uid() = user_id)"
+  },
+  {
+    "tablename": "cost_adjustment_audit",
+    "policyname": "cost_adjustment_audit_admin_create",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'financialAdmin'::text, 'ict'::text])))))"
+  },
+  {
+    "tablename": "cost_approval_history",
+    "policyname": "Users can view relevant history",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM site_visit_cost_submissions\n  WHERE ((site_visit_cost_submissions.id = cost_approval_history.submission_id) AND ((site_visit_cost_submissions.submitted_by = auth.uid()) OR (EXISTS ( SELECT 1\n           FROM user_roles\n          WHERE ((user_roles.user_id = auth.uid()) AND (lower(user_roles.role) = ANY (ARRAY['admin'::text, 'financialadmin'::text, 'fom'::text, 'ict'::text])))))))))",
+    "with_check": null
+  },
+  {
+    "tablename": "dashboard_settings",
+    "policyname": "dashboard_settings_insert_own",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "dashboard_settings",
+    "policyname": "dashboard_settings_update_own",
+    "cmd": "UPDATE",
+    "qual": "(user_id = auth.uid())",
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "dashboard_settings",
+    "policyname": "dashboard_settings_delete_own",
+    "cmd": "DELETE",
+    "qual": "(user_id = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "dashboard_settings",
+    "policyname": "dashboard_settings_modify_own",
+    "cmd": "ALL",
+    "qual": "(user_id = auth.uid())",
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "dashboard_settings",
+    "policyname": "dashboard_settings_select_own",
+    "cmd": "SELECT",
+    "qual": "(user_id = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "data_visibility_settings",
+    "policyname": "data_visibility_settings_insert_own",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "data_visibility_settings",
+    "policyname": "data_visibility_settings_update_own",
+    "cmd": "UPDATE",
+    "qual": "(user_id = auth.uid())",
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "data_visibility_settings",
+    "policyname": "data_visibility_settings_delete_own",
+    "cmd": "DELETE",
+    "qual": "(user_id = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "data_visibility_settings",
+    "policyname": "data_visibility_settings_select_own",
+    "cmd": "SELECT",
+    "qual": "(user_id = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "data_visibility_settings",
+    "policyname": "data_visibility_settings_modify_own",
+    "cmd": "ALL",
+    "qual": "(user_id = auth.uid())",
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "deletion_audit_log",
+    "policyname": "deletion_audit_log_view",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'financialAdmin'::text, 'ict'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "deletion_audit_log",
+    "policyname": "deletion_audit_log_super_admin_create",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((deleted_by = auth.uid()) AND (EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'ict'::text]))))))"
+  },
+  {
+    "tablename": "down_payment_requests",
+    "policyname": "down_payment_requests_supervisor_update",
+    "cmd": "UPDATE",
+    "qual": "((EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['supervisor'::text, 'hubSupervisor'::text])) AND ((profiles.hub_id = down_payment_requests.hub_id) OR (profiles.hub_id IS NULL))))) AND (status = ANY (ARRAY['pending_supervisor'::text, 'pending_admin'::text])))",
+    "with_check": null
+  },
+  {
+    "tablename": "down_payment_requests",
+    "policyname": "down_payment_requests_user_view",
+    "cmd": "SELECT",
+    "qual": "(requested_by = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "down_payment_requests",
+    "policyname": "down_payment_requests_user_create",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((requested_by = auth.uid()) AND (EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['dataCollector'::text, 'datacollector'::text, 'coordinator'::text]))))))"
+  },
+  {
+    "tablename": "down_payment_requests",
+    "policyname": "down_payment_requests_supervisor_view",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['supervisor'::text, 'hubSupervisor'::text])) AND ((profiles.hub_id = down_payment_requests.hub_id) OR (profiles.hub_id IS NULL)))))",
+    "with_check": null
+  },
+  {
+    "tablename": "down_payment_requests",
+    "policyname": "down_payment_requests_admin_all",
+    "cmd": "ALL",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'financialAdmin'::text, 'ict'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "feedback",
+    "policyname": "feedback_select_admin",
+    "cmd": "SELECT",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'superAdmin'::text, 'ictSupport'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "feedback",
+    "policyname": "feedback_select_own",
+    "cmd": "SELECT",
+    "qual": "((auth.uid() = user_id) OR (auth.uid() IS NULL))",
+    "with_check": null
+  },
+  {
+    "tablename": "feedback",
+    "policyname": "feedback_update_admin",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'superAdmin'::text, 'ictSupport'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "handwriting_signatures",
+    "policyname": "Users can view their own signatures",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "handwriting_signatures",
+    "policyname": "Users can update their own signatures",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "handwriting_signatures",
+    "policyname": "Users can insert their own signatures",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(auth.uid() = user_id)"
+  },
+  {
+    "tablename": "incident_reports",
+    "policyname": "Users can delete their own incident reports",
+    "cmd": "DELETE",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "incident_reports",
+    "policyname": "Users can insert their own incident reports",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(auth.uid() = user_id)"
+  },
+  {
+    "tablename": "incident_reports",
+    "policyname": "Users can update their own incident reports",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "incident_reports",
+    "policyname": "Users can view their own incident reports",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "location_logs",
+    "policyname": "location_logs_insert_own",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "location_logs",
+    "policyname": "location_logs_select_own",
+    "cmd": "SELECT",
+    "qual": "(user_id = auth.uid())",
+    "with_check": null
+  },
+  {
+    "tablename": "mmp_files",
+    "policyname": "mf_select_authenticated",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() IS NOT NULL)",
+    "with_check": null
+  },
+  {
+    "tablename": "mmp_files",
+    "policyname": "mf_update_editors",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))"
+  },
+  {
+    "tablename": "mmp_site_entries",
+    "policyname": "Allow delete mmp_site_entries for authenticated",
+    "cmd": "DELETE",
+    "qual": "((auth.uid() = (accepted_by)::uuid) OR (accepted_by IS NULL))",
+    "with_check": null
+  },
+  {
+    "tablename": "mmp_site_entries",
+    "policyname": "mse_select_authenticated",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() IS NOT NULL)",
+    "with_check": null
+  },
+  {
+    "tablename": "mmp_site_entries",
+    "policyname": "mse_insert_editors",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))"
+  },
+  {
+    "tablename": "mmp_site_entries",
+    "policyname": "mse_update_editors",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))"
+  },
+  {
+    "tablename": "mmp_site_entries",
+    "policyname": "mse_delete_editors",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = ANY (ARRAY['admin'::text, 'ict'::text, 'coordinator'::text, 'fom'::text])))))",
+    "with_check": null
+  },
+  {
+    "tablename": "mmp_site_entries",
+    "policyname": "mmp_site_entries_select",
+    "cmd": "SELECT",
+    "qual": "(( SELECT auth.uid() AS uid) IS NOT NULL)",
+    "with_check": null
+  },
+  {
+    "tablename": "mmp_site_entries",
+    "policyname": "mmp_site_entries_insert",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(( SELECT auth.uid() AS uid) IS NOT NULL)"
+  },
+  {
+    "tablename": "mmp_site_entries",
+    "policyname": "mmp_site_entries_update",
+    "cmd": "UPDATE",
+    "qual": "(( SELECT auth.uid() AS uid) IS NOT NULL)",
+    "with_check": null
+  },
+  {
+    "tablename": "notifications",
+    "policyname": "Users can read own notifications",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() = recipient_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "notifications",
+    "policyname": "Users view own notifications",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() = recipient_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "notifications",
+    "policyname": "Allow recipients to read their notifications",
+    "cmd": "SELECT",
+    "qual": "((auth.uid() = recipient_id) OR (auth.uid() = user_id))",
+    "with_check": null
+  },
+  {
+    "tablename": "notifications",
+    "policyname": "Users update own notifications",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = recipient_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "notifications",
+    "policyname": "Users delete own notifications",
+    "cmd": "DELETE",
+    "qual": "(auth.uid() = recipient_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "notifications",
+    "policyname": "Users can delete own notifications",
+    "cmd": "DELETE",
+    "qual": "(auth.uid() = recipient_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "notifications",
+    "policyname": "Users can update own notifications",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = recipient_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "payout_requests",
+    "policyname": "payout_update_self_cancel",
+    "cmd": "UPDATE",
+    "qual": "((user_id = auth.uid()) AND (status = 'requested'::payout_status))",
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "payout_requests",
+    "policyname": "Users can view their own payout requests",
+    "cmd": "SELECT",
+    "qual": "((user_id = auth.uid()) OR (decided_by = auth.uid()))",
+    "with_check": null
+  },
+  {
+    "tablename": "payout_requests",
+    "policyname": "Users can create their own payout requests",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "payout_requests",
+    "policyname": "payout_select",
+    "cmd": "SELECT",
+    "qual": "((user_id = auth.uid()) OR has_role('admin'::text) OR has_role('financialAdmin'::text))",
+    "with_check": null
+  },
+  {
+    "tablename": "payout_requests",
+    "policyname": "payout_insert_self",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "payout_requests",
+    "policyname": "Users can update their own pending payout requests",
+    "cmd": "UPDATE",
+    "qual": "(((user_id = auth.uid()) AND (status = 'requested'::payout_status)) OR (EXISTS ( SELECT 1\n   FROM (user_roles ur\n     JOIN roles r ON ((ur.role_id = r.id)))\n  WHERE ((ur.user_id = auth.uid()) AND ((r.name)::text = ANY ((ARRAY['admin'::character varying, 'financialAdmin'::character varying, 'supervisor'::character varying])::text[]))))))",
+    "with_check": null
+  },
+  {
+    "tablename": "permissions",
+    "policyname": "permissions_modify_admin_only",
+    "cmd": "ALL",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'ict'::text])))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'ict'::text])))))"
+  },
+  {
+    "tablename": "profiles",
+    "policyname": "profiles_admin_update",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'ict'::text])))))",
+    "with_check": "true"
+  },
+  {
+    "tablename": "profiles",
+    "policyname": "profiles_update_admin",
+    "cmd": "UPDATE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = 'admin'::text))))",
+    "with_check": "true"
+  },
+  {
+    "tablename": "profiles",
+    "policyname": "profiles_update_admin_ict",
+    "cmd": "UPDATE",
+    "qual": "((auth.uid() = id) OR (EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'ict'::text]))))))",
+    "with_check": "((auth.uid() = id) OR (EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'ict'::text]))))))"
+  },
+  {
+    "tablename": "profiles",
+    "policyname": "profiles_delete_admin",
+    "cmd": "DELETE",
+    "qual": "(EXISTS ( SELECT 1\n   FROM user_roles ur\n  WHERE ((ur.user_id = auth.uid()) AND (ur.role = 'admin'::text))))",
+    "with_check": null
+  },
+  {
+    "tablename": "profiles",
+    "policyname": "profiles_update_own",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = id)",
+    "with_check": "(auth.uid() = id)"
+  },
+  {
+    "tablename": "roles",
+    "policyname": "roles_modify_admin_only",
+    "cmd": "ALL",
+    "qual": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'ict'::text])))))",
+    "with_check": "(EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE ((p.id = auth.uid()) AND (p.role = ANY (ARRAY['admin'::text, 'ict'::text])))))"
+  },
+  {
+    "tablename": "site_locations",
+    "policyname": "Allow update site_locations for authenticated",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": "(auth.uid() = user_id)"
+  },
+  {
+    "tablename": "site_locations",
+    "policyname": "site_locations_update",
+    "cmd": "UPDATE",
+    "qual": "(user_id = auth.uid())",
+    "with_check": "(user_id = auth.uid())"
+  },
+  {
+    "tablename": "site_locations",
+    "policyname": "Allow insert site_locations for authenticated",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((auth.role() = 'authenticated'::text) AND (auth.uid() = user_id))"
+  },
+  {
+    "tablename": "site_locations",
+    "policyname": "Allow delete site_locations for authenticated",
+    "cmd": "DELETE",
+    "qual": "(auth.uid() = user_id)",
+    "with_check": null
+  },
+  {
+    "tablename": "site_visit_cost_submissions",
+    "policyname": "Users can update own pending submissions",
+    "cmd": "UPDATE",
+    "qual": "((submitted_by = auth.uid()) AND ((status)::text = 'pending'::text))",
+    "with_check": "(submitted_by = auth.uid())"
+  }
+]
