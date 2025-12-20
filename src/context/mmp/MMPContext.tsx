@@ -298,6 +298,7 @@ const MMPContext = createContext<MMPContextType>({
 export const useMMPProvider = () => {
   const [mmpFiles, setMMPFiles] = useState<MMPFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -371,7 +372,12 @@ export const useMMPProvider = () => {
         return;
       }
 
-      setLoading(true);
+      // Only show the global loading state on the very first load.
+      // For background/automatic refreshes after initial load, we keep
+      // the existing data on screen to avoid a "full page reload" effect.
+      if (!hasLoadedOnce) {
+        setLoading(true);
+      }
       
       const { data: mmpData, error } = await supabase
         .from('mmp_files')
@@ -402,6 +408,9 @@ export const useMMPProvider = () => {
       const mapped = (rows || []).map(transformDBToMMPFile);
       setMMPFiles(mapped);
       setError(null); // Clear any previous errors on successful refresh
+      if (!hasLoadedOnce) {
+        setHasLoadedOnce(true);
+      }
     } catch (err) {
       console.error('Error loading MMP files:', err);
       // Don't clear existing data on error, just log it
@@ -409,9 +418,11 @@ export const useMMPProvider = () => {
       // Keep existing data instead of clearing it
       // setMMPFiles([]);
     } finally {
-      setLoading(false);
+      if (!hasLoadedOnce) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [hasLoadedOnce]);
 
   useEffect(() => {
     refreshMMPFiles();
