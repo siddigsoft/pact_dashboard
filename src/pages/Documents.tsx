@@ -229,7 +229,8 @@ const DocumentsPage = () => {
       const monthsSet = new Set<string>();
       const statesSet = new Set<string>();
 
-      // Date filter: only fetch documents from the last 90 days for faster initial load
+      // Date filter: fetch documents updated in the last 90 days for faster initial load
+      // Using updated_at ensures recently modified records (like newly added permits) are included
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - 90);
       const cutoffISO = cutoffDate.toISOString();
@@ -239,13 +240,13 @@ const DocumentsPage = () => {
         supabase
           .from('mmp_files')
           .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
-          .gte('created_at', cutoffISO)
-          .order('created_at', { ascending: false })
+          .or(`created_at.gte.${cutoffISO},updated_at.gte.${cutoffISO}`)
+          .order('updated_at', { ascending: false })
           .limit(500),
         supabase
           .from('cost_submissions')
           .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, projects(name)')
-          .gte('created_at', cutoffISO)
+          .or(`created_at.gte.${cutoffISO},updated_at.gte.${cutoffISO}`)
           .order('created_at', { ascending: false })
           .limit(500),
         (async () => {
