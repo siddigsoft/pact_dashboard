@@ -227,15 +227,23 @@ CREATE POLICY "Admins can manage sites_registry" ON public.sites_registry
   FOR ALL USING (public.is_admin_or_super());
 
 -- 4.4 tracker_plan_configs - Public read, Admin write
-ALTER TABLE public.tracker_plan_configs ENABLE ROW LEVEL SECURITY;
+-- NOTE: Skip this section if table doesn't exist in your database
+-- Check first: SELECT COUNT(*) FROM tracker_plan_configs;
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tracker_plan_configs') THEN
+    ALTER TABLE public.tracker_plan_configs ENABLE ROW LEVEL SECURITY;
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Anyone can read tracker_plan_configs" ON public.tracker_plan_configs;
-CREATE POLICY "Anyone can read tracker_plan_configs" ON public.tracker_plan_configs
-  FOR SELECT USING (true);
-
 DROP POLICY IF EXISTS "Admins can manage tracker_plan_configs" ON public.tracker_plan_configs;
-CREATE POLICY "Admins can manage tracker_plan_configs" ON public.tracker_plan_configs
-  FOR ALL USING (public.is_admin_or_super());
+
+-- Only run these if table exists:
+-- CREATE POLICY "Anyone can read tracker_plan_configs" ON public.tracker_plan_configs
+--   FOR SELECT USING (true);
+-- CREATE POLICY "Admins can manage tracker_plan_configs" ON public.tracker_plan_configs
+--   FOR ALL USING (public.is_admin_or_super());
 
 
 -- ============================================================================
