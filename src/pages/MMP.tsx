@@ -1400,9 +1400,11 @@ const MMP = () => {
         console.log('📄 Generating PDF report...');
         await generateVisitReportPDF(site, reportData, report, photoUrls);
       } else {
-        // Offline: Queue report submission using site_visit_complete type
+        // Offline: Queue report submission and save completed visit to offline DB
         console.log('💾 Offline mode - queuing report submission...');
-        const { addPendingSync } = await import('@/lib/offline-db');
+        const { addPendingSync, saveSiteVisitOffline, getOfflineSiteVisit, updateSiteVisitOffline } = await import('@/lib/offline-db');
+        
+        // Queue sync action
         await addPendingSync({
           type: 'site_visit_complete',
           payload: {
@@ -1424,7 +1426,38 @@ const MMP = () => {
             }
           }
         });
-        console.log('✅ Report queued for offline submission');
+
+        // Save/update offline site visit as completed but not synced
+        const existingOfflineVisit = await getOfflineSiteVisit(site.id);
+        if (existingOfflineVisit) {
+          await updateSiteVisitOffline(existingOfflineVisit.id, {
+            status: 'completed',
+            completedAt: now,
+            notes: reportData.notes || 'No additional notes provided',
+            synced: false // Mark as unsynced so it appears in Outbox
+          });
+        } else {
+          // Create new offline visit record for completed visit
+          const visitId = await saveSiteVisitOffline({
+            siteEntryId: site.id,
+            siteName: site.siteName || site.site_name || 'Unknown',
+            siteCode: site.siteCode || site.site_code || site.id,
+            state: site.state || '',
+            locality: site.locality || '',
+            status: 'completed',
+            startedAt: site.visit_started_at || now,
+            completedAt: now,
+            endLocation: reportData.coordinates ? {
+              lat: reportData.coordinates.latitude,
+              lng: reportData.coordinates.longitude,
+              accuracy: reportData.coordinates.accuracy
+            } : undefined,
+            notes: reportData.notes || 'No additional notes provided'
+          });
+          // Ensure it's marked as unsynced (saveSiteVisitOffline sets synced: false by default)
+        }
+        
+        console.log('✅ Report queued for offline submission and saved to offline DB');
       }
 
       // Save GPS coordinates to Sites Registry (if coordinates were captured and site has valid ID)
@@ -1541,10 +1574,37 @@ const MMP = () => {
       setSelectedSiteForVisit(null);
       setSubmittingReport(false);
 
-      // Reload enumerator data immediately instead of full page reload
+        // Reload enumerator data immediately instead of full page reload
       if (canClaimSites && currentUser?.id) {
         console.log('🔄 Reloading enumerator data after visit completion...');
         try {
+          // Reload unsynced completed visits (for Outbox)
+          if (!isOnline) {
+            const { getUnsyncedSiteVisits } = await import('@/lib/offline-db');
+            const unsyncedVisits = await getUnsyncedSiteVisits();
+            const completedUnsynced = unsyncedVisits
+              .filter(v => v.status === 'completed' && !v.synced)
+              .map(visit => ({
+                id: visit.siteEntryId,
+                siteEntryId: visit.siteEntryId,
+                siteName: visit.siteName,
+                siteCode: visit.siteCode,
+                state: visit.state,
+                locality: visit.locality,
+                status: 'Completed',
+                completedAt: visit.completedAt,
+                accepted_by: currentUser.id,
+                additionalData: {
+                  offline_completed: true,
+                  offline_sync_pending: true,
+                  completed_at_offline: visit.completedAt,
+                  notes: visit.notes
+                },
+                _isOfflineVisit: true
+              }));
+            setUnsyncedCompletedVisits(completedUnsynced);
+          }
+
           // Load updated my sites data
           const { data: mySitesData, error: mySitesError } = await supabase
             .from('mmp_site_entries')
@@ -1774,6 +1834,7 @@ const MMP = () => {
   const [enumeratorGroupedByLocality, setEnumeratorGroupedByLocality] = useState<Record<string, any[]>>({});
   const [enumeratorSmartAssigned, setEnumeratorSmartAssigned] = useState<any[]>([]);
   const [enumeratorMySites, setEnumeratorMySites] = useState<any[]>([]);
+  const [unsyncedCompletedVisits, setUnsyncedCompletedVisits] = useState<any[]>([]);
 
   // Helper function to normalize role checking (handles both lowercase and proper case)
   const hasRole = (rolesToCheck: string[]) => {
@@ -2245,6 +2306,58 @@ const MMP = () => {
       loading: loading
     };
   }, [allSiteEntries, canClaimSites, currentUser?.id, currentUser?.stateId, currentUser?.localityId, formatSiteEntry, loading]);
+
+  // Load unsynced completed visits from offline DB
+  useEffect(() => {
+    const loadUnsyncedCompletedVisits = async () => {
+      if (!canClaimSites || !currentUser?.id) {
+        setUnsyncedCompletedVisits([]);
+        return;
+      }
+
+      try {
+        const { getUnsyncedSiteVisits } = await import('@/lib/offline-db');
+        const unsyncedVisits = await getUnsyncedSiteVisits();
+        
+        // Filter for completed visits only and map to site entry format
+        const completedUnsynced = unsyncedVisits
+          .filter(v => v.status === 'completed' && !v.synced)
+          .map(visit => ({
+            id: visit.siteEntryId,
+            siteEntryId: visit.siteEntryId,
+            siteName: visit.siteName,
+            siteCode: visit.siteCode,
+            state: visit.state,
+            locality: visit.locality,
+            status: 'Completed',
+            completedAt: visit.completedAt,
+            accepted_by: currentUser.id, // Assume it's for current user
+            additionalData: {
+              offline_completed: true,
+              offline_sync_pending: true,
+              completed_at_offline: visit.completedAt,
+              notes: visit.notes
+            },
+            _isOfflineVisit: true
+          }));
+
+        setUnsyncedCompletedVisits(completedUnsynced);
+      } catch (error) {
+        console.error('Failed to load unsynced completed visits:', error);
+        setUnsyncedCompletedVisits([]);
+      }
+    };
+
+    loadUnsyncedCompletedVisits();
+    
+    // Also reload when online status changes (to catch synced items)
+    const handleOnline = () => {
+      setTimeout(loadUnsyncedCompletedVisits, 2000); // Wait a bit for sync to complete
+    };
+    
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [canClaimSites, currentUser?.id]);
 
   // Set enumerator state from derived data
   useEffect(() => {
@@ -3882,13 +3995,7 @@ const MMP = () => {
                           >
                             Outbox
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                return status === 'inprogress' || 
-                                       status.includes('ongoing') ||
-                                       status.includes('progress') ||
-                                       status.includes('started');
-                              }).length}
+                              {unsyncedCompletedVisits.length}
                             </Badge>
                           </Button>
                           <Button 
@@ -3901,7 +4008,12 @@ const MMP = () => {
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase();
-                                return status.includes('completed') || status.includes('finished') || status.includes('done');
+                                // Only count completed sites that are NOT in unsynced list (synced completed)
+                                const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
+                                if (!isCompleted) return false;
+                                // Exclude sites that are still unsynced in offline DB
+                                const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                                return !isUnsynced;
                               }).length}
                             </Badge>
                           </Button>
@@ -4091,10 +4203,10 @@ const MMP = () => {
                             ? (mySitesSubTab === 'pending' 
                                 ? 'Sites that have been accepted or smart assigned' 
                                 : mySitesSubTab === 'ongoing'
-                                ? 'Sites currently being visited or saved as drafts for offline access'
+                                ? 'Completed visits stored offline - will sync automatically when internet is available'
                                 : mySitesSubTab === 'all'
                                 ? 'In-progress site visits (drafts) - sites that have been started but not completed'
-                                : 'Sites that have been completed with submitted reports')
+                                : 'Completed visits that have been successfully submitted and synced')
                             : 'Sites assigned to your area that must be visited'
                           }
                         </p>
@@ -4116,13 +4228,7 @@ const MMP = () => {
                                          status.includes('assigned');
                                 }).length
                               : mySitesSubTab === 'ongoing'
-                              ? enumeratorMySites.filter(site => {
-                                  const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                  return status === 'inprogress' || 
-                                         status.includes('ongoing') ||
-                                         status.includes('progress') ||
-                                         status.includes('started');
-                                }).length
+                              ? unsyncedCompletedVisits.length
                               : mySitesSubTab === 'all'
                               ? enumeratorMySites.filter(site => {
                                   const status = (site.status || '').trim();
@@ -4130,7 +4236,11 @@ const MMP = () => {
                                 }).length
                               : enumeratorMySites.filter(site => {
                                   const status = (site.status || '').toLowerCase();
-                                  return status.includes('completed') || status.includes('finished') || status.includes('done');
+                                  const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
+                                  if (!isCompleted) return false;
+                                  // Exclude unsynced completed visits
+                                  const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                                  return !isUnsynced;
                                 }).length)
                           : enumeratorSmartAssigned.length
                         } sites
@@ -4167,17 +4277,17 @@ const MMP = () => {
                                    status.includes('assigned');
                           });
                         } else if (mySitesSubTab === 'ongoing') {
-                          sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                            return status === 'inprogress' || 
-                                   status.includes('ongoing') ||
-                                   status.includes('progress') ||
-                                   status.includes('started');
-                          });
+                          // Outbox: Show completed visits that are not yet synced (from offline DB)
+                          sitesToShow = unsyncedCompletedVisits;
                         } else {
+                          // Sent: Show completed visits that are synced (from DB, excluding unsynced offline visits)
                           sitesToShow = enumeratorMySites.filter(site => {
                             const status = (site.status || '').toLowerCase();
-                            return status.includes('completed') || status.includes('finished') || status.includes('done');
+                            const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
+                            if (!isCompleted) return false;
+                            // Exclude sites that are still unsynced in offline DB
+                            const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                            return !isUnsynced;
                           });
                         }
                       } else {
@@ -4192,7 +4302,7 @@ const MMP = () => {
                                 ? (mySitesSubTab === 'pending' 
                                     ? 'No pending visits found.' 
                                     : mySitesSubTab === 'ongoing'
-                                    ? 'No ongoing visits found.'
+                                    ? 'No completed visits waiting to sync. All visits have been submitted.'
                                     : mySitesSubTab === 'all'
                                     ? 'No in-progress site visits found. Start a visit to see it here.'
                                     : 'No completed sites found.')
