@@ -29,6 +29,9 @@ import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useSettings } from '@/context/settings/SettingsContext';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useWallet } from '@/context/wallet/WalletContext';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
 import { getWorkflowMenuGroups } from '@/navigation/menu';
 import { syncManager } from '@/lib/sync-manager';
@@ -50,11 +53,14 @@ const MobileAppHeader = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, logout } = useUser() || {};
+  const { currentUser, logout, refreshUsers } = useUser() || {};
   const { currentUser: appUser, roles } = useAppContext() || {};
   const { checkPermission = () => false, hasAnyRole = () => false, canManageRoles = () => false } = useAuthorization() || {};
   const { isSuperAdmin = false } = useSuperAdmin() || {};
   const { userSettings } = useSettings() || {};
+  const { refreshMMPFiles } = useMMP();
+  const { refreshSiteVisits } = useSiteVisitContext();
+  const { refreshWallet } = useWallet();
   const [open, setOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -103,13 +109,34 @@ const MobileAppHeader = ({
     hapticPresets.buttonPress();
     setIsSyncing(true);
     try {
-      await syncManager.forceSync();
+      // Global refresh: Refresh all contexts and sync data in parallel
+      await Promise.allSettled([
+        // Refresh all major contexts
+        refreshMMPFiles().catch(err => {
+          console.error('[Header] MMP refresh failed:', err);
+        }),
+        refreshSiteVisits?.().catch(err => {
+          console.error('[Header] Site visits refresh failed:', err);
+        }),
+        refreshUsers?.().catch(err => {
+          console.error('[Header] Users refresh failed:', err);
+        }),
+        refreshWallet?.().catch(err => {
+          console.error('[Header] Wallet refresh failed:', err);
+        }),
+        // Sync offline data and pending actions
+        syncManager.forceSync().catch(err => {
+          console.error('[Header] Sync manager failed:', err);
+        })
+      ]);
+      
+      console.log('[Header] Global refresh completed');
     } catch (error) {
-      console.error('[Header] Sync failed:', error);
+      console.error('[Header] Global refresh error:', error);
     } finally {
       setIsSyncing(false);
     }
-  }, [isOnline, isSyncing]);
+  }, [isOnline, isSyncing, refreshMMPFiles, refreshSiteVisits, refreshUsers, refreshWallet]);
 
   const handleLogout = useCallback(async () => {
     try {
