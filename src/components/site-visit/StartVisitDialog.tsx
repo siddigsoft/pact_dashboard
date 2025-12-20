@@ -35,9 +35,10 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg bg-white dark:bg-neutral-900 border-0 shadow-2xl rounded-3xl p-0 overflow-hidden">
+      <DialogContent className="max-w-lg bg-white dark:bg-neutral-900 border-0 shadow-2xl rounded-3xl p-0 max-h-[85vh] overflow-hidden">
+        <div className="flex h-[85vh] max-h-[85vh] min-h-0 flex-col">
         {/* Header - Uber style black */}
-        <div className="bg-black dark:bg-white px-6 py-5">
+        <div className="bg-black dark:bg-white px-6 py-5 shrink-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3 text-white dark:text-black">
               <div className="w-10 h-10 rounded-full bg-white dark:bg-black flex items-center justify-center">
@@ -48,7 +49,7 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
           </DialogHeader>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto scroll-container p-6 space-y-5">
           {/* Site Details - Floating Card */}
           <div className="rounded-2xl p-5 shadow-lg bg-gray-50 dark:bg-neutral-800">
             <h3 className="text-xs font-bold text-black/50 dark:text-white/50 uppercase tracking-wider mb-4">
@@ -131,7 +132,7 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
         </div>
 
         {/* Footer - Action Buttons */}
-        <DialogFooter className="p-6 pt-0 gap-3">
+        <DialogFooter className="p-6 pt-0 gap-3 shrink-0">
           <Button
             type="button"
             variant="outline"
@@ -151,6 +152,7 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
             {isStarting ? 'Starting...' : 'Start Visit'}
           </Button>
         </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
