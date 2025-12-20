@@ -229,22 +229,37 @@ const DocumentsPage = () => {
       const monthsSet = new Set<string>();
       const statesSet = new Set<string>();
 
-      // Parallel fetch all document sources for improved speed
+      // Date filter: only fetch documents from the last 90 days for faster initial load
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 90);
+      const cutoffISO = cutoffDate.toISOString();
+      
+      // Parallel fetch all document sources with date filter and limits for improved speed
       const [mmpResult, costResult, photoResult] = await Promise.all([
         supabase
           .from('mmp_files')
           .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
-          .order('created_at', { ascending: false }),
+          .gte('created_at', cutoffISO)
+          .order('created_at', { ascending: false })
+          .limit(500),
         supabase
           .from('cost_submissions')
           .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, projects(name)')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('report_photos')
-          .select('id, photo_url, caption, created_at, site_visit_id')
+          .gte('created_at', cutoffISO)
           .order('created_at', { ascending: false })
-          .then(res => res)
-          .catch(() => ({ data: null, error: { message: 'Table may not exist' } }))
+          .limit(500),
+        (async () => {
+          try {
+            return await supabase
+              .from('report_photos')
+              .select('id, photo_url, caption, created_at, site_visit_id')
+              .gte('created_at', cutoffISO)
+              .order('created_at', { ascending: false })
+              .limit(200);
+          } catch {
+            return { data: null, error: { message: 'Table may not exist' } };
+          }
+        })()
       ]);
 
       const mmpFiles = mmpResult.data;
