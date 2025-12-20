@@ -4317,7 +4317,14 @@ const MMP = () => {
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
                           onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
                           onStartVisit={handleStartVisit}
-                          onCompleteVisit={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing') ? handleCompleteVisit : undefined}
+                          onCompleteVisit={
+                            enumeratorSubTab === 'mySites' 
+                              && (mySitesSubTab === 'pending' 
+                                  || mySitesSubTab === 'ongoing' 
+                                  || mySitesSubTab === 'all')
+                              ? handleCompleteVisit 
+                              : undefined
+                          }
                           currentUserId={currentUser?.id}
                           showAcceptRejectForAssigned={enumeratorSubTab === 'smartAssigned'}
                           showVisitActions={true}

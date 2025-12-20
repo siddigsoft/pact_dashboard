@@ -420,7 +420,7 @@ const MMPSiteEntriesTable = ({
                                 className="w-full min-h-[44px] bg-green-600 hover:bg-green-700"
                                 data-testid={`button-complete-visit-${site.id}`}
                               >
-                                Complete Visit
+                                Complete Site Visit
                               </Button>
                             )}
                           </>
