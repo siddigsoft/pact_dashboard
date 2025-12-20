@@ -271,6 +271,13 @@ const DocumentsPage = () => {
         reportPhotos: reportPhotos?.length || 0,
         photoError
       });
+      
+      // Detailed MMP debug
+      if (mmpFiles && mmpFiles.length > 0) {
+        console.log('First MMP file details:', JSON.stringify(mmpFiles[0], null, 2));
+      } else {
+        console.log('No MMP files returned from database query');
+      }
 
       // 1. Process MMP Files (the CSV uploads themselves)
       try {
