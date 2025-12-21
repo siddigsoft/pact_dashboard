@@ -282,22 +282,46 @@ const PermissionsManagement = () => {
 
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      console.log('[Permissions] Saving for user:', userPermissions.userId);
+      console.log('[Permissions] Screens count:', userPermissions.screens?.length);
+      
+      // First try to check if record exists
+      const { data: existing } = await supabase
         .from('user_screen_permissions')
-        .upsert({
-          user_id: userPermissions.userId,
-          screens: userPermissions.screens,
-          updated_at: new Date().toISOString(),
-          updated_by: currentUser.id,
-        }, {
-          onConflict: 'user_id',
-        });
+        .select('id')
+        .eq('user_id', userPermissions.userId)
+        .maybeSingle();
+      
+      let error;
+      if (existing) {
+        // Update existing record
+        const result = await supabase
+          .from('user_screen_permissions')
+          .update({
+            screens: userPermissions.screens,
+            updated_at: new Date().toISOString(),
+            updated_by: currentUser.id,
+          })
+          .eq('user_id', userPermissions.userId);
+        error = result.error;
+      } else {
+        // Insert new record
+        const result = await supabase
+          .from('user_screen_permissions')
+          .insert({
+            user_id: userPermissions.userId,
+            screens: userPermissions.screens,
+            updated_at: new Date().toISOString(),
+            updated_by: currentUser.id,
+          });
+        error = result.error;
+      }
 
       if (error) {
         console.error('Error saving permissions:', error);
         toast({
           title: 'Error',
-          description: 'Failed to save permissions. The table may not exist yet.',
+          description: `Failed to save: ${error.message || 'Unknown error'}`,
           variant: 'destructive',
         });
         return;
