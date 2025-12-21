@@ -234,7 +234,45 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (currentUser) {
-      checkSuperAdminStatus(currentUser.id).then(setIsSuperAdmin);
+      // Check super admin status from super_admins table first
+      checkSuperAdminStatus(currentUser.id).then(async (isSuper) => {
+        if (isSuper) {
+          setIsSuperAdmin(true);
+        } else {
+          // Fallback: Also check if user's role is 'superAdmin' in their profile
+          // This handles cases where profile ID doesn't match auth ID
+          const userRole = currentUser.role?.toLowerCase();
+          if (userRole === 'superadmin' || userRole === 'super_admin') {
+            setIsSuperAdmin(true);
+            // Try to find and use their super_admin entry by email lookup
+            try {
+              const { data: profileByEmail } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('email', currentUser.email)
+                .single();
+              
+              if (profileByEmail) {
+                const { data: saEntry } = await supabase
+                  .from('super_admins')
+                  .select('*')
+                  .eq('user_id', profileByEmail.id)
+                  .eq('is_active', true)
+                  .maybeSingle();
+                
+                if (saEntry) {
+                  console.log('[SuperAdmin] Found super admin entry via email lookup');
+                  setIsSuperAdmin(true);
+                }
+              }
+            } catch (e) {
+              console.log('[SuperAdmin] Email lookup fallback error:', e);
+            }
+          } else {
+            setIsSuperAdmin(false);
+          }
+        }
+      });
       refreshSuperAdmins();
       refreshDeletionLogs();
     }
