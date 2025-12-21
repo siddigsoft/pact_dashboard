@@ -395,11 +395,41 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Hydrate current user from existing Supabase session (OAuth/email) and listen for auth state changes
   const setUserFromAuthUser = async (authUser: any): Promise<boolean> => {
     try {
-      const { data: profileData } = await supabase
+      // First try to find profile by auth user ID
+      let { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .single();
+
+      // Fallback: If not found by ID, try to find by email and sync the profile ID
+      if (!profileData && authUser.email) {
+        const { data: profileByEmail } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', authUser.email)
+          .single();
+        
+        if (profileByEmail) {
+          // Update the profile ID to match auth user ID for future logins
+          const { data: updatedProfile } = await supabase
+            .from('profiles')
+            .update({ id: authUser.id })
+            .eq('email', authUser.email)
+            .select('*')
+            .single();
+          
+          profileData = updatedProfile || profileByEmail;
+          
+          // Also update super_admins table if this user is a super admin
+          if (profileByEmail.role === 'superAdmin') {
+            await supabase
+              .from('super_admins')
+              .update({ user_id: authUser.id })
+              .eq('user_id', profileByEmail.id);
+          }
+        }
+      }
 
       const { data: userRoles } = await supabase
         .from('user_roles')
