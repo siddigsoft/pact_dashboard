@@ -29,10 +29,10 @@ USING (
   -- User's own notifications
   (recipient_id IS NOT NULL AND recipient_id = auth.uid()) OR 
   (user_id IS NOT NULL AND user_id = auth.uid()) OR
-  -- Admins can see system notifications (MMP uploads, site visits, etc.)
+  -- Admins can see system and assignment notifications (MMP uploads, MMP forwarded to FOM, site visits, etc.)
   (
-    event_type = 'system' AND
     entity_type IN ('mmpFile', 'siteVisit') AND
+    event_type IN ('system', 'assignments', 'approvals') AND
     EXISTS (
       SELECT 1 FROM public.profiles 
       WHERE id = auth.uid() 
