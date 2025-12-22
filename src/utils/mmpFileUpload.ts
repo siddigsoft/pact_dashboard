@@ -81,39 +81,82 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
   };
 };
 
-// Notify FOMs/Supervisors that a new MMP has been uploaded
+// Notify FOMs, Supervisors, Admins, and Super Admins that a new MMP has been uploaded
 async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?: string }) {
   try {
-    const { data: recipients } = await supabase
+    console.log('[notifyStakeholdersOnUpload] Starting notification for MMP:', mmp.id, mmp.name);
+    
+    // Get FOMs and Supervisors (hub-specific if hub is provided)
+    const { data: hubRecipients, error: hubError } = await supabase
       .from('profiles')
       .select('id, role, hub_id')
       .in('role', ['fom', 'supervisor']);
 
-    const userIds = (recipients || [])
+    if (hubError) {
+      console.error('[notifyStakeholdersOnUpload] Error fetching hub recipients:', hubError);
+    }
+
+    const hubUserIds = (hubRecipients || [])
       .filter(r => !mmp.hub || r.hub_id === mmp.hub)
       .map(r => r.id);
 
-    if (userIds.length === 0) return;
+    console.log('[notifyStakeholdersOnUpload] Found hub recipients:', hubUserIds.length);
+
+    // Get all Admins and Super Admins (global, not hub-specific)
+    const { data: adminRecipients, error: adminError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .in('role', ['admin', 'Admin', 'super_admin', 'superAdmin', 'SuperAdmin'])
+      .eq('status', 'approved');
+
+    if (adminError) {
+      console.error('[notifyStakeholdersOnUpload] Error fetching admin recipients:', adminError);
+    }
+
+    const adminUserIds = (adminRecipients || [])
+      .map(r => r.id);
+
+    console.log('[notifyStakeholdersOnUpload] Found admin recipients:', adminUserIds.length);
+
+    // Combine all recipient IDs and remove duplicates
+    const allUserIds = Array.from(new Set([...hubUserIds, ...adminUserIds]));
+
+    console.log('[notifyStakeholdersOnUpload] Total unique recipients:', allUserIds.length);
+
+    if (allUserIds.length === 0) {
+      console.warn('[notifyStakeholdersOnUpload] No recipients found, skipping notifications');
+      return;
+    }
 
     // Send notifications with email enabled using NotificationTriggerService
-    const notificationPromises = userIds.map(uid => 
-      NotificationTriggerService.send({
-        userId: uid,
-        title: 'New MMP uploaded',
-        titleAr: 'تم رفع خطة مراقبة شهرية جديدة',
-        message: `${mmp.name} has been uploaded and is ready for verification`,
-        messageAr: `تم رفع ${mmp.name} وهي جاهزة للتحقق`,
-        type: 'info',
-        category: 'system',
-        priority: 'normal',
-        link: `/mmp/${mmp.id}`,
-        relatedEntityId: mmp.id,
-        relatedEntityType: 'mmpFile',
-        sendEmail: true // Enable email sending for MMP upload notifications
-      })
-    );
+    const notificationPromises = allUserIds.map(async (uid) => {
+      try {
+        console.log(`[notifyStakeholdersOnUpload] Sending notification to user: ${uid}`);
+        const result = await NotificationTriggerService.send({
+          userId: uid,
+          title: 'New MMP uploaded',
+          titleAr: 'تم رفع خطة مراقبة شهرية جديدة',
+          message: `${mmp.name} has been uploaded and is ready for verification`,
+          messageAr: `تم رفع ${mmp.name} وهي جاهزة للتحقق`,
+          type: 'info',
+          category: 'system',
+          priority: 'normal',
+          link: `/mmp/${mmp.id}`,
+          relatedEntityId: mmp.id,
+          relatedEntityType: 'mmpFile',
+          sendEmail: true // Enable email sending for MMP upload notifications
+        });
+        console.log(`[notifyStakeholdersOnUpload] Notification result for ${uid}:`, result);
+        return result;
+      } catch (err) {
+        console.error(`[notifyStakeholdersOnUpload] Failed to send notification to ${uid}:`, err);
+        return false;
+      }
+    });
 
-    await Promise.all(notificationPromises);
+    const results = await Promise.all(notificationPromises);
+    const successCount = results.filter(r => r === true).length;
+    console.log(`[notifyStakeholdersOnUpload] Completed: ${successCount}/${allUserIds.length} notifications sent successfully`);
   } catch (error) {
     console.error('[notifyStakeholdersOnUpload] Error sending notifications:', error);
   }

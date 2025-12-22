@@ -12,7 +12,7 @@ Set-Location ..
 
 # Step 2: Build the web app
 Write-Host "[2/4] Building web application..." -ForegroundColor Yellow
-npm run build
+npm run build:mobile
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Web build failed!" -ForegroundColor Red

@@ -138,8 +138,15 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
   const urgentNotifications = filteredNotifications.filter(n => n.type === 'error');
   const warningNotifications = filteredNotifications.filter(n => n.type === 'warning');
   const infoNotifications = filteredNotifications.filter(n => 
-    n.type === 'info' || n.type === 'success'
+    n.type === 'info' || n.type === 'success' || !n.type // Include notifications without type
   );
+  
+  // Debug logging
+  console.log('[NotificationDropdown] Filtered notifications:', filteredNotifications.length);
+  console.log('[NotificationDropdown] Urgent:', urgentNotifications.length);
+  console.log('[NotificationDropdown] Warning:', warningNotifications.length);
+  console.log('[NotificationDropdown] Info:', infoNotifications.length);
+  console.log('[NotificationDropdown] Notification types:', filteredNotifications.map(n => ({ id: n.id, type: n.type, title: n.title })));
 
   const dateGroupedNotifications = useMemo(() => {
     const today: Notification[] = [];

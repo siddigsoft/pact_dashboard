@@ -33,7 +33,7 @@ export interface MMPContextType {
   ) => Promise<{ success: boolean; id?: string; mmp?: MMPFile; error?: string }>;
   updateMMP: (id: string, updatedMMP: Partial<MMPFile>) => Promise<boolean>;
   updateMMPVersion: (id: string, changes: string) => Promise<boolean>;
-  deleteMMP: (id: string) => void;
+  deleteMMP: (id: string) => Promise<boolean>;
   restoreMMP: (id: string) => void;
   resetMMP: (id?: string) => Promise<boolean>;
   attachPermitsToMMP: (id: string, permits: { federal: File | null; state?: File | null; local?: File | null }) => Promise<void>;

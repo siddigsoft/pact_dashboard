@@ -224,7 +224,10 @@ drop policy if exists "notifications_all_auth" on public.notifications;
 
 drop policy if exists "notifications_select_own" on public.notifications;
 create policy "notifications_select_own" on public.notifications 
-  for select using (user_id = auth.uid());
+  for select using (
+    (recipient_id IS NOT NULL AND recipient_id = auth.uid()) OR 
+    (user_id IS NOT NULL AND user_id = auth.uid())
+  );
 
 -- Users can only create notifications for themselves
 -- System/backend notifications should use service_role which bypasses RLS
@@ -234,11 +237,20 @@ create policy "notifications_insert_own" on public.notifications
 
 drop policy if exists "notifications_update_own" on public.notifications;
 create policy "notifications_update_own" on public.notifications 
-  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+  for update using (
+    (recipient_id IS NOT NULL AND recipient_id = auth.uid()) OR 
+    (user_id IS NOT NULL AND user_id = auth.uid())
+  ) with check (
+    (recipient_id IS NOT NULL AND recipient_id = auth.uid()) OR 
+    (user_id IS NOT NULL AND user_id = auth.uid())
+  );
 
 drop policy if exists "notifications_delete_own" on public.notifications;
 create policy "notifications_delete_own" on public.notifications 
-  for delete using (user_id = auth.uid());
+  for delete using (
+    (recipient_id IS NOT NULL AND recipient_id = auth.uid()) OR 
+    (user_id IS NOT NULL AND user_id = auth.uid())
+  );
 
 -- =====================================================
 -- REALTIME PUBLICATION

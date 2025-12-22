@@ -424,28 +424,36 @@ const ReviewAssignCoordinators: React.FC = () => {
 
       // Attempt to send notifications (don't fail the whole operation if this fails)
       try {
-        const notifications = [
+        const notifications: any[] = [
           {
-            user_id: coordinatorId,
-            title: 'Sites forwarded for CP verification',
-            message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
-            type: 'info',
-            link: `/coordinator/sites`,
-            related_entity_id: mmpId,
-            related_entity_type: 'mmpFile',
+            recipient_id: coordinatorId,
+            title_en: 'Sites forwarded for CP verification',
+            title_ar: 'تم إرسال المواقع للتحقق من CP',
+            message_en: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+            message_ar: `${mmpFile?.name || 'خطة المراقبة الشهرية'}: تم إرسال ${siteIds.length} موقع(ات) لمراجعة CP الخاصة بك${attachStatePermitMap[groupKey] ? ' (تم إرفاق تصريح الولاية)' : ''}`,
+            event_type: 'assignments',
+            entity_id: mmpId,
+            entity_type: 'mmpFile',
+            action_url: `/coordinator/sites`,
+            priority: 'normal',
+            status: 'pending',
           }
         ];
 
         // Send notification to supervisor if selected
         if (supervisorId) {
           notifications.push({
-            user_id: supervisorId,
-            title: 'Sites assigned to coordinator for verification',
-            message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
-            type: 'info',
-            link: `/supervisor/sites`,
-            related_entity_id: mmpId,
-            related_entity_type: 'mmpFile',
+            recipient_id: supervisorId,
+            title_en: 'Sites assigned to coordinator for verification',
+            title_ar: 'تم تعيين مواقع للمنسق للتحقق',
+            message_en: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+            message_ar: `${mmpFile?.name || 'خطة المراقبة الشهرية'}: تم تعيين ${siteIds.length} موقع(ات) إلى ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'المنسق'} للتحقق من CP${attachStatePermitMap[groupKey] ? ' (تم إرفاق تصريح الولاية)' : ''}`,
+            event_type: 'assignments',
+            entity_id: mmpId,
+            entity_type: 'mmpFile',
+            action_url: `/supervisor/sites`,
+            priority: 'normal',
+            status: 'pending',
           });
         }
 
