@@ -189,6 +189,178 @@ function StateBreakdownSection({ breakdowns }: { breakdowns: StateBreakdown[] })
   );
 }
 
+interface CoordinatorByState {
+  state: string;
+  coordinators: { 
+    id: string; 
+    name: string; 
+    sitesAssigned: number;
+    sitesVerified: number;
+    receivedAt?: string;
+  }[];
+  hasReceivedSites: boolean;
+}
+
+function getCoordinatorsByState(mmp: any): CoordinatorByState[] {
+  const siteEntries = mmp.siteEntries || [];
+  if (siteEntries.length === 0) return [];
+
+  const stateMap = new Map<string, CoordinatorByState>();
+
+  siteEntries.forEach((entry: any) => {
+    const stateName = entry.state || entry.stateName || 'Unknown State';
+    
+    if (!stateMap.has(stateName)) {
+      stateMap.set(stateName, {
+        state: stateName,
+        coordinators: [],
+        hasReceivedSites: false,
+      });
+    }
+
+    const stateData = stateMap.get(stateName)!;
+
+    const coordId = entry.additional_data?.assigned_to || 
+                   entry.forwarded_to_user_id || 
+                   entry.forwardedToUserId;
+    const coordName = entry.additional_data?.assigned_to_name || 
+                     entry.coordinator_name || 
+                     entry.coordinatorName;
+    const receivedAt = entry.forwarded_at || entry.forwardedAt || entry.dispatched_at || entry.dispatchedAt;
+    
+    if (coordId) {
+      stateData.hasReceivedSites = true;
+      const existingCoord = stateData.coordinators.find(c => c.id === coordId);
+      const entryStatus = (entry.status || '').toLowerCase();
+      const isVerified = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'].includes(entryStatus);
+      
+      if (existingCoord) {
+        existingCoord.sitesAssigned++;
+        if (isVerified) existingCoord.sitesVerified++;
+      } else {
+        stateData.coordinators.push({ 
+          id: coordId, 
+          name: coordName || coordId.substring(0, 8),
+          sitesAssigned: 1,
+          sitesVerified: isVerified ? 1 : 0,
+          receivedAt: receivedAt,
+        });
+      }
+    }
+  });
+
+  return Array.from(stateMap.values()).sort((a, b) => a.state.localeCompare(b.state));
+}
+
+function CoordinatorsByStateSection({ coordinatorsByState }: { coordinatorsByState: CoordinatorByState[] }) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  const statesWithCoordinators = coordinatorsByState.filter(s => s.hasReceivedSites);
+  const statesWithoutCoordinators = coordinatorsByState.filter(s => !s.hasReceivedSites);
+
+  if (coordinatorsByState.length === 0) {
+    return (
+      <div className="text-xs text-muted-foreground flex items-center gap-1">
+        <Users className="h-3 w-3" />
+        No state data available
+      </div>
+    );
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover-elevate rounded px-2 py-1 -mx-2 w-full" data-testid="trigger-coordinators-by-state">
+        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+        <span>Coordinators by State</span>
+        <Badge variant="secondary" className="ml-auto">
+          {statesWithCoordinators.length}/{coordinatorsByState.length} received
+        </Badge>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 space-y-2">
+        {statesWithCoordinators.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" />
+              States with Assigned Coordinators
+            </div>
+            {statesWithCoordinators.map((stateData) => (
+              <div 
+                key={stateData.state} 
+                className="border border-green-200 dark:border-green-800 rounded-md p-3 bg-green-50/50 dark:bg-green-950/30"
+                data-testid={`coordinators-state-${stateData.state}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <MapPin className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <span className="font-medium text-sm">{stateData.state}</span>
+                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 ml-auto">
+                    {stateData.coordinators.length} coordinator{stateData.coordinators.length > 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                <div className="space-y-1.5">
+                  {stateData.coordinators.map((coord) => (
+                    <div 
+                      key={coord.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded bg-background/50 text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Users className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                        <span className="font-medium">{coord.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs py-0">
+                          {coord.sitesVerified}/{coord.sitesAssigned} verified
+                        </Badge>
+                        {coord.receivedAt && (() => {
+                          try {
+                            const date = new Date(coord.receivedAt);
+                            if (!isNaN(date.getTime())) {
+                              return (
+                                <span className="text-xs text-muted-foreground">
+                                  {format(date, 'MMM dd')}
+                                </span>
+                              );
+                            }
+                          } catch {
+                            return null;
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {statesWithoutCoordinators.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              States Awaiting Coordinator Assignment
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {statesWithoutCoordinators.map((stateData) => (
+                <Badge 
+                  key={stateData.state}
+                  variant="outline" 
+                  className="border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300"
+                  data-testid={`pending-state-${stateData.state}`}
+                >
+                  <MapPin className="h-3 w-3 mr-1" />
+                  {stateData.state}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 interface WorkflowTrackerTabProps {
   mmpFiles: any[];
   coordinators?: { id: string; name: string }[];
@@ -210,14 +382,63 @@ const STAGE_ORDER: WorkflowStage[] = ['new', 'forwarded_to_fom', 'forwarded_to_c
 
 function deriveWorkflowStage(mmp: any): WorkflowStage {
   const workflow = mmp.workflow || {};
+  const siteEntries = mmp.siteEntries || [];
   
   // Check recalled first - if recalledAt exists and workflow fields were cleared, it's recalled
   if (workflow.recalledAt && (!workflow.forwardedToCoordinatorIds?.length && !workflow.forwardedToFomIds?.length)) {
     return 'recalled';
   }
   
+  // Check completed status early
+  if (mmp.status === 'completed' || workflow.completedAt) {
+    return 'completed';
+  }
+  
+  // Check if all sites are verified
+  const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
+  const allVerified = siteEntries.length > 0 && siteEntries.every((s: any) => 
+    verifiedStatuses.includes(s.status?.toLowerCase())
+  );
+  if (allVerified && siteEntries.length > 0) {
+    return 'sites_verified';
+  }
+  
+  // PRIORITY: Check if ANY site entries have been forwarded to coordinators
+  // This takes precedence over stored workflow.currentStage which may be stale
+  const hasSitesForwardedToCoordinator = siteEntries.some((site: any) => {
+    const siteWorkflow = site.workflow || {};
+    const additionalData = site.additional_data || site.additionalData || {};
+    return (
+      site.forwarded_to_user_id ||
+      site.forwardedToUserId ||
+      site.forwarded_at ||
+      site.forwardedAt ||
+      site.dispatched_at ||
+      site.dispatchedAt ||
+      additionalData.assigned_to ||
+      additionalData.forwarded_to ||
+      siteWorkflow.forwardedToCoordinatorIds?.length > 0
+    );
+  });
+  if (hasSitesForwardedToCoordinator) {
+    return 'forwarded_to_coordinator';
+  }
+  
+  // Check MMP-level workflow for coordinator forwarding
+  if (workflow.forwardedToCoordinatorIds?.length > 0 || 
+      workflow.forwardedToCoordinators?.length > 0 ||
+      workflow.forwardedToCoordinatorAt ||
+      workflow.forwardedToCoordinatorsAt) {
+    return 'forwarded_to_coordinator';
+  }
+  
+  // Check database status field
+  if (mmp.status === 'forwarded_to_coordinator') {
+    return 'forwarded_to_coordinator';
+  }
+  
+  // Now check stored currentStage (may be stale, so checked after site-level checks)
   if (workflow.currentStage) {
-    // Normalize the stage string: lowercase, replace hyphens/spaces with underscores
     const normalizedStage = String(workflow.currentStage)
       .toLowerCase()
       .replace(/[-\s]+/g, '_')
@@ -244,44 +465,7 @@ function deriveWorkflowStage(mmp: any): WorkflowStage {
     }
   }
   
-  // Check database status field as fallback
-  if (mmp.status === 'forwarded_to_coordinator') {
-    return 'forwarded_to_coordinator';
-  }
-  
-  if (mmp.status === 'completed' || workflow.completedAt) {
-    return 'completed';
-  }
-  
-  const siteEntries = mmp.siteEntries || [];
-  const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
-  const allVerified = siteEntries.length > 0 && siteEntries.every((s: any) => 
-    verifiedStatuses.includes(s.status?.toLowerCase())
-  );
-  if (allVerified && siteEntries.length > 0) {
-    return 'sites_verified';
-  }
-  
-  // Check if any site entries have been forwarded to coordinators
-  // This catches cases where sites were forwarded but parent MMP workflow wasn't updated
-  const hasSitesForwardedToCoordinator = siteEntries.some((site: any) => {
-    const siteWorkflow = site.workflow || {};
-    const additionalData = site.additional_data || site.additionalData || {};
-    return (
-      site.forwarded_to_user_id ||
-      site.forwardedToUserId ||
-      additionalData.assigned_to ||
-      siteWorkflow.forwardedToCoordinatorIds?.length > 0
-    );
-  });
-  if (hasSitesForwardedToCoordinator) {
-    return 'forwarded_to_coordinator';
-  }
-  
-  if (workflow.forwardedToCoordinatorIds?.length > 0 || workflow.forwardedToCoordinators?.length > 0) {
-    return 'forwarded_to_coordinators';
-  }
-  
+  // Fallback checks for FOM forwarding
   if (workflow.forwardedToFomIds?.length > 0 || workflow.forwardedAt) {
     return 'forwarded_to_fom';
   }
@@ -421,6 +605,7 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
       verificationProgress: getVerificationProgress(mmp),
       timeline: buildTimeline(mmp),
       stateBreakdown: getStateBreakdown(mmp),
+      coordinatorsByState: getCoordinatorsByState(mmp),
     }));
   }, [mmpFiles]);
 
@@ -753,6 +938,9 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
                     </span>
                   </div>
 
+                  {/* Coordinators by State Section */}
+                  <CoordinatorsByStateSection coordinatorsByState={mmp.coordinatorsByState} />
+                  
                   {/* State Breakdown Section */}
                   <StateBreakdownSection breakdowns={mmp.stateBreakdown} />
                   
