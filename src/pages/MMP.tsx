@@ -637,13 +637,17 @@ const MMP = () => {
           const mmpName = site.mmp_name || site.mmpName || 'MMP';
           
           await insertNotifications([{
-            user_id: coordinatorId,
-            title: 'Site Sent Back for Editing',
-            message: `Site "${siteName}" from ${mmpName} has been sent back with comments: ${comments.trim().substring(0, 100)}${comments.length > 100 ? '...' : ''}`,
-            type: 'warning',
-            link: `/coordinator/sites`,
-            related_entity_id: site.id,
-            related_entity_type: 'mmpFile'
+            recipient_id: coordinatorId,
+            title_en: 'Site Sent Back for Editing',
+            title_ar: 'تم إرجاع الموقع للتحرير',
+            message_en: `Site "${siteName}" from ${mmpName} has been sent back with comments: ${comments.trim().substring(0, 100)}${comments.length > 100 ? '...' : ''}`,
+            message_ar: `تم إرجاع الموقع "${siteName}" من ${mmpName} مع تعليقات: ${comments.trim().substring(0, 100)}${comments.length > 100 ? '...' : ''}`,
+            event_type: 'approvals',
+            entity_id: site.id,
+            entity_type: 'mmpFile',
+            action_url: `/coordinator/sites`,
+            priority: 'high',
+            status: 'pending'
           }]);
         } catch (notifError) {
           // Log but don't fail the operation if notification fails
