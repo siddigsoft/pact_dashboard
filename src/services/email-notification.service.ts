@@ -1850,40 +1850,88 @@ PACT Workflow Platform`;
   // ============================================
 
   /**
-   * Send bulk emails to multiple recipients with rate limiting
-   * Sends emails sequentially with 2-second delays to avoid SMTP rate limits
+   * Send a single email to multiple recipients using CC
+   * Sends one email to the first recipient with all others in CC
+   * This reduces email volume and ensures all recipients see who else received the notification
    */
   async sendBulk(
     recipients: Array<{ email: string; name: string }>,
     options: NotificationEmailOptions
   ): Promise<{ total: number; successful: number; failed: number }> {
-    const results: EmailNotificationResult[] = [];
-    const DELAY_MS = 5000; // 5 second delay between emails to avoid IONOS rate limiting
-    
-    for (let i = 0; i < recipients.length; i++) {
-      const r = recipients[i];
-      
-      // Add delay before sending (except for the first email)
-      if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-      }
-      
-      try {
-        const result = await this.sendNotification(r.email, r.name, options);
-        results.push(result);
-        console.log(`[EMAIL] Sent ${i + 1}/${recipients.length} to ${r.email}: ${result.success ? 'OK' : result.error}`);
-      } catch (error: any) {
-        results.push({ success: false, error: error.message });
-        console.error(`[EMAIL] Failed ${i + 1}/${recipients.length} to ${r.email}:`, error.message);
-      }
+    if (recipients.length === 0) {
+      return { total: 0, successful: 0, failed: 0 };
     }
     
-    const successful = results.filter(r => r.success).length;
-    return {
-      total: recipients.length,
-      successful,
-      failed: recipients.length - successful,
-    };
+    // Single recipient - send normally
+    if (recipients.length === 1) {
+      const result = await this.sendNotification(recipients[0].email, recipients[0].name, options);
+      return {
+        total: 1,
+        successful: result.success ? 1 : 0,
+        failed: result.success ? 0 : 1,
+      };
+    }
+    
+    // Multiple recipients - send to first with CC to others
+    const primaryRecipient = recipients[0];
+    const ccRecipients = recipients.slice(1).map(r => r.email);
+    
+    console.log(`[EMAIL] Sending single email to ${primaryRecipient.email} with ${ccRecipients.length} CC recipients`);
+    
+    try {
+      const priorityPrefix = options.type === 'error' ? '[URGENT | عاجل] ' : 
+                            options.type === 'warning' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
+      const subject = priorityPrefix + options.title;
+      
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: primaryRecipient.email,
+          subject,
+          type: 'notification',
+          recipientName: primaryRecipient.name,
+          title_en: options.title,
+          title_ar: options.titleAr || options.title,
+          message_en: options.message,
+          message_ar: options.messageAr || options.message,
+          actionUrl: options.actionUrl,
+          priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
+          details: options.details,
+          cc: ccRecipients,
+        },
+      });
+
+      if (error) {
+        console.error('[EMAIL] Bulk email with CC failed:', error);
+        await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, error.message);
+        return { total: recipients.length, successful: 0, failed: recipients.length };
+      }
+
+      if (data && !data.success) {
+        console.error('[EMAIL] Bulk email with CC returned error:', data.error);
+        await logEmailSend(primaryRecipient.email, subject, 'notification', false, undefined, data.error);
+        return { total: recipients.length, successful: 0, failed: recipients.length };
+      }
+
+      console.log(`[EMAIL] Bulk email sent successfully to ${primaryRecipient.email} + ${ccRecipients.length} CC`);
+      const messageId = data?.messageId || `bulk-${Date.now()}`;
+      
+      // Log primary recipient
+      await logEmailSend(primaryRecipient.email, subject, 'notification', true, messageId);
+      
+      // Log CC recipients for audit trail
+      for (const ccEmail of ccRecipients) {
+        await logEmailSend(ccEmail, `[CC] ${subject}`, 'notification', true, `${messageId}-cc`);
+      }
+      
+      return {
+        total: recipients.length,
+        successful: recipients.length,
+        failed: 0,
+      };
+    } catch (error: any) {
+      console.error('[EMAIL] Bulk email exception:', error);
+      return { total: recipients.length, successful: 0, failed: recipients.length };
+    }
   },
 
   /**
