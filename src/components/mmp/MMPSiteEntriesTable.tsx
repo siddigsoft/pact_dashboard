@@ -283,10 +283,9 @@ const MMPSiteEntriesTable = ({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border w-full">
-          {/* List View */}
-          {paginatedSites.length > 0 ? (
-            <div className="space-y-3 p-4">
+        {/* List View */}
+        {paginatedSites.length > 0 ? (
+          <div className="space-y-3">
               {paginatedSites.map((site, idx) => {
                 const row = normalizeSite(site);
                 return (
@@ -420,7 +419,7 @@ const MMPSiteEntriesTable = ({
                                 className="w-full min-h-[44px] bg-green-600 hover:bg-green-700"
                                 data-testid={`button-complete-visit-${site.id}`}
                               >
-                                Complete Visit
+                                Complete Site Visit
                               </Button>
                             )}
                           </>
@@ -442,13 +441,12 @@ const MMPSiteEntriesTable = ({
                   </Card>
                 );
               })}
-            </div>
-          ) : (
-            <div className="p-8 text-center text-muted-foreground">
-              No results.
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="p-8 text-center text-muted-foreground">
+            No results.
+          </div>
+        )}
         {/* Pagination Controls */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4 px-2">

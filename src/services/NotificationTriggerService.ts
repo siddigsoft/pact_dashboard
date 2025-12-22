@@ -71,24 +71,24 @@ interface QuietHoursSettings {
 }
 
 /**
- * Helper function to get CC emails for super admins only
- * Returns only approved super admin emails
+ * Helper function to get CC emails for super admins and regular admins
+ * Returns approved super admin and admin emails
  */
 const getSuperAdminCcEmails = async (): Promise<string[]> => {
   try {
-    const { data: superAdmins } = await supabase
+    const { data: admins } = await supabase
       .from('profiles')
       .select('email')
-      .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
+      .in('role', ['superAdmin', 'super_admin', 'SuperAdmin', 'admin', 'Admin'])
       .eq('status', 'approved');
     
-    if (!superAdmins) return [];
+    if (!admins) return [];
     
-    return superAdmins
-      .filter(sa => sa.email)
-      .map(sa => sa.email as string);
+    return admins
+      .filter(a => a.email)
+      .map(a => a.email as string);
   } catch (error) {
-    console.error('Error fetching super admin CC emails:', error);
+    console.error('Error fetching admin CC emails:', error);
     return [];
   }
 };
@@ -227,8 +227,10 @@ export const NotificationTriggerService = {
       const safePriority = priority || 'normal';
       
       // Map to actual database schema columns
+      // Include both recipient_id (new) and user_id (legacy) for RLS policy compatibility
       const notificationData = {
         recipient_id: userId,
+        user_id: userId, // Also set for legacy column and RLS policy compatibility
         title_en: title || 'Notification',
         title_ar: titleAr || title || 'إشعار',
         message_en: message || '',
@@ -239,16 +241,43 @@ export const NotificationTriggerService = {
         entity_type: relatedEntityType || null,
         event_type: safeEventType,
         status: 'pending',
-        email_sent: false
+        email_sent: false,
+        // Legacy columns for backward compatibility
+        title: title || 'Notification',
+        message: message || '',
+        link: link || null,
+        related_entity_id: relatedEntityId || null,
+        related_entity_type: relatedEntityType || null,
+        type: type,
+        is_read: false
       };
 
       console.log(`[NOTIFICATION] Inserting into database:`, JSON.stringify(notificationData));
       console.log(`[NOTIFICATION] event_type="${safeEventType}", priority="${safePriority}"`);
+      console.log(`[NOTIFICATION] recipient_id="${userId}", user_id="${userId}"`);
+
+      // Validate required fields before insert
+      if (!userId) {
+        console.error('[NOTIFICATION] Missing required field: userId');
+        return false;
+      }
+      if (!notificationData.title_en || !notificationData.message_en) {
+        console.error('[NOTIFICATION] Missing required fields: title_en or message_en');
+        return false;
+      }
+      if (!notificationData.event_type) {
+        console.error('[NOTIFICATION] Missing required field: event_type');
+        return false;
+      }
 
       const { data, error } = await supabase.from('notifications').insert(notificationData).select('id');
 
       if (error) {
         console.error('[NOTIFICATION] Failed to create notification:', error);
+        console.error('[NOTIFICATION] Error code:', error.code);
+        console.error('[NOTIFICATION] Error message:', error.message);
+        console.error('[NOTIFICATION] Error details:', error.details);
+        console.error('[NOTIFICATION] Error hint:', error.hint);
         return false;
       }
 
@@ -1057,8 +1086,21 @@ export const NotificationTriggerService = {
         });
       }
 
-      // Note: Regular admins removed from hub management notifications
-      // Only super admins receive management notifications now
+      // 4. Get all regular admins (global, not hub-specific)
+      const { data: admins, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .in('role', ['admin', 'Admin'])
+        .eq('status', 'approved');
+
+      if (!adminError && admins) {
+        admins.forEach(admin => {
+          if (!seenIds.has(admin.id)) {
+            seenIds.add(admin.id);
+            allUsers.push({ ...admin, role: admin.role || 'admin' });
+          }
+        });
+      }
 
       return allUsers;
     } catch (error) {
@@ -1101,7 +1143,7 @@ export const NotificationTriggerService = {
   /**
    * Notify coordinators when MMP is forwarded to them
    * - Sends in-app notification to selected coordinators only
-   * - Sends bilingual email to coordinators (CC one Super Admin)
+   * - Sends bilingual email to coordinators (CC Super Admins and Admins)
    * - Simplified to reduce email volume and avoid rate limiting
    */
   async mmpForwardedToCoordinators(
@@ -1116,8 +1158,8 @@ export const NotificationTriggerService = {
       let successCount = 0;
       const sender = forwarderName || 'Field Operations Manager';
 
-      // 1. Build CC list: Super Admins + Hub Supervisor for accountability
-      const ccEmails = await getAllCcEmails(hubId);
+      // 1. Build CC list: Approved Super Admins and regular Admins
+      const ccEmails = await getSuperAdminCcEmails();
 
       // 2. If specific coordinators provided, notify them directly
       if (coordinatorUserIds && coordinatorUserIds.length > 0) {
@@ -1146,7 +1188,7 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email to coordinator (CC Super Admins only)
+          // Send bilingual email to coordinator (CC Super Admins and Admins)
           if (coord.email) {
             try {
               const roleInfo = formatRoleName(coord.role);
@@ -1184,7 +1226,7 @@ export const NotificationTriggerService = {
   /**
    * Notify FOM when a site is verified by a coordinator
    * - Sends in-app notification to the FOM only
-   * - Sends bilingual email to FOM (CC one Super Admin)
+   * - Sends bilingual email to FOM (CC Super Admins and Admins)
    * - Simplified to reduce email volume
    */
   async siteVerifiedByCoordinator(
@@ -1224,7 +1266,7 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email to FOM (CC Super Admins only)
+          // Send bilingual email to FOM (CC Super Admins and Admins)
           if (fomUser.email) {
             try {
               const roleInfo = formatRoleName(fomUser.role);
@@ -1632,19 +1674,24 @@ export const NotificationTriggerService = {
         }
       }
 
-      // 4. Create in-app notifications for CC recipients (super admins + hub supervisor)
-      // NO separate emails - they receive CC on the FOM email
-      for (const ccEmail of ccEmails) {
-        const { data: ccUser } = await supabase
-          .from('profiles')
-          .select('id, full_name, role')
-          .eq('email', ccEmail)
-          .single();
-        
-        if (ccUser) {
-          // Create in-app notification only (no email - they're CC'd on FOM's email)
+      // 3. Fetch approved Super Admins and regular Admins
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .in('role', ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'])
+        .eq('status', 'approved');
+
+      if (adminError) {
+        console.error('Error fetching admins for MMP forward notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // 4. Notify both Super Admins and regular Admins with bilingual email
+        for (const adminUser of adminUsers) {
+          const isSuperAdmin = ['super_admin', 'superAdmin', 'SuperAdmin'].includes(adminUser.role || '');
+          const recipientName = adminUser.full_name || (isSuperAdmin ? 'Super Administrator' : 'Administrator');
+          
+          // Create in-app notification
           const sent = await this.send({
-            userId: ccUser.id,
+            userId: adminUser.id,
             title: 'MMP Forwarded to FOM',
             message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s) by ${sender}`,
             type: 'info',
@@ -1656,6 +1703,23 @@ export const NotificationTriggerService = {
             sendEmail: false
           });
           if (sent) successCount++;
+
+          // Send bilingual email directly to admin
+          if (adminUser.email) {
+            try {
+              await EmailNotificationService.sendMMPForwardedToFOM(
+                adminUser.email,
+                recipientName,
+                mmpName,
+                sender,
+                mmpId,
+                false // isRecipientFOM (admin gets info notification, not action required)
+              );
+              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to ${isSuperAdmin ? 'Super Admin' : 'Admin'}: ${adminUser.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to ${isSuperAdmin ? 'Super Admin' : 'Admin'} ${adminUser.email}:`, emailError);
+            }
+          }
         }
       }
 
