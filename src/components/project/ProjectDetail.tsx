@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { format, isValid, parseISO, differenceInDays } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Calendar,
   Tag,
@@ -121,6 +122,57 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [editBudgetOpen, setEditBudgetOpen] = useState(false);
   const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
   const projectBudget = getProjectBudget(project.id);
+  const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
+
+  // Active statuses for workload calculation (non-terminal statuses)
+  const ACTIVE_SITE_VISIT_STATUSES = ['pending', 'scheduled', 'in_progress', 'assigned', 'dispatched', 'verification_pending'];
+  const ACTIVE_MMP_ENTRY_STATUSES = ['Pending', 'pending', 'in_progress', 'In Progress', 'dispatched', 'Dispatched', 'accepted', 'Accepted'];
+
+  // Derive stable user ID list for dependency tracking
+  const teamUserIds = (project.team?.teamComposition || []).map(m => m.userId).sort().join(',');
+
+  // Fetch workloads for team members
+  const fetchTeamWorkloads = useCallback(async () => {
+    const teamMembers = project.team?.teamComposition || [];
+    if (teamMembers.length === 0) return;
+
+    const userIds = teamMembers.map(m => m.userId);
+
+    try {
+      const [{ data: siteVisits }, { data: mmpEntries }] = await Promise.all([
+        supabase
+          .from('site_visits')
+          .select('assigned_to, status')
+          .in('assigned_to', userIds)
+          .in('status', ACTIVE_SITE_VISIT_STATUSES),
+        supabase
+          .from('mmp_site_entries')
+          .select('forwarded_to_user_id, status')
+          .in('forwarded_to_user_id', userIds)
+          .in('status', ACTIVE_MMP_ENTRY_STATUSES)
+      ]);
+
+      const MAX_CAPACITY = 10;
+      const workloads: Record<string, number> = {};
+
+      userIds.forEach(userId => {
+        const svCount = (siteVisits || []).filter(sv => sv.assigned_to === userId).length;
+        const mmpCount = (mmpEntries || []).filter(e => e.forwarded_to_user_id === userId).length;
+        const totalTasks = svCount + mmpCount;
+        workloads[userId] = Math.min(100, Math.round((totalTasks / MAX_CAPACITY) * 100));
+      });
+
+      setUserWorkloads(workloads);
+    } catch (error) {
+      console.error('Error fetching team workloads:', error);
+    }
+  }, [teamUserIds]); // Re-run when team composition changes
+
+  useEffect(() => {
+    if (activeTab === 'team') {
+      fetchTeamWorkloads();
+    }
+  }, [activeTab, fetchTeamWorkloads]);
 
   // Helper function to safely format dates
   const formatDate = (dateString: string) => {
@@ -589,7 +641,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           {project.team?.teamComposition && project.team.teamComposition.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {project.team.teamComposition.map((member) => (
-                <TeamMemberCard key={member.userId} member={member} />
+                <TeamMemberCard 
+                  key={member.userId} 
+                  member={member} 
+                  calculatedWorkload={userWorkloads[member.userId]}
+                />
               ))}
             </div>
           ) : (
