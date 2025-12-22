@@ -298,6 +298,7 @@ const MMPContext = createContext<MMPContextType>({
 export const useMMPProvider = () => {
   const [mmpFiles, setMMPFiles] = useState<MMPFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -365,7 +366,18 @@ export const useMMPProvider = () => {
         return;
       }
 
-      setLoading(true);
+      // Don't refresh if offline
+      if (!navigator.onLine) {
+        console.debug('MMP refresh skipped: device is offline');
+        return;
+      }
+
+      // Only show the global loading state on the very first load.
+      // For background/automatic refreshes after initial load, we keep
+      // the existing data on screen to avoid a "full page reload" effect.
+      if (!hasLoadedOnce) {
+        setLoading(true);
+      }
       
       const { data: mmpData, error } = await supabase
         .from('mmp_files')
@@ -382,6 +394,7 @@ export const useMMPProvider = () => {
 
       let rows = mmpData;
       if (error) {
+        console.warn('Error loading MMP files with relations, trying fallback:', error);
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('mmp_files')
           .select('*')
@@ -394,18 +407,119 @@ export const useMMPProvider = () => {
 
       const mapped = (rows || []).map(transformDBToMMPFile);
       setMMPFiles(mapped);
+      setError(null); // Clear any previous errors on successful refresh
+      if (!hasLoadedOnce) {
+        setHasLoadedOnce(true);
+      }
     } catch (err) {
       console.error('Error loading MMP files:', err);
+      // Don't clear existing data on error, just log it
       setError('Failed to load MMP files');
-      setMMPFiles([]);
+      // Keep existing data instead of clearing it
+      // setMMPFiles([]);
     } finally {
-      setLoading(false);
+      if (!hasLoadedOnce) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [hasLoadedOnce]);
 
   useEffect(() => {
     refreshMMPFiles();
   }, []);
+
+  // Automatic background refresh for mobile and when app becomes visible
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    let visibilityTimeout: NodeJS.Timeout | null = null;
+    let appStateListener: any = null;
+
+    const handleVisibilityChange = () => {
+      // When app becomes visible, refresh after a short delay
+      if (document.visibilityState === 'visible') {
+        // Clear any pending timeout
+        if (visibilityTimeout) {
+          clearTimeout(visibilityTimeout);
+        }
+        // Refresh after 500ms to avoid rapid refreshes when switching tabs quickly
+        visibilityTimeout = setTimeout(() => {
+          if (navigator.onLine) {
+            refreshMMPFiles();
+          }
+        }, 500);
+      }
+    };
+
+    const handleOnline = () => {
+      // When coming back online, refresh immediately
+      refreshMMPFiles();
+    };
+
+    // Set up periodic background refresh (every 30 seconds when app is visible)
+    const startPeriodicRefresh = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      
+      intervalId = setInterval(() => {
+        // Only refresh if:
+        // 1. App is visible
+        // 2. Online
+        // 3. User is authenticated (checked inside refreshMMPFiles)
+        if (document.visibilityState === 'visible' && navigator.onLine) {
+          refreshMMPFiles();
+        }
+      }, 30000); // 30 seconds
+    };
+
+    // Listen for visibility changes (app becoming visible/hidden)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Listen for online/offline status
+    window.addEventListener('online', handleOnline);
+
+    // For native mobile apps (Capacitor), also listen to app state changes
+    const setupAppStateListener = async () => {
+      try {
+        // Check if we're in a Capacitor app
+        if (typeof (window as any).Capacitor !== 'undefined') {
+          const { App } = await import('@capacitor/app');
+          
+          appStateListener = await App.addListener('appStateChange', ({ isActive }) => {
+            if (isActive && navigator.onLine) {
+              // App became active, refresh data
+              setTimeout(() => {
+                refreshMMPFiles();
+              }, 500);
+            }
+          });
+        }
+      } catch (error) {
+        // Capacitor not available or App plugin not installed, that's okay
+        console.debug('Capacitor App plugin not available, using web visibility API only');
+      }
+    };
+
+    setupAppStateListener();
+
+    // Start periodic refresh
+    startPeriodicRefresh();
+
+    // Cleanup
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      if (visibilityTimeout) {
+        clearTimeout(visibilityTimeout);
+      }
+      if (appStateListener) {
+        appStateListener.remove();
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [refreshMMPFiles]);
 
   useEffect(() => {
     let channel: any = null;
@@ -660,23 +774,71 @@ export const useMMPProvider = () => {
     }
   };
 
-  const deleteMMP = (id: string) => {
-    // Soft delete in DB and local state
-    const deletedAt = new Date().toISOString();
-    setMMPFiles((prev: MMPFile[]) =>
-      prev.map((mmp) => (mmp.id === id ? { ...mmp, status: 'deleted', deletedAt } : mmp))
-    );
-
+  const deleteMMP = async (id: string) => {
     try {
-      supabase
+      // First, get all site entries for this MMP that have wallet transactions
+      const { data: siteEntries, error: sitesError } = await supabase
+        .from('mmp_site_entries')
+        .select('id, accepted_by, cost, enumerator_fee, transport_fee')
+        .eq('mmp_file_id', id)
+        .not('accepted_by', 'is', null);
+
+      if (sitesError) {
+        console.error('Error fetching site entries for MMP deletion:', sitesError);
+      }
+
+      // Reverse wallet transactions for each site entry
+      if (siteEntries && siteEntries.length > 0) {
+        for (const site of siteEntries) {
+          const totalAmount = (site.cost || 0) + (site.enumerator_fee || 0) + (site.transport_fee || 0);
+          if (totalAmount > 0 && site.accepted_by) {
+            // Create a reversal transaction
+            const { data: wallet } = await supabase
+              .from('wallets')
+              .select('id')
+              .eq('user_id', site.accepted_by)
+              .single();
+
+            if (wallet) {
+              await supabase
+                .from('wallet_transactions')
+                .insert({
+                  user_id: site.accepted_by,
+                  wallet_id: wallet.id,
+                  amount: -totalAmount, // Negative amount to reverse
+                  amount_cents: -totalAmount * 100,
+                  currency: 'SDG',
+                  type: 'adjustment_debit', // Reversal type
+                  status: 'posted',
+                  memo: `MMP deletion reversal - Site: ${site.id}`,
+                  related_site_visit_id: site.id,
+                  posted_at: new Date().toISOString(),
+                });
+            }
+          }
+        }
+      }
+
+      // Soft delete the MMP
+      const deletedAt = new Date().toISOString();
+      setMMPFiles((prev: MMPFile[]) =>
+        prev.map((mmp) => (mmp.id === id ? { ...mmp, status: 'deleted', deletedAt } : mmp))
+      );
+
+      const { error } = await supabase
         .from('mmp_files')
         .update({ status: 'deleted', deleted_at: deletedAt })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Supabase delete (soft) error:', error);
-        });
+        .eq('id', id);
+
+      if (error) {
+        console.error('Supabase delete (soft) error:', error);
+        throw error;
+      }
+
+      return true;
     } catch (e) {
-      console.error('Failed to persist deleteMMP:', e);
+      console.error('Failed to delete MMP:', e);
+      return false;
     }
   };
 

@@ -319,13 +319,17 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           return role === 'fom' || role === 'supervisor';
         });
         const rows = recipients.map(r => ({
-          user_id: r.id,
-          title: 'Permit uploaded',
-          message: `${mmpFile?.name || 'MMP'} has a new permit uploaded`,
-          type: 'info',
-          link: `/mmp/${mmpId}`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile'
+          recipient_id: r.id,
+          title_en: 'Permit uploaded',
+          title_ar: 'تم رفع التصريح',
+          message_en: `${mmpFile?.name || 'MMP'} has a new permit uploaded`,
+          message_ar: `تم رفع تصريح جديد لـ ${mmpFile?.name || 'خطة المراقبة الشهرية'}`,
+          event_type: 'system',
+          entity_id: mmpId,
+          entity_type: 'mmpFile',
+          action_url: `/mmp/${mmpId}`,
+          priority: 'normal',
+          status: 'pending'
         }));
         if (rows.length) await insertNotifications(rows);
 
@@ -374,13 +378,17 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           const key2 = `${c.stateId}|`;
           return targetPairs.has(key1) || targetPairs.has(key2);
         }).map(c => ({
-          user_id: c.id,
-          title: 'Sites shared for CP review',
-          message: `${mmpFile?.name || 'MMP'} sites have been shared for your review`,
-          type: 'info',
-          link: `/mmp/${mmpId}`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile'
+          recipient_id: c.id,
+          title_en: 'Sites shared for CP review',
+          title_ar: 'تم مشاركة المواقع لمراجعة CP',
+          message_en: `${mmpFile?.name || 'MMP'} sites have been shared for your review`,
+          message_ar: `تم مشاركة مواقع ${mmpFile?.name || 'خطة المراقبة الشهرية'} لمراجعتك`,
+          event_type: 'assignments',
+          entity_id: mmpId,
+          entity_type: 'mmpFile',
+          action_url: `/mmp/${mmpId}`,
+          priority: 'normal',
+          status: 'pending'
         }));
 
         if (coordRows.length) await insertNotifications(coordRows);

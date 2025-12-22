@@ -72,39 +72,61 @@ export async function clearForwardedWorkflow(mmpId: string) {
   if (updateError) throw updateError;
 }
 
-// Insert notifications helper - maps to actual DB schema (supports both extended and simple columns)
+// Insert notifications helper - maps to actual DB schema
+// PREFERRED: Use new column names (recipient_id, title_en, title_ar, message_en, message_ar, event_type, etc.)
+// DEPRECATED: Old column names (user_id, title, message, type, link) are still supported for backward compatibility
 export async function insertNotifications(rows: any[]) {
   if (!rows?.length) return;
+  
   // Database has extended columns: recipient_id, title_en, title_ar, message_en, message_ar, 
   // event_type, entity_id, entity_type, action_url, priority, status, etc.
-  // Also has simple columns: user_id, title, message, type, link, related_entity_id, related_entity_type
-  // We'll populate both sets to ensure compatibility
+  // Also has legacy columns: user_id, title, message, type, link, related_entity_id, related_entity_type
+  // We'll populate both sets to ensure compatibility during migration period
+  
   const sanitizedRows = rows.map(row => {
+    // Extract values, preferring new column names
     const recipientId = row.recipient_id || row.user_id;
     const titleEn = row.title_en || row.title || '';
-    const titleAr = row.title_ar || row.title || '';
+    const titleAr = row.title_ar || row.title || titleEn; // Fallback to English if Arabic not provided
     const messageEn = row.message_en || row.message || '';
-    const messageAr = row.message_ar || row.message || '';
+    const messageAr = row.message_ar || row.message || messageEn; // Fallback to English if Arabic not provided
     const eventType = row.event_type || row.type || 'system';
     const entityId = row.entity_id || row.related_entity_id || null;
     const entityType = row.entity_type || row.related_entity_type || null;
     const actionUrl = row.action_url || row.link || null;
-    const priority = row.priority || 'normal';
+    const priority = row.priority || (row.type === 'error' ? 'urgent' : row.type === 'warning' ? 'high' : 'normal');
     
-    // Map event_type to type for simple columns (info, success, warning, error)
+    // Warn if using deprecated columns
+    if (row.user_id && !row.recipient_id) {
+      console.warn('[insertNotifications] Using deprecated column "user_id". Please use "recipient_id" instead.');
+    }
+    if (row.title && !row.title_en) {
+      console.warn('[insertNotifications] Using deprecated column "title". Please use "title_en" and "title_ar" instead.');
+    }
+    if (row.message && !row.message_en) {
+      console.warn('[insertNotifications] Using deprecated column "message". Please use "message_en" and "message_ar" instead.');
+    }
+    if (row.link && !row.action_url) {
+      console.warn('[insertNotifications] Using deprecated column "link". Please use "action_url" instead.');
+    }
+    if (row.type && !row.event_type) {
+      console.warn('[insertNotifications] Using deprecated column "type". Please use "event_type" instead.');
+    }
+    
+    // Map event_type to type for legacy columns (info, success, warning, error)
     let type = 'info';
     if (row.type && ['info', 'success', 'warning', 'error'].includes(row.type)) {
       type = row.type;
-    } else if (row.priority === 'urgent') {
+    } else if (priority === 'urgent') {
       type = 'error';
-    } else if (row.priority === 'high') {
+    } else if (priority === 'high') {
       type = 'warning';
-    } else if (row.event_type === 'system') {
+    } else if (eventType === 'system') {
       type = 'info';
     }
     
     return {
-      // Extended columns (primary)
+      // New columns (primary) - REQUIRED
       recipient_id: recipientId,
       title_en: titleEn,
       title_ar: titleAr,
@@ -116,10 +138,10 @@ export async function insertNotifications(rows: any[]) {
       action_url: actionUrl,
       priority: priority,
       status: row.status || 'pending',
-      // Simple columns (for backward compatibility)
+      // Legacy columns (for backward compatibility during migration)
       user_id: recipientId,
-      title: titleEn, // Use English title for simple column
-      message: messageEn, // Use English message for simple column
+      title: titleEn, // Use English title for legacy column
+      message: messageEn, // Use English message for legacy column
       type: type,
       link: actionUrl,
       related_entity_id: entityId,

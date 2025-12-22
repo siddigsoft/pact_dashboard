@@ -29,8 +29,11 @@ import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useSettings } from '@/context/settings/SettingsContext';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useWallet } from '@/context/wallet/WalletContext';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
-import { getWorkflowMenuGroups } from '@/navigation/menu';
+import { getWorkflowMenuGroups, MenuGroup } from '@/navigation/menu';
 import { syncManager } from '@/lib/sync-manager';
 import { getOfflineStats } from '@/lib/offline-db';
 import { hapticPresets } from '@/lib/haptics';
@@ -50,11 +53,14 @@ const MobileAppHeader = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, logout } = useUser() || {};
+  const { currentUser, logout, refreshUsers } = useUser() || {};
   const { currentUser: appUser, roles } = useAppContext() || {};
   const { checkPermission = () => false, hasAnyRole = () => false, canManageRoles = () => false } = useAuthorization() || {};
   const { isSuperAdmin = false } = useSuperAdmin() || {};
   const { userSettings } = useSettings() || {};
+  const { refreshMMPFiles } = useMMP();
+  const { refreshSiteVisits } = useSiteVisitContext();
+  const { refreshWallet } = useWallet();
   const [open, setOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -103,13 +109,34 @@ const MobileAppHeader = ({
     hapticPresets.buttonPress();
     setIsSyncing(true);
     try {
-      await syncManager.forceSync();
+      // Global refresh: Refresh all contexts and sync data in parallel
+      await Promise.allSettled([
+        // Refresh all major contexts
+        refreshMMPFiles().catch(err => {
+          console.error('[Header] MMP refresh failed:', err);
+        }),
+        refreshSiteVisits?.().catch(err => {
+          console.error('[Header] Site visits refresh failed:', err);
+        }),
+        refreshUsers?.().catch(err => {
+          console.error('[Header] Users refresh failed:', err);
+        }),
+        refreshWallet?.().catch(err => {
+          console.error('[Header] Wallet refresh failed:', err);
+        }),
+        // Sync offline data and pending actions
+        syncManager.forceSync().catch(err => {
+          console.error('[Header] Sync manager failed:', err);
+        })
+      ]);
+      
+      console.log('[Header] Global refresh completed');
     } catch (error) {
-      console.error('[Header] Sync failed:', error);
+      console.error('[Header] Global refresh error:', error);
     } finally {
       setIsSyncing(false);
     }
-  }, [isOnline, isSyncing]);
+  }, [isOnline, isSyncing, refreshMMPFiles, refreshSiteVisits, refreshUsers, refreshWallet]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -168,116 +195,171 @@ const MobileAppHeader = ({
         const workflowGroups = getWorkflowMenuGroups(roles || [], appUser?.role || currentUser?.role || 'dataCollector', perms, isSuperAdmin, menuPrefs);
       
       // Add additional menu items from the "More" section
-      const additionalMenuGroups = [
+      // Note: These will be filtered to remove duplicates that already exist in workflowGroups
+      const additionalMenuGroups: MenuGroup[] = [
         {
           id: 'quick-access',
           label: 'Quick Access',
+          order: 1.25,
           items: [
-            { id: 'chat', icon: MessageSquare, title: 'Team Chat', url: '/chat' },
-            { id: 'notifications', icon: Bell, title: 'Notifications', url: '/notifications' },
-            { id: 'search', icon: Search, title: 'Global Search', url: '/search' },
-            { id: 'field-team', icon: Map, title: 'Field Team Map', url: '/field-team' },
+            { id: 'chat', icon: MessageSquare, title: 'Team Chat', url: '/chat', priority: 1 },
+            { id: 'notifications', icon: Bell, title: 'Notifications', url: '/notifications', priority: 2 },
+            { id: 'search', icon: Search, title: 'Global Search', url: '/search', priority: 3 },
+            { id: 'field-team', icon: Map, title: 'Field Team Map', url: '/field-team', priority: 4 },
           ]
         },
         {
           id: 'finance',
           label: 'Finance & Wallet',
+          order: 2.5,
           items: [
-            { id: 'wallet', icon: Wallet, title: 'My Wallet', url: '/wallet' },
+            { id: 'wallet', icon: Wallet, title: 'My Wallet', url: '/wallet', priority: 1 },
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'DataCollector', 'Coordinator', 'Supervisor']) ? [
-              { id: 'cost-submission', icon: Receipt, title: 'Submit Costs', url: '/cost-submission' }
+              { id: 'cost-submission', icon: Receipt, title: 'Submit Costs', url: '/cost-submission', priority: 2 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead']) ? [
-              { id: 'finance', icon: DollarSign, title: 'Finance Overview', url: '/finance' }
+              { id: 'finance', icon: DollarSign, title: 'Finance Overview', url: '/finance', priority: 3 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)']) ? [
-              { id: 'financial-ops', icon: TrendingUp, title: 'Financial Operations', url: '/financial-operations' }
+              { id: 'financial-ops', icon: TrendingUp, title: 'Financial Operations', url: '/financial-operations', priority: 4 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead']) ? [
-              { id: 'budget', icon: Banknote, title: 'Budget', url: '/budget' }
+              { id: 'budget', icon: Banknote, title: 'Budget', url: '/budget', priority: 5 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin']) ? [
-              { id: 'admin-wallets', icon: CreditCard, title: 'Admin Wallets', url: '/admin/wallets' }
+              { id: 'admin-wallets', icon: CreditCard, title: 'Admin Wallets', url: '/admin/wallets', priority: 6 }
             ] : []),
           ]
         },
         ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'Supervisor', 'ProjectManager', 'SeniorOperationsLead']) ? [{
           id: 'approvals',
           label: 'Approvals',
+          order: 2.75,
           items: [
-            { id: 'withdrawal-approval', icon: CheckCircle, title: 'Supervisor Approval', url: '/withdrawal-approval' },
+            { id: 'withdrawal-approval', icon: CheckCircle, title: 'Supervisor Approval', url: '/withdrawal-approval', priority: 1 },
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin']) ? [
-              { id: 'finance-approval', icon: CreditCard, title: 'Finance Approval', url: '/finance-approval' }
+              { id: 'finance-approval', icon: CreditCard, title: 'Finance Approval', url: '/finance-approval', priority: 2 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'SeniorOperationsLead']) ? [
-              { id: 'down-payment', icon: Banknote, title: 'Down Payment Approval', url: '/down-payment-approval' }
+              { id: 'down-payment', icon: Banknote, title: 'Down Payment Approval', url: '/down-payment-approval', priority: 3 }
             ] : []),
           ]
         }] : []),
         ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead', 'Supervisor']) ? [{
           id: 'team',
           label: 'Team Management',
+          order: 3.5,
           items: [
-            { id: 'users', icon: Users, title: 'Team Members', url: '/users' },
+            { id: 'users', icon: Users, title: 'Team Members', url: '/users', priority: 1 },
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT']) ? [
-              { id: 'role-management', icon: UserCog, title: 'Role Management', url: '/role-management' }
+              { id: 'role-management', icon: UserCog, title: 'Role Management', url: '/role-management', priority: 2 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'Field Operation Manager (FOM)']) ? [
-              { id: 'hub-operations', icon: Building2, title: 'Hub Operations', url: '/hub-operations' }
+              { id: 'hub-operations', icon: Building2, title: 'Hub Operations', url: '/hub-operations', priority: 3 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin']) ? [
-              { id: 'data-visibility', icon: Eye, title: 'Data Visibility', url: '/data-visibility' }
+              { id: 'data-visibility', icon: Eye, title: 'Data Visibility', url: '/data-visibility', priority: 4 }
             ] : []),
           ]
         }] : []),
         ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead', 'Supervisor', 'Reviewer']) ? [{
           id: 'reports',
           label: 'Reports & Analytics',
+          order: 5.25,
           items: [
-            { id: 'reports', icon: BarChart, title: 'Reports', url: '/reports' },
+            { id: 'reports', icon: BarChart, title: 'Reports', url: '/reports', priority: 1 },
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin']) ? [
-              { id: 'wallet-reports', icon: ClipboardList, title: 'Wallet Reports', url: '/wallet-reports' }
+              { id: 'wallet-reports', icon: ClipboardList, title: 'Wallet Reports', url: '/wallet-reports', priority: 2 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'Field Operation Manager (FOM)', 'Coordinator', 'ProjectManager']) ? [
-              { id: 'tracker-plan', icon: FileCheck, title: 'Tracker Plan', url: '/tracker-preparation-plan' }
+              { id: 'tracker-plan', icon: FileCheck, title: 'Tracker Plan', url: '/tracker-preparation-plan', priority: 3 }
             ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT']) ? [
-              { id: 'login-analytics', icon: Activity, title: 'Login Analytics', url: '/login-analytics' }
+              { id: 'login-analytics', icon: Activity, title: 'Login Analytics', url: '/login-analytics', priority: 4 }
             ] : []),
           ]
         }] : []),
         {
           id: 'tools',
           label: 'Tools',
+          order: 6.5,
           items: [
-            { id: 'calendar', icon: Calendar, title: 'Calendar', url: '/calendar' },
-            { id: 'signatures', icon: PenTool, title: 'Signatures', url: '/signatures' },
-            { id: 'calls', icon: Phone, title: 'Calls', url: '/calls' },
-            { id: 'advanced-map', icon: Globe, title: 'Advanced Map', url: '/advanced-map' },
+            { id: 'calendar', icon: Calendar, title: 'Calendar', url: '/calendar', priority: 1 },
+            { id: 'signatures', icon: PenTool, title: 'Signatures', url: '/signatures', priority: 2 },
+            { id: 'calls', icon: Phone, title: 'Calls', url: '/calls', priority: 3 },
+            { id: 'advanced-map', icon: Globe, title: 'Advanced Map', url: '/advanced-map', priority: 4 },
           ]
         },
         ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT']) ? [{
           id: 'admin',
           label: 'Administration',
+          order: 6.75,
           items: [
             ...(hasAnyRole(['SuperAdmin', 'Admin']) ? [
-              { id: 'classifications', icon: Database, title: 'Classifications', url: '/classifications' },
-              { id: 'audit', icon: Shield, title: 'Audit & Compliance', url: '/audit-compliance' }
+              { id: 'classifications', icon: Database, title: 'Classifications', url: '/classifications', priority: 1 },
+              { id: 'audit', icon: Shield, title: 'Audit & Compliance', url: '/audit-compliance', priority: 2 }
             ] : []),
           ]
         }] : []),
         {
           id: 'settings-section',
           label: 'Settings & Help',
+          order: 7,
           items: [
-            { id: 'app-settings', icon: SettingsIcon, title: 'Settings', url: '/settings' },
-            { id: 'help-docs', icon: HelpCircle, title: 'Help & Docs', url: '/documentation' },
+            { id: 'app-settings', icon: SettingsIcon, title: 'Settings', url: '/settings', priority: 1 },
+            { id: 'help-docs', icon: HelpCircle, title: 'Help & Docs', url: '/documentation', priority: 2 },
           ]
         },
       ];
 
-      // Merge workflow groups with additional groups
-      return [...workflowGroups, ...additionalMenuGroups];
+      // Merge workflow groups with additional groups, removing duplicates by URL
+      const allGroups: MenuGroup[] = [];
+      const existingUrls = new Set<string>();
+      
+      // First, add workflow groups and track their URLs
+      workflowGroups.forEach(group => {
+        const uniqueItems = group.items.filter(item => {
+          if (existingUrls.has(item.url)) {
+            console.log(`[MobileAppHeader] Skipping duplicate in workflow groups: ${item.title} (${item.url})`);
+            return false;
+          }
+          existingUrls.add(item.url);
+          return true;
+        });
+        
+        if (uniqueItems.length > 0) {
+          allGroups.push({
+            ...group,
+            items: uniqueItems
+          });
+        }
+      });
+      
+      // Then add additional groups, filtering out duplicates
+      additionalMenuGroups.forEach(additionalGroup => {
+        const filteredItems = additionalGroup.items.filter(item => {
+          if (existingUrls.has(item.url)) {
+            console.log(`[MobileAppHeader] Skipping duplicate in additional groups: ${item.title} (${item.url})`);
+            return false;
+          }
+          existingUrls.add(item.url);
+          return true;
+        });
+        
+        if (filteredItems.length > 0) {
+          allGroups.push({
+            ...additionalGroup,
+            items: filteredItems
+          });
+        }
+      });
+      
+      // Sort groups by order
+      allGroups.sort((a, b) => a.order - b.order);
+      
+      console.log(`[MobileAppHeader] Total menu groups: ${allGroups.length}, Total unique items: ${existingUrls.size}`);
+      
+      return allGroups;
       } catch (error) {
         console.error('[MobileAppHeader] Error generating menu groups:', error);
         return [{
