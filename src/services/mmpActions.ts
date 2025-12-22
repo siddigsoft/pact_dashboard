@@ -277,6 +277,39 @@ export async function forwardSitesToCoordinator(opts: {
     });
     await Promise.all(updates);
   }
+
+  // Update parent MMP status to reflect coordinator forwarding
+  if (mmpId) {
+    // Get the current workflow data to preserve existing fields
+    const { data: mmpData } = await supabase
+      .from('mmp_files')
+      .select('workflow')
+      .eq('id', mmpId)
+      .single();
+
+    const existingWorkflow = mmpData?.workflow || {};
+    const updatedWorkflow = {
+      ...existingWorkflow,
+      currentStage: 'forwarded_to_coordinator',
+      forwardedToCoordinatorAt: forwardedAt,
+      forwardedToCoordinatorBy: currentUserId || null,
+      lastCoordinatorId: coordinatorId,
+    };
+
+    const { error: mmpUpdateError } = await supabase
+      .from('mmp_files')
+      .update({
+        status: 'forwarded_to_coordinator',
+        workflow: updatedWorkflow,
+      })
+      .eq('id', mmpId);
+
+    if (mmpUpdateError) {
+      console.error('Failed to update parent MMP status:', mmpUpdateError);
+    } else {
+      console.log(`[MMP] Updated MMP ${mmpId} status to forwarded_to_coordinator`);
+    }
+  }
 }
 
 // Location data service helpers
