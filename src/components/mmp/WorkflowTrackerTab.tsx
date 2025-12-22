@@ -4,26 +4,199 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { ArrowRight, Clock, CheckCircle2, AlertCircle, RotateCcw, Users, MapPin, Calendar, Search } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ArrowRight, Clock, CheckCircle2, AlertCircle, RotateCcw, Users, MapPin, Calendar, Search, ChevronDown, ChevronRight, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
+
+interface StateBreakdown {
+  state: string;
+  totalSites: number;
+  verifiedSites: number;
+  pendingSites: number;
+  dispatchedSites: number;
+  status: 'pending' | 'in_progress' | 'verified' | 'completed';
+  coordinators: { id: string; name: string }[];
+  percentage: number;
+}
+
+function getStateBreakdown(mmp: any): StateBreakdown[] {
+  const siteEntries = mmp.siteEntries || [];
+  if (siteEntries.length === 0) return [];
+
+  const stateMap = new Map<string, StateBreakdown>();
+
+  siteEntries.forEach((entry: any) => {
+    const stateName = entry.state || entry.stateName || 'Unknown State';
+    
+    if (!stateMap.has(stateName)) {
+      stateMap.set(stateName, {
+        state: stateName,
+        totalSites: 0,
+        verifiedSites: 0,
+        pendingSites: 0,
+        dispatchedSites: 0,
+        status: 'pending',
+        coordinators: [],
+        percentage: 0,
+      });
+    }
+
+    const stateData = stateMap.get(stateName)!;
+    stateData.totalSites++;
+
+    const entryStatus = (entry.status || '').toLowerCase();
+    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'completed'];
+    const dispatchedStatuses = ['dispatched', 'in_progress', 'accepted'];
+
+    if (verifiedStatuses.includes(entryStatus)) {
+      stateData.verifiedSites++;
+    } else if (dispatchedStatuses.includes(entryStatus)) {
+      stateData.dispatchedSites++;
+    } else {
+      stateData.pendingSites++;
+    }
+
+    // Track coordinators for this state
+    const coordId = entry.additional_data?.assigned_to || entry.forwarded_to_user_id;
+    const coordName = entry.additional_data?.assigned_to_name || entry.coordinator_name;
+    if (coordId && !stateData.coordinators.find(c => c.id === coordId)) {
+      stateData.coordinators.push({ id: coordId, name: coordName || coordId.substring(0, 8) });
+    }
+  });
+
+  // Calculate status and percentage for each state
+  stateMap.forEach((data) => {
+    data.percentage = data.totalSites > 0 ? Math.round((data.verifiedSites / data.totalSites) * 100) : 0;
+    
+    if (data.verifiedSites === data.totalSites) {
+      data.status = 'completed';
+    } else if (data.verifiedSites > 0 || data.dispatchedSites > 0) {
+      data.status = 'in_progress';
+    } else if (data.dispatchedSites > 0) {
+      data.status = 'verified';
+    } else {
+      data.status = 'pending';
+    }
+  });
+
+  return Array.from(stateMap.values()).sort((a, b) => a.state.localeCompare(b.state));
+}
+
+function StateBreakdownSection({ breakdowns }: { breakdowns: StateBreakdown[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (breakdowns.length === 0) {
+    return (
+      <div className="text-xs text-muted-foreground flex items-center gap-1">
+        <Building2 className="h-3 w-3" />
+        No state data available
+      </div>
+    );
+  }
+
+  const statusColors: Record<string, string> = {
+    pending: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+    verified: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+    completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
+  };
+
+  const statusLabels: Record<string, string> = {
+    pending: 'Pending',
+    in_progress: 'In Progress',
+    verified: 'Verified',
+    completed: 'Completed',
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover-elevate rounded px-2 py-1 -mx-2 w-full" data-testid="trigger-state-breakdown">
+        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        <Building2 className="h-4 w-4" />
+        <span>State Breakdown</span>
+        <Badge variant="secondary" className="ml-auto">{breakdowns.length} states</Badge>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 space-y-2">
+        {breakdowns.map((stateData) => (
+          <div 
+            key={stateData.state} 
+            className="border rounded-md p-3 bg-muted/30"
+            data-testid={`state-breakdown-${stateData.state}`}
+          >
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium text-sm">{stateData.state}</span>
+              </div>
+              <Badge className={statusColors[stateData.status]}>
+                {statusLabels[stateData.status]}
+              </Badge>
+            </div>
+            
+            <div className="flex items-center gap-2 mb-2">
+              <Progress value={stateData.percentage} className="flex-1 h-1.5" />
+              <span className="text-xs text-muted-foreground w-20 text-right">
+                {stateData.verifiedSites}/{stateData.totalSites} verified
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="text-muted-foreground">
+                Sites: {stateData.totalSites}
+              </span>
+              {stateData.pendingSites > 0 && (
+                <Badge variant="outline" className="text-xs py-0">
+                  {stateData.pendingSites} pending
+                </Badge>
+              )}
+              {stateData.dispatchedSites > 0 && (
+                <Badge variant="outline" className="text-xs py-0 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">
+                  {stateData.dispatchedSites} dispatched
+                </Badge>
+              )}
+              {stateData.verifiedSites > 0 && (
+                <Badge variant="outline" className="text-xs py-0 border-green-300 text-green-700 dark:border-green-700 dark:text-green-300">
+                  {stateData.verifiedSites} verified
+                </Badge>
+              )}
+            </div>
+
+            {stateData.coordinators.length > 0 && (
+              <div className="mt-2 pt-2 border-t flex items-center gap-1 flex-wrap">
+                <Users className="h-3 w-3 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Coordinators:</span>
+                {stateData.coordinators.map((coord, idx) => (
+                  <Badge key={coord.id} variant="secondary" className="text-xs py-0">
+                    {coord.name}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 interface WorkflowTrackerTabProps {
   mmpFiles: any[];
   coordinators?: { id: string; name: string }[];
 }
 
-type WorkflowStage = 'new' | 'forwarded_to_fom' | 'forwarded_to_coordinators' | 'sites_verified' | 'completed' | 'recalled';
+type WorkflowStage = 'new' | 'forwarded_to_fom' | 'forwarded_to_coordinator' | 'forwarded_to_coordinators' | 'sites_verified' | 'completed' | 'recalled';
 
 const STAGE_CONFIG: Record<WorkflowStage, { label: string; color: string; icon: typeof Clock }> = {
   new: { label: 'New', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200', icon: Clock },
   forwarded_to_fom: { label: 'Forwarded to FOM', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', icon: ArrowRight },
+  forwarded_to_coordinator: { label: 'With Coordinators', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', icon: Users },
   forwarded_to_coordinators: { label: 'With Coordinators', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', icon: Users },
   sites_verified: { label: 'Sites Verified', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', icon: CheckCircle2 },
   completed: { label: 'Completed', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200', icon: CheckCircle2 },
   recalled: { label: 'Recalled', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', icon: RotateCcw },
 };
 
-const STAGE_ORDER: WorkflowStage[] = ['new', 'forwarded_to_fom', 'forwarded_to_coordinators', 'sites_verified', 'completed'];
+const STAGE_ORDER: WorkflowStage[] = ['new', 'forwarded_to_fom', 'forwarded_to_coordinator', 'sites_verified', 'completed'];
 
 function deriveWorkflowStage(mmp: any): WorkflowStage {
   const workflow = mmp.workflow || {};
@@ -38,8 +211,10 @@ function deriveWorkflowStage(mmp: any): WorkflowStage {
       'new': 'new',
       'forwarded_fom': 'forwarded_to_fom',
       'forwarded_to_fom': 'forwarded_to_fom',
-      'forwarded_coordinators': 'forwarded_to_coordinators',
-      'forwarded_to_coordinators': 'forwarded_to_coordinators',
+      'forwarded_coordinator': 'forwarded_to_coordinator',
+      'forwarded_to_coordinator': 'forwarded_to_coordinator',
+      'forwarded_coordinators': 'forwarded_to_coordinator',
+      'forwarded_to_coordinators': 'forwarded_to_coordinator',
       'sites_verified': 'sites_verified',
       'verified': 'sites_verified',
       'completed': 'completed',
@@ -47,6 +222,11 @@ function deriveWorkflowStage(mmp: any): WorkflowStage {
     if (stageMap[workflow.currentStage]) {
       return stageMap[workflow.currentStage];
     }
+  }
+  
+  // Check database status field as fallback
+  if (mmp.status === 'forwarded_to_coordinator') {
+    return 'forwarded_to_coordinator';
   }
   
   if (mmp.status === 'completed' || workflow.completedAt) {
@@ -202,6 +382,7 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
       derivedStage: deriveWorkflowStage(mmp),
       verificationProgress: getVerificationProgress(mmp),
       timeline: buildTimeline(mmp),
+      stateBreakdown: getStateBreakdown(mmp),
     }));
   }, [mmpFiles]);
 
@@ -388,6 +569,9 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
                       {mmp.verificationProgress.verified}/{mmp.verificationProgress.total}
                     </span>
                   </div>
+
+                  {/* State Breakdown Section */}
+                  <StateBreakdownSection breakdowns={mmp.stateBreakdown} />
                   
                   <div>
                     <span className="text-sm font-medium mb-1 block">Timeline</span>
