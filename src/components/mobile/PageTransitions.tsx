@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-type TransitionType = 'fade' | 'slide' | 'slideUp' | 'scale' | 'none';
+type TransitionType = 'fade' | 'slide' | 'slideUp' | 'scale' | 'bounce' | 'none';
 
 interface PageTransitionProps {
   children: React.ReactNode;
@@ -31,6 +31,11 @@ const variants = {
     animate: { scale: 1, opacity: 1 },
     exit: { scale: 0.95, opacity: 0 },
   },
+  bounce: {
+    initial: { scale: 0.3, opacity: 0 },
+    animate: { scale: 1, opacity: 1 },
+    exit: { scale: 0.3, opacity: 0 },
+  },
   none: {
     initial: {},
     animate: {},
@@ -43,8 +48,9 @@ const transitions = {
   slide: { type: 'spring', stiffness: 300, damping: 30 },
   slideUp: { type: 'spring', stiffness: 300, damping: 30 },
   scale: { duration: 0.2 },
+  bounce: { type: 'spring', stiffness: 500, damping: 10 },
   none: { duration: 0 },
-};
+} as const;
 
 export function PageTransition({ 
   children, 
