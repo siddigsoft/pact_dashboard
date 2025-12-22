@@ -217,6 +217,12 @@ function deriveWorkflowStage(mmp: any): WorkflowStage {
   }
   
   if (workflow.currentStage) {
+    // Normalize the stage string: lowercase, replace hyphens/spaces with underscores
+    const normalizedStage = String(workflow.currentStage)
+      .toLowerCase()
+      .replace(/[-\s]+/g, '_')
+      .trim();
+    
     const stageMap: Record<string, WorkflowStage> = {
       'new': 'new',
       'forwarded_fom': 'forwarded_to_fom',
@@ -225,12 +231,16 @@ function deriveWorkflowStage(mmp: any): WorkflowStage {
       'forwarded_to_coordinator': 'forwarded_to_coordinator',
       'forwarded_coordinators': 'forwarded_to_coordinator',
       'forwarded_to_coordinators': 'forwarded_to_coordinator',
+      'awaitingcoordinatorverification': 'forwarded_to_coordinator',
+      'awaiting_coordinator_verification': 'forwarded_to_coordinator',
+      'with_coordinators': 'forwarded_to_coordinator',
+      'coordinator': 'forwarded_to_coordinator',
       'sites_verified': 'sites_verified',
       'verified': 'sites_verified',
       'completed': 'completed',
     };
-    if (stageMap[workflow.currentStage]) {
-      return stageMap[workflow.currentStage];
+    if (stageMap[normalizedStage]) {
+      return stageMap[normalizedStage];
     }
   }
   
@@ -454,6 +464,96 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
     return counts;
   }, [enrichedMMPs]);
 
+  // Calculate coordinator workload summary
+  const coordinatorWorkload = useMemo(() => {
+    const workload: Record<string, { 
+      name: string; 
+      totalSites: number; 
+      verifiedSites: number; 
+      pendingSites: number;
+      mmpCount: number;
+      mmpNames: string[];
+    }> = {};
+
+    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
+
+    enrichedMMPs.forEach(mmp => {
+      const workflow = mmp.workflow || {};
+      const coordIds = workflow.forwardedToCoordinatorIds || [];
+      const coordNames = workflow.forwardedToCoordinatorNames || [];
+      const siteEntries = mmp.siteEntries || [];
+      
+      // Track which coordinators we've already counted this MMP for
+      const countedMmpForCoord = new Set<string>();
+      
+      coordIds.forEach((coordId: string, index: number) => {
+        if (!workload[coordId]) {
+          workload[coordId] = {
+            name: coordNames[index] || coordId,
+            totalSites: 0,
+            verifiedSites: 0,
+            pendingSites: 0,
+            mmpCount: 0,
+            mmpNames: []
+          };
+        }
+        
+        if (!countedMmpForCoord.has(coordId)) {
+          workload[coordId].mmpCount++;
+          workload[coordId].mmpNames.push(mmp.name || mmp.file_name || 'Unnamed');
+          countedMmpForCoord.add(coordId);
+        }
+      });
+      
+      // Count sites - check multiple sources for coordinator assignment
+      siteEntries.forEach((site: any) => {
+        // Get all possible coordinator IDs for this site
+        const siteCoordIds = new Set<string>();
+        
+        // Check direct assignment
+        if (site.forwarded_to_user_id) siteCoordIds.add(site.forwarded_to_user_id);
+        if (site.forwardedToUserId) siteCoordIds.add(site.forwardedToUserId);
+        
+        // Check additional_data.assigned_to
+        const additionalData = site.additional_data || site.additionalData || {};
+        if (additionalData.assigned_to) siteCoordIds.add(additionalData.assigned_to);
+        
+        // Check site-level workflow
+        const siteWorkflow = site.workflow || {};
+        if (Array.isArray(siteWorkflow.forwardedToCoordinatorIds)) {
+          siteWorkflow.forwardedToCoordinatorIds.forEach((id: string) => siteCoordIds.add(id));
+        }
+        
+        // If no specific assignment, use MMP-level coordinators
+        if (siteCoordIds.size === 0 && coordIds.length > 0) {
+          coordIds.forEach((id: string) => siteCoordIds.add(id));
+        }
+        
+        const isVerified = verifiedStatuses.includes(site.status?.toLowerCase());
+        
+        siteCoordIds.forEach(coordId => {
+          if (workload[coordId]) {
+            workload[coordId].totalSites++;
+            if (isVerified) {
+              workload[coordId].verifiedSites++;
+            } else {
+              workload[coordId].pendingSites++;
+            }
+          }
+        });
+      });
+    });
+
+    return Object.entries(workload).map(([id, data]) => ({ id, ...data }));
+  }, [enrichedMMPs]);
+
+  // Handler for coordinator card click - clears other filters for clarity
+  const handleCoordinatorClick = (coordId: string) => {
+    setStageFilter('all');
+    setSearchQuery('');
+    setCoordinatorFilter(coordinatorFilter === coordId ? 'all' : coordId);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3 items-center">
@@ -524,6 +624,61 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
           );
         })}
       </div>
+
+      {/* Coordinator Workload Summary */}
+      {coordinatorWorkload.length > 0 && (
+        <Card data-testid="card-coordinator-summary">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Coordinator Workload Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {coordinatorWorkload.map(coord => {
+                const verificationPct = coord.totalSites > 0 
+                  ? Math.round((coord.verifiedSites / coord.totalSites) * 100) 
+                  : 0;
+                return (
+                  <div 
+                    key={coord.id} 
+                    className="p-3 rounded-lg border bg-muted/30 cursor-pointer hover-elevate"
+                    onClick={() => handleCoordinatorClick(coord.id)}
+                    data-testid={`coordinator-summary-${coord.id}`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="font-medium text-sm truncate">{coord.name}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {coord.mmpCount} MMP{coord.mmpCount !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Sites:</span>
+                        <span className="font-medium">{coord.totalSites}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Verified:</span>
+                        <span className="font-medium text-green-600 dark:text-green-400">
+                          {coord.verifiedSites} ({verificationPct}%)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Pending:</span>
+                        <span className="font-medium text-amber-600 dark:text-amber-400">
+                          {coord.pendingSites}
+                        </span>
+                      </div>
+                      <Progress value={verificationPct} className="h-1.5 mt-1" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {filteredMMPs.length === 0 ? (
         <Card>
