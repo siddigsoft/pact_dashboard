@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
 import { useRealtimeWallet } from '@/hooks/use-realtime-wallet';
+import { supabase } from '@/integrations/supabase/client';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -73,10 +74,32 @@ const WalletPage = () => {
   // Real-time wallet updates
   const { lastRefresh } = useRealtimeWallet();
 
+  useEffect(() => {
+    if (currentUser?.id) {
+      fetchPaymentMethods();
+    }
+  }, [currentUser?.id]);
+
+  const fetchPaymentMethods = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('payment_methods')
+        .select('*')
+        .eq('user_id', currentUser?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPaymentMethods(data || []);
+    } catch (error) {
+      console.error('Error fetching payment methods:', error);
+    }
+  };
+
   const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [withdrawalReason, setWithdrawalReason] = useState('');
   const [withdrawalMethod, setWithdrawalMethod] = useState('');
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
@@ -440,15 +463,20 @@ const WalletPage = () => {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="method">Payment Method (Optional)</Label>
-                    <Input
-                      id="method"
-                      value={withdrawalMethod}
-                      onChange={(e) => setWithdrawalMethod(e.target.value)}
-                      placeholder="Bank transfer, Mobile money, etc."
-                      className="h-11"
-                      data-testid="input-withdrawal-method"
-                    />
+                    <Label htmlFor="method">Payment Method</Label>
+                    <Select value={withdrawalMethod} onValueChange={setWithdrawalMethod}>
+                      <SelectTrigger data-testid="select-withdrawal-method">
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentMethods.map((method) => (
+                          <SelectItem key={method.id} value={method.name}>
+                            {method.name} ({method.type.replace('_', ' ')})
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="other">Other (specify in reason)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="flex gap-3 justify-end pt-4 border-t border-purple-500/20">

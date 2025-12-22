@@ -40,6 +40,8 @@ import { StatePermitUpload } from '@/components/StatePermitUpload';
 import { DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
+import { useOffline } from '@/hooks/use-offline';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -353,6 +355,8 @@ const MMP = () => {
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+  const { startSiteVisit: startSiteVisitOffline, completeSiteVisit: completeSiteVisitOffline } = useOfflineSiteVisit();
+  const { queuePhotoUpload } = useOffline();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
@@ -634,13 +638,17 @@ const MMP = () => {
           const mmpName = site.mmp_name || site.mmpName || 'MMP';
           
           await insertNotifications([{
-            user_id: coordinatorId,
-            title: 'Site Sent Back for Editing',
-            message: `Site "${siteName}" from ${mmpName} has been sent back with comments: ${comments.trim().substring(0, 100)}${comments.length > 100 ? '...' : ''}`,
-            type: 'warning',
-            link: `/coordinator/sites`,
-            related_entity_id: site.id,
-            related_entity_type: 'mmpFile'
+            recipient_id: coordinatorId,
+            title_en: 'Site Sent Back for Editing',
+            title_ar: 'تم إرجاع الموقع للتحرير',
+            message_en: `Site "${siteName}" from ${mmpName} has been sent back with comments: ${comments.trim().substring(0, 100)}${comments.length > 100 ? '...' : ''}`,
+            message_ar: `تم إرجاع الموقع "${siteName}" من ${mmpName} مع تعليقات: ${comments.trim().substring(0, 100)}${comments.length > 100 ? '...' : ''}`,
+            event_type: 'approvals',
+            entity_id: site.id,
+            entity_type: 'mmpFile',
+            action_url: `/coordinator/sites`,
+            priority: 'high',
+            status: 'pending'
           }]);
         } catch (notifError) {
           // Log but don't fail the operation if notification fails
@@ -798,7 +806,69 @@ const MMP = () => {
       const site = selectedSiteForVisit;
       const now = new Date().toISOString();
       const siteStatus = site.status?.toLowerCase();
+      const isOnline = navigator.onLine;
 
+      // Get current location if available
+      let location: { lat: number; lng: number; accuracy?: number } | undefined;
+      try {
+        if (navigator.geolocation) {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 5000,
+              maximumAge: 0
+            });
+          });
+          location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          };
+        }
+      } catch (locationError) {
+        console.warn('[StartVisit] Could not get location:', locationError);
+        // Continue without location - it's optional
+      }
+
+      // If offline, use offline hook to save the visit start
+      if (!isOnline) {
+        console.log('[StartVisit] Offline mode - saving visit start locally');
+        
+        const result = await startSiteVisitOffline(
+          {
+            siteEntryId: site.id,
+            siteName: site.siteName || site.site_name || 'Unknown',
+            siteCode: site.siteCode || site.site_code || site.id,
+            state: site.state || '',
+            locality: site.locality || '',
+          },
+          {
+            siteEntryId: site.id,
+            userId: currentUser?.id || '',
+            location: location ? { lat: location.lat, lng: location.lng, accuracy: location.accuracy } : undefined
+          }
+        );
+
+        if (result.success) {
+          console.log('[StartVisit] Visit start saved offline, will sync when online');
+          
+          toast({
+            title: 'Visit Started (Offline)',
+            description: 'Visit has been started and will be synced when you are back online.',
+            variant: 'default'
+          });
+
+          // Close start dialog and open visit report dialog
+          setStartVisitDialogOpen(false);
+          setVisitReportDialogOpen(true);
+          setStartingVisit(false);
+          return;
+        } else {
+          throw new Error(result.error || 'Failed to save visit start offline');
+        }
+      }
+
+      // Online mode - proceed with database update
       // Build update object - using direct columns for visit tracking
       const updateData: any = {
         status: 'In Progress',
@@ -806,6 +876,14 @@ const MMP = () => {
         visit_started_at: now,
         visit_started_by: currentUser?.id
       };
+
+      // Add location to additional_data if available
+      if (location) {
+        updateData.additional_data = {
+          ...(site.additional_data || site.additionalData || {}),
+          start_location: location
+        };
+      }
 
       // If site was 'assigned' (not yet accepted), also set acceptance fields AND ensure fees are set
       if (siteStatus === 'assigned' && !site.accepted_by) {
@@ -896,6 +974,45 @@ const MMP = () => {
 
     } catch (error: any) {
       console.error('Failed to start visit:', error);
+      
+      // If online and error occurred, try offline fallback
+      if (navigator.onLine && error) {
+        console.log('[StartVisit] Online update failed, attempting offline save...');
+        try {
+          const site = selectedSiteForVisit;
+          const location: { lat: number; lng: number; accuracy?: number } | undefined = undefined;
+          
+          const result = await startSiteVisitOffline(
+            {
+              siteEntryId: site.id,
+              siteName: site.siteName || site.site_name || 'Unknown',
+              siteCode: site.siteCode || site.site_code || site.id,
+              state: site.state || '',
+              locality: site.locality || '',
+            },
+            {
+              siteEntryId: site.id,
+              userId: currentUser?.id || '',
+              location
+            }
+          );
+
+          if (result.success) {
+            toast({
+              title: 'Visit Started (Saved Offline)',
+              description: 'Visit has been started and will be synced when connection is restored.',
+              variant: 'default'
+            });
+            setStartVisitDialogOpen(false);
+            setVisitReportDialogOpen(true);
+            setStartingVisit(false);
+            return;
+          }
+        } catch (offlineError) {
+          console.error('[StartVisit] Offline fallback also failed:', offlineError);
+        }
+      }
+      
       toast({
         title: 'Visit Start Failed',
         description: error.message || 'Failed to start the site visit. Please try again.',
@@ -908,14 +1025,58 @@ const MMP = () => {
   // Handle completing a site visit
   const handleCompleteVisit = async (site: any) => {
     try {
+      const isOnline = navigator.onLine;
+      
       // Get final location
-      const location = await getCurrentLocation();
+      let location: { lat: number; lng: number; accuracy?: number } | undefined;
+      try {
+        const currentLocation = await getCurrentLocation();
+        location = {
+          lat: currentLocation.latitude,
+          lng: currentLocation.longitude,
+          accuracy: 10 // Default accuracy value
+        };
+      } catch (locationError) {
+        console.warn('[CompleteVisit] Could not get location:', locationError);
+        // Continue without location - it's optional
+      }
 
       const now = new Date().toISOString();
 
       // Stop location tracking
       stopLocationTracking(site.id);
 
+      // If offline, use offline hook to save completion
+      if (!isOnline) {
+        console.log('[CompleteVisit] Offline mode - saving visit completion locally');
+        
+        const result = await completeSiteVisitOffline({
+          siteEntryId: site.id,
+          userId: currentUser?.id || '',
+          location: location ? { lat: location.lat, lng: location.lng, accuracy: location.accuracy } : undefined,
+          notes: undefined, // Notes will be added in the report
+          photos: [] // Photos will be added in the report
+        });
+
+        if (result.success) {
+          console.log('[CompleteVisit] Visit completion saved offline, will sync when online');
+          
+          toast({
+            title: 'Visit Completed (Offline)',
+            description: 'Visit has been completed and will be synced when you are back online.',
+            variant: 'default'
+          });
+
+          // Set the site for visit report and open dialog
+          setSelectedSiteForVisit(site);
+          setVisitReportDialogOpen(true);
+          return;
+        } else {
+          throw new Error(result.error || 'Failed to save visit completion offline');
+        }
+      }
+
+      // Online mode - proceed with database update
       // Update site with visit completion time and final location (but don't change status yet)
       await supabase
         .from('mmp_site_entries')
@@ -931,17 +1092,19 @@ const MMP = () => {
         .eq('id', site.id);
 
       // Save final location to site_locations table
-      await supabase
-        .from('site_locations')
-        .insert({
-          site_id: site.id,
-          user_id: currentUser?.id || null,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          accuracy: 10, // Default accuracy value
-          notes: 'Visit end location',
-          recorded_at: now
-        });
+      if (location) {
+        await supabase
+          .from('site_locations')
+          .insert({
+            site_id: site.id,
+            user_id: currentUser?.id || null,
+            latitude: location.lat,
+            longitude: location.lng,
+            accuracy: location.accuracy || 10,
+            notes: 'Visit end location',
+            recorded_at: now
+          });
+      }
 
       // Process wallet payment for the user who completed the site entry
       try {
@@ -1066,6 +1229,37 @@ const MMP = () => {
 
     } catch (error: any) {
       console.error('Failed to complete visit:', error);
+      
+      // If online and error occurred, try offline fallback
+      if (navigator.onLine && error) {
+        console.log('[CompleteVisit] Online update failed, attempting offline save...');
+        try {
+          const site = selectedSiteForVisit;
+          const location: { lat: number; lng: number; accuracy?: number } | undefined = undefined;
+          
+          const result = await completeSiteVisitOffline({
+            siteEntryId: site.id,
+            userId: currentUser?.id || '',
+            location,
+            notes: undefined,
+            photos: []
+          });
+
+          if (result.success) {
+            toast({
+              title: 'Visit Completed (Saved Offline)',
+              description: 'Visit has been completed and will be synced when connection is restored.',
+              variant: 'default'
+            });
+            setSelectedSiteForVisit(site);
+            setVisitReportDialogOpen(true);
+            return;
+          }
+        } catch (offlineError) {
+          console.error('[CompleteVisit] Offline fallback also failed:', offlineError);
+        }
+      }
+      
       toast({
         title: 'Complete Visit Failed',
         description: error.message || 'Failed to complete the site visit. Please try again.',
@@ -1087,31 +1281,71 @@ const MMP = () => {
 
       const site = selectedSiteForVisit;
       const now = new Date().toISOString();
+      const isOnline = navigator.onLine;
 
-      // Upload photos to Supabase storage
-      console.log('📸 Uploading photos...');
+      // Upload photos to Supabase storage (or queue for offline)
+      console.log('📸 Processing photos...');
       const photoUrls: string[] = [];
-      for (const photo of reportData.photos) {
-        const fileName = `visit-photos/${site.id}/${Date.now()}-${photo.name}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('site-visit-photos')
-          .upload(fileName, photo);
+      
+      if (isOnline) {
+        // Online: Upload photos immediately
+        for (const photo of reportData.photos) {
+          const fileName = `visit-photos/${site.id}/${Date.now()}-${photo.name}`;
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('site-visit-photos')
+            .upload(fileName, photo);
 
-        if (uploadError) {
-          console.error('❌ Error uploading photo:', uploadError);
-          continue; // Continue with other photos
+          if (uploadError) {
+            console.error('❌ Error uploading photo:', uploadError);
+            // If upload fails, queue it for offline sync
+            try {
+              const reader = new FileReader();
+              reader.onloadend = async () => {
+                const base64Data = reader.result as string;
+                await queuePhotoUpload(site.id, base64Data, photo.name);
+              };
+              reader.readAsDataURL(photo);
+            } catch (queueError) {
+              console.error('Failed to queue photo for offline upload:', queueError);
+            }
+            continue;
+          }
+
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from('site-visit-photos')
+            .getPublicUrl(fileName);
+
+          if (urlData?.publicUrl) {
+            photoUrls.push(urlData.publicUrl);
+          }
         }
-
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from('site-visit-photos')
-          .getPublicUrl(fileName);
-
-        if (urlData?.publicUrl) {
-          photoUrls.push(urlData.publicUrl);
+        console.log('✅ Photos uploaded:', photoUrls.length);
+      } else {
+        // Offline: Queue all photos for upload
+        console.log('📸 Offline mode - queuing photos for upload...');
+        for (const photo of reportData.photos) {
+          try {
+            const reader = new FileReader();
+            await new Promise<void>((resolve, reject) => {
+              reader.onloadend = async () => {
+                try {
+                  const base64Data = reader.result as string;
+                  await queuePhotoUpload(site.id, base64Data, photo.name);
+                  resolve();
+                } catch (error) {
+                  reject(error);
+                }
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(photo);
+            });
+          } catch (queueError) {
+            console.error('Failed to queue photo for offline upload:', queueError);
+          }
         }
+        console.log(`✅ ${reportData.photos.length} photos queued for offline upload`);
       }
-      console.log('✅ Photos uploaded:', photoUrls.length);
 
       // Prepare coordinates in the format expected by the database (JSONB with latitude and longitude)
       const coordinatesJsonb = reportData.coordinates ? {
@@ -1120,52 +1354,116 @@ const MMP = () => {
         accuracy: reportData.coordinates.accuracy
       } : {};
 
-      // Save report to reports table
-      console.log('💾 Saving visit report to database...');
-      const { data: report, error: reportError } = await supabase
-        .from('reports')
-        .insert({
-          site_visit_id: site.id,
-          submitted_by: currentUser?.id || null,
-          activities: reportData.activities,
-          notes: reportData.notes || 'No additional notes provided',
-          duration_minutes: reportData.visitDuration,
-          coordinates: coordinatesJsonb,
-          submitted_at: now
-        })
-        .select()
-        .single();
+      let report: any = null;
 
-      if (reportError) {
-        console.error('❌ Report save error:', reportError);
-        throw reportError;
-      }
-      console.log('✅ Report saved with ID:', report.id);
+      if (isOnline) {
+        // Online: Save report to database immediately
+        console.log('💾 Saving visit report to database...');
+        const { data: savedReport, error: reportError } = await supabase
+          .from('reports')
+          .insert({
+            site_visit_id: site.id,
+            submitted_by: currentUser?.id || null,
+            activities: reportData.activities,
+            notes: reportData.notes || 'No additional notes provided',
+            duration_minutes: reportData.visitDuration,
+            coordinates: coordinatesJsonb,
+            submitted_at: now
+          })
+          .select()
+          .single();
 
-      // Link photos to report via report_photos table
-      if (photoUrls.length > 0) {
-        console.log('📎 Linking photos to report...');
-        const reportPhotos = photoUrls.map((photoUrl, index) => ({
-          report_id: report.id,
-          photo_url: photoUrl,
-          storage_path: null // Can be added if we track the storage path
-        }));
-
-        const { error: photosError } = await supabase
-          .from('report_photos')
-          .insert(reportPhotos);
-
-        if (photosError) {
-          console.error('❌ Error linking photos to report:', photosError);
-          // Don't throw - report is already created, just log the error
-        } else {
-          console.log('✅ Photos linked to report');
+        if (reportError) {
+          console.error('❌ Report save error:', reportError);
+          throw reportError;
         }
-      }
+        report = savedReport;
+        console.log('✅ Report saved with ID:', report.id);
 
-      // Generate PDF report
-      console.log('📄 Generating PDF report...');
-      await generateVisitReportPDF(site, reportData, report, photoUrls);
+        // Link photos to report via report_photos table
+        if (photoUrls.length > 0) {
+          console.log('📎 Linking photos to report...');
+          const reportPhotos = photoUrls.map((photoUrl, index) => ({
+            report_id: report.id,
+            photo_url: photoUrl,
+            storage_path: null // Can be added if we track the storage path
+          }));
+
+          const { error: photosError } = await supabase
+            .from('report_photos')
+            .insert(reportPhotos);
+
+          if (photosError) {
+            console.error('❌ Error linking photos to report:', photosError);
+            // Don't throw - report is already created, just log the error
+          } else {
+            console.log('✅ Photos linked to report');
+          }
+        }
+
+        // Generate PDF report
+        console.log('📄 Generating PDF report...');
+        await generateVisitReportPDF(site, reportData, report, photoUrls);
+      } else {
+        // Offline: Queue report submission and save completed visit to offline DB
+        console.log('💾 Offline mode - queuing report submission...');
+        const { addPendingSync, saveSiteVisitOffline, getOfflineSiteVisit, updateSiteVisitOffline } = await import('@/lib/offline-db');
+        
+        // Queue sync action
+        await addPendingSync({
+          type: 'site_visit_complete',
+          payload: {
+            siteEntryId: site.id,
+            userId: currentUser?.id || null,
+            completedAt: now,
+            location: reportData.coordinates ? {
+              lat: reportData.coordinates.latitude,
+              lng: reportData.coordinates.longitude,
+              accuracy: reportData.coordinates.accuracy
+            } : undefined,
+            notes: reportData.notes || 'No additional notes provided',
+            photos: [], // Photos are queued separately
+            visitReport: {
+              activities: reportData.activities,
+              durationMinutes: reportData.visitDuration,
+              coordinates: coordinatesJsonb,
+              submittedAt: now
+            }
+          }
+        });
+
+        // Save/update offline site visit as completed but not synced
+        const existingOfflineVisit = await getOfflineSiteVisit(site.id);
+        if (existingOfflineVisit) {
+          await updateSiteVisitOffline(existingOfflineVisit.id, {
+            status: 'completed',
+            completedAt: now,
+            notes: reportData.notes || 'No additional notes provided',
+            synced: false // Mark as unsynced so it appears in Outbox
+          });
+        } else {
+          // Create new offline visit record for completed visit
+          const visitId = await saveSiteVisitOffline({
+            siteEntryId: site.id,
+            siteName: site.siteName || site.site_name || 'Unknown',
+            siteCode: site.siteCode || site.site_code || site.id,
+            state: site.state || '',
+            locality: site.locality || '',
+            status: 'completed',
+            startedAt: site.visit_started_at || now,
+            completedAt: now,
+            endLocation: reportData.coordinates ? {
+              lat: reportData.coordinates.latitude,
+              lng: reportData.coordinates.longitude,
+              accuracy: reportData.coordinates.accuracy
+            } : undefined,
+            notes: reportData.notes || 'No additional notes provided'
+          });
+          // Ensure it's marked as unsynced (saveSiteVisitOffline sets synced: false by default)
+        }
+        
+        console.log('✅ Report queued for offline submission and saved to offline DB');
+      }
 
       // Save GPS coordinates to Sites Registry (if coordinates were captured and site has valid ID)
       const siteEntryId = site.id || site.siteId || site.entry_id;
@@ -1220,46 +1518,59 @@ const MMP = () => {
       }
 
       // Update site status to 'Completed' and save report info
-      console.log('🔄 Updating site status to Completed...');
-      const { data: updateData, error: updateError } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          status: 'Completed',
-          additional_data: {
-            ...(site.additional_data || {}),
-            visit_report_submitted: true,
-            visit_report_id: report.id,
-            visit_report_submitted_at: now
-          }
-        })
-        .eq('id', site.id)
-        .select();
+      if (isOnline) {
+        console.log('🔄 Updating site status to Completed...');
+        const { data: updateData, error: updateError } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            status: 'Completed',
+            additional_data: {
+              ...(site.additional_data || {}),
+              visit_report_submitted: true,
+              visit_report_id: report?.id || null,
+              visit_report_submitted_at: now
+            }
+          })
+          .eq('id', site.id)
+          .select();
 
-      if (updateError) {
-        console.error('❌ Site status update error:', updateError);
-        throw updateError;
-      }
-      console.log('✅ Site status updated to Completed:', updateData);
-
-      try {
-        console.log('💰 Reconciling wallet for completed site:', site.id);
-        const result = await reconcileSiteVisitFee(site.id);
-        if (result.success) {
-          toast({
-            title: 'Payment Added',
-            description: result.message,
-            variant: 'default'
-          });
-        } else {
-          console.warn('[Wallet] ' + result.message);
+        if (updateError) {
+          console.error('❌ Site status update error:', updateError);
+          throw updateError;
         }
-      } catch (walletErr) {
-        console.error('Wallet reconciliation error:', walletErr);
+        console.log('✅ Site status updated to Completed:', updateData);
+      } else {
+        // Offline: Site status update is already included in site_visit_complete sync
+        console.log('🔄 Offline mode - site status update included in completion sync');
+      }
+
+      // Wallet reconciliation (only when online)
+      if (isOnline) {
+        try {
+          console.log('💰 Reconciling wallet for completed site:', site.id);
+          const result = await reconcileSiteVisitFee(site.id);
+          if (result.success) {
+            toast({
+              title: 'Payment Added',
+              description: result.message,
+              variant: 'default'
+            });
+          } else {
+            console.warn('[Wallet] ' + result.message);
+          }
+        } catch (walletErr) {
+          console.error('Wallet reconciliation error:', walletErr);
+        }
+      } else {
+        // Wallet reconciliation will be handled when syncing site_visit_complete
+        console.log('💰 Wallet reconciliation will be processed when syncing completion');
       }
 
       toast({
-        title: 'Visit Report Submitted',
-        description: 'Visit report has been submitted successfully and site visit is now completed.',
+        title: isOnline ? 'Visit Report Submitted' : 'Visit Report Saved (Offline)',
+        description: isOnline 
+          ? 'Visit report has been submitted successfully and site visit is now completed.'
+          : 'Visit report has been saved and will be submitted when you are back online.',
         variant: 'default'
       });
 
@@ -1268,10 +1579,37 @@ const MMP = () => {
       setSelectedSiteForVisit(null);
       setSubmittingReport(false);
 
-      // Reload enumerator data immediately instead of full page reload
+        // Reload enumerator data immediately instead of full page reload
       if (canClaimSites && currentUser?.id) {
         console.log('🔄 Reloading enumerator data after visit completion...');
         try {
+          // Reload unsynced completed visits (for Outbox)
+          if (!isOnline) {
+            const { getUnsyncedSiteVisits } = await import('@/lib/offline-db');
+            const unsyncedVisits = await getUnsyncedSiteVisits();
+            const completedUnsynced = unsyncedVisits
+              .filter(v => v.status === 'completed' && !v.synced)
+              .map(visit => ({
+                id: visit.siteEntryId,
+                siteEntryId: visit.siteEntryId,
+                siteName: visit.siteName,
+                siteCode: visit.siteCode,
+                state: visit.state,
+                locality: visit.locality,
+                status: 'Completed',
+                completedAt: visit.completedAt,
+                accepted_by: currentUser.id,
+                additionalData: {
+                  offline_completed: true,
+                  offline_sync_pending: true,
+                  completed_at_offline: visit.completedAt,
+                  notes: visit.notes
+                },
+                _isOfflineVisit: true
+              }));
+            setUnsyncedCompletedVisits(completedUnsynced);
+          }
+
           // Load updated my sites data
           const { data: mySitesData, error: mySitesError } = await supabase
             .from('mmp_site_entries')
@@ -1311,6 +1649,78 @@ const MMP = () => {
 
     } catch (error: any) {
       console.error('❌ Failed to submit visit report:', error);
+      
+      // If online and error occurred, try offline fallback
+      if (navigator.onLine && error && selectedSiteForVisit) {
+        console.log('[SubmitReport] Online submission failed, attempting offline save...');
+        try {
+          const { addPendingSync } = await import('@/lib/offline-db');
+          const fallbackSite = selectedSiteForVisit;
+          
+          // Queue report submission using site_visit_complete type
+          await addPendingSync({
+            type: 'site_visit_complete',
+            payload: {
+              siteEntryId: fallbackSite.id,
+              userId: currentUser?.id || null,
+              completedAt: new Date().toISOString(),
+              location: reportData.coordinates ? {
+                lat: reportData.coordinates.latitude,
+                lng: reportData.coordinates.longitude,
+                accuracy: reportData.coordinates.accuracy
+              } : undefined,
+              notes: reportData.notes || 'No additional notes provided',
+              photos: [],
+              visitReport: {
+                activities: reportData.activities,
+                durationMinutes: reportData.visitDuration,
+                coordinates: reportData.coordinates ? {
+                  latitude: reportData.coordinates.latitude,
+                  longitude: reportData.coordinates.longitude,
+                  accuracy: reportData.coordinates.accuracy
+                } : {},
+                submittedAt: new Date().toISOString()
+              }
+            }
+          });
+          
+          // Queue photos
+          for (const photo of reportData.photos) {
+            try {
+              const reader = new FileReader();
+              await new Promise<void>((resolve, reject) => {
+                reader.onloadend = async () => {
+                  try {
+                    const base64Data = reader.result as string;
+                    await queuePhotoUpload(fallbackSite.id, base64Data, photo.name);
+                    resolve();
+                  } catch (err) {
+                    reject(err);
+                  }
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(photo);
+              });
+            } catch (queueError) {
+              console.error('Failed to queue photo:', queueError);
+            }
+          }
+          
+          toast({
+            title: 'Report Saved (Offline)',
+            description: 'Report has been saved and will be submitted when connection is restored.',
+            variant: 'default'
+          });
+          
+          setVisitReportDialogOpen(false);
+          setSelectedSiteForVisit(null);
+          setSubmittingReport(false);
+          return;
+        } catch (offlineError) {
+          console.error('[SubmitReport] Offline fallback also failed:', offlineError);
+        }
+      }
+      
       toast({
         title: 'Report Submission Failed',
         description: error.message || 'Failed to submit the visit report. Please try again.',
@@ -1429,6 +1839,7 @@ const MMP = () => {
   const [enumeratorGroupedByLocality, setEnumeratorGroupedByLocality] = useState<Record<string, any[]>>({});
   const [enumeratorSmartAssigned, setEnumeratorSmartAssigned] = useState<any[]>([]);
   const [enumeratorMySites, setEnumeratorMySites] = useState<any[]>([]);
+  const [unsyncedCompletedVisits, setUnsyncedCompletedVisits] = useState<any[]>([]);
 
   // Helper function to normalize role checking (handles both lowercase and proper case)
   const hasRole = (rolesToCheck: string[]) => {
@@ -1919,6 +2330,58 @@ const MMP = () => {
       loading: loading
     };
   }, [allSiteEntries, canClaimSites, currentUser?.id, currentUser?.stateId, currentUser?.localityId, formatSiteEntry, loading]);
+
+  // Load unsynced completed visits from offline DB
+  useEffect(() => {
+    const loadUnsyncedCompletedVisits = async () => {
+      if (!canClaimSites || !currentUser?.id) {
+        setUnsyncedCompletedVisits([]);
+        return;
+      }
+
+      try {
+        const { getUnsyncedSiteVisits } = await import('@/lib/offline-db');
+        const unsyncedVisits = await getUnsyncedSiteVisits();
+        
+        // Filter for completed visits only and map to site entry format
+        const completedUnsynced = unsyncedVisits
+          .filter(v => v.status === 'completed' && !v.synced)
+          .map(visit => ({
+            id: visit.siteEntryId,
+            siteEntryId: visit.siteEntryId,
+            siteName: visit.siteName,
+            siteCode: visit.siteCode,
+            state: visit.state,
+            locality: visit.locality,
+            status: 'Completed',
+            completedAt: visit.completedAt,
+            accepted_by: currentUser.id, // Assume it's for current user
+            additionalData: {
+              offline_completed: true,
+              offline_sync_pending: true,
+              completed_at_offline: visit.completedAt,
+              notes: visit.notes
+            },
+            _isOfflineVisit: true
+          }));
+
+        setUnsyncedCompletedVisits(completedUnsynced);
+      } catch (error) {
+        console.error('Failed to load unsynced completed visits:', error);
+        setUnsyncedCompletedVisits([]);
+      }
+    };
+
+    loadUnsyncedCompletedVisits();
+    
+    // Also reload when online status changes (to catch synced items)
+    const handleOnline = () => {
+      setTimeout(loadUnsyncedCompletedVisits, 2000); // Wait a bit for sync to complete
+    };
+    
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [canClaimSites, currentUser?.id]);
 
   // Set enumerator state from derived data
   useEffect(() => {
@@ -2750,11 +3213,10 @@ const MMP = () => {
       </div>
 
       {/* Body */}
-      <div className="bg-card rounded-xl shadow-lg border border-blue-100 dark:border-blue-900/30 p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-280px)]">
-        {loading ? (
-          <MMPTabsSkeleton />
-        ) : (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      {loading ? (
+        <MMPTabsSkeleton />
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="overflow-x-auto mb-6">
               <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1 min-h-[44px]">
                 {canClaimSites && (
@@ -3575,13 +4037,7 @@ const MMP = () => {
                           >
                             Outbox
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                return status === 'inprogress' || 
-                                       status.includes('ongoing') ||
-                                       status.includes('progress') ||
-                                       status.includes('started');
-                              }).length}
+                              {unsyncedCompletedVisits.length}
                             </Badge>
                           </Button>
                           <Button 
@@ -3594,7 +4050,12 @@ const MMP = () => {
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase();
-                                return status.includes('completed') || status.includes('finished') || status.includes('done');
+                                // Only count completed sites that are NOT in unsynced list (synced completed)
+                                const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
+                                if (!isCompleted) return false;
+                                // Exclude sites that are still unsynced in offline DB
+                                const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                                return !isUnsynced;
                               }).length}
                             </Badge>
                           </Button>
@@ -3606,7 +4067,10 @@ const MMP = () => {
                           >
                             Drafts
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.length}
+                              {enumeratorMySites.filter(site => {
+                                const status = (site.status || '').trim();
+                                return status.toLowerCase() === 'in progress';
+                              }).length}
                             </Badge>
                           </Button>
                       </div>
@@ -3771,7 +4235,7 @@ const MMP = () => {
                           {enumeratorSubTab === 'mySites' 
                             ? (mySitesSubTab === 'pending' ? 'Pending Visits' 
                                : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' 
-                               : mySitesSubTab === 'all' ? 'All My Sites'
+                               : mySitesSubTab === 'all' ? 'Drafts (In-Progress Visits)'
                                : 'Completed Sites')
                             : 'Smart Assigned Sites'
                           }
@@ -3781,10 +4245,10 @@ const MMP = () => {
                             ? (mySitesSubTab === 'pending' 
                                 ? 'Sites that have been accepted or smart assigned' 
                                 : mySitesSubTab === 'ongoing'
-                                ? 'Sites currently being visited or saved as drafts for offline access'
+                                ? 'Completed visits stored offline - will sync automatically when internet is available'
                                 : mySitesSubTab === 'all'
-                                ? 'All sites assigned to you regardless of status'
-                                : 'Sites that have been completed with submitted reports')
+                                ? 'In-progress site visits (drafts) - sites that have been started but not completed'
+                                : 'Completed visits that have been successfully submitted and synced')
                             : 'Sites assigned to your area that must be visited'
                           }
                         </p>
@@ -3806,18 +4270,19 @@ const MMP = () => {
                                          status.includes('assigned');
                                 }).length
                               : mySitesSubTab === 'ongoing'
-                              ? enumeratorMySites.filter(site => {
-                                  const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                  return status === 'inprogress' || 
-                                         status.includes('ongoing') ||
-                                         status.includes('progress') ||
-                                         status.includes('started');
-                                }).length
+                              ? unsyncedCompletedVisits.length
                               : mySitesSubTab === 'all'
-                              ? enumeratorMySites.length
+                              ? enumeratorMySites.filter(site => {
+                                  const status = (site.status || '').trim();
+                                  return status.toLowerCase() === 'in progress';
+                                }).length
                               : enumeratorMySites.filter(site => {
                                   const status = (site.status || '').toLowerCase();
-                                  return status.includes('completed') || status.includes('finished') || status.includes('done');
+                                  const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
+                                  if (!isCompleted) return false;
+                                  // Exclude unsynced completed visits
+                                  const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                                  return !isUnsynced;
                                 }).length)
                           : enumeratorSmartAssigned.length
                         } sites
@@ -3834,7 +4299,11 @@ const MMP = () => {
                       let sitesToShow: any[] = [];
                       if (enumeratorSubTab === 'mySites') {
                         if (mySitesSubTab === 'all') {
-                          sitesToShow = enumeratorMySites;
+                          // Drafts: Show only "In Progress" status site entries
+                          sitesToShow = enumeratorMySites.filter(site => {
+                            const status = (site.status || '').trim();
+                            return status.toLowerCase() === 'in progress';
+                          });
                         } else if (mySitesSubTab === 'pending') {
                           sitesToShow = enumeratorMySites.filter(site => {
                             const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
@@ -3850,17 +4319,17 @@ const MMP = () => {
                                    status.includes('assigned');
                           });
                         } else if (mySitesSubTab === 'ongoing') {
-                          sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                            return status === 'inprogress' || 
-                                   status.includes('ongoing') ||
-                                   status.includes('progress') ||
-                                   status.includes('started');
-                          });
+                          // Outbox: Show completed visits that are not yet synced (from offline DB)
+                          sitesToShow = unsyncedCompletedVisits;
                         } else {
+                          // Sent: Show completed visits that are synced (from DB, excluding unsynced offline visits)
                           sitesToShow = enumeratorMySites.filter(site => {
                             const status = (site.status || '').toLowerCase();
-                            return status.includes('completed') || status.includes('finished') || status.includes('done');
+                            const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
+                            if (!isCompleted) return false;
+                            // Exclude sites that are still unsynced in offline DB
+                            const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                            return !isUnsynced;
                           });
                         }
                       } else {
@@ -3875,9 +4344,9 @@ const MMP = () => {
                                 ? (mySitesSubTab === 'pending' 
                                     ? 'No pending visits found.' 
                                     : mySitesSubTab === 'ongoing'
-                                    ? 'No ongoing visits found.'
+                                    ? 'No completed visits waiting to sync. All visits have been submitted.'
                                     : mySitesSubTab === 'all'
-                                    ? 'No sites assigned to you yet. Check "Available Sites" to claim new sites.'
+                                    ? 'No in-progress site visits found. Start a visit to see it here.'
                                     : 'No completed sites found.')
                                 : 'No sites assigned to you yet.'
                               }
@@ -3891,7 +4360,14 @@ const MMP = () => {
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
                           onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
                           onStartVisit={handleStartVisit}
-                          onCompleteVisit={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing') ? handleCompleteVisit : undefined}
+                          onCompleteVisit={
+                            enumeratorSubTab === 'mySites' 
+                              && (mySitesSubTab === 'pending' 
+                                  || mySitesSubTab === 'ongoing' 
+                                  || mySitesSubTab === 'all')
+                              ? handleCompleteVisit 
+                              : undefined
+                          }
                           currentUserId={currentUser?.id}
                           showAcceptRejectForAssigned={enumeratorSubTab === 'smartAssigned'}
                           showVisitActions={true}
@@ -4033,7 +4509,6 @@ const MMP = () => {
             )}
           </Tabs>
         )}
-      </div>
       {(isAdmin || isICT) && (
         <>
         <BulkClearForwardedDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen} />
