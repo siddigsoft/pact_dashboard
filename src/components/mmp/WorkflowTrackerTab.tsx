@@ -45,14 +45,18 @@ function getStateBreakdown(mmp: any): StateBreakdown[] {
     stateData.totalSites++;
 
     const entryStatus = (entry.status || '').toLowerCase();
-    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'completed'];
-    const dispatchedStatuses = ['dispatched', 'in_progress', 'accepted'];
+    // Match the global getVerificationProgress logic for consistency
+    // Verified statuses = fully processed (same as global progress bar)
+    const verifiedStatuses = ['verified', 'approved', 'approved and costed', 'dispatched', 'completed'];
+    // In-progress statuses = work actively being done
+    const inProgressStatuses = ['in_progress', 'accepted'];
 
     if (verifiedStatuses.includes(entryStatus)) {
       stateData.verifiedSites++;
-    } else if (dispatchedStatuses.includes(entryStatus)) {
+    } else if (inProgressStatuses.includes(entryStatus)) {
       stateData.dispatchedSites++;
     } else {
+      // Pending, new, or unassigned entries
       stateData.pendingSites++;
     }
 
@@ -65,16 +69,22 @@ function getStateBreakdown(mmp: any): StateBreakdown[] {
   });
 
   // Calculate status and percentage for each state
+  // Percentage = verified sites / total (like the global progress)
   stateMap.forEach((data) => {
     data.percentage = data.totalSites > 0 ? Math.round((data.verifiedSites / data.totalSites) * 100) : 0;
     
-    if (data.verifiedSites === data.totalSites) {
+    // Determine status based on site distribution
+    if (data.verifiedSites === data.totalSites && data.totalSites > 0) {
+      // All sites verified
       data.status = 'completed';
-    } else if (data.verifiedSites > 0 || data.dispatchedSites > 0) {
-      data.status = 'in_progress';
-    } else if (data.dispatchedSites > 0) {
+    } else if (data.verifiedSites > 0) {
+      // Some verified, some still in progress
       data.status = 'verified';
+    } else if (data.dispatchedSites > 0) {
+      // Work has started but nothing verified yet
+      data.status = 'in_progress';
     } else {
+      // Nothing started
       data.status = 'pending';
     }
   });
@@ -321,12 +331,14 @@ function buildTimeline(mmp: any): { label: string; timestamp: Date | null; actor
 }
 
 function StageIndicator({ currentStage }: { currentStage: WorkflowStage }) {
-  const currentIndex = STAGE_ORDER.indexOf(currentStage === 'recalled' ? 'new' : currentStage);
+  // Normalize coordinator stages to the one in STAGE_ORDER
+  const normalizedStage = currentStage === 'forwarded_to_coordinators' ? 'forwarded_to_coordinator' : currentStage;
+  const currentIndex = STAGE_ORDER.indexOf(normalizedStage === 'recalled' ? 'new' : normalizedStage);
   
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {STAGE_ORDER.map((stage, index) => {
-        const isActive = currentStage === stage || (currentStage === 'recalled' && stage === 'new');
+        const isActive = normalizedStage === stage || (normalizedStage === 'recalled' && stage === 'new');
         const isPast = index < currentIndex;
         const config = STAGE_CONFIG[stage];
         
