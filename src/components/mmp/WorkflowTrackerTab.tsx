@@ -262,6 +262,22 @@ function deriveWorkflowStage(mmp: any): WorkflowStage {
     return 'sites_verified';
   }
   
+  // Check if any site entries have been forwarded to coordinators
+  // This catches cases where sites were forwarded but parent MMP workflow wasn't updated
+  const hasSitesForwardedToCoordinator = siteEntries.some((site: any) => {
+    const siteWorkflow = site.workflow || {};
+    const additionalData = site.additional_data || site.additionalData || {};
+    return (
+      site.forwarded_to_user_id ||
+      site.forwardedToUserId ||
+      additionalData.assigned_to ||
+      siteWorkflow.forwardedToCoordinatorIds?.length > 0
+    );
+  });
+  if (hasSitesForwardedToCoordinator) {
+    return 'forwarded_to_coordinator';
+  }
+  
   if (workflow.forwardedToCoordinatorIds?.length > 0 || workflow.forwardedToCoordinators?.length > 0) {
     return 'forwarded_to_coordinators';
   }
