@@ -39,6 +39,7 @@ export interface NotificationEmailOptions {
   actionLabel?: string;
   details?: Array<{ label: string; value: string }>;
   recipientRole?: { en: string; ar: string };
+  cc?: string[]; // CC recipients for email
 }
 
 /**
@@ -341,6 +342,7 @@ export const EmailNotificationService = {
           actionUrl: options.actionUrl,
           priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
           details: options.details,
+          cc: retryCount === 0 ? (options as any).cc : undefined, // Only include CC on first attempt
         },
       });
 
