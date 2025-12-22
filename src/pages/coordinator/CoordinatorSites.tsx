@@ -26,6 +26,8 @@ import { LocalityPermitStatus } from '@/types/coordinator-permits';
 import { PermitVerificationQuestions, PermitDecision } from '@/components/PermitVerificationQuestions';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { useGestures } from '@/hooks/use-gestures'; // Assuming this hook exists for swipe gestures
+import { useLocation } from '@/context/location/LocationContext';
+import { useCoordinatorSites, type SiteVisit } from './hooks/useCoordinatorSites';
 
 // Predefined options for dropdowns
 const HUB_OFFICE_OPTIONS = [
@@ -46,50 +48,10 @@ const SURVEY_TOOL_OPTIONS = [
   'Excel', 'Paper-based', 'Other'
 ];
 
-interface Hub {
-  id: string;
-  name: string;
-  description?: string;
-  is_active: boolean;
-}
+// Location types are now imported from LocationContext
+import type { Hub, State, Locality } from '@/context/location/LocationContext';
 
-interface State {
-  id: string;
-  name: string;
-  code: string;
-}
-
-interface Locality {
-  id: string;
-  name: string;
-  state_id: string;
-}
-
-interface SiteVisit {
-  id: string;
-  site_name: string;
-  site_code: string;
-  status: string;
-  state: string;
-  locality: string;
-  activity: string;
-  main_activity: string;
-  visit_date: string;
-  assigned_at: string;
-  comments: string;
-  mmp_file_id: string;
-  hub_office: string;
-  cp_name?: string;
-  activity_at_site?: string[];
-  monitoring_by?: string;
-  survey_tool?: string;
-  use_market_diversion?: boolean;
-  use_warehouse_monitoring?: boolean;
-  verified_at?: string;
-  verified_by?: string;
-  verification_notes?: string;
-  additional_data?: any;
-}
+// SiteVisit type is now imported from useCoordinatorSites hook
 
 interface SiteEditFormProps {
   site: SiteVisit;
@@ -439,35 +401,19 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
   );
 };
 
-interface SiteVisit {
-  id: string;
-  site_name: string;
-  site_code: string;
-  status: string;
-  state: string;
-  locality: string;
-  activity: string;
-  main_activity: string;
-  visit_date: string;
-  assigned_at: string;
-  comments: string;
-  mmp_file_id: string;
-  hub_office: string;
-  verified_at?: string;
-  verified_by?: string;
-  verification_notes?: string;
-  additional_data?: any;
-}
+// SiteVisit type is imported from useCoordinatorSites hook
 
 const CoordinatorSites: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles, loading: contextLoading } = useMMP();
+  const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles } = useMMP();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const siteVisitContext = useSiteVisitContext();
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
+  const { hubs, states, localities, hubStates, loading: loadingLocations } = useLocation();
+  const { coordinatorSites, loading: contextLoading } = useCoordinatorSites();
   const [localitiesData, setLocalitiesData] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('new');
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
@@ -571,12 +517,7 @@ const CoordinatorSites: React.FC = () => {
   // Sub-tab state for new sites categorization
   const [newSitesSubTab, setNewSitesSubTab] = useState('state_required');
 
-  // Database data for location dropdowns
-  const [hubs, setHubs] = useState<Hub[]>([]);
-  const [states, setStates] = useState<State[]>([]);
-  const [localities, setLocalities] = useState<Locality[]>([]);
-  const [hubStates, setHubStates] = useState<{ hub_id: string; state_id: string; state_name: string; state_code: string; }[]>([]);
-  const [loadingLocations, setLoadingLocations] = useState(true);
+  // Location data is now provided by LocationContext (removed local state)
 
   // Debounce search query
   useEffect(() => {
@@ -588,72 +529,7 @@ const CoordinatorSites: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Filter coordinator-specific sites from MMP context data
-  const coordinatorSites = useMemo(() => {
-    if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
-    
-    // Non-admin users with no project assignments should see nothing
-    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-      return [];
-    }
-
-    const allSites: SiteVisit[] = [];
-    
-    // Collect all site entries from context that are forwarded to this coordinator
-    contextMmpFiles.forEach((mmp: any) => {
-      if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
-      
-      mmp.siteEntries.forEach((entry: any) => {
-        // Filter by forwarded_to_user_id
-        if (entry.forwardedToUserId !== currentUser.id) return;
-        
-        // Exclude sites that have been returned to FOM
-        if (entry.status === 'returned_to_fom') return;
-        
-        // For non-admins, also check project membership
-        if (!isAdminOrSuperUser) {
-          const projectId = mmp.projectId;
-          if (!projectId || !userProjectIds.includes(projectId)) return;
-        }
-
-        // Transform entry to SiteVisit format
-        const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' || 
-                            entry.status === 'assigned' || entry.status === 'inProgress' || 
-                            entry.status === 'in_progress';
-        const visitDate = isUnverified ? null : entry.visitDate;
-
-        allSites.push({
-          id: entry.id,
-          site_name: entry.siteName || entry.site_name,
-          site_code: entry.siteCode || entry.site_code,
-          status: entry.status,
-          state: entry.state,
-          locality: entry.locality,
-          activity: entry.siteActivity || entry.activity_at_site || entry.mainActivity,
-          main_activity: entry.mainActivity || entry.main_activity,
-          activity_at_site: entry.siteActivity 
-            ? (typeof entry.siteActivity === 'string' ? entry.siteActivity.split(', ').filter(a => a.trim() !== '') : entry.siteActivity)
-            : [],
-          visit_date: visitDate,
-          assigned_at: entry.additionalData?.assigned_at || entry.additional_data?.assigned_at,
-          comments: entry.comments,
-          mmp_file_id: mmp.id,
-          hub_office: entry.hubOffice || entry.hub_office,
-          cp_name: entry.cpName || entry.cp_name,
-          monitoring_by: entry.monitoringBy || entry.monitoring_by,
-          survey_tool: entry.surveyTool || entry.survey_tool,
-          use_market_diversion: entry.useMarketDiversion ?? entry.use_market_diversion ?? false,
-          use_warehouse_monitoring: entry.useWarehouseMonitoring ?? entry.use_warehouse_monitoring ?? false,
-          verified_at: entry.verified_at,
-          verified_by: entry.verified_by,
-          verification_notes: entry.verification_notes,
-          additional_data: entry.additionalData || entry.additional_data || {},
-        });
-      });
-    });
-
-    return allSites;
-  }, [contextMmpFiles, contextLoading, currentUser?.id, userProjectIds, isAdminOrSuperUser]);
+  // Coordinator sites are now provided by useCoordinatorSites hook (following MMP.tsx pattern)
 
   // Filter sites by active tab status
   const sitesByTab = useMemo(() => {
@@ -768,74 +644,10 @@ const CoordinatorSites: React.FC = () => {
     return grouped;
   }, [filteredSites]);
 
-  // Fetch location data from database
-  useEffect(() => {
-    const fetchLocationData = async () => {
-      try {
-        setLoadingLocations(true);
-        
-        // Fetch hubs
-        const { data: hubsData, error: hubsError } = await supabase
-          .from('hubs')
-          .select('id, name, description, is_active')
-          .eq('is_active', true)
-          .order('name');
-        
-        if (hubsError) throw hubsError;
-        setHubs(hubsData || []);
-        
-        // Fetch hub_states for hub-state relationships
-        const { data: hubStatesData, error: hubStatesError } = await supabase
-          .from('hub_states')
-          .select('hub_id, state_id, state_name, state_code')
-          .order('state_name');
-        
-        if (hubStatesError) throw hubStatesError;
-        setHubStates(hubStatesData || []);
-        
-        // Fetch localities from sites_registry table (distinct localities)
-        const { data: localitiesData, error: localitiesError } = await supabase
-          .from('sites_registry')
-          .select('locality_id, locality_name, state_id')
-          .order('locality_name');
-        
-        if (localitiesError) throw localitiesError;
-        
-        // Convert to Locality interface format and remove duplicates
-        const uniqueLocalities: Locality[] = [];
-        const seen = new Set<string>();
-        
-        (localitiesData || []).forEach(loc => {
-          const key = `${loc.locality_id}-${loc.state_id}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniqueLocalities.push({
-              id: loc.locality_id,
-              name: loc.locality_name,
-              state_id: loc.state_id
-            });
-          }
-        });
-        
-        setLocalities(uniqueLocalities);
-        
-      } catch (error) {
-        console.error('Error fetching location data:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load location data. Please refresh the page.',
-          variant: 'destructive'
-        });
-      } finally {
-        setLoadingLocations(false);
-      }
-    };
+  // Location data is now provided by LocationContext (no need to fetch manually)
 
-    fetchLocationData();
-  }, [toast]);
-
-  // Calculate badge counts from coordinator sites
-  useEffect(() => {
+  // Calculate badge counts from coordinator sites (using useMemo like MMP.tsx pattern)
+  const badgeCounts = useMemo(() => {
     const newCount = coordinatorSites.filter((e: any) => 
       e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
     ).length;
@@ -855,13 +667,25 @@ const CoordinatorSites: React.FC = () => {
       e.status?.toLowerCase() === 'rejected'
     ).length;
 
-    setNewSitesCount(newCount);
-    setPermitsAttachedCount(permitsAttachedCount);
-    setVerifiedSitesCount(verifiedCount);
-    setApprovedSitesCount(approvedCount);
-    setCompletedSitesCount(completedCount);
-    setRejectedSitesCount(rejectedCount);
+    return {
+      new: newCount,
+      permitsAttached: permitsAttachedCount,
+      verified: verifiedCount,
+      approved: approvedCount,
+      completed: completedCount,
+      rejected: rejectedCount
+    };
   }, [coordinatorSites]);
+
+  // Sync badge counts to state (for backward compatibility with existing code)
+  useEffect(() => {
+    setNewSitesCount(badgeCounts.new);
+    setPermitsAttachedCount(badgeCounts.permitsAttached);
+    setVerifiedSitesCount(badgeCounts.verified);
+    setApprovedSitesCount(badgeCounts.approved);
+    setCompletedSitesCount(badgeCounts.completed);
+    setRejectedSitesCount(badgeCounts.rejected);
+  }, [badgeCounts]);
 
   // Reset search and pagination when tab changes
   useEffect(() => {
@@ -2856,7 +2680,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {contextLoading || permitsLoading ? (
+                  {contextLoading || permitsLoading || loadingLocations ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                       <p className="text-muted-foreground">Loading states...</p>
@@ -2903,7 +2727,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {contextLoading || permitsLoading ? (
+                  {contextLoading || permitsLoading || loadingLocations ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                       <p className="text-muted-foreground">Loading localities...</p>
