@@ -232,25 +232,26 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           console.log('[NotificationContext] User notifications:', userNotifications.length);
         }
         
-        // If admin, also fetch system notifications (MMP uploads, etc.)
+        // If admin, also fetch system and assignment notifications related to MMPs and site visits
+        // This includes: MMP uploads (system), MMP forwarded to FOM (assignments), etc.
         if (isAdmin) {
-          console.log('[NotificationContext] Admin user - fetching system notifications');
-          const { data: systemNotifications, error: systemError } = await supabase
+          console.log('[NotificationContext] Admin user - fetching admin-relevant notifications');
+          const { data: adminNotifications, error: adminError } = await supabase
             .from('notifications')
             .select('*')
-            .eq('event_type', 'system')
             .in('entity_type', ['mmpFile', 'siteVisit'])
+            .in('event_type', ['system', 'assignments', 'approvals'])
             .order('created_at', { ascending: false })
             .limit(50);
           
-          if (systemError) {
-            console.error('[NotificationContext] Error fetching system notifications:', systemError);
-          } else if (systemNotifications) {
-            console.log('[NotificationContext] System notifications:', systemNotifications.length);
+          if (adminError) {
+            console.error('[NotificationContext] Error fetching admin notifications:', adminError);
+          } else if (adminNotifications) {
+            console.log('[NotificationContext] Admin-relevant notifications:', adminNotifications.length);
             // Merge and deduplicate by ID
             const existingIds = new Set(allNotifications.map(n => n.id));
-            const newSystemNotifications = systemNotifications.filter(n => !existingIds.has(n.id));
-            allNotifications = [...allNotifications, ...newSystemNotifications];
+            const newAdminNotifications = adminNotifications.filter(n => !existingIds.has(n.id));
+            allNotifications = [...allNotifications, ...newAdminNotifications];
             // Sort by created_at descending
             allNotifications.sort((a, b) => 
               new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
