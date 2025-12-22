@@ -261,6 +261,38 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'Sites forwarded', description: `Forwarded sites to coordinators by locality` });
 
+        // Update parent MMP status to reflect coordinator forwarding
+        if (mmpId) {
+          const now = new Date().toISOString();
+          const { data: mmpData } = await supabase
+            .from('mmp_files')
+            .select('workflow')
+            .eq('id', mmpId)
+            .single();
+
+          const existingWorkflow = mmpData?.workflow || {};
+          const updatedWorkflow = {
+            ...existingWorkflow,
+            currentStage: 'forwarded_to_coordinator',
+            forwardedToCoordinatorAt: now,
+            lastUpdated: now,
+          };
+
+          const { error: mmpUpdateError } = await supabase
+            .from('mmp_files')
+            .update({
+              status: 'forwarded_to_coordinator',
+              workflow: updatedWorkflow,
+            })
+            .eq('id', mmpId);
+
+          if (mmpUpdateError) {
+            console.error('Failed to update parent MMP status:', mmpUpdateError);
+          } else {
+            console.log(`[MMP] Updated MMP ${mmpId} status to forwarded_to_coordinator`);
+          }
+        }
+
         // Notify hub supervisors for each group (coordinator emails already sent above)
         for (const group of siteGroups!) {
           const groupKey = `${group.stateId}|${group.localityId}`;
@@ -406,6 +438,38 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
         toast({ title: 'Sites forwarded', description: `Forwarded to ${ids.length} Coordinator(s)` });
 
+        // Update parent MMP status to reflect coordinator forwarding
+        if (mmpId) {
+          const now = new Date().toISOString();
+          const { data: mmpData } = await supabase
+            .from('mmp_files')
+            .select('workflow')
+            .eq('id', mmpId)
+            .single();
+
+          const existingWorkflow = mmpData?.workflow || {};
+          const updatedWorkflow = {
+            ...existingWorkflow,
+            currentStage: 'forwarded_to_coordinator',
+            forwardedToCoordinatorAt: now,
+            lastUpdated: now,
+          };
+
+          const { error: mmpUpdateError } = await supabase
+            .from('mmp_files')
+            .update({
+              status: 'forwarded_to_coordinator',
+              workflow: updatedWorkflow,
+            })
+            .eq('id', mmpId);
+
+          if (mmpUpdateError) {
+            console.error('Failed to update parent MMP status:', mmpUpdateError);
+          } else {
+            console.log(`[MMP] Updated MMP ${mmpId} status to forwarded_to_coordinator`);
+          }
+        }
+
         // Notify hub supervisors and send emails via NotificationTriggerService (backup)
         try {
           const firstCoord = coordinators.find(c => selected.has(c.id));
@@ -502,7 +566,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           }
         } catch {}
 
-        // Update workflow field
+        // Update workflow field AND status to reflect coordinator forwarding
         const { data: row } = await supabase
           .from('mmp_files')
           .select('workflow')
@@ -514,13 +578,18 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         const unique = Array.from(new Set([...list, ...ids]));
         const next = {
           ...wf,
-          currentStage: 'awaitingCoordinatorVerification',
+          currentStage: 'forwarded_to_coordinator',
           forwardedToCoordinatorIds: unique,
           forwardedToCoordinators: true,
+          forwardedToCoordinatorAt: now,
           forwardedAt: now,
           lastUpdated: now
         };
-        await supabase.from('mmp_files').update({ workflow: next }).eq('id', mmpId);
+        await supabase.from('mmp_files').update({ 
+          workflow: next,
+          status: 'forwarded_to_coordinator'
+        }).eq('id', mmpId);
+        console.log(`[MMP] Updated MMP ${mmpId} status to forwarded_to_coordinator`);
 
         toast({ title: 'MMP forwarded', description: `Forwarded to ${ids.length} Coordinator(s)` });
 
