@@ -153,6 +153,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           // Insert notifications for coordinators in this group
           const rows = coordinatorIds.map(uid => ({
             recipient_id: uid,
+            user_id: uid, // Also set for RLS policy compatibility
             title_en: 'Sites forwarded to you',
             title_ar: 'تم إرسال مواقع إليك',
             message_en: `${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) have been forwarded to you for verification`,
@@ -203,6 +204,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             if (forwarderId) {
               await supabase.from('notifications').insert({
                 recipient_id: forwarderId,
+                user_id: forwarderId, // Also set for RLS policy compatibility
                 title_en: 'Sites forwarded',
                 title_ar: 'تم إرسال المواقع',
                 message_en: `You forwarded ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) to ${coordinatorIds.length} Coordinator(s)`,
@@ -324,6 +326,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           if (forwarderId) {
             await supabase.from('notifications').insert({
               recipient_id: forwarderId,
+              user_id: forwarderId, // Also set for RLS policy compatibility
               title_en: 'Sites forwarded',
               title_ar: 'تم إرسال المواقع',
               message_en: `You forwarded ${siteNamesStr} to ${ids.length} Coordinator(s)`,
@@ -410,6 +413,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           if (forwarderId) {
             await supabase.from('notifications').insert({
               recipient_id: forwarderId,
+              user_id: forwarderId, // Also set for RLS policy compatibility
               title_en: 'MMP forwarded',
               title_ar: 'تم إرسال خطة المراقبة الشهرية',
               message_en: `You forwarded ${mmpName || 'MMP'} to ${ids.length} Coordinator(s)`,

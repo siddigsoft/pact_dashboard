@@ -139,22 +139,44 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Helper to map DB row to UI Notification (using correct schema column names)
   // Supports both old columns (title, message, link, related_entity_id/type) 
   // and new columns (title_en, message_en, action_url, entity_id/type)
-  const mapDbToNotification = useCallback((row: any): Notification => ({
-    id: row.id,
-    userId: row.recipient_id || row.user_id,
-    title: row.title_en || row.title || '',
-    message: row.message_en || row.message || '',
-    type: row.type || (row.status === 'read' ? 'success' : (row.priority === 'urgent' ? 'error' : 'info')),
-    isRead: row.is_read || !!row.read_at || row.status === 'read',
-    createdAt: row.created_at,
-    link: row.action_url || row.link || undefined,
-    relatedEntityId: row.entity_id || row.related_entity_id || undefined,
-    relatedEntityType: row.entity_type || row.related_entity_type || undefined,
-    category: row.event_type || undefined,
-    priority: row.priority || undefined,
-    targetRoles: row.recipient_role ? [row.recipient_role] : undefined,
-    projectId: undefined,
-  }), []);
+  const mapDbToNotification = useCallback((row: any): Notification => {
+    // Ensure we have a valid userId - prefer recipient_id, fallback to user_id
+    const userId = row.recipient_id || row.user_id;
+    
+    // Log if we have a notification with missing userId (shouldn't happen but helps debug)
+    if (!userId && row.id) {
+      console.warn('[NotificationContext] Notification missing userId:', row.id, {
+        recipient_id: row.recipient_id,
+        user_id: row.user_id,
+        title: row.title_en || row.title
+      });
+    }
+    
+    return {
+      id: row.id,
+      userId: userId,
+      title: row.title_en || row.title || '',
+      message: row.message_en || row.message || '',
+      // Map type: use row.type if present, otherwise derive from event_type or priority
+      // event_type 'success' should map to type 'success', not 'info'
+      type: row.type || 
+            (row.event_type === 'success' ? 'success' : 
+             row.event_type === 'error' ? 'error' :
+             row.status === 'read' ? 'success' : 
+             row.priority === 'urgent' ? 'error' : 
+             row.priority === 'high' ? 'warning' : 
+             'info'),
+      isRead: row.is_read || !!row.read_at || row.status === 'read',
+      createdAt: row.created_at,
+      link: row.action_url || row.link || undefined,
+      relatedEntityId: row.entity_id || row.related_entity_id || undefined,
+      relatedEntityType: row.entity_type || row.related_entity_type || undefined,
+      category: row.event_type || undefined,
+      priority: row.priority || undefined,
+      targetRoles: row.recipient_role ? [row.recipient_role] : undefined,
+      projectId: undefined,
+    };
+  }, []);
 
   // Filter notifications by user role and project
   const filterByRoleAndProject = useCallback((notification: Notification): boolean => {
@@ -187,23 +209,89 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       try {
         // Fetch notifications where recipient_id OR user_id matches current user
         // Database has both columns - recipient_id is the primary one in extended schema
-        const { data, error } = await supabase
+        console.log('[NotificationContext] Fetching notifications for user:', currentUserId);
+        console.log('[NotificationContext] Current user role:', currentUserRole);
+        
+        // If user is admin or super admin, also include system notifications (like MMP uploads)
+        const isAdmin = currentUserRole && ['admin', 'Admin', 'super_admin', 'superAdmin', 'SuperAdmin'].includes(currentUserRole);
+        
+        let allNotifications: any[] = [];
+        
+        // First, fetch user's own notifications
+        const { data: userNotifications, error: userError } = await supabase
           .from('notifications')
           .select('*')
           .or(`recipient_id.eq.${currentUserId},user_id.eq.${currentUserId}`)
           .order('created_at', { ascending: false })
           .limit(50);
+        
+        if (userError) {
+          console.error('[NotificationContext] Error fetching user notifications:', userError);
+        } else if (userNotifications) {
+          allNotifications = userNotifications;
+          console.log('[NotificationContext] User notifications:', userNotifications.length);
+        }
+        
+        // If admin, also fetch system notifications (MMP uploads, etc.)
+        if (isAdmin) {
+          console.log('[NotificationContext] Admin user - fetching system notifications');
+          const { data: systemNotifications, error: systemError } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('event_type', 'system')
+            .in('entity_type', ['mmpFile', 'siteVisit'])
+            .order('created_at', { ascending: false })
+            .limit(50);
+          
+          if (systemError) {
+            console.error('[NotificationContext] Error fetching system notifications:', systemError);
+          } else if (systemNotifications) {
+            console.log('[NotificationContext] System notifications:', systemNotifications.length);
+            // Merge and deduplicate by ID
+            const existingIds = new Set(allNotifications.map(n => n.id));
+            const newSystemNotifications = systemNotifications.filter(n => !existingIds.has(n.id));
+            allNotifications = [...allNotifications, ...newSystemNotifications];
+            // Sort by created_at descending
+            allNotifications.sort((a, b) => 
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+            // Limit to 50 total
+            allNotifications = allNotifications.slice(0, 50);
+          }
+        }
+        
+        const error = userError;
+        const data = allNotifications;
+        
+        console.log('[NotificationContext] Query result - error:', error);
+        console.log('[NotificationContext] Query result - data count:', data?.length || 0);
+        
         if (!cancelled) {
           if (error) {
-            console.warn('Failed to fetch notifications:', error);
+            console.error('[NotificationContext] Failed to fetch notifications:', error);
+            console.error('[NotificationContext] Error code:', error.code);
+            console.error('[NotificationContext] Error message:', error.message);
+            console.error('[NotificationContext] Error details:', error.details);
+            console.error('[NotificationContext] Error hint:', error.hint);
           } else if (data) {
+            console.log('[NotificationContext] Raw notifications fetched:', data.length);
+            console.log('[NotificationContext] Sample notification:', data[0]);
+            
             // Additional client-side filter as backup + role/project filtering
-            const filtered = data
-              .map(mapDbToNotification)
-              .filter(n => n.title !== 'Chat System Active')
-              .filter(filterByRoleAndProject);
+            const mapped = data.map(mapDbToNotification);
+            console.log('[NotificationContext] Mapped notifications:', mapped.length);
+            
+            const filteredOutChat = mapped.filter(n => n.title !== 'Chat System Active');
+            console.log('[NotificationContext] After filtering out chat:', filteredOutChat.length);
+            
+            const filtered = filteredOutChat.filter(filterByRoleAndProject);
+            console.log('[NotificationContext] After role/project filter:', filtered.length);
+            console.log('[NotificationContext] Final notifications to display:', filtered);
+            
             setAppNotifications(filtered);
             setLastRefresh(new Date());
+          } else {
+            console.warn('[NotificationContext] No data returned from query');
           }
         }
       } catch (err) {
@@ -370,6 +458,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       try {
         const { error } = await supabase.from('notifications').insert({
           recipient_id: notification.userId,
+          user_id: notification.userId, // Also set for RLS policy compatibility
           title_en: notification.title,
           title_ar: notification.title,
           message_en: notification.message,
