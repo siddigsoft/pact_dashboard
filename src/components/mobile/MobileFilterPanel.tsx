@@ -243,6 +243,8 @@ export function MobileFilterPanel({
                                 ? values[section.id] === option.id
                                 : ((values[section.id] as string[]) || []).includes(option.id);
 
+                              const toggleType: 'single' | 'multi' = section.type === 'single' ? 'single' : 'multi';
+
                               return (
                                 <button
                                   key={option.id}
@@ -252,7 +254,7 @@ export function MobileFilterPanel({
                                       ? "bg-black dark:bg-white text-white dark:text-black"
                                       : "bg-black/5 dark:bg-white/5 text-black dark:text-white"
                                   )}
-                                  onClick={() => handleOptionToggle(section.id, option.id, section.type === 'search' ? 'multi' : section.type)}
+                                  onClick={() => handleOptionToggle(section.id, option.id, toggleType)}
                                   data-testid={`filter-option-${option.id}`}
                                 >
                                   <div className="flex items-center gap-2">
