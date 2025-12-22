@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, UserPlus, UserMinus, X, Briefcase, Users } from 'lucide-react';
 import { 
   Project, 
@@ -9,6 +9,7 @@ import {
 import { User } from '@/types';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -60,12 +61,82 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>(
     project.team?.teamComposition || []
   );
+  const [userWorkloads, setUserWorkloads] = useState<Record<string, number>>({});
 
-  // Calculate current workload for each user
-  const calculateWorkload = (userId: string): number => {
-    // In a real app, you would calculate this based on assigned tasks, activities, etc.
-    // For this example, we'll use a random number between 0-100
-    return Math.floor(Math.random() * 100);
+  // Active statuses for workload calculation (non-terminal statuses)
+  const ACTIVE_SITE_VISIT_STATUSES = ['pending', 'scheduled', 'in_progress', 'assigned', 'dispatched', 'verification_pending'];
+  const ACTIVE_MMP_ENTRY_STATUSES = ['Pending', 'pending', 'in_progress', 'In Progress', 'dispatched', 'Dispatched', 'accepted', 'Accepted'];
+
+  // Derive stable ID lists for dependency tracking
+  const teamMemberIds = teamMembers.map(m => m.userId).sort().join(',');
+  const userIdList = users.map(u => u.id).sort().join(',');
+
+  // Fetch actual workload data for users based on their assigned site visits and MMP entries
+  const fetchUserWorkloads = useCallback(async () => {
+    try {
+      // Get all user IDs we need workloads for
+      const userIds = [...teamMembers.map(m => m.userId), ...users.map(u => u.id)];
+      const uniqueUserIds = [...new Set(userIds)];
+      
+      if (uniqueUserIds.length === 0) return;
+
+      // Fetch active site visits for these users
+      const [{ data: siteVisits, error: svError }, { data: mmpEntries, error: mmpError }] = await Promise.all([
+        supabase
+          .from('site_visits')
+          .select('assigned_to, status')
+          .in('assigned_to', uniqueUserIds)
+          .in('status', ACTIVE_SITE_VISIT_STATUSES),
+        supabase
+          .from('mmp_site_entries')
+          .select('forwarded_to_user_id, status')
+          .in('forwarded_to_user_id', uniqueUserIds)
+          .in('status', ACTIVE_MMP_ENTRY_STATUSES)
+      ]);
+
+      if (svError) console.warn('Error fetching site visits for workload:', svError);
+      if (mmpError) console.warn('Error fetching MMP entries for workload:', mmpError);
+
+      // Calculate workload per user
+      // Workload = (active tasks / max capacity) * 100
+      // Max capacity = 10 tasks for 100% workload
+      const MAX_CAPACITY = 10;
+      const workloads: Record<string, number> = {};
+
+      uniqueUserIds.forEach(userId => {
+        const svCount = (siteVisits || []).filter(sv => sv.assigned_to === userId).length;
+        const mmpCount = (mmpEntries || []).filter(e => e.forwarded_to_user_id === userId).length;
+        const totalTasks = svCount + mmpCount;
+        const workloadPercent = Math.min(100, Math.round((totalTasks / MAX_CAPACITY) * 100));
+        workloads[userId] = workloadPercent;
+      });
+
+      setUserWorkloads(workloads);
+
+      // Also update team members with the new workload values
+      if (Object.keys(workloads).length > 0) {
+        setTeamMembers(prev => {
+          const updatedMembers = prev.map(member => ({
+            ...member,
+            workload: workloads[member.userId] ?? member.workload ?? 0
+          }));
+          // Only update if workloads actually changed
+          const hasChanges = updatedMembers.some((m, i) => m.workload !== prev[i]?.workload);
+          return hasChanges ? updatedMembers : prev;
+        });
+      }
+    } catch (error) {
+      console.error('Error calculating workloads:', error);
+    }
+  }, [teamMemberIds, userIdList]); // Re-run when team or user composition changes
+
+  useEffect(() => {
+    fetchUserWorkloads();
+  }, [fetchUserWorkloads]);
+
+  // Get workload for a user (from fetched data or default to 0)
+  const getWorkload = (userId: string): number => {
+    return userWorkloads[userId] ?? 0;
   };
 
   const filteredUsers = users.filter(user => {
@@ -84,7 +155,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
       name: user.name,
       role: selectedRole,
       joinedAt: new Date().toISOString(),
-      workload: user.performance?.currentWorkload || calculateWorkload(user.id),
+      workload: user.performance?.currentWorkload || getWorkload(user.id),
     };
 
     const updatedTeam = [...teamMembers, newMember];
@@ -276,7 +347,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                   <TableBody>
                     {filteredUsers.length > 0 ? (
                       filteredUsers.map((user) => {
-                        const workload = user.performance?.currentWorkload || calculateWorkload(user.id);
+                        const workload = user.performance?.currentWorkload || getWorkload(user.id);
                         const isOverloaded = workload > 80;
                         
                         return (

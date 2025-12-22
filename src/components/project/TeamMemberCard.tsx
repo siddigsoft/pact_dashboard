@@ -9,13 +9,17 @@ import UserProjectHistory from './team/UserProjectHistory';
 
 interface TeamMemberCardProps {
   member: ProjectTeamMember;
+  calculatedWorkload?: number; // Pass pre-calculated workload to avoid N+1 queries
 }
 
-const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member }) => {
-  const getWorkloadColor = (workload?: number) => {
-    if (!workload) return 'bg-gray-200';
-    if (workload > 80) return 'bg-red-500';
-    if (workload > 60) return 'bg-amber-500';
+const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, calculatedWorkload }) => {
+  // Use calculated workload if provided, otherwise fall back to stored value
+  const workload = calculatedWorkload ?? member.workload ?? 0;
+
+  const getWorkloadColor = (wl: number) => {
+    if (!wl) return 'bg-gray-200';
+    if (wl > 80) return 'bg-red-500';
+    if (wl > 60) return 'bg-amber-500';
     return 'bg-green-500';
   };
 
@@ -37,18 +41,20 @@ const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member }) => {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="flex-1 h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
               <div 
-                className={`h-full ${getWorkloadColor(member.workload)} transition-all`}
-                style={{ width: `${member.workload || 0}%` }}
+                className={`h-full ${getWorkloadColor(workload)} transition-all`}
+                style={{ width: `${workload}%` }}
               />
             </div>
-            <span className="text-sm text-muted-foreground">{member.workload || 0}%</span>
+            <span className="text-sm text-muted-foreground">
+              {`${workload}%`}
+            </span>
           </div>
 
           <div className="flex gap-2">
             <UserProjectHistory userId={member.userId} />
-            <UserCalendarAvailability userId={member.userId} busy={member.workload ? member.workload > 80 : false} />
+            <UserCalendarAvailability userId={member.userId} busy={workload > 80} />
           </div>
         </div>
       </CardContent>
