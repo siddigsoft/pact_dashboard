@@ -768,34 +768,33 @@ class SyncManager {
 
     if (fetchError) throw fetchError;
 
-    if (this.isTerminalOrAdvancedStatus(existing?.status, 'completed')) {
-      console.log(`[SyncManager] Skipping complete action - server already has status: ${existing?.status}`);
-      return;
+    const alreadyCompleted = this.isTerminalOrAdvancedStatus(existing?.status, 'completed');
+    if (alreadyCompleted) {
+      console.log(`[SyncManager] Status already completed on server (${existing?.status}), will skip status update but still ensure wallet payout.`);
+    } else {
+      const shouldUpdate = this.resolveConflict({ completedAt }, existing);
+      if (shouldUpdate) {
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            status: 'Completed',
+            visit_completed_at: completedAt,
+            visit_completed_by: userId,
+            notes: notes || existing?.additional_data?.notes,
+            additional_data: {
+              ...(existing?.additional_data || {}),
+              offline_complete: true,
+              end_location: location,
+              offline_synced_at: new Date().toISOString(),
+            },
+          })
+          .eq('id', siteEntryId);
+
+        if (error) throw error;
+      } else {
+        console.log(`[SyncManager] Skipping status update due to conflict resolution, but will check wallet payout.`);
+      }
     }
-
-    const shouldUpdate = this.resolveConflict({ completedAt }, existing);
-    if (!shouldUpdate) {
-      console.log(`[SyncManager] Skipping complete action due to conflict resolution`);
-      return;
-    }
-
-    const { error } = await supabase
-      .from('mmp_site_entries')
-      .update({
-        status: 'Completed',
-        visit_completed_at: completedAt,
-        visit_completed_by: userId,
-        notes: notes || existing?.additional_data?.notes,
-        additional_data: {
-          ...(existing?.additional_data || {}),
-          offline_complete: true,
-          end_location: location,
-          offline_synced_at: new Date().toISOString(),
-        },
-      })
-      .eq('id', siteEntryId);
-
-    if (error) throw error;
 
     // Process wallet transaction for completed visit - with duplicate prevention
     const fee = (existing?.enumerator_fee || 0) + (existing?.transport_fee || 0);
