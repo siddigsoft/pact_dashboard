@@ -58,6 +58,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
   const [finishing, setFinishing] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -69,6 +70,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setShowLocationRequiredDialog(false);
       setAccuracyHistory([]);
       setFinishing(false);
+      setLocationError(null);
 
       if (site.additionalData) {
         const draftData = site.additionalData;
@@ -99,6 +101,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setVisitDuration(0);
       stopLocationMonitoring();
       setFinishing(false);
+      setLocationError(null);
       if (locationTimeoutRef.current) {
         clearTimeout(locationTimeoutRef.current);
         locationTimeoutRef.current = null;
@@ -138,15 +141,56 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     };
   }, [visitStartTime, open]);
 
+  const formatGeoError = (error: GeolocationPositionError): string => {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        return 'Location permission denied. Please allow location for this site.';
+      case error.POSITION_UNAVAILABLE:
+        return 'Location unavailable. Check GPS/Wi‑Fi signal.';
+      case error.TIMEOUT:
+        return 'Location request timed out. Try again or move to a clearer area.';
+      default:
+        return 'Unable to get location. Please try again.';
+    }
+  };
+
   const startLocationMonitoring = async () => {
     setIsGettingLocation(true);
+    setLocationError(null);
 
     try {
       if (!navigator.geolocation) {
         setLocationEnabled(false);
         setIsGettingLocation(false);
+        setLocationError('This browser does not support location.');
         setShowLocationRequiredDialog(true);
         return;
+      }
+
+      // Quick low-accuracy grab to avoid long waits
+      let initialCoords: { latitude: number; longitude: number; accuracy: number } | null = null;
+      try {
+        const quickPosition = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: false,
+            timeout: 5000,
+            maximumAge: 60000
+          });
+        });
+
+        initialCoords = {
+          latitude: quickPosition.coords.latitude,
+          longitude: quickPosition.coords.longitude,
+          accuracy: quickPosition.coords.accuracy
+        };
+
+        setCoordinates(initialCoords);
+        setLocationEnabled(true);
+        setLocationError(null);
+        setIsGettingLocation(false);
+      } catch (quickError: any) {
+        console.warn('Low-accuracy location failed, trying high-accuracy watch:', quickError);
+        setLocationError(formatGeoError(quickError));
       }
 
       const watchId = navigator.geolocation.watchPosition(
@@ -184,26 +228,28 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
           setLocationEnabled(true);
           setIsGettingLocation(false);
+          setLocationError(null);
         },
         (error) => {
           console.error('Location watch error:', error);
-          setLocationEnabled(false);
+          setLocationEnabled(Boolean(initialCoords));
           setIsGettingLocation(false);
+          setLocationError(formatGeoError(error));
           setShowLocationRequiredDialog(true);
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 5000
+          timeout: 20000,
+          maximumAge: 10000
         }
       );
 
       setLocationWatchId(watchId);
-
     } catch (error: any) {
       console.error('Location monitoring setup error:', error);
       setLocationEnabled(false);
       setIsGettingLocation(false);
+      setLocationError('Unable to start location monitoring.');
       setShowLocationRequiredDialog(true);
     }
   };
@@ -242,6 +288,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: `New accuracy: ±${newCoords.accuracy.toFixed(1)} meters`,
         variant: 'default'
       });
+      setLocationError(null);
 
     } catch (error: any) {
       console.error('Location refresh error:', error);
@@ -250,6 +297,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: 'Could not refresh location. Please try again.',
         variant: 'destructive'
       });
+      if (error?.code !== undefined) {
+        setLocationError(formatGeoError(error));
+      }
     } finally {
       setIsGettingLocation(false);
     }
@@ -652,6 +702,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
                      coordinates.accuracy <= 10 ? 'Excellent accuracy' :
                      'Improving accuracy...'}
                   </p>
+                {locationError && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    {locationError}
+                  </p>
+                )}
                 </div>
               </div>
               {coordinates && (
