@@ -61,6 +61,30 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const [locationError, setLocationError] = useState<string | null>(null);
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const LAST_KNOWN_LOCATION_KEY = 'visitReport.lastKnownLocation';
+
+  const saveLastKnownLocation = (coords: { latitude: number; longitude: number; accuracy: number }) => {
+    try {
+      localStorage.setItem(
+        LAST_KNOWN_LOCATION_KEY,
+        JSON.stringify({ ...coords, savedAt: Date.now() })
+      );
+    } catch {
+      // ignore storage failures
+    }
+  };
+
+  const loadLastKnownLocation = (): { latitude: number; longitude: number; accuracy: number; savedAt: number } | null => {
+    try {
+      const raw = localStorage.getItem(LAST_KNOWN_LOCATION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.latitude || !parsed?.longitude) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
 
   useEffect(() => {
     if (open && site) {
@@ -82,6 +106,17 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           setLocationEnabled(true);
         }
       } else {
+        // Fallback to last known location if available (even when offline for days)
+        const cached = loadLastKnownLocation();
+        if (cached) {
+          setCoordinates({
+            latitude: cached.latitude,
+            longitude: cached.longitude,
+            accuracy: cached.accuracy
+          });
+          setLocationEnabled(true);
+          setLocationError('Using last known location (cached). Refresh when online for better accuracy.');
+        }
         setNotes('');
         setActivities('');
         setPhotos([]);
@@ -167,14 +202,14 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         return;
       }
 
-      // Quick low-accuracy grab to avoid long waits
+      // Quick low-accuracy grab to avoid long waits (allow older cache when offline)
       let initialCoords: { latitude: number; longitude: number; accuracy: number } | null = null;
       try {
         const quickPosition = await new Promise<GeolocationPosition>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(resolve, reject, {
             enableHighAccuracy: false,
             timeout: 5000,
-            maximumAge: 60000
+            maximumAge: 1000 * 60 * 60 * 24 * 7 // accept up to 7 days old cache
           });
         });
 
@@ -188,9 +223,23 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         setLocationEnabled(true);
         setLocationError(null);
         setIsGettingLocation(false);
+        saveLastKnownLocation(initialCoords);
       } catch (quickError: any) {
         console.warn('Low-accuracy location failed, trying high-accuracy watch:', quickError);
-        setLocationError(formatGeoError(quickError));
+        // Try cached last known location if available
+        const cached = loadLastKnownLocation();
+        if (cached) {
+          setCoordinates({
+            latitude: cached.latitude,
+            longitude: cached.longitude,
+            accuracy: cached.accuracy
+          });
+          setLocationEnabled(true);
+          setLocationError('Using last known location (cached). Refresh when connection improves.');
+          setIsGettingLocation(false);
+        } else {
+          setLocationError(formatGeoError(quickError));
+        }
       }
 
       const watchId = navigator.geolocation.watchPosition(
@@ -229,6 +278,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           setLocationEnabled(true);
           setIsGettingLocation(false);
           setLocationError(null);
+          saveLastKnownLocation(newCoords);
         },
         (error) => {
           console.error('Location watch error:', error);
@@ -289,6 +339,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         variant: 'default'
       });
       setLocationError(null);
+      saveLastKnownLocation(newCoords);
 
     } catch (error: any) {
       console.error('Location refresh error:', error);
