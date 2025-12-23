@@ -1446,6 +1446,17 @@ const CoordinatorSites: React.FC = () => {
       const statePermitNotRequired = decision.statePermit.requirement === 'not_required' || 
         (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
       
+      // Check if state permit was just uploaded (required_have_it + uploaded: true)
+      // In this case, sites should NOT be verified yet - they need locality permits first
+      const statePermitJustUploaded = decision.statePermit.requirement === 'required_have_it' && 
+        decision.statePermit.uploaded === true;
+      
+      // Determine if sites should be verified now
+      // Sites are only verified if:
+      // 1. They already have permits_attached status (both state and locality permits are done)
+      // 2. OR state permit is not required (can skip to locality permits)
+      const shouldVerifyNow = !statePermitJustUploaded && !statePermitNotRequired;
+      
       // Update all sites with permit decision
       for (const site of sitesToVerify) {
         const additionalData = {
@@ -1455,8 +1466,11 @@ const CoordinatorSites: React.FC = () => {
           ...(statePermitNotRequired ? { state_permit_not_required: true } : {}),
         };
 
-        // If state permit not required, don't change status to verified - just update additional_data
-        const updateData: any = statePermitNotRequired ? {
+        // If state permit was just uploaded, don't verify yet - just update additional_data
+        // Sites will move to locality permit tab to upload locality permits
+        // If state permit not required, also don't verify - move to locality permit tab
+        // Only verify if sites already have permits_attached status (both permits done)
+        const updateData: any = (statePermitJustUploaded || statePermitNotRequired) ? {
           additional_data: additionalData,
         } : {
           ...(pendingVerificationData || {}),
@@ -1473,70 +1487,81 @@ const CoordinatorSites: React.FC = () => {
 
         if (error) throw error;
 
-        // Update MMP workflow for each site
-        try {
-          const { data: mmpData } = await supabase
-            .from('mmp_files')
-            .select('workflow, status')
-            .eq('id', site.mmp_file_id)
-            .single();
-
-          if (mmpData) {
-            const workflow = (mmpData.workflow as any) || {};
-            if (!workflow.coordinatorVerified) {
-              const updatedWorkflow = {
-                ...workflow,
-                coordinatorVerified: true,
-                coordinatorVerifiedAt: verifiedAt,
-                coordinatorVerifiedBy: verifiedBy,
-                currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
-                lastUpdated: verifiedAt
-              };
-              await updateMMP(site.mmp_file_id, {
-                workflow: updatedWorkflow,
-                status: 'pending'
-              });
-            }
-          }
-        } catch (syncErr) {
-          console.warn('Failed to sync MMP workflow:', syncErr);
-        }
-      }
-
-      // Notify hub supervisors about verified sites
-      try {
-        const hubsNotified = new Set<string>();
-        for (const site of sitesToVerify) {
-          if (site.hub_office && !hubsNotified.has(site.hub_office)) {
-            const { data: hubData } = await supabase
-              .from('hubs')
-              .select('id')
-              .eq('name', site.hub_office)
+        // Update MMP workflow only if sites are being verified now
+        // Don't update workflow if state permit was just uploaded (sites not verified yet)
+        if (shouldVerifyNow) {
+          try {
+            const { data: mmpData } = await supabase
+              .from('mmp_files')
+              .select('workflow, status')
+              .eq('id', site.mmp_file_id)
               .single();
-            if (hubData?.id) {
-              const sitesInHub = sitesToVerify.filter(s => s.hub_office === site.hub_office);
-              await NotificationTriggerService.siteOperationNotification(
-                hubData.id,
-                'verified',
-                sitesInHub.length > 1 ? `${sitesInHub.length} sites` : site.site_name,
-                {
-                  actorName: verifiedBy,
-                  siteCount: sitesInHub.length
-                }
-              );
-              hubsNotified.add(site.hub_office);
+
+            if (mmpData) {
+              const workflow = (mmpData.workflow as any) || {};
+              if (!workflow.coordinatorVerified) {
+                const updatedWorkflow = {
+                  ...workflow,
+                  coordinatorVerified: true,
+                  coordinatorVerifiedAt: verifiedAt,
+                  coordinatorVerifiedBy: verifiedBy,
+                  currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
+                  lastUpdated: verifiedAt
+                };
+                await updateMMP(site.mmp_file_id, {
+                  workflow: updatedWorkflow,
+                  status: 'pending'
+                });
+              }
             }
+          } catch (syncErr) {
+            console.warn('Failed to sync MMP workflow:', syncErr);
           }
         }
-      } catch (notifyErr) {
-        console.warn('Failed to notify supervisors about verification:', notifyErr);
       }
 
-      // Check if state permit is not required or user can proceed without it
-      const statePermitNotRequiredForToast = decision.statePermit.requirement === 'not_required' || 
-        (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
+      // Notify hub supervisors only if sites are being verified now
+      if (shouldVerifyNow) {
+        try {
+          const hubsNotified = new Set<string>();
+          for (const site of sitesToVerify) {
+            if (site.hub_office && !hubsNotified.has(site.hub_office)) {
+              const { data: hubData } = await supabase
+                .from('hubs')
+                .select('id')
+                .eq('name', site.hub_office)
+                .single();
+              if (hubData?.id) {
+                const sitesInHub = sitesToVerify.filter(s => s.hub_office === site.hub_office);
+                await NotificationTriggerService.siteOperationNotification(
+                  hubData.id,
+                  'verified',
+                  sitesInHub.length > 1 ? `${sitesInHub.length} sites` : site.site_name,
+                  {
+                    actorName: verifiedBy,
+                    siteCount: sitesInHub.length
+                  }
+                );
+                hubsNotified.add(site.hub_office);
+              }
+            }
+          }
+        } catch (notifyErr) {
+          console.warn('Failed to notify supervisors about verification:', notifyErr);
+        }
+      }
 
-      if (statePermitNotRequiredForToast) {
+      // Show appropriate toast message based on what happened
+      if (statePermitJustUploaded) {
+        // State permit was just uploaded - sites move to locality permit tab
+        toast({
+          title: 'State Permit Uploaded',
+          description: sitesToVerify.length > 1 
+            ? `State permit uploaded. ${sitesToVerify.length} sites moved to Locality Permit Status. You can now upload locality permits.`
+            : 'State permit uploaded. Site moved to Locality Permit Status. You can now upload locality permits.',
+        });
+      } else if (statePermitNotRequired) {
+        // State permit not required - sites move to locality permit tab
         toast({
           title: 'State Permit Not Required',
           description: sitesToVerify.length > 1 
@@ -1544,6 +1569,7 @@ const CoordinatorSites: React.FC = () => {
             : 'Site moved to Locality Permit Status.',
         });
       } else {
+        // Sites are being verified (both state and locality permits are done)
         toast({
           title: sitesToVerify.length > 1 ? 'Sites Verified' : 'Site Verified',
           description: sitesToVerify.length > 1 
@@ -1565,9 +1591,12 @@ const CoordinatorSites: React.FC = () => {
       await refreshMMPFiles();
       
       // Switch to appropriate tab
-      if (statePermitNotRequiredForToast) {
+      if (statePermitJustUploaded || statePermitNotRequired) {
+        // Move to locality permit tab to upload locality permits
         setNewSitesSubTab('local_required');
+        setActiveTab('new');
       } else {
+        // Sites are verified - move to verified tab
         setActiveTab('verified');
       }
     } catch (error) {
