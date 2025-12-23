@@ -78,29 +78,39 @@ START: Permit Verification Questions Dialog Opens
 
 #### In CoordinatorSites.tsx (`handlePermitVerificationComplete`):
 
-**For State-Level Verification:**
-- Gets all sites in the state from `coordinatorSites`
+**When State Permit is Uploaded:**
+- Detects that state permit was just uploaded (`statePermitJustUploaded = true`)
 - For each site:
   - Updates `additional_data` with `permit_decision`
-  - Sets `status = 'verified'`
-  - Sets `verified_at` and `verified_by`
-  - Updates MMP workflow to mark as `coordinatorVerified: true`
-- Shows toast: *"State Verified - {count} sites in {state} have been verified successfully."*
+  - **Does NOT change status to verified** (status remains unchanged: `Pending`, `assigned`, etc.)
+  - **Does NOT update MMP workflow** (sites not verified yet)
+- Shows toast: *"State Permit Uploaded - {count} sites moved to Locality Permit Status. You can now upload locality permits."*
 - Closes dialog
-- Switches to **"Verified" tab**
+- Switches to **"New" tab → "Locality Permit Status" sub-tab**
 
-**For Site-Level Verification:**
-- Updates selected site(s) with same logic
-- Shows toast: *"Site(s) Verified - {count} sites have been verified successfully."*
-- Closes dialog
-- Switches to **"Verified" tab**
+**Next Steps (Locality Permit Upload):**
+- User navigates to "Locality Permit Status" sub-tab
+- User uploads locality permit for each locality
+- When locality permit is uploaded (via `LocalityPermitUpload` component):
+  - Site status changes to `permits_attached`
+  - Sites move to **"CP Verification" tab** (`permits_attached`)
 
-### Final State:
-- ✅ Sites status: `verified`
-- ✅ Sites appear in **"Verified" tab**
-- ✅ MMP workflow: `coordinatorVerified: true`
-- ✅ State permit uploaded and stored
-- ✅ Ready for locality permit verification
+**Final Verification (After Locality Permit Uploaded):**
+- When user clicks "Verify" on sites with `permits_attached` status:
+  - Site status changes to `verified`
+  - Sites move to **"Verified" tab**
+
+### Final State After State Permit Upload:
+- ⚠️ Sites status: **Unchanged** (remains `Pending`, `assigned`, etc.)
+- ⚠️ Sites appear in **"New" tab → "Locality Permit Status" sub-tab**
+- ✅ State permit uploaded and stored in MMP file
+- ✅ `state_permit_attached: true` set in site's `additional_data`
+- ⏳ **Waiting for locality permit upload**
+
+### Flow Summary:
+1. **State Permit Uploaded** → Sites move to "Locality Permit Status" sub-tab (status unchanged)
+2. **Locality Permit Uploaded** → Sites get `permits_attached` status → Move to "CP Verification" tab
+3. **Verification** → Sites get `verified` status → Move to "Verified" tab
 
 ---
 
@@ -264,12 +274,12 @@ START: Permit Verification Questions Dialog Opens
 
 ## Summary Table
 
-| Scenario | State Permit Status | Can Work Without? | Site Status | Tab Location | MMP Workflow |
-|----------|---------------------|-------------------|-------------|--------------|--------------|
-| **1. Uploaded** | Required & Uploaded | N/A | `verified` | Verified tab | `coordinatorVerified: true` |
-| **2. Can Work Without** | Required but Missing | Yes | Unchanged | New → Locality Permit | `coordinatorVerified: true` |
-| **3. Cannot Proceed** | Required but Missing | No | `returned_to_fom` | Removed (sent to FOM) | Unchanged |
-| **4. Not Required** | Not Required | N/A | Unchanged | New → Locality Permit | `coordinatorVerified: true` |
+| Scenario | State Permit Status | Can Work Without? | Site Status | Tab Location | Next Step |
+|----------|---------------------|-------------------|-------------|--------------|-----------|
+| **1. Uploaded** | Required & Uploaded | N/A | **Unchanged** (Pending/assigned) | New → Locality Permit Status | Upload locality permit → `permits_attached` → CP Verification tab |
+| **2. Can Work Without** | Required but Missing | Yes | **Unchanged** (Pending/assigned) | New → Locality Permit Status | Upload locality permit → `permits_attached` → CP Verification tab |
+| **3. Cannot Proceed** | Required but Missing | No | `returned_to_fom` | Removed (sent to FOM) | FOM must take action |
+| **4. Not Required** | Not Required | N/A | **Unchanged** (Pending/assigned) | New → Locality Permit Status | Upload locality permit → `permits_attached` → CP Verification tab |
 
 ---
 
@@ -291,23 +301,44 @@ START: Permit Verification Questions Dialog Opens
 
 ## Important Notes
 
-1. **State Permit Not Required Logic:**
+1. **State Permit Upload Flow:**
+   - When state permit is uploaded, sites are **NOT** verified immediately
+   - Sites remain in their current status (Pending/assigned/etc.)
+   - Sites move to "New" tab → "Locality Permit Status" sub-tab
+   - Coordinator must upload locality permits next
+   - Only after locality permits are uploaded do sites get `permits_attached` status
+   - Sites with `permits_attached` status appear in "CP Verification" tab
+   - Final verification moves sites to `verified` status and "Verified" tab
+
+2. **State Permit Not Required Logic:**
    - When `statePermitNotRequired = true`, sites are **NOT** marked as `verified`
    - They remain in their current status but move to "Locality Permit" sub-tab
    - This allows coordinators to proceed with locality permit verification
 
-2. **Returned to FOM:**
+3. **Complete Permit Flow:**
+   ```
+   State Permit Uploaded → Locality Permit Status tab (status unchanged)
+        ↓
+   Locality Permit Uploaded → CP Verification tab (status: permits_attached)
+        ↓
+   Verification → Verified tab (status: verified)
+   ```
+
+4. **Returned to FOM:**
    - Sites with status `returned_to_fom` are **filtered out** from coordinator's view
    - They appear in FOM's view for correction/action
    - Notifications are sent to both FOM and Hub Supervisor
 
-3. **MMP Workflow:**
-   - All scenarios (except "Send Back to FOM") mark MMP as `coordinatorVerified: true`
-   - This indicates the coordinator has reviewed and made a decision about permits
+5. **MMP Workflow:**
+   - MMP workflow is only updated when sites are actually verified (status = `verified`)
+   - State permit upload alone does NOT mark MMP as `coordinatorVerified: true`
+   - This ensures proper workflow tracking
 
-4. **Additional Data:**
+6. **Additional Data:**
    - All decisions are stored in `additional_data.permit_decision`
    - `state_permit_not_required` flag is set when applicable
+   - `state_permit_attached: true` is set when state permit is uploaded
+   - `locality_permit_attached: true` is set when locality permit is uploaded
    - This data is used for tracking and audit purposes
 
 ---
