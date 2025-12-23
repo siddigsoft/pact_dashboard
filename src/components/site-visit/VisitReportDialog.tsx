@@ -425,9 +425,12 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (finishing) return;
+    if (finishing || isSubmitting) return;
     setFinishing(true);
-    if (!site) return;
+    if (!site) {
+      setFinishing(false);
+      return;
+    }
 
     if (!locationEnabled || !coordinates) {
       toast({
@@ -460,105 +463,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     }
 
     try {
-      const coordinatesJsonb = coordinates ? {
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        accuracy: coordinates.accuracy
-      } : {};
-
-      const photoUrls: string[] = [];
-      const photoStoragePaths: string[] = [];
-      
-      for (const photo of photos) {
-        const fileName = `reports/${site.id}/${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('site-visit-photos')
-          .upload(fileName, photo);
-
-        if (uploadError) {
-          console.error('Error uploading photo:', uploadError);
-          
-          if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
-            toast({
-              title: 'Storage Bucket Not Found',
-              description: 'The site-visit-photos storage bucket has not been created.',
-              variant: 'destructive'
-            });
-            setFinishing(false);
-            return;
-          }
-          
-          toast({
-            title: 'Photo Upload Error',
-            description: `Failed to upload ${photo.name}. Please try again.`,
-            variant: 'destructive'
-          });
-          continue;
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('site-visit-photos')
-          .getPublicUrl(fileName);
-
-        if (urlData?.publicUrl) {
-          photoUrls.push(urlData.publicUrl);
-          photoStoragePaths.push(fileName);
-        }
-      }
-
-      if (photoUrls.length === 0) {
-        toast({
-          title: 'Photo Upload Failed',
-          description: 'Failed to upload photos. Please try again.',
-          variant: 'destructive'
-        });
-        setFinishing(false);
-        return;
-      }
-
-      const { data: reportData, error: reportError } = await supabase
-        .from('reports')
-        .insert({
-          site_visit_id: site.id,
-          notes: notes || 'No additional notes provided',
-          activities: activities,
-          duration_minutes: visitDuration,
-          coordinates: coordinatesJsonb,
-          submitted_by: currentUser?.id || null,
-          submitted_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (reportError) {
-        console.error('Error saving to reports table:', reportError);
-        throw reportError;
-      }
-
-      if (!reportData) {
-        throw new Error('Failed to create report record');
-      }
-
-      const reportPhotos = photoUrls.map((photoUrl, index) => ({
-        report_id: reportData.id,
-        photo_url: photoUrl,
-        storage_path: photoStoragePaths[index] || null
-      }));
-
-      const { error: photosError } = await supabase
-        .from('report_photos')
-        .insert(reportPhotos);
-
-      if (photosError) {
-        console.error('Error linking photos to report:', photosError);
-        toast({
-          title: 'Warning',
-          description: 'Report created but some photos may not be linked properly.',
-          variant: 'default'
-        });
-      }
-
+      // Delegate storage + report creation to parent handler to avoid duplicate uploads and delays
       const visitReportData: VisitReportData = {
         notes,
         activities,
@@ -592,6 +497,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: "Failed to complete site visit. Please try again.",
         variant: "destructive",
       });
+    } finally {
       setFinishing(false);
     }
   };
@@ -1101,11 +1007,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
             <Button
               type="button"
               onClick={handleSubmit}
-              disabled={isSubmitting || !locationEnabled || !coordinates || !activities.trim() || photos.length === 0}
+              disabled={isSubmitting || finishing || !locationEnabled || !coordinates || !activities.trim() || photos.length === 0}
               className="flex-1 h-12 rounded-full bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 dark:text-black font-bold gap-2"
             >
               <CheckCircle className="h-5 w-5" />
-              {isSubmitting ? 'Submitting...' : 'Finish Visit'}
+              {isSubmitting || finishing ? 'Submitting...' : 'Finish Visit'}
             </Button>
           </div>
         </DialogFooter>
