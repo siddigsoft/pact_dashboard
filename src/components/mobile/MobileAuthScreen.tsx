@@ -79,15 +79,61 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   }, []);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    let networkListener: any = null;
+    let cleanupWebListeners: (() => void) | null = null;
     
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    // Initialize network status - use Capacitor Network plugin if available
+    const initNetworkStatus = async () => {
+      try {
+        // Check if we're in a Capacitor app
+        if (typeof (window as any).Capacitor !== 'undefined') {
+          const { Network } = await import('@capacitor/network');
+          const status = await Network.getStatus();
+          setIsOnline(status.connected);
+          
+          // Listen for network changes
+          networkListener = await Network.addListener('networkStatusChange', (status) => {
+            setIsOnline(status.connected);
+          });
+        } else {
+          // Web fallback
+          setIsOnline(navigator.onLine);
+          const handleOnline = () => setIsOnline(true);
+          const handleOffline = () => setIsOnline(false);
+          
+          window.addEventListener('online', handleOnline);
+          window.addEventListener('offline', handleOffline);
+          
+          cleanupWebListeners = () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+          };
+        }
+      } catch (error) {
+        console.warn('[MobileAuthScreen] Failed to initialize network monitoring, using navigator.onLine', error);
+        setIsOnline(navigator.onLine);
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        
+        cleanupWebListeners = () => {
+          window.removeEventListener('online', handleOnline);
+          window.removeEventListener('offline', handleOffline);
+        };
+      }
+    };
+    
+    initNetworkStatus();
     
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      if (networkListener) {
+        networkListener.remove();
+      }
+      if (cleanupWebListeners) {
+        cleanupWebListeners();
+      }
     };
   }, []);
 
@@ -141,14 +187,29 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
       return;
     }
 
+    // Check if offline - but allow login if there's a stored session we can restore
     if (!isOnline) {
-      hapticPresets.warning();
-      toast({
-        title: 'No connection',
-        description: 'Please check your internet connection',
-        variant: 'destructive',
-      });
-      return;
+      // Check if user has a stored session that can be restored
+      const storedUser = localStorage.getItem('PACTCurrentUser');
+      const storedSession = localStorage.getItem('pact_biometric_token');
+      
+      if (storedUser || storedSession) {
+        // User has stored credentials - allow them to proceed
+        // The UserContext will handle restoring the session
+        toast({
+          title: 'Offline Mode',
+          description: 'Using stored credentials. You can continue working offline.',
+        });
+        // Continue with login attempt - it may work if session is still valid
+      } else {
+        hapticPresets.warning();
+        toast({
+          title: 'No connection',
+          description: 'Please check your internet connection. Login requires an active connection.',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     setIsLoading(true);

@@ -390,6 +390,28 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Hydrate current user from existing Supabase session (OAuth/email) and listen for auth state changes
   const setUserFromAuthUser = async (authUser: any): Promise<boolean> => {
     try {
+      // If offline, try to restore from localStorage first
+      if (!navigator.onLine) {
+        const storedUser = localStorage.getItem('PACTCurrentUser');
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser) as User;
+            // Only restore if it's the same user
+            if (parsedUser.id === authUser.id) {
+              setCurrentUser(parsedUser);
+              console.log('[UserContext] Restored user from localStorage (offline, setUserFromAuthUser)');
+              return true;
+            }
+          } catch (error) {
+            console.error('[UserContext] Error parsing stored user:', error);
+          }
+        }
+        // If no stored user or different user, we can't fetch profile offline
+        // Return false but don't clear the existing user
+        console.log('[UserContext] Cannot fetch profile offline - preserving existing session');
+        return false;
+      }
+      
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -571,15 +593,61 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     (async () => {
       try {
+        // Check if we're offline - if so, restore from localStorage
+        if (!navigator.onLine) {
+          const storedUser = localStorage.getItem('PACTCurrentUser');
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser) as User;
+              setCurrentUser(parsedUser);
+              console.log('[UserContext] Restored user from localStorage (offline mode)');
+              return;
+            } catch (error) {
+              console.error('[UserContext] Error parsing stored user:', error);
+            }
+          }
+        }
+        
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) await setUserFromAuthUser(user);
         } else {
-          setCurrentUser(null);
-          localStorage.removeItem('PACTCurrentUser');
+          // Only clear user if we're online - preserve session when offline
+          if (navigator.onLine) {
+            setCurrentUser(null);
+            localStorage.removeItem('PACTCurrentUser');
+          } else {
+            // Offline: try to restore from localStorage
+            const storedUser = localStorage.getItem('PACTCurrentUser');
+            if (storedUser) {
+              try {
+                const parsedUser = JSON.parse(storedUser) as User;
+                setCurrentUser(parsedUser);
+                console.log('[UserContext] Restored user from localStorage (offline, no session)');
+              } catch (error) {
+                console.error('[UserContext] Error parsing stored user:', error);
+              }
+            }
+          }
         }
-      } catch {}
+      } catch (error) {
+        // Network error or other issue - preserve session if offline
+        if (!navigator.onLine) {
+          const storedUser = localStorage.getItem('PACTCurrentUser');
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser) as User;
+              setCurrentUser(parsedUser);
+              console.log('[UserContext] Restored user from localStorage (offline, error)');
+            } catch (parseError) {
+              console.error('[UserContext] Error parsing stored user:', parseError);
+            }
+          }
+        } else {
+          console.error('[UserContext] Error getting session:', error);
+        }
+      }
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
         try {
@@ -587,11 +655,31 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const { data: { user } } = await supabase.auth.getUser();
             if (user) await setUserFromAuthUser(user);
           } else if (event === 'SIGNED_OUT') {
-            setCurrentUser(null);
-            localStorage.removeItem('PACTCurrentUser');
+            // Only clear user if we're online - preserve session when offline
+            // This prevents accidental logout when network is temporarily unavailable
+            if (navigator.onLine) {
+              setCurrentUser(null);
+              localStorage.removeItem('PACTCurrentUser');
+            } else {
+              console.log('[UserContext] SIGNED_OUT event received offline - preserving session');
+              // Keep the user in localStorage for offline use
+            }
           }
         } catch (err) {
           console.error('Auth state handler error:', err);
+          // If error occurs offline, preserve session
+          if (!navigator.onLine) {
+            const storedUser = localStorage.getItem('PACTCurrentUser');
+            if (storedUser && !currentUser) {
+              try {
+                const parsedUser = JSON.parse(storedUser) as User;
+                setCurrentUser(parsedUser);
+                console.log('[UserContext] Restored user from localStorage after auth error (offline)');
+              } catch (parseError) {
+                console.error('[UserContext] Error parsing stored user:', parseError);
+              }
+            }
+          }
         } finally {
           // Once we receive the first auth event post-mount, we can consider auth ready
           if (!authReady) setAuthReady(true);
