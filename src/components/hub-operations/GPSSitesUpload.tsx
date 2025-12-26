@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2 } from 'lucide-react';
+import { getHubForState, getHubNameForState } from '@/data/sudanStates';
 import * as XLSX from 'xlsx';
 
 interface ParsedSite {
@@ -534,28 +535,33 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             
             const siteCode = site.siteId || `SITE-${Date.now()}-${i}`;
             
+            // Get hub information based on state
+            const stateId = stateData?.id || '';
+            const hubId = stateId ? getHubForState(stateId) : undefined;
+            const hubName = stateId ? getHubNameForState(stateId) : undefined;
+            
+            // Only include columns that exist in sites_registry table:
+            // id, site_code, site_name, state_id, state_name, locality_id, locality_name,
+            // hub_id, hub_name, gps_latitude, gps_longitude, activity_type, status, mmp_count,
+            // created_at, updated_at, created_by
             const insertData: Record<string, any> = {
               site_code: siteCode,
               site_name: site.siteName || siteCode,
-              state_id: stateData?.id || '',
+              state_id: stateId,
               state_name: stateData?.name || site.state,
               locality_id: localityData?.id || '',
               locality_name: localityData?.name || site.locality,
-              gps_captured_by: currentUser?.id,
-              gps_captured_at: new Date().toISOString(),
-              status: 'registered',
+              hub_id: hubId || '',
+              hub_name: hubName || '',
+              activity_type: 'GFA',
+              status: 'active',
               mmp_count: 0,
               created_by: currentUser?.id || 'system',
               created_at: new Date().toISOString(),
             };
+            // Only add GPS if available (these columns exist in the table)
             if (site.latitude !== null) insertData.gps_latitude = site.latitude;
             if (site.longitude !== null) insertData.gps_longitude = site.longitude;
-            if (site.altitude !== null) insertData.gps_altitude = site.altitude;
-            if (site.precision !== null) insertData.gps_precision = site.precision;
-            if (site.residenceLatitude !== null) insertData.residence_latitude = site.residenceLatitude;
-            if (site.residenceLongitude !== null) insertData.residence_longitude = site.residenceLongitude;
-            if (site.residenceAltitude !== null) insertData.residence_altitude = site.residenceAltitude;
-            if (site.residencePrecision !== null) insertData.residence_precision = site.residencePrecision;
             
             const { error } = await supabase
               .from('sites_registry')
