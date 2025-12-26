@@ -246,6 +246,20 @@ const STATE_NAME_ALIASES: { [key: string]: string } = {
   'northern': 'northern', 'ash shamaliyah': 'northern',
 }
 
+// WFP Hub configuration - must match frontend hubs from sudanStates.ts
+const HUBS = [
+  { id: 'country-office', name: 'Country Office (Khartoum)', states: ['khartoum', 'red-sea'] },
+  { id: 'dongola-hub', name: 'Dongola Hub', states: ['northern', 'river-nile'] },
+  { id: 'forchana-hub', name: 'Forchana Hub', states: ['west-darfur', 'central-darfur'] },
+  { id: 'kassala-hub', name: 'Kassala Hub', states: ['kassala', 'gedaref', 'gezira', 'sennar', 'blue-nile'] },
+  { id: 'kosti-hub', name: 'Kosti Hub', states: ['white-nile', 'north-kordofan', 'south-kordofan', 'west-kordofan', 'north-darfur', 'south-darfur', 'east-darfur'] },
+]
+
+function getHubForState(stateId: string): { id: string; name: string } | null {
+  const hub = HUBS.find(h => h.states.includes(stateId))
+  return hub ? { id: hub.id, name: hub.name } : null
+}
+
 function normalizeStateId(stateName: string | null): string | null {
   if (!stateName) return null
   
@@ -416,12 +430,17 @@ serve(async (req) => {
     // Find state name from normalized ID
     const stateInfo = SUDAN_STATES.find(s => s.id === normalizedStateId)
     
+    // Get hub information based on state
+    const hubInfo = normalizedStateId ? getHubForState(normalizedStateId) : null
+    
     console.log('[MoDa Webhook] Normalized location:', {
       rawState: parsed.state,
       normalizedStateId,
       rawLocality: parsed.locality,
       normalizedLocalityId,
-      stateFound: !!stateInfo
+      stateFound: !!stateInfo,
+      hubId: hubInfo?.id,
+      hubName: hubInfo?.name
     })
 
     // Only include columns that exist in the sites_registry table
@@ -434,6 +453,8 @@ serve(async (req) => {
       state_id: normalizedStateId || 'unknown',
       locality_name: parsed.locality || 'Unknown',
       locality_id: normalizedLocalityId || 'unknown',
+      hub_id: hubInfo?.id || '',
+      hub_name: hubInfo?.name || '',
       gps_latitude: hasSiteGps ? parsed.siteGps.latitude : (hasResidenceGps ? parsed.residenceGps.latitude : null),
       gps_longitude: hasSiteGps ? parsed.siteGps.longitude : (hasResidenceGps ? parsed.residenceGps.longitude : null),
       activity_type: 'MoDa',
