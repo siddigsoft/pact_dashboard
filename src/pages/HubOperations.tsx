@@ -25,6 +25,7 @@ import SiteCard from '@/components/hub-operations/SiteCard';
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import SudanMapView from '@/components/hub-operations/SudanMapView';
 import SiteDetailDialog from '@/components/mmp/SiteDetailDialog';
+import GPSSitesUpload from '@/components/hub-operations/GPSSitesUpload';
 import { MapContainer, TileLayer, Circle, Marker, Popup, GeoJSON, useMap
 } from 'react-leaflet';
 import L from 'leaflet';
@@ -1331,6 +1332,11 @@ export default function HubOperations() {
               </div>
             </Card>
           </div>
+
+          {/* GPS Bulk Upload Section */}
+          {(isSuperAdmin || currentUser?.role === 'admin' || currentUser?.role === 'fom') && (
+            <GPSSitesUpload onUploadComplete={loadSites} />
+          )}
 
           {/* Active Filter Indicator */}
           {siteSourceFilter !== 'all' && (
