@@ -33,6 +33,7 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, featurin
 *   **Visit Postponement System:** Allows data collectors and coordinators to request visit date changes with an approval workflow and historical tracking.
 *   **Date Range Visit Support:** Enables multi-day visits with `visitDateFrom` and `visitDateTo` fields, special handling for DM/GFA activities, and deadline calculations based on the start date.
 *   **Configurable Auto-Release System:** Administrators can configure auto-release timing, confirmation deadlines, and reminder frequency presets for site visits.
+*   **MoDa Webhook Integration:** Supabase Edge Function (`moda-webhook`) receives real-time form submissions from MoDa/ODK. Uses same GPS parsing patterns as bulk upload (A05 for residence, A06 for site GPS). Automatically registers sites with coordinates, supporting combined geopoint strings or separate lat/lng fields. Optional webhook secret for security (`MODA_WEBHOOK_SECRET`).
 
 ### System Design Choices
 The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.
