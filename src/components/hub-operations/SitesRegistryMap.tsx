@@ -15,6 +15,7 @@ interface SiteWithGPS {
   gps_altitude?: number | null;
   gps_precision?: number | null;
   source?: string;
+  activity_type?: string | null;
 }
 
 interface SitesRegistryMapProps {
