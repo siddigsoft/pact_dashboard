@@ -26,6 +26,7 @@ import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import SudanMapView from '@/components/hub-operations/SudanMapView';
 import SiteDetailDialog from '@/components/mmp/SiteDetailDialog';
 import GPSSitesUpload from '@/components/hub-operations/GPSSitesUpload';
+import SitesRegistryMap from '@/components/hub-operations/SitesRegistryMap';
 import { MapContainer, TileLayer, Circle, Marker, Popup, GeoJSON, useMap
 } from 'react-leaflet';
 import L from 'leaflet';
@@ -1337,6 +1338,21 @@ export default function HubOperations() {
           {(isSuperAdmin || currentUser?.role === 'admin' || currentUser?.role === 'fom') && (
             <GPSSitesUpload onUploadComplete={loadSites} />
           )}
+
+          {/* Sites Map */}
+          <SitesRegistryMap 
+            sites={sites.filter(s => s.gps_latitude && s.gps_longitude).map(s => ({
+              id: s.id,
+              site_code: s.site_code,
+              site_name: s.site_name,
+              state_name: s.state_name,
+              locality_name: s.locality_name,
+              gps_latitude: s.gps_latitude!,
+              gps_longitude: s.gps_longitude!,
+              source: s.source,
+            }))}
+            height="400px"
+          />
 
           {/* Active Filter Indicator */}
           {siteSourceFilter !== 'all' && (
