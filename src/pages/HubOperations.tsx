@@ -1350,6 +1350,7 @@ export default function HubOperations() {
               gps_latitude: s.gps_latitude!,
               gps_longitude: s.gps_longitude!,
               source: s.source,
+              activity_type: s.activity_type,
             }))}
             height="400px"
           />

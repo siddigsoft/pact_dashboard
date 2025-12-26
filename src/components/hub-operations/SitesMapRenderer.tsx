@@ -23,6 +23,7 @@ interface SiteWithGPS {
   gps_altitude?: number | null;
   gps_precision?: number | null;
   source?: string;
+  activity_type?: string | null;
 }
 
 interface SitesMapRendererProps {
@@ -125,6 +126,15 @@ export default function SitesMapRenderer({ sites, height = '400px' }: SitesMapRe
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground w-16">Locality:</span>
                     <span>{site.locality_name}</span>
+                  </div>
+                )}
+                
+                {site.activity_type && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground w-16">Activity:</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {site.activity_type}
+                    </Badge>
                   </div>
                 )}
                 
