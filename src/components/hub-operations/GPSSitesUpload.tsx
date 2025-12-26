@@ -680,8 +680,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         )}
 
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh]">
-            <DialogHeader>
+          <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>Preview GPS Sites Data</DialogTitle>
               <DialogDescription>
                 Review the parsed data before uploading. Column mapping: 
@@ -691,9 +691,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               </DialogDescription>
             </DialogHeader>
             
-            <ScrollArea className="h-[50vh]">
+            <div className="flex-1 overflow-auto border rounded-md">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead className="w-10">
                       <Checkbox
@@ -756,9 +756,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
                   ))}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
             
-            <DialogFooter>
+            <DialogFooter className="flex-shrink-0">
               <Button variant="outline" onClick={() => setPreviewOpen(false)}>
                 Close
               </Button>
