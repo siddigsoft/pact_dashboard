@@ -424,6 +424,9 @@ serve(async (req) => {
       stateFound: !!stateInfo
     })
 
+    // Only include columns that exist in the sites_registry table
+    // Existing columns: id, site_code, site_name, state_id, state_name, locality_id, locality_name,
+    // hub_id, hub_name, gps_latitude, gps_longitude, activity_type, status, mmp_count, created_at, updated_at, created_by
     const siteData = {
       site_code: siteCode,
       site_name: parsed.siteName || siteCode,
@@ -433,16 +436,8 @@ serve(async (req) => {
       locality_id: normalizedLocalityId || 'unknown',
       gps_latitude: hasSiteGps ? parsed.siteGps.latitude : (hasResidenceGps ? parsed.residenceGps.latitude : null),
       gps_longitude: hasSiteGps ? parsed.siteGps.longitude : (hasResidenceGps ? parsed.residenceGps.longitude : null),
-      gps_altitude: hasSiteGps ? parsed.siteGps.altitude : (hasResidenceGps ? parsed.residenceGps.altitude : null),
-      gps_precision: hasSiteGps ? parsed.siteGps.precision : (hasResidenceGps ? parsed.residenceGps.precision : null),
-      residence_gps_latitude: hasResidenceGps ? parsed.residenceGps.latitude : null,
-      residence_gps_longitude: hasResidenceGps ? parsed.residenceGps.longitude : null,
-      residence_gps_altitude: hasResidenceGps ? parsed.residenceGps.altitude : null,
-      residence_gps_precision: hasResidenceGps ? parsed.residenceGps.precision : null,
       activity_type: 'MoDa',
       status: 'active',
-      moda_form_id: parsed.formId,
-      moda_submission_id: parsed.submissionId,
       updated_at: new Date().toISOString(),
     }
 
