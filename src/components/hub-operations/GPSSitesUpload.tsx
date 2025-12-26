@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface ParsedSite {
   rowIndex: number;
@@ -172,14 +173,46 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
 
+  const parseExcelFile = async (file: File): Promise<{ headers: string[]; rows: Record<string, string>[] }> => {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { header: 1, defval: '' });
+    
+    if (jsonData.length < 2) {
+      return { headers: [], rows: [] };
+    }
+    
+    const headers = (jsonData[0] as string[]).map(h => String(h || '').trim());
+    const rows: Record<string, string>[] = [];
+    
+    for (let i = 1; i < jsonData.length; i++) {
+      const rowData = jsonData[i] as any[];
+      const row: Record<string, string> = {};
+      headers.forEach((header, idx) => {
+        row[header] = String(rowData[idx] ?? '').trim();
+      });
+      if (Object.values(row).some(v => v !== '')) {
+        rows.push(row);
+      }
+    }
+    
+    return { headers, rows };
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
     
-    if (!selectedFile.name.endsWith('.csv')) {
+    const fileName = selectedFile.name.toLowerCase();
+    const isCSV = fileName.endsWith('.csv');
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    
+    if (!isCSV && !isExcel) {
       toast({
         title: 'Invalid file type',
-        description: 'Please upload a CSV file',
+        description: 'Please upload a CSV or Excel file (.csv, .xlsx, .xls)',
         variant: 'destructive',
       });
       return;
@@ -191,23 +224,35 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     setUploadResult(null);
     
     try {
-      const text = await selectedFile.text();
-      const { headers: csvHeaders, rows } = parseCSV(text);
-      setHeaders(csvHeaders);
+      let fileHeaders: string[];
+      let rows: Record<string, string>[];
       
-      const siteIdCol = findColumn(csvHeaders, [/site_id/i, /site_code/i, /siteid/i, /^id$/i]);
-      const siteNameCol = findColumn(csvHeaders, [/site_name/i, /sitename/i, /^name$/i]);
-      const stateCol = findColumn(csvHeaders, [/^state$/i, /state_name/i]);
-      const localityCol = findColumn(csvHeaders, [/^locality$/i, /locality_name/i]);
-      const latCol = findColumn(csvHeaders, GPS_COLUMN_PATTERNS.latitude);
-      const lngCol = findColumn(csvHeaders, GPS_COLUMN_PATTERNS.longitude);
-      const altCol = findColumn(csvHeaders, GPS_COLUMN_PATTERNS.altitude);
-      const precisionCol = findColumn(csvHeaders, GPS_COLUMN_PATTERNS.precision);
-      let combinedCol = findColumn(csvHeaders, GPS_COLUMN_PATTERNS.combined);
+      if (isExcel) {
+        const result = await parseExcelFile(selectedFile);
+        fileHeaders = result.headers;
+        rows = result.rows;
+      } else {
+        const text = await selectedFile.text();
+        const result = parseCSV(text);
+        fileHeaders = result.headers;
+        rows = result.rows;
+      }
+      
+      setHeaders(fileHeaders);
+      
+      const siteIdCol = findColumn(fileHeaders, [/site_id/i, /site_code/i, /siteid/i, /^id$/i]);
+      const siteNameCol = findColumn(fileHeaders, [/site_name/i, /sitename/i, /^name$/i]);
+      const stateCol = findColumn(fileHeaders, [/^state$/i, /state_name/i]);
+      const localityCol = findColumn(fileHeaders, [/^locality$/i, /locality_name/i]);
+      const latCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.latitude);
+      const lngCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.longitude);
+      const altCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.altitude);
+      const precisionCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.precision);
+      let combinedCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.combined);
       
       if (!combinedCol && !latCol && !lngCol && rows.length > 0) {
         const sampleRow = rows[0];
-        for (const header of csvHeaders) {
+        for (const header of fileHeaders) {
           if (sampleRow[header] && isLikelyGeopointColumn(header, sampleRow[header])) {
             combinedCol = header;
             console.log(`[GPS Upload] Auto-detected geopoint column: ${header}`);
@@ -481,7 +526,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               GPS Sites Bulk Upload
             </CardTitle>
             <CardDescription>
-              Upload CSV with site coordinates (ODK/KoboToolbox format supported)
+              Upload CSV or Excel file with site coordinates (ODK/KoboToolbox format supported)
             </CardDescription>
           </div>
           <Button
@@ -508,7 +553,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv,.xlsx,.xls"
             onChange={handleFileSelect}
             className="hidden"
             data-testid="input-file-upload"
@@ -518,11 +563,11 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             <div className="space-y-2">
               <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                Drop your CSV file here or click to browse
+                Drop your CSV or Excel file here or click to browse
               </p>
               <Button onClick={() => fileInputRef.current?.click()} data-testid="button-select-file">
                 <Upload className="h-4 w-4 mr-2" />
-                Select CSV File
+                Select File
               </Button>
             </div>
           ) : (
