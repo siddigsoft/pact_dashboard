@@ -18,6 +18,118 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates, getLocalitiesByState, hubs as defaultHubs, getTotalLocalityCount } from '@/data/sudanStates';
 import { sudanStateBoundaries } from '@/data/sudanGeoJSON';
+
+const stateNameAliases: { [key: string]: string } = {
+  'khartoum': 'khartoum',
+  'khartum': 'khartoum',
+  'al khartoum': 'khartoum',
+  'gezira': 'gezira',
+  'aj jazirah': 'gezira',
+  'al jazirah': 'gezira',
+  'al-jazirah': 'gezira',
+  'jazirah': 'gezira',
+  'red sea': 'red-sea',
+  'redsea': 'red-sea',
+  'al bahr al ahmar': 'red-sea',
+  'kassala': 'kassala',
+  'gedaref': 'gedaref',
+  'gadaref': 'gedaref',
+  'al qadarif': 'gedaref',
+  'qadarif': 'gedaref',
+  'white nile': 'white-nile',
+  'whitenile': 'white-nile',
+  'an nil al abyad': 'white-nile',
+  'blue nile': 'blue-nile',
+  'bluenile': 'blue-nile',
+  'an nil al azraq': 'blue-nile',
+  'sennar': 'sennar',
+  'sinnar': 'sennar',
+  'north kordofan': 'north-kordofan',
+  'northkordofan': 'north-kordofan',
+  'shamal kurdufan': 'north-kordofan',
+  'south kordofan': 'south-kordofan',
+  'southkordofan': 'south-kordofan',
+  'janub kurdufan': 'south-kordofan',
+  'west kordofan': 'west-kordofan',
+  'westkordofan': 'west-kordofan',
+  'gharb kurdufan': 'west-kordofan',
+  'north darfur': 'north-darfur',
+  'northdarfur': 'north-darfur',
+  'shamal darfur': 'north-darfur',
+  'south darfur': 'south-darfur',
+  'southdarfur': 'south-darfur',
+  'janub darfur': 'south-darfur',
+  'west darfur': 'west-darfur',
+  'westdarfur': 'west-darfur',
+  'gharb darfur': 'west-darfur',
+  'east darfur': 'east-darfur',
+  'eastdarfur': 'east-darfur',
+  'sharq darfur': 'east-darfur',
+  'central darfur': 'central-darfur',
+  'centraldarfur': 'central-darfur',
+  'wasat darfur': 'central-darfur',
+  'river nile': 'river-nile',
+  'rivernile': 'river-nile',
+  'nahr an nil': 'river-nile',
+  'northern': 'northern',
+  'ash shamaliyah': 'northern',
+  'al shamaliyah': 'northern',
+};
+
+function normalizeStateId(stateName: string): string | null {
+  if (!stateName) return null;
+  
+  const normalized = stateName.toLowerCase().trim().replace(/[\s_-]+/g, ' ');
+  
+  if (stateNameAliases[normalized]) {
+    return stateNameAliases[normalized];
+  }
+  
+  const noSpaces = normalized.replace(/\s+/g, '');
+  if (stateNameAliases[noSpaces]) {
+    return stateNameAliases[noSpaces];
+  }
+  
+  const hyphenated = normalized.replace(/\s+/g, '-');
+  const matchByExactId = sudanStates.find(s => s.id === hyphenated);
+  if (matchByExactId) return matchByExactId.id;
+  
+  const matchByName = sudanStates.find(s => 
+    s.name.toLowerCase() === normalized ||
+    s.name.toLowerCase().replace(/\s+/g, '-') === hyphenated
+  );
+  if (matchByName) return matchByName.id;
+  
+  return null;
+}
+
+function normalizeLocalityId(localityName: string, stateId: string): string | null {
+  if (!localityName || !stateId) return null;
+  
+  const state = sudanStates.find(s => s.id === stateId);
+  if (!state) return null;
+  
+  const normalized = localityName.toLowerCase().trim();
+  
+  const exactMatch = state.localities.find(l => 
+    l.name.toLowerCase() === normalized ||
+    l.id === normalized ||
+    l.id.endsWith('-' + normalized.replace(/\s+/g, '-'))
+  );
+  if (exactMatch) return exactMatch.id;
+  
+  const normalizedNoSpaces = normalized.replace(/[\s-]+/g, '');
+  const partialMatch = state.localities.find(l => {
+    const localityNorm = l.name.toLowerCase().replace(/[\s-]+/g, '');
+    return localityNorm === normalizedNoSpaces || 
+           localityNorm.includes(normalizedNoSpaces) || 
+           normalizedNoSpaces.includes(localityNorm);
+  });
+  if (partialMatch) return partialMatch.id;
+  
+  console.warn(`[Hub Operations] Unmatched locality "${localityName}" in state "${stateId}"`);
+  return null;
+}
 import { ManagedHub, SiteRegistry, ProjectScope, generateSiteCode } from '@/types/hub-operations';
 import StateMapCard, { getStateCoords, getStateColor } from '@/components/hub-operations/StateMapCard';
 import HubCard from '@/components/hub-operations/HubCard';
@@ -136,6 +248,32 @@ export default function HubOperations() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('sites_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sites_registry' },
+        (payload) => {
+          console.log('[Hub Operations] Sites registry change detected:', payload.eventType);
+          loadSites();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_site_entries' },
+        (payload) => {
+          console.log('[Hub Operations] MMP site entries change detected:', payload.eventType);
+          loadSites();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadData = async () => {
@@ -267,14 +405,28 @@ export default function HubOperations() {
         }
         seenSiteKeys.add(siteKey);
 
-        // Convert MMP site to SiteRegistry format
+        // Convert MMP site to SiteRegistry format with normalized IDs
+        const normalizedStateId = normalizeStateId(mmpSite.state || '');
+        const normalizedLocalityId = normalizedStateId 
+          ? normalizeLocalityId(mmpSite.locality || '', normalizedStateId) 
+          : null;
+        
+        if (!normalizedStateId) {
+          console.warn(`[Hub Operations] Skipping MMP site with unmatched state: "${mmpSite.state}" (site: ${mmpSite.site_name})`);
+          continue;
+        }
+        
+        if (!normalizedLocalityId && mmpSite.locality) {
+          console.warn(`[Hub Operations] MMP site has unmatched locality: "${mmpSite.locality}" in state "${normalizedStateId}" (site: ${mmpSite.site_name})`);
+        }
+        
         combinedSites.push({
           id: mmpSite.id,
           site_code: mmpSite.site_code || generateSiteCode(mmpSite.state || '', mmpSite.locality || '', mmpSite.site_name || '', 1, 'TPM'),
           site_name: mmpSite.site_name || '',
-          state_id: mmpSite.state?.toLowerCase().replace(/\s+/g, '-') || '',
+          state_id: normalizedStateId,
           state_name: mmpSite.state || '',
-          locality_id: mmpSite.locality?.toLowerCase().replace(/\s+/g, '-') || '',
+          locality_id: normalizedLocalityId || '',
           locality_name: mmpSite.locality || '',
           hub_id: '',
           hub_name: mmpSite.hub_office || '',
@@ -698,8 +850,31 @@ export default function HubOperations() {
     return hubs.find(h => h.states.includes(stateId));
   };
 
+  const getValidatedSitesForState = (stateId: string) => {
+    const state = sudanStates.find(s => s.id === stateId);
+    if (!state) return [];
+    
+    const validLocalityIds = new Set(state.localities.map(l => l.id));
+    
+    return sites.filter(s => 
+      s.state_id === stateId && 
+      s.locality_id && 
+      validLocalityIds.has(s.locality_id)
+    );
+  };
+
   const getSiteCountForState = (stateId: string) => {
-    return sites.filter(s => s.state_id === stateId).length;
+    return getValidatedSitesForState(stateId).length;
+  };
+
+  const getLocalitySiteCounts = (stateId: string) => {
+    const counts: { [localityId: string]: number } = {};
+    
+    getValidatedSitesForState(stateId).forEach(site => {
+      counts[site.locality_id!] = (counts[site.locality_id!] || 0) + 1;
+    });
+    
+    return counts;
   };
 
   const mapLocations = useMemo(() => {
@@ -1245,6 +1420,7 @@ export default function HubOperations() {
             {sudanStates.map(state => {
               const hub = getHubForState(state.id);
               const siteCount = getSiteCountForState(state.id);
+              const localitySiteCounts = getLocalitySiteCounts(state.id);
               const coords = getStateCoords(state.id);
               
               return (
@@ -1255,6 +1431,7 @@ export default function HubOperations() {
                   stateCode={state.code}
                   localities={state.localities}
                   siteCount={siteCount}
+                  localitySiteCounts={localitySiteCounts}
                   hubName={hub?.name}
                   coordinates={coords}
                   isSelected={selectedState === state.id}

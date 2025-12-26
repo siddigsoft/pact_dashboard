@@ -13,6 +13,7 @@ interface StateMapCardProps {
   stateCode: string;
   localities: { id: string; name: string; nameAr?: string }[];
   siteCount: number;
+  localitySiteCounts?: { [localityId: string]: number };
   hubName?: string;
   coordinates: [number, number];
   onViewDetails?: () => void;
@@ -100,6 +101,7 @@ export default function StateMapCard({
   stateCode,
   localities,
   siteCount,
+  localitySiteCounts = {},
   hubName,
   coordinates,
   onViewDetails,
@@ -107,6 +109,8 @@ export default function StateMapCard({
 }: StateMapCardProps) {
   const stateColor = getStateColor(stateId);
   const stateCoords = coordinates || getStateCoords(stateId);
+  
+  const localitiesWithSites = localities.filter(l => (localitySiteCounts[l.id] || 0) > 0).length;
 
   return (
     <Card 
@@ -168,11 +172,17 @@ export default function StateMapCard({
             <Globe className="h-4 w-4" />
             <span>{localities.length} Localities</span>
           </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Navigation className="h-4 w-4" />
-            <span>{siteCount} Sites</span>
+          <div className="flex items-center gap-2">
+            <Navigation className="h-4 w-4 text-primary" />
+            <span className="font-semibold text-foreground">{siteCount} Sites</span>
           </div>
         </div>
+        
+        {localitiesWithSites > 0 && (
+          <div className="text-xs text-muted-foreground">
+            {localitiesWithSites} of {localities.length} localities have registered sites
+          </div>
+        )}
         
         {hubName && (
           <div className="flex items-center gap-2 text-sm">
