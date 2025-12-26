@@ -27,6 +27,11 @@ interface ParsedSite {
   altitude: number | null;
   precision: number | null;
   rawGpsString?: string;
+  residenceLatitude: number | null;
+  residenceLongitude: number | null;
+  residenceAltitude: number | null;
+  residencePrecision: number | null;
+  rawResidenceGpsString?: string;
   isValid: boolean;
   validationErrors: string[];
   existsInRegistry: boolean;
@@ -50,12 +55,25 @@ const EXPECTED_COLUMNS = [
 ];
 
 const GPS_COLUMN_PATTERNS = {
-  latitude: [/_latitude$/i, /^latitude$/i, /^lat$/i, /_lat$/i, /:latitude$/i],
-  longitude: [/_longitude$/i, /^longitude$/i, /^lng$/i, /^lon$/i, /_lon$/i, /_lng$/i, /:longitude$/i],
-  altitude: [/_altitude$/i, /^altitude$/i, /^alt$/i, /_alt$/i, /:altitude$/i],
-  precision: [/_precision$/i, /^precision$/i, /^accuracy$/i, /_accuracy$/i, /:precision$/i, /:accuracy$/i],
-  combined: [/gps.*coordinates/i, /^gps$/i, /coordinates/i, /geopoint/i],
+  latitude: [/[/_]A06[/_]latitude$/i, /A06.*latitude/i, /site.*latitude/i, /_latitude$/i, /^latitude$/i, /^lat$/i, /_lat$/i, /:latitude$/i],
+  longitude: [/[/_]A06[/_]longitude$/i, /A06.*longitude/i, /site.*longitude/i, /_longitude$/i, /^longitude$/i, /^lng$/i, /^lon$/i, /_lon$/i, /_lng$/i, /:longitude$/i],
+  altitude: [/[/_]A06[/_]altitude$/i, /A06.*altitude/i, /site.*altitude/i, /_altitude$/i, /^altitude$/i, /^alt$/i, /_alt$/i, /:altitude$/i],
+  precision: [/[/_]A06[/_]precision$/i, /A06.*precision/i, /site.*precision/i, /_precision$/i, /^precision$/i, /^accuracy$/i, /_accuracy$/i, /:precision$/i, /:accuracy$/i],
+  combined: [/gps.*coordinates.*site/i, /site.*gps/i, /gps.*coordinates/i, /^gps$/i, /coordinates/i, /geopoint/i],
+  residenceLatitude: [/[/_]A05[/_]latitude$/i, /A05.*latitude/i, /residence.*latitude/i],
+  residenceLongitude: [/[/_]A05[/_]longitude$/i, /A05.*longitude/i, /residence.*longitude/i],
+  residenceAltitude: [/[/_]A05[/_]altitude$/i, /A05.*altitude/i, /residence.*altitude/i],
+  residencePrecision: [/[/_]A05[/_]precision$/i, /A05.*precision/i, /residence.*precision/i],
+  residenceCombined: [/gps.*coordinates.*residence/i, /residence.*gps/i, /residence.*coordinates/i],
 };
+
+function isA05Column(header: string): boolean {
+  return /[/_]A05[/_]/i.test(header) || /A05/i.test(header);
+}
+
+function isA06Column(header: string): boolean {
+  return /[/_]A06[/_]/i.test(header) || /A06/i.test(header);
+}
 
 function isLikelyGeopointColumn(header: string, sampleValue: string): boolean {
   if (!sampleValue) return false;
@@ -156,6 +174,11 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     altitude: string | null;
     precision: string | null;
     combinedGps: string | null;
+    residenceLatitude: string | null;
+    residenceLongitude: string | null;
+    residenceAltitude: string | null;
+    residencePrecision: string | null;
+    residenceCombinedGps: string | null;
   }>({
     siteId: null,
     siteName: null,
@@ -166,6 +189,11 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     altitude: null,
     precision: null,
     combinedGps: null,
+    residenceLatitude: null,
+    residenceLongitude: null,
+    residenceAltitude: null,
+    residencePrecision: null,
+    residenceCombinedGps: null,
   });
   const [headers, setHeaders] = useState<string[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -250,16 +278,30 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       const precisionCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.precision);
       let combinedCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.combined);
       
-      if (!combinedCol && !latCol && !lngCol && rows.length > 0) {
+      const resLatCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.residenceLatitude);
+      const resLngCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.residenceLongitude);
+      const resAltCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.residenceAltitude);
+      const resPrecisionCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.residencePrecision);
+      let resCombinedCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.residenceCombined);
+      
+      if (rows.length > 0) {
         const sampleRow = rows[0];
         for (const header of fileHeaders) {
           if (sampleRow[header] && isLikelyGeopointColumn(header, sampleRow[header])) {
-            combinedCol = header;
-            console.log(`[GPS Upload] Auto-detected geopoint column: ${header}`);
-            break;
+            if (isA05Column(header) || header.toLowerCase().includes('residence')) {
+              if (!resCombinedCol) {
+                resCombinedCol = header;
+                console.log(`[GPS Upload] Auto-detected residence geopoint column: ${header}`);
+              }
+            } else if (!combinedCol && !latCol && !lngCol) {
+              combinedCol = header;
+              console.log(`[GPS Upload] Auto-detected site geopoint column: ${header}`);
+            }
           }
         }
       }
+      
+      console.log(`[GPS Upload] Detected columns - Site GPS: ${latCol || combinedCol || 'none'}, Residence GPS: ${resLatCol || resCombinedCol || 'none'}`);
       
       setColumnMapping({
         siteId: siteIdCol,
@@ -271,11 +313,16 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         altitude: altCol,
         precision: precisionCol,
         combinedGps: combinedCol,
+        residenceLatitude: resLatCol,
+        residenceLongitude: resLngCol,
+        residenceAltitude: resAltCol,
+        residencePrecision: resPrecisionCol,
+        residenceCombinedGps: resCombinedCol,
       });
       
       const { data: existingSites } = await supabase
         .from('sites_registry')
-        .select('id, site_code, site_name, state_name, locality_name, gps_latitude, gps_longitude');
+        .select('id, site_code, site_name, state_name, locality_name, gps_latitude, gps_longitude, residence_latitude, residence_longitude');
       
       const siteMap = new Map<string, any>();
       (existingSites || []).forEach(site => {
@@ -298,13 +345,19 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         let precision: number | null = null;
         let rawGpsString: string | undefined;
         
+        let residenceLatitude: number | null = null;
+        let residenceLongitude: number | null = null;
+        let residenceAltitude: number | null = null;
+        let residencePrecision: number | null = null;
+        let rawResidenceGpsString: string | undefined;
+        
         if (combinedCol && row[combinedCol]) {
           rawGpsString = row[combinedCol];
-          const parsed = parseGPSString(row[combinedCol]);
-          latitude = parsed.lat;
-          longitude = parsed.lng;
-          altitude = parsed.alt;
-          precision = parsed.precision;
+          const parsedGps = parseGPSString(row[combinedCol]);
+          latitude = parsedGps.lat;
+          longitude = parsedGps.lng;
+          altitude = parsedGps.alt;
+          precision = parsedGps.precision;
         }
         
         if (latitude === null && latCol && row[latCol]) {
@@ -324,15 +377,48 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           if (isNaN(precision)) precision = null;
         }
         
+        if (resCombinedCol && row[resCombinedCol]) {
+          rawResidenceGpsString = row[resCombinedCol];
+          const parsedResGps = parseGPSString(row[resCombinedCol]);
+          residenceLatitude = parsedResGps.lat;
+          residenceLongitude = parsedResGps.lng;
+          residenceAltitude = parsedResGps.alt;
+          residencePrecision = parsedResGps.precision;
+        }
+        
+        if (residenceLatitude === null && resLatCol && row[resLatCol]) {
+          residenceLatitude = parseFloat(row[resLatCol]);
+          if (isNaN(residenceLatitude)) residenceLatitude = null;
+        }
+        if (residenceLongitude === null && resLngCol && row[resLngCol]) {
+          residenceLongitude = parseFloat(row[resLngCol]);
+          if (isNaN(residenceLongitude)) residenceLongitude = null;
+        }
+        if (residenceAltitude === null && resAltCol && row[resAltCol]) {
+          residenceAltitude = parseFloat(row[resAltCol]);
+          if (isNaN(residenceAltitude)) residenceAltitude = null;
+        }
+        if (residencePrecision === null && resPrecisionCol && row[resPrecisionCol]) {
+          residencePrecision = parseFloat(row[resPrecisionCol]);
+          if (isNaN(residencePrecision)) residencePrecision = null;
+        }
+        
         const validationErrors: string[] = [];
         if (!siteId && !siteName) validationErrors.push('Missing site ID or name');
         if (!state) validationErrors.push('Missing state');
-        if (latitude === null || longitude === null) validationErrors.push('Invalid or missing GPS coordinates');
-        if (latitude !== null && (latitude < -90 || latitude > 90)) validationErrors.push('Latitude out of range');
-        if (longitude !== null && (longitude < -180 || longitude > 180)) validationErrors.push('Longitude out of range');
+        const hasSiteGps = latitude !== null && longitude !== null;
+        const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
+        if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Invalid or missing GPS coordinates (need site or residence)');
+        if (latitude !== null && (latitude < -90 || latitude > 90)) validationErrors.push('Site latitude out of range');
+        if (longitude !== null && (longitude < -180 || longitude > 180)) validationErrors.push('Site longitude out of range');
+        if (residenceLatitude !== null && (residenceLatitude < -90 || residenceLatitude > 90)) validationErrors.push('Residence latitude out of range');
+        if (residenceLongitude !== null && (residenceLongitude < -180 || residenceLongitude > 180)) validationErrors.push('Residence longitude out of range');
         
         const lookupKey = `${siteId.toLowerCase()}_${siteName.toLowerCase()}_${state.toLowerCase()}`;
         const existingSite = siteMap.get(siteId.toLowerCase()) || siteMap.get(lookupKey);
+        
+        const willUpdateSiteGps = hasSiteGps && (!existingSite?.gps_latitude || !existingSite?.gps_longitude);
+        const willUpdateResidenceGps = hasResidenceGps && (!existingSite?.residence_latitude || !existingSite?.residence_longitude);
         
         return {
           rowIndex: idx + 2,
@@ -345,11 +431,16 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           altitude,
           precision,
           rawGpsString,
+          residenceLatitude,
+          residenceLongitude,
+          residenceAltitude,
+          residencePrecision,
+          rawResidenceGpsString,
           isValid: validationErrors.length === 0,
           validationErrors,
           existsInRegistry: !!existingSite,
           registrySiteId: existingSite?.id,
-          willUpdate: !!existingSite && (existingSite.gps_latitude === null || existingSite.gps_longitude === null),
+          willUpdate: !!existingSite && (willUpdateSiteGps || willUpdateResidenceGps || hasSiteGps || hasResidenceGps),
         };
       });
       
@@ -399,15 +490,23 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         
         try {
           if (site.existsInRegistry && site.registrySiteId) {
+            const updateData: Record<string, any> = {
+              gps_captured_by: currentUser?.id,
+              gps_captured_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+            if (site.latitude !== null) updateData.gps_latitude = site.latitude;
+            if (site.longitude !== null) updateData.gps_longitude = site.longitude;
+            if (site.altitude !== null) updateData.gps_altitude = site.altitude;
+            if (site.precision !== null) updateData.gps_precision = site.precision;
+            if (site.residenceLatitude !== null) updateData.residence_latitude = site.residenceLatitude;
+            if (site.residenceLongitude !== null) updateData.residence_longitude = site.residenceLongitude;
+            if (site.residenceAltitude !== null) updateData.residence_altitude = site.residenceAltitude;
+            if (site.residencePrecision !== null) updateData.residence_precision = site.residencePrecision;
+            
             const { error } = await supabase
               .from('sites_registry')
-              .update({
-                gps_latitude: site.latitude,
-                gps_longitude: site.longitude,
-                gps_captured_by: currentUser?.id,
-                gps_captured_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              })
+              .update(updateData)
               .eq('id', site.registrySiteId);
             
             if (error) {
@@ -435,24 +534,32 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             
             const siteCode = site.siteId || `SITE-${Date.now()}-${i}`;
             
+            const insertData: Record<string, any> = {
+              site_code: siteCode,
+              site_name: site.siteName || siteCode,
+              state_id: stateData?.id || '',
+              state_name: stateData?.name || site.state,
+              locality_id: localityData?.id || '',
+              locality_name: localityData?.name || site.locality,
+              gps_captured_by: currentUser?.id,
+              gps_captured_at: new Date().toISOString(),
+              status: 'registered',
+              mmp_count: 0,
+              created_by: currentUser?.id || 'system',
+              created_at: new Date().toISOString(),
+            };
+            if (site.latitude !== null) insertData.gps_latitude = site.latitude;
+            if (site.longitude !== null) insertData.gps_longitude = site.longitude;
+            if (site.altitude !== null) insertData.gps_altitude = site.altitude;
+            if (site.precision !== null) insertData.gps_precision = site.precision;
+            if (site.residenceLatitude !== null) insertData.residence_latitude = site.residenceLatitude;
+            if (site.residenceLongitude !== null) insertData.residence_longitude = site.residenceLongitude;
+            if (site.residenceAltitude !== null) insertData.residence_altitude = site.residenceAltitude;
+            if (site.residencePrecision !== null) insertData.residence_precision = site.residencePrecision;
+            
             const { error } = await supabase
               .from('sites_registry')
-              .insert({
-                site_code: siteCode,
-                site_name: site.siteName || siteCode,
-                state_id: stateData?.id || '',
-                state_name: stateData?.name || site.state,
-                locality_id: localityData?.id || '',
-                locality_name: localityData?.name || site.locality,
-                gps_latitude: site.latitude,
-                gps_longitude: site.longitude,
-                gps_captured_by: currentUser?.id,
-                gps_captured_at: new Date().toISOString(),
-                status: 'registered',
-                mmp_count: 0,
-                created_by: currentUser?.id || 'system',
-                created_at: new Date().toISOString(),
-              });
+              .insert(insertData);
             
             if (error) {
               if (error.code === '23505') {
@@ -533,7 +640,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             variant="outline"
             size="sm"
             onClick={() => {
-              const template = 'site_id,site_name,state,locality,SECTION_A/A06_latitude,SECTION_A/A06_longitude,SECTION_A/A06_altitude,SECTION_A/A06_precision\nSITE001,Health Center A,North Darfur,Al Fasher,13.7506,34.4040,432.19,6.65';
+              const template = 'site_id,site_name,state,locality,SECTION_A/_A06_latitude,SECTION_A/_A06_longitude,SECTION_A/_A06_altitude,SECTION_A/_A06_precision,SECTION_A/_A05_latitude,SECTION_A/_A05_longitude,SECTION_A/_A05_altitude,SECTION_A/_A05_precision\nSITE001,Health Center A,North Darfur,Al Fasher,13.7506,34.4040,432.19,6.65,13.7510,34.4045,430.50,5.20';
               const blob = new Blob([template], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');

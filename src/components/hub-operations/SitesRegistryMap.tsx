@@ -14,6 +14,10 @@ interface SiteWithGPS {
   gps_longitude: number;
   gps_altitude?: number | null;
   gps_precision?: number | null;
+  residence_latitude?: number | null;
+  residence_longitude?: number | null;
+  residence_altitude?: number | null;
+  residence_precision?: number | null;
   source?: string;
   activity_type?: string | null;
 }
