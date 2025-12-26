@@ -203,6 +203,109 @@ function generateSiteCode(state: string, locality: string, siteName: string): st
   return `${stateCode}-${localityCode}-${siteCode}-${timestamp}`
 }
 
+// Sudan states configuration - must match frontend sudanStates.ts
+const SUDAN_STATES = [
+  { id: 'khartoum', name: 'Khartoum', code: 'KH', localities: ['kh-khartoum', 'kh-bahri', 'kh-omdurman', 'kh-jebel-awlia', 'kh-karrari', 'kh-sharg-an-neel', 'kh-um-bada'] },
+  { id: 'gezira', name: 'Aj Jazirah', code: 'GZ', localities: ['gz-medani-al-kubra', 'gz-al-hasahisa', 'gz-al-kamlin', 'gz-al-manaqil', 'gz-al-qurashi', 'gz-janub-al-jazirah', 'gz-sharg-al-jazirah', 'gz-um-algura'] },
+  { id: 'red-sea', name: 'Red Sea', code: 'RS', localities: ['rs-port-sudan', 'rs-sawakin', 'rs-agig', 'rs-al-ganab', 'rs-dordieb', 'rs-halaib', 'rs-haya', 'rs-jubayt-elmaadin', 'rs-sinkat', 'rs-tawkar'] },
+  { id: 'kassala', name: 'Kassala', code: 'KS', localities: ['ks-madeinat-kassala', 'ks-halfa-aj-jadeedah', 'ks-reifi-aroma', 'ks-reifi-gharb-kassala', 'ks-reifi-hamashkureib', 'ks-reifi-kassla', 'ks-reifi-khashm-elgirba', 'ks-reifi-nahr-atbara', 'ks-reifi-shamal-ad-delta', 'ks-reifi-telkok', 'ks-reifi-wad-elhilaiw'] },
+  { id: 'gedaref', name: 'Gedaref', code: 'GD', localities: ['gd-madeinat-al-gedaref', 'gd-wasat-al-gedaref', 'gd-al-butanah', 'gd-al-fao', 'gd-al-fashaga', 'gd-al-galabat-al-gharbyah', 'gd-al-mafaza', 'gd-al-qureisha', 'gd-ar-rahad', 'gd-basundah', 'gd-al-galabat-ash-sharqiya', 'gd-gala-en-nahal'] },
+  { id: 'white-nile', name: 'White Nile', code: 'WN', localities: ['wn-kosti', 'wn-rabak', 'wn-aj-jabalain', 'wn-as-salam', 'wn-guli', 'wn-tandalti', 'wn-um-rimta', 'wn-ad-douiem'] },
+  { id: 'blue-nile', name: 'Blue Nile', code: 'BN', localities: ['bn-ad-damazin', 'bn-at-tadamon', 'bn-al-kurmuk', 'bn-al-roseiris', 'bn-bau', 'bn-gaisan', 'bn-wad-al-mahi'] },
+  { id: 'sennar', name: 'Sennar', code: 'SN', localities: ['sn-sennar', 'sn-singa', 'sn-abu-hujar', 'sn-ad-dali', 'sn-al-dinder', 'sn-as-suki', 'sn-sharq-sennar'] },
+  { id: 'north-kordofan', name: 'North Kordofan', code: 'NK', localities: ['nk-al-ubayyid', 'nk-shaykan', 'nk-an-nuhud', 'nk-abu-zabad', 'nk-al-khiwai', 'nk-bara', 'nk-gabrat-al-sheikh', 'nk-gharb-bara', 'nk-sodari', 'nk-um-dam-haj-ahmed', 'nk-um-rawaba', 'nk-wad-banda'] },
+  { id: 'south-kordofan', name: 'South Kordofan', code: 'SK', localities: ['sk-kaduqli', 'sk-dilling', 'sk-al-buram', 'sk-al-liri', 'sk-ar-rashad', 'sk-as-sunut', 'sk-at-tadamon', 'sk-dalami', 'sk-habila', 'sk-heiban', 'sk-talodi', 'sk-um-durein', 'sk-abu-jubaihah', 'sk-ghadeer', 'sk-reif-asharqi', 'sk-al-quoz', 'sk-al-abassiya'] },
+  { id: 'west-kordofan', name: 'West Kordofan', code: 'WK', localities: ['wk-al-fula', 'wk-abyei', 'wk-al-idia', 'wk-al-khiwai', 'wk-al-meiram', 'wk-an-nuhud', 'wk-as-salam', 'wk-at-tubun', 'wk-babanusa', 'wk-ghubaish', 'wk-lagawa', 'wk-wad-banda'] },
+  { id: 'north-darfur', name: 'North Darfur', code: 'ND', localities: ['nd-al-fasher', 'nd-kutum', 'nd-al-lait', 'nd-al-malha', 'nd-at-tawisha', 'nd-al-waha', 'nd-dar-as-salam', 'nd-kelemando', 'nd-kebkabiya', 'nd-kornoi', 'nd-al-kuma', 'nd-melit', 'nd-saraf-omra', 'nd-tawila', 'nd-um-baru', 'nd-um-kadada', 'nd-al-serief'] },
+  { id: 'south-darfur', name: 'South Darfur', code: 'SD', localities: ['sd-nyala', 'sd-al-radoom', 'sd-as-salam', 'sd-buram', 'sd-damso', 'sd-ed-al-fursan', 'sd-gereida', 'sd-idd-al-ghanam', 'sd-kas', 'sd-katila', 'sd-kubum', 'sd-marshing', 'sd-nitega', 'sd-rehaid-elbirdi', 'sd-sharg-aj-jabal', 'sd-shattaya', 'sd-tulus', 'sd-um-dafoug', 'sd-al-wihda', 'sd-beleil'] },
+  { id: 'west-darfur', name: 'West Darfur', code: 'WD', localities: ['wd-al-geneina', 'wd-beida', 'wd-habila', 'wd-jebel-moon', 'wd-kereinik', 'wd-kulbus', 'wd-sirba', 'wd-um-dukhun'] },
+  { id: 'east-darfur', name: 'East Darfur', code: 'ED', localities: ['ed-ed-daein', 'ed-abu-jabra', 'ed-abu-karinka', 'ed-adila', 'ed-al-firdous', 'ed-assalaya', 'ed-bahr-al-arab', 'ed-sheiria', 'ed-yassin'] },
+  { id: 'central-darfur', name: 'Central Darfur', code: 'CD', localities: ['cd-zalingei', 'cd-azum', 'cd-bendasi', 'cd-jebel-marra', 'cd-mukjar', 'cd-nertiti', 'cd-rokero', 'cd-um-dukhun', 'cd-wadi-salih'] },
+  { id: 'river-nile', name: 'River Nile', code: 'RN', localities: ['rn-atbara', 'rn-shendi', 'rn-ad-damar', 'rn-al-buhaira', 'rn-al-matammah', 'rn-barbar', 'rn-abu-hamad'] },
+  { id: 'northern', name: 'Northern', code: 'NR', localities: ['nr-dongola', 'nr-al-golid', 'nr-al-burgaig', 'nr-al-dabbah', 'nr-delgo', 'nr-halfa', 'nr-merowe'] },
+]
+
+const STATE_NAME_ALIASES: { [key: string]: string } = {
+  'khartoum': 'khartoum', 'khartum': 'khartoum', 'al khartoum': 'khartoum',
+  'gezira': 'gezira', 'aj jazirah': 'gezira', 'al jazirah': 'gezira', 'al-jazirah': 'gezira', 'jazirah': 'gezira',
+  'red sea': 'red-sea', 'redsea': 'red-sea', 'al bahr al ahmar': 'red-sea',
+  'kassala': 'kassala',
+  'gedaref': 'gedaref', 'gadaref': 'gedaref', 'al qadarif': 'gedaref', 'qadarif': 'gedaref',
+  'white nile': 'white-nile', 'whitenile': 'white-nile', 'an nil al abyad': 'white-nile',
+  'blue nile': 'blue-nile', 'bluenile': 'blue-nile', 'an nil al azraq': 'blue-nile',
+  'sennar': 'sennar', 'sinnar': 'sennar',
+  'north kordofan': 'north-kordofan', 'northkordofan': 'north-kordofan', 'shamal kurdufan': 'north-kordofan',
+  'south kordofan': 'south-kordofan', 'southkordofan': 'south-kordofan', 'janub kurdufan': 'south-kordofan',
+  'west kordofan': 'west-kordofan', 'westkordofan': 'west-kordofan', 'gharb kurdufan': 'west-kordofan',
+  'north darfur': 'north-darfur', 'northdarfur': 'north-darfur', 'shamal darfur': 'north-darfur',
+  'south darfur': 'south-darfur', 'southdarfur': 'south-darfur', 'janub darfur': 'south-darfur',
+  'west darfur': 'west-darfur', 'westdarfur': 'west-darfur', 'gharb darfur': 'west-darfur',
+  'east darfur': 'east-darfur', 'eastdarfur': 'east-darfur', 'sharq darfur': 'east-darfur',
+  'central darfur': 'central-darfur', 'centraldarfur': 'central-darfur', 'wasat darfur': 'central-darfur',
+  'river nile': 'river-nile', 'rivernile': 'river-nile', 'nahr an nil': 'river-nile',
+  'northern': 'northern', 'ash shamaliyah': 'northern',
+}
+
+function normalizeStateId(stateName: string | null): string | null {
+  if (!stateName) return null
+  
+  const normalized = stateName.toLowerCase().trim().replace(/[\s_-]+/g, ' ')
+  
+  if (STATE_NAME_ALIASES[normalized]) {
+    return STATE_NAME_ALIASES[normalized]
+  }
+  
+  const noSpaces = normalized.replace(/\s+/g, '')
+  if (STATE_NAME_ALIASES[noSpaces]) {
+    return STATE_NAME_ALIASES[noSpaces]
+  }
+  
+  const hyphenated = normalized.replace(/\s+/g, '-')
+  const matchByExactId = SUDAN_STATES.find(s => s.id === hyphenated)
+  if (matchByExactId) return matchByExactId.id
+  
+  const matchByName = SUDAN_STATES.find(s => 
+    s.name.toLowerCase() === normalized ||
+    s.name.toLowerCase().replace(/\s+/g, '-') === hyphenated
+  )
+  if (matchByName) return matchByName.id
+  
+  console.warn(`[MoDa Webhook] Unmatched state: "${stateName}"`)
+  return null
+}
+
+function normalizeLocalityId(localityName: string | null, stateId: string | null): string | null {
+  if (!localityName || !stateId) return null
+  
+  const state = SUDAN_STATES.find(s => s.id === stateId)
+  if (!state) return null
+  
+  const normalized = localityName.toLowerCase().trim()
+  const normalizedNoSpaces = normalized.replace(/[\s-]+/g, '')
+  
+  // Try to match locality by partial name
+  const prefix = state.code.toLowerCase() + '-'
+  
+  // Exact match
+  const exactMatch = state.localities.find(lid => 
+    lid === normalized ||
+    lid === prefix + normalized.replace(/\s+/g, '-')
+  )
+  if (exactMatch) return exactMatch
+  
+  // Partial match
+  const partialMatch = state.localities.find(lid => {
+    const localityNorm = lid.replace(prefix, '').replace(/-/g, '')
+    return localityNorm === normalizedNoSpaces || 
+           localityNorm.includes(normalizedNoSpaces) || 
+           normalizedNoSpaces.includes(localityNorm)
+  })
+  if (partialMatch) return partialMatch
+  
+  console.warn(`[MoDa Webhook] Unmatched locality "${localityName}" in state "${stateId}"`)
+  return null
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -306,13 +409,28 @@ serve(async (req) => {
     let result: any
     let operation: 'created' | 'updated' = 'created'
 
+    // Normalize state and locality IDs to match frontend expectations
+    const normalizedStateId = normalizeStateId(parsed.state)
+    const normalizedLocalityId = normalizeLocalityId(parsed.locality, normalizedStateId)
+    
+    // Find state name from normalized ID
+    const stateInfo = SUDAN_STATES.find(s => s.id === normalizedStateId)
+    
+    console.log('[MoDa Webhook] Normalized location:', {
+      rawState: parsed.state,
+      normalizedStateId,
+      rawLocality: parsed.locality,
+      normalizedLocalityId,
+      stateFound: !!stateInfo
+    })
+
     const siteData = {
       site_code: siteCode,
       site_name: parsed.siteName || siteCode,
-      state_name: parsed.state || 'Unknown',
-      state_id: parsed.state?.toLowerCase().replace(/\s+/g, '-') || 'unknown',
+      state_name: stateInfo?.name || parsed.state || 'Unknown',
+      state_id: normalizedStateId || 'unknown',
       locality_name: parsed.locality || 'Unknown',
-      locality_id: parsed.locality?.toLowerCase().replace(/\s+/g, '-') || 'unknown',
+      locality_id: normalizedLocalityId || 'unknown',
       gps_latitude: hasSiteGps ? parsed.siteGps.latitude : (hasResidenceGps ? parsed.residenceGps.latitude : null),
       gps_longitude: hasSiteGps ? parsed.siteGps.longitude : (hasResidenceGps ? parsed.residenceGps.longitude : null),
       gps_altitude: hasSiteGps ? parsed.siteGps.altitude : (hasResidenceGps ? parsed.residenceGps.altitude : null),
