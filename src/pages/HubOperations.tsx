@@ -1349,6 +1349,12 @@ export default function HubOperations() {
               locality_name: s.locality_name,
               gps_latitude: s.gps_latitude!,
               gps_longitude: s.gps_longitude!,
+              gps_altitude: s.gps_altitude,
+              gps_precision: s.gps_precision,
+              residence_latitude: s.residence_latitude,
+              residence_longitude: s.residence_longitude,
+              residence_altitude: s.residence_altitude,
+              residence_precision: s.residence_precision,
               source: s.source,
               activity_type: s.activity_type,
             }))}

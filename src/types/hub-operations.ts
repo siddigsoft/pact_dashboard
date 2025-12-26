@@ -22,8 +22,14 @@ export interface SiteRegistry {
   hub_name?: string;
   gps_latitude?: number | null;
   gps_longitude?: number | null;
+  gps_altitude?: number | null;
+  gps_precision?: number | null;
   gps_captured_by?: string;
   gps_captured_at?: string;
+  residence_latitude?: number | null;
+  residence_longitude?: number | null;
+  residence_altitude?: number | null;
+  residence_precision?: number | null;
   activity_type?: string;
   status: 'registered' | 'active' | 'inactive' | 'archived' | string;
   mmp_count: number;
