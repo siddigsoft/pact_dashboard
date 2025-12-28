@@ -357,14 +357,14 @@ export default function HubOperations() {
       
       const { data: mmpSitesWithRegistry, error: mmpErrorWithRegistry } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at')
+        .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, cp_name, activity_at_site, monitoring_by, survey_tool, visit_date, visit_type, main_activity, use_market_diversion, use_warehouse_monitoring, comments, additional_data, status')
         .order('created_at', { ascending: false });
       
       if (mmpErrorWithRegistry && mmpErrorWithRegistry.code === '42703') {
         // Column doesn't exist, try without registry_site_id
         const { data: mmpSitesBasic, error: mmpErrorBasic } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_code, site_name, state, locality, hub_office, created_at')
+          .select('id, site_code, site_name, state, locality, hub_office, created_at, cp_name, activity_at_site, monitoring_by, survey_tool, visit_date, visit_type, main_activity, use_market_diversion, use_warehouse_monitoring, comments, additional_data, status')
           .order('created_at', { ascending: false });
         
         if (mmpErrorBasic && mmpErrorBasic.code !== '42P01') {
@@ -461,15 +461,39 @@ export default function HubOperations() {
           locality_name: mmpSite.locality || '',
           hub_id: hubIdForMmp || '',
           hub_name: hubNameForMmp || mmpSite.hub_office || '',
+          hub_office: mmpSite.hub_office || hubNameForMmp || '',
+          hubOffice: mmpSite.hub_office || hubNameForMmp || '',
           gps_latitude: null,
           gps_longitude: null,
           activity_type: 'TPM',
-          status: 'active',
+          status: mmpSite.status || 'active',
           mmp_count: 1,
           created_at: mmpSite.created_at || new Date().toISOString(),
           updated_at: mmpSite.created_at || new Date().toISOString(),
           created_by: '',
-          source: 'mmp' as const
+          source: 'mmp' as const,
+          // MMP-specific fields
+          cp_name: mmpSite.cp_name || '',
+          cpName: mmpSite.cp_name || '',
+          activity_at_site: mmpSite.activity_at_site || '',
+          siteActivity: mmpSite.activity_at_site || '',
+          monitoring_by: mmpSite.monitoring_by || '',
+          monitoringBy: mmpSite.monitoring_by || '',
+          survey_tool: mmpSite.survey_tool || '',
+          surveyTool: mmpSite.survey_tool || '',
+          visit_date: mmpSite.visit_date || '',
+          visitDate: mmpSite.visit_date || '',
+          visit_type: mmpSite.visit_type || '',
+          visitType: mmpSite.visit_type || '',
+          main_activity: mmpSite.main_activity || '',
+          mainActivity: mmpSite.main_activity || '',
+          use_market_diversion: mmpSite.use_market_diversion || false,
+          useMarketDiversion: mmpSite.use_market_diversion || false,
+          use_warehouse_monitoring: mmpSite.use_warehouse_monitoring || false,
+          useWarehouseMonitoring: mmpSite.use_warehouse_monitoring || false,
+          comments: mmpSite.comments || '',
+          additional_data: mmpSite.additional_data || {},
+          additionalData: mmpSite.additional_data || {},
         });
       }
 

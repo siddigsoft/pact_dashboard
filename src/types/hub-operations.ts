@@ -20,6 +20,8 @@ export interface SiteRegistry {
   locality_name: string;
   hub_id?: string;
   hub_name?: string;
+  hub_office?: string;
+  hubOffice?: string;
   gps_latitude?: number | null;
   gps_longitude?: number | null;
   gps_altitude?: number | null;
@@ -38,6 +40,28 @@ export interface SiteRegistry {
   created_by: string;
   updated_at?: string;
   source?: 'registry' | 'mmp';
+  // MMP-specific fields
+  cp_name?: string;
+  cpName?: string;
+  activity_at_site?: string;
+  siteActivity?: string;
+  monitoring_by?: string;
+  monitoringBy?: string;
+  survey_tool?: string;
+  surveyTool?: string;
+  visit_date?: string;
+  visitDate?: string;
+  visit_type?: string;
+  visitType?: string;
+  main_activity?: string;
+  mainActivity?: string;
+  use_market_diversion?: boolean;
+  useMarketDiversion?: boolean;
+  use_warehouse_monitoring?: boolean;
+  useWarehouseMonitoring?: boolean;
+  comments?: string;
+  additional_data?: any;
+  additionalData?: any;
 }
 
 export interface ProjectScope {
