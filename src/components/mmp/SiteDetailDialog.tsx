@@ -68,7 +68,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
 
     const ad = site?.additionalData || site?.additional_data || {};
 
-    const hubOffice = site.hubOffice || site.hub_office || vd?.hubOffice || ad['Hub Office'] || ad['Hub Office:'] || '';
+    const hubOffice = site.hub_name || site.hubName || site.hubOffice || site.hub_office || vd?.hubOffice || ad['Hub Office'] || ad['Hub Office:'] || '';
     const state = site.state || site.state_name || vd?.state || ad['State'] || ad['State:'] || '';
     const locality = site.locality || site.locality_name || vd?.locality || ad['Locality'] || ad['Locality:'] || '';
     const siteCode = site.siteCode || site.site_code || vd?.siteCode || ad['Site Code'] || ad['Site Code:'] || '';
