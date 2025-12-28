@@ -497,7 +497,18 @@ export default function HubOperations() {
         });
       }
 
-      console.log(`Loaded ${combinedSites.length} sites (${registrySites?.length || 0} from registry, ${combinedSites.length - (registrySites?.length || 0)} from MMP)`);
+      console.log(`[loadSites] Loaded ${combinedSites.length} sites (${registrySites?.length || 0} from registry, ${combinedSites.length - (registrySites?.length || 0)} from MMP)`);
+      if (combinedSites.length > 0) {
+        console.log('[loadSites] Sample site with MMP fields:', {
+          site_name: combinedSites[0].site_name,
+          cp_name: combinedSites[0].cp_name,
+          activity_at_site: combinedSites[0].activity_at_site,
+          monitoring_by: combinedSites[0].monitoring_by,
+          survey_tool: combinedSites[0].survey_tool,
+          visit_date: combinedSites[0].visit_date,
+          source: combinedSites[0].source,
+        });
+      }
       setSites(combinedSites);
       localStorage.removeItem('pact_sites_local');
     } catch (err) {
@@ -524,6 +535,12 @@ export default function HubOperations() {
 
   const fetchMmpEntryDataForSite = async (site: SiteRegistry): Promise<any> => {
     try {
+      // If site already has MMP fields populated (from source='mmp' or previous enrichment), return as-is
+      if (site.source === 'mmp' && (site.cp_name || site.cpName || site.activity_at_site || site.siteActivity)) {
+        console.log('[fetchMmpEntryDataForSite] Site already has MMP data, returning as-is:', site.site_name);
+        return site;
+      }
+      
       let mmpEntry = null;
       
       if (site.id) {
