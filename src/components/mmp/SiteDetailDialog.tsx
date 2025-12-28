@@ -13,6 +13,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
+import { parseBoolean } from '@/utils/siteNormalization';
 
 interface SiteDetailDialogProps {
   open: boolean;
@@ -77,10 +78,10 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const siteActivity = site.siteActivity || site.activity_at_site || site.activity || vd?.siteActivity || ad['Activity at the site'] || ad['Activity at Site'] || ad['Activity at the site:'] || '';
     const monitoringBy = site.monitoringBy || site.monitoring_by || vd?.monitoringBy || ad['monitoring by'] || ad['monitoring by:'] || ad['Monitoring By'] || '';
     const surveyTool = site.surveyTool || site.survey_tool || vd?.surveyTool || ad['Survey under Master tool'] || ad['Survey under Master tool:'] || ad['Survey Tool'] || '';
-    const useMarketDiversion = site.useMarketDiversion || site.use_market_diversion || vd?.useMarketDiversion || 
-      (ad['Use Market Diversion Monitoring'] === 'Yes' || ad['Use Market Diversion Monitoring'] === 'true' || ad['Use Market Diversion Monitoring'] === '1') || false;
-    const useWarehouseMonitoring = site.useWarehouseMonitoring || site.use_warehouse_monitoring || vd?.useWarehouseMonitoring || 
-      (ad['Use Warehouse Monitoring'] === 'Yes' || ad['Use Warehouse Monitoring'] === 'true' || ad['Use Warehouse Monitoring'] === '1') || false;
+    const useMarketDiversion = parseBoolean(site.useMarketDiversion) || parseBoolean(site.use_market_diversion) || parseBoolean(vd?.useMarketDiversion) || 
+      parseBoolean(ad['Use Market Diversion Monitoring']);
+    const useWarehouseMonitoring = parseBoolean(site.useWarehouseMonitoring) || parseBoolean(site.use_warehouse_monitoring) || parseBoolean(vd?.useWarehouseMonitoring) || 
+      parseBoolean(ad['Use Warehouse Monitoring']);
 
     const rawDate = site.due_date || site.visitDate || site.visit_date || '';
     let visitDate = '';
