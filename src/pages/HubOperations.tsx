@@ -17,6 +17,17 @@ import { useAppContext } from '@/context/AppContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates, getLocalitiesByState, hubs as defaultHubs, getTotalLocalityCount } from '@/data/sudanStates';
+import { 
+  MMPSiteEntry,
+  normalizeStateId as normalizeStateIdUtil, 
+  normalizeLocalityId as normalizeLocalityIdUtil,
+  buildMmpLookupMaps,
+  aggregateMmpHistory,
+  enrichSiteWithMmpData,
+  generateNormalizedSiteKey,
+  normalizeSiteCode,
+  parseBoolean
+} from '@/utils/siteNormalization';
 import { sudanStateBoundaries } from '@/data/sudanGeoJSON';
 
 const stateNameAliases: { [key: string]: string } = {
@@ -349,15 +360,19 @@ export default function HubOperations() {
       
       if (registryError && registryError.code !== '42P01') {
         console.error('Error loading registry sites:', registryError);
+        toast({
+          title: 'Warning',
+          description: 'Some registry sites could not be loaded',
+          variant: 'destructive',
+        });
       }
 
       // Load unique sites from MMP entries (sites uploaded via MMP)
-      // Try with registry_site_id first, fallback to basic query if column doesn't exist
-      let mmpSites: any[] | null = null;
+      let mmpSites: MMPSiteEntry[] | null = null;
       
       const { data: mmpSitesWithRegistry, error: mmpErrorWithRegistry } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, cp_name, activity_at_site, monitoring_by, survey_tool, visit_date, visit_type, main_activity, use_market_diversion, use_warehouse_monitoring, comments, additional_data, status')
+        .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, cp_name, activity_at_site, monitoring_by, survey_tool, visit_date, visit_type, main_activity, use_market_diversion, use_warehouse_monitoring, comments, additional_data, status, mmp_file_id')
         .order('created_at', { ascending: false });
       
       if (mmpErrorWithRegistry && mmpErrorWithRegistry.code === '42703') {
@@ -369,48 +384,54 @@ export default function HubOperations() {
         
         if (mmpErrorBasic && mmpErrorBasic.code !== '42P01') {
           console.error('Error loading MMP sites:', mmpErrorBasic);
+          toast({
+            title: 'Warning',
+            description: 'Some MMP entries could not be loaded',
+            variant: 'destructive',
+          });
         }
-        mmpSites = mmpSitesBasic;
+        mmpSites = (mmpSitesBasic || []).map(s => ({ ...s, registry_site_id: null })) as MMPSiteEntry[];
       } else {
         if (mmpErrorWithRegistry && mmpErrorWithRegistry.code !== '42P01') {
           console.error('Error loading MMP sites:', mmpErrorWithRegistry);
+          toast({
+            title: 'Warning',
+            description: 'Some MMP entries could not be loaded',
+            variant: 'destructive',
+          });
         }
-        mmpSites = mmpSitesWithRegistry;
+        mmpSites = (mmpSitesWithRegistry || []) as MMPSiteEntry[];
       }
+
+      // Build lookup maps using centralized utility with multi-key indexing
+      const { byRegistryId, bySiteKey, bySiteCode } = buildMmpLookupMaps(mmpSites || []);
 
       // Combine sites: registry sites + unique MMP sites not in registry
       const combinedSites: SiteRegistry[] = [];
       const seenSiteKeys = new Set<string>();
-      
-      // Create a map of registry_site_id -> MMP entry for quick lookup
-      const mmpByRegistryId: Record<string, any> = {};
-      const mmpBySiteKey: Record<string, any> = {};
-      for (const mmpSite of (mmpSites || [])) {
-        if (mmpSite.registry_site_id) {
-          mmpByRegistryId[mmpSite.registry_site_id] = mmpSite;
-        }
-        // Also index by site key for fallback matching
-        const mmpKey = `${mmpSite.site_code || ''}-${mmpSite.site_name}-${mmpSite.state}-${mmpSite.locality}`.toLowerCase();
-        if (!mmpBySiteKey[mmpKey]) {
-          mmpBySiteKey[mmpKey] = mmpSite;
-        }
-      }
+      let unmatchedLocalities = 0;
+      let unmatchedStates = 0;
 
       // Add registry sites first (they are the canonical source)
       for (const site of (registrySites || [])) {
-        const siteKey = `${site.site_code || ''}-${site.site_name}-${site.state_name}-${site.locality_name}`.toLowerCase();
+        const siteKey = generateNormalizedSiteKey(site.site_code, site.site_name, site.state_name, site.locality_name);
         seenSiteKeys.add(siteKey);
+        
+        // Also track by site_code for deduplication
+        if (site.site_code) {
+          seenSiteKeys.add(`code:${normalizeSiteCode(site.site_code)}`);
+        }
         
         // Normalize state_id if missing but state_name exists
         let stateId = site.state_id;
         if ((!stateId || stateId === '' || stateId === 'unknown') && site.state_name) {
-          stateId = normalizeStateId(site.state_name) || '';
+          stateId = normalizeStateIdUtil(site.state_name) || '';
         }
         
-        // Normalize locality_id if missing but locality_name exists
+        // Normalize locality_id if missing but locality_name exists  
         let localityId = site.locality_id;
         if ((!localityId || localityId === '' || localityId === 'unknown') && site.locality_name && stateId) {
-          localityId = normalizeLocalityId(site.locality_name, stateId) || '';
+          localityId = normalizeLocalityIdUtil(site.locality_name, stateId) || '';
         }
         
         // Compute hub_id if missing but state_id exists
@@ -422,71 +443,95 @@ export default function HubOperations() {
           hubName = hubForRegistry?.name || site.hub_name || '';
         }
         
-        // Look up linked MMP entry to get MMP-specific fields
-        const linkedMmp = mmpByRegistryId[site.id] || mmpBySiteKey[siteKey];
+        // Find linked MMP entries with multi-level fallback matching
+        let mmpEntries: MMPSiteEntry[] = [];
         
-        combinedSites.push({
+        // Level 1: Direct registry_site_id match
+        if (byRegistryId[site.id]) {
+          mmpEntries = byRegistryId[site.id];
+        }
+        
+        // Level 2: Site code match
+        if (mmpEntries.length === 0 && site.site_code) {
+          const codeKey = normalizeSiteCode(site.site_code);
+          if (bySiteCode[codeKey]) {
+            mmpEntries = bySiteCode[codeKey];
+          }
+        }
+        
+        // Level 3: Normalized site key match  
+        if (mmpEntries.length === 0) {
+          if (bySiteKey[siteKey]) {
+            mmpEntries = bySiteKey[siteKey];
+          }
+        }
+        
+        // Level 4: Alternate key matches (name+state, name+locality)
+        if (mmpEntries.length === 0) {
+          const altKey1 = `name-state:${site.site_name?.toLowerCase().trim()}|${site.state_name?.toLowerCase().trim()}`;
+          const altKey2 = `name-locality:${site.site_name?.toLowerCase().trim()}|${site.locality_name?.toLowerCase().trim()}`;
+          if (bySiteKey[altKey1]) {
+            mmpEntries = bySiteKey[altKey1];
+          } else if (bySiteKey[altKey2]) {
+            mmpEntries = bySiteKey[altKey2];
+          }
+        }
+        
+        // Aggregate MMP history
+        const { count: mmpCount, latestEntry } = aggregateMmpHistory(mmpEntries);
+        
+        // Build enriched site object
+        let enrichedSite: SiteRegistry = {
           ...site,
           state_id: stateId,
           locality_id: localityId,
           hub_id: hubId,
           hub_name: hubName,
           source: 'registry' as const,
-          // Enrich with MMP fields if linked MMP entry exists
-          ...(linkedMmp ? {
-            cp_name: linkedMmp.cp_name || '',
-            cpName: linkedMmp.cp_name || '',
-            activity_at_site: linkedMmp.activity_at_site || '',
-            siteActivity: linkedMmp.activity_at_site || '',
-            monitoring_by: linkedMmp.monitoring_by || '',
-            monitoringBy: linkedMmp.monitoring_by || '',
-            survey_tool: linkedMmp.survey_tool || '',
-            surveyTool: linkedMmp.survey_tool || '',
-            visit_date: linkedMmp.visit_date || '',
-            visitDate: linkedMmp.visit_date || '',
-            visit_type: linkedMmp.visit_type || '',
-            visitType: linkedMmp.visit_type || '',
-            main_activity: linkedMmp.main_activity || '',
-            mainActivity: linkedMmp.main_activity || '',
-            use_market_diversion: linkedMmp.use_market_diversion || false,
-            useMarketDiversion: linkedMmp.use_market_diversion || false,
-            use_warehouse_monitoring: linkedMmp.use_warehouse_monitoring || false,
-            useWarehouseMonitoring: linkedMmp.use_warehouse_monitoring || false,
-            hub_office: linkedMmp.hub_office || hubName || '',
-            hubOffice: linkedMmp.hub_office || hubName || '',
-            comments: linkedMmp.comments || '',
-            additional_data: linkedMmp.additional_data || {},
-            additionalData: linkedMmp.additional_data || {},
-          } : {}),
-        });
+          mmp_count: mmpCount || site.mmp_count || 0,
+          last_mmp_date: latestEntry?.visit_date || latestEntry?.created_at || site.last_mmp_date,
+        };
+        
+        // Enrich with MMP fields from latest entry
+        if (latestEntry) {
+          enrichedSite = enrichSiteWithMmpData(enrichedSite, latestEntry) as SiteRegistry;
+        }
+        
+        combinedSites.push(enrichedSite);
       }
 
       // Add MMP sites that don't have a registry entry yet
       for (const mmpSite of (mmpSites || [])) {
-        // Skip if already linked to registry
-        if (mmpSite.registry_site_id) {
+        // Skip if already linked to registry via registry_site_id
+        if (mmpSite.registry_site_id && byRegistryId[mmpSite.registry_site_id]) {
           continue;
         }
         
-        const siteKey = `${mmpSite.site_code || ''}-${mmpSite.site_name}-${mmpSite.state}-${mmpSite.locality}`.toLowerCase();
-        if (seenSiteKeys.has(siteKey)) {
-          continue; // Already have this site from registry or earlier MMP entry
+        const siteKey = generateNormalizedSiteKey(mmpSite.site_code, mmpSite.site_name, mmpSite.state, mmpSite.locality);
+        const codeKey = mmpSite.site_code ? `code:${normalizeSiteCode(mmpSite.site_code)}` : '';
+        
+        // Skip if already seen via key or code
+        if (seenSiteKeys.has(siteKey) || (codeKey && seenSiteKeys.has(codeKey))) {
+          continue;
         }
         seenSiteKeys.add(siteKey);
+        if (codeKey) seenSiteKeys.add(codeKey);
 
         // Convert MMP site to SiteRegistry format with normalized IDs
-        const normalizedStateId = normalizeStateId(mmpSite.state || '');
+        const normalizedStateId = normalizeStateIdUtil(mmpSite.state || '');
         const normalizedLocalityId = normalizedStateId 
-          ? normalizeLocalityId(mmpSite.locality || '', normalizedStateId) 
+          ? normalizeLocalityIdUtil(mmpSite.locality || '', normalizedStateId) 
           : null;
         
-        if (!normalizedStateId) {
-          console.warn(`[Hub Operations] Skipping MMP site with unmatched state: "${mmpSite.state}" (site: ${mmpSite.site_name})`);
-          continue;
+        // Track unmatched states/localities but DON'T skip the site
+        if (!normalizedStateId && mmpSite.state) {
+          unmatchedStates++;
+          console.warn(`[Hub Operations] MMP site has unmatched state: "${mmpSite.state}" (site: ${mmpSite.site_name})`);
         }
         
         if (!normalizedLocalityId && mmpSite.locality) {
-          console.warn(`[Hub Operations] MMP site has unmatched locality: "${mmpSite.locality}" in state "${normalizedStateId}" (site: ${mmpSite.site_name})`);
+          unmatchedLocalities++;
+          console.warn(`[Hub Operations] MMP site has unmatched locality: "${mmpSite.locality}" in state "${normalizedStateId || mmpSite.state}" (site: ${mmpSite.site_name})`);
         }
         
         // Get hub ID from state using the same hub mapping
@@ -494,13 +539,17 @@ export default function HubOperations() {
         const hubIdForMmp = hubForMmp?.id;
         const hubNameForMmp = hubForMmp?.name;
         
+        // Get all MMP entries for this site to calculate visit count
+        const allEntriesForSite = bySiteKey[siteKey] || [];
+        const { count: mmpCount, latestEntry } = aggregateMmpHistory(allEntriesForSite.length > 0 ? allEntriesForSite : [mmpSite]);
+        
         combinedSites.push({
           id: mmpSite.id,
           site_code: mmpSite.site_code || generateSiteCode(mmpSite.state || '', mmpSite.locality || '', mmpSite.site_name || '', 1, 'TPM'),
           site_name: mmpSite.site_name || '',
-          state_id: normalizedStateId,
+          state_id: normalizedStateId || mmpSite.state || '',
           state_name: mmpSite.state || '',
-          locality_id: normalizedLocalityId || '',
+          locality_id: normalizedLocalityId || mmpSite.locality || '',
           locality_name: mmpSite.locality || '',
           hub_id: hubIdForMmp || '',
           hub_name: hubNameForMmp || mmpSite.hub_office || '',
@@ -510,12 +559,13 @@ export default function HubOperations() {
           gps_longitude: null,
           activity_type: 'TPM',
           status: mmpSite.status || 'active',
-          mmp_count: 1,
+          mmp_count: mmpCount,
+          last_mmp_date: latestEntry?.visit_date || mmpSite.created_at || undefined,
           created_at: mmpSite.created_at || new Date().toISOString(),
           updated_at: mmpSite.created_at || new Date().toISOString(),
           created_by: '',
           source: 'mmp' as const,
-          // MMP-specific fields
+          // MMP-specific fields with proper boolean parsing
           cp_name: mmpSite.cp_name || '',
           cpName: mmpSite.cp_name || '',
           activity_at_site: mmpSite.activity_at_site || '',
@@ -530,10 +580,10 @@ export default function HubOperations() {
           visitType: mmpSite.visit_type || '',
           main_activity: mmpSite.main_activity || '',
           mainActivity: mmpSite.main_activity || '',
-          use_market_diversion: mmpSite.use_market_diversion || false,
-          useMarketDiversion: mmpSite.use_market_diversion || false,
-          use_warehouse_monitoring: mmpSite.use_warehouse_monitoring || false,
-          useWarehouseMonitoring: mmpSite.use_warehouse_monitoring || false,
+          use_market_diversion: parseBoolean(mmpSite.use_market_diversion),
+          useMarketDiversion: parseBoolean(mmpSite.use_market_diversion),
+          use_warehouse_monitoring: parseBoolean(mmpSite.use_warehouse_monitoring),
+          useWarehouseMonitoring: parseBoolean(mmpSite.use_warehouse_monitoring),
           comments: mmpSite.comments || '',
           additional_data: mmpSite.additional_data || {},
           additionalData: mmpSite.additional_data || {},
@@ -541,6 +591,12 @@ export default function HubOperations() {
       }
 
       console.log(`[loadSites] Loaded ${combinedSites.length} sites (${registrySites?.length || 0} from registry, ${combinedSites.length - (registrySites?.length || 0)} from MMP)`);
+      
+      // Show warning if there were unmatched locations
+      if (unmatchedStates > 0 || unmatchedLocalities > 0) {
+        console.warn(`[loadSites] ${unmatchedStates} sites with unmatched states, ${unmatchedLocalities} with unmatched localities`);
+      }
+      
       if (combinedSites.length > 0) {
         console.log('[loadSites] Sample site with MMP fields:', {
           site_name: combinedSites[0].site_name,
@@ -549,6 +605,7 @@ export default function HubOperations() {
           monitoring_by: combinedSites[0].monitoring_by,
           survey_tool: combinedSites[0].survey_tool,
           visit_date: combinedSites[0].visit_date,
+          mmp_count: combinedSites[0].mmp_count,
           source: combinedSites[0].source,
         });
       }
@@ -556,6 +613,11 @@ export default function HubOperations() {
       localStorage.removeItem('pact_sites_local');
     } catch (err) {
       console.error('Error loading sites from database:', err);
+      toast({
+        title: 'Error Loading Sites',
+        description: 'Failed to load sites. Please refresh and try again.',
+        variant: 'destructive',
+      });
       setSites([]);
     }
   };

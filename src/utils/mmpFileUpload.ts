@@ -5,6 +5,7 @@ import { validateCSV, CSVValidationError } from '@/utils/csvValidator';
 import { validateSitesAgainstRegistry, SiteMatchResult, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
 import { insertNotifications } from '@/services/mmpActions';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { parseBoolean } from '@/utils/siteNormalization';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
@@ -25,8 +26,8 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
       siteActivity: entry.activity_at_site,
       monitoringBy: entry.monitoring_by,
       surveyTool: entry.survey_tool,
-      useMarketDiversion: entry.use_market_diversion,
-      useWarehouseMonitoring: entry.use_warehouse_monitoring,
+      useMarketDiversion: parseBoolean(entry.use_market_diversion),
+      useWarehouseMonitoring: parseBoolean(entry.use_warehouse_monitoring),
       comments: entry.comments,
       additionalData: entry.additional_data || {},
       status: entry.status
