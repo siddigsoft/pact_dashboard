@@ -381,6 +381,20 @@ export default function HubOperations() {
       // Combine sites: registry sites + unique MMP sites not in registry
       const combinedSites: SiteRegistry[] = [];
       const seenSiteKeys = new Set<string>();
+      
+      // Create a map of registry_site_id -> MMP entry for quick lookup
+      const mmpByRegistryId: Record<string, any> = {};
+      const mmpBySiteKey: Record<string, any> = {};
+      for (const mmpSite of (mmpSites || [])) {
+        if (mmpSite.registry_site_id) {
+          mmpByRegistryId[mmpSite.registry_site_id] = mmpSite;
+        }
+        // Also index by site key for fallback matching
+        const mmpKey = `${mmpSite.site_code || ''}-${mmpSite.site_name}-${mmpSite.state}-${mmpSite.locality}`.toLowerCase();
+        if (!mmpBySiteKey[mmpKey]) {
+          mmpBySiteKey[mmpKey] = mmpSite;
+        }
+      }
 
       // Add registry sites first (they are the canonical source)
       for (const site of (registrySites || [])) {
@@ -408,13 +422,42 @@ export default function HubOperations() {
           hubName = hubForRegistry?.name || site.hub_name || '';
         }
         
+        // Look up linked MMP entry to get MMP-specific fields
+        const linkedMmp = mmpByRegistryId[site.id] || mmpBySiteKey[siteKey];
+        
         combinedSites.push({
           ...site,
           state_id: stateId,
           locality_id: localityId,
           hub_id: hubId,
           hub_name: hubName,
-          source: 'registry' as const
+          source: 'registry' as const,
+          // Enrich with MMP fields if linked MMP entry exists
+          ...(linkedMmp ? {
+            cp_name: linkedMmp.cp_name || '',
+            cpName: linkedMmp.cp_name || '',
+            activity_at_site: linkedMmp.activity_at_site || '',
+            siteActivity: linkedMmp.activity_at_site || '',
+            monitoring_by: linkedMmp.monitoring_by || '',
+            monitoringBy: linkedMmp.monitoring_by || '',
+            survey_tool: linkedMmp.survey_tool || '',
+            surveyTool: linkedMmp.survey_tool || '',
+            visit_date: linkedMmp.visit_date || '',
+            visitDate: linkedMmp.visit_date || '',
+            visit_type: linkedMmp.visit_type || '',
+            visitType: linkedMmp.visit_type || '',
+            main_activity: linkedMmp.main_activity || '',
+            mainActivity: linkedMmp.main_activity || '',
+            use_market_diversion: linkedMmp.use_market_diversion || false,
+            useMarketDiversion: linkedMmp.use_market_diversion || false,
+            use_warehouse_monitoring: linkedMmp.use_warehouse_monitoring || false,
+            useWarehouseMonitoring: linkedMmp.use_warehouse_monitoring || false,
+            hub_office: linkedMmp.hub_office || hubName || '',
+            hubOffice: linkedMmp.hub_office || hubName || '',
+            comments: linkedMmp.comments || '',
+            additional_data: linkedMmp.additional_data || {},
+            additionalData: linkedMmp.additional_data || {},
+          } : {}),
         });
       }
 
