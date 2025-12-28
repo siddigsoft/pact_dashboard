@@ -386,8 +386,34 @@ export default function HubOperations() {
       for (const site of (registrySites || [])) {
         const siteKey = `${site.site_code || ''}-${site.site_name}-${site.state_name}-${site.locality_name}`.toLowerCase();
         seenSiteKeys.add(siteKey);
+        
+        // Normalize state_id if missing but state_name exists
+        let stateId = site.state_id;
+        if ((!stateId || stateId === '' || stateId === 'unknown') && site.state_name) {
+          stateId = normalizeStateId(site.state_name) || '';
+        }
+        
+        // Normalize locality_id if missing but locality_name exists
+        let localityId = site.locality_id;
+        if ((!localityId || localityId === '' || localityId === 'unknown') && site.locality_name && stateId) {
+          localityId = normalizeLocalityId(site.locality_name, stateId) || '';
+        }
+        
+        // Compute hub_id if missing but state_id exists
+        let hubId = site.hub_id;
+        let hubName = site.hub_name;
+        if ((!hubId || hubId === '') && stateId) {
+          const hubForRegistry = defaultHubs.find(h => h.states.includes(stateId));
+          hubId = hubForRegistry?.id || '';
+          hubName = hubForRegistry?.name || site.hub_name || '';
+        }
+        
         combinedSites.push({
           ...site,
+          state_id: stateId,
+          locality_id: localityId,
+          hub_id: hubId,
+          hub_name: hubName,
           source: 'registry' as const
         });
       }
