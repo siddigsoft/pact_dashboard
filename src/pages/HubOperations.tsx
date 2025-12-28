@@ -420,6 +420,11 @@ export default function HubOperations() {
           console.warn(`[Hub Operations] MMP site has unmatched locality: "${mmpSite.locality}" in state "${normalizedStateId}" (site: ${mmpSite.site_name})`);
         }
         
+        // Get hub ID from state using the same hub mapping
+        const hubForMmp = normalizedStateId ? defaultHubs.find(h => h.states.includes(normalizedStateId)) : undefined;
+        const hubIdForMmp = hubForMmp?.id;
+        const hubNameForMmp = hubForMmp?.name;
+        
         combinedSites.push({
           id: mmpSite.id,
           site_code: mmpSite.site_code || generateSiteCode(mmpSite.state || '', mmpSite.locality || '', mmpSite.site_name || '', 1, 'TPM'),
@@ -428,8 +433,8 @@ export default function HubOperations() {
           state_name: mmpSite.state || '',
           locality_id: normalizedLocalityId || '',
           locality_name: mmpSite.locality || '',
-          hub_id: '',
-          hub_name: mmpSite.hub_office || '',
+          hub_id: hubIdForMmp || '',
+          hub_name: hubNameForMmp || mmpSite.hub_office || '',
           gps_latitude: null,
           gps_longitude: null,
           activity_type: 'TPM',
