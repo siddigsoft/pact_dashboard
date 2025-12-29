@@ -1354,17 +1354,36 @@ const CoordinatorSites: React.FC = () => {
       const statePermitNotRequired = decision.statePermit.requirement === 'not_required' || 
         (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
       
+      // Check if state permit was just uploaded (required_have_it + uploaded: true)
+      // In this case, sites should NOT be verified yet - they need locality permits first
+      const statePermitJustUploaded = decision.statePermit.requirement === 'required_have_it' && 
+        decision.statePermit.uploaded === true;
+      
+      // Determine if sites should be verified now
+      // Sites are only verified if:
+      // 1. They already have permits_attached status (both state and locality permits are done)
+      // 2. OR state permit is not required (can skip to locality permits)
+      const shouldVerifyNow = !statePermitJustUploaded && !statePermitNotRequired;
+      
       // Update all sites in the state
       for (const site of sitesInState) {
         const additionalData = {
           ...(site.additional_data || {}),
           permit_decision: decision,
           ...(statePermitNotRequired ? { state_permit_not_required: true } : {}),
+          ...(statePermitJustUploaded ? { state_permit_attached: true } : {}),
         };
 
-        const updateData: any = statePermitNotRequired ? {
+        // If state permit was just uploaded, don't verify yet - just update additional_data
+        // Sites will move to locality permit tab to upload locality permits
+        // If state permit not required, also don't verify - move to locality permit tab
+        // Only verify if sites already have permits_attached status (both permits done)
+        // IMPORTANT: When statePermitJustUploaded is true, we MUST NOT set status to 'verified'
+        const updateData: any = (statePermitJustUploaded || statePermitNotRequired) ? {
+          // Only update additional_data - do NOT change status
           additional_data: additionalData,
         } : {
+          // Sites are being verified (both state and locality permits are done)
           status: 'verified',
           verified_at: verifiedAt,
           verified_by: verifiedBy,
@@ -1381,50 +1400,75 @@ const CoordinatorSites: React.FC = () => {
           continue;
         }
 
-        // Update MMP workflow
-        try {
-          const { data: mmpData } = await supabase
-            .from('mmp_files')
-            .select('workflow, status')
-            .eq('id', site.mmp_file_id)
-            .single();
+        // Update MMP workflow only if sites are being verified now
+        // Don't update workflow if state permit was just uploaded (sites not verified yet)
+        if (shouldVerifyNow) {
+          try {
+            const { data: mmpData } = await supabase
+              .from('mmp_files')
+              .select('workflow, status')
+              .eq('id', site.mmp_file_id)
+              .single();
 
-          if (mmpData) {
-            const workflow = (mmpData.workflow as any) || {};
-            if (!workflow.coordinatorVerified) {
-              const updatedWorkflow = {
-                ...workflow,
-                coordinatorVerified: true,
-                coordinatorVerifiedAt: verifiedAt,
-                coordinatorVerifiedBy: verifiedBy,
-                currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
-                lastUpdated: verifiedAt
-              };
-              await updateMMP(site.mmp_file_id, {
-                workflow: updatedWorkflow,
-                status: 'pending'
-              });
+            if (mmpData) {
+              const workflow = (mmpData.workflow as any) || {};
+              if (!workflow.coordinatorVerified) {
+                const updatedWorkflow = {
+                  ...workflow,
+                  coordinatorVerified: true,
+                  coordinatorVerifiedAt: verifiedAt,
+                  coordinatorVerifiedBy: verifiedBy,
+                  currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
+                  lastUpdated: verifiedAt
+                };
+                await updateMMP(site.mmp_file_id, {
+                  workflow: updatedWorkflow,
+                  status: 'pending'
+                });
+              }
             }
+          } catch (syncErr) {
+            console.warn('Failed to sync MMP workflow:', syncErr);
           }
-        } catch (syncErr) {
-          console.warn('Failed to sync MMP workflow:', syncErr);
         }
       }
 
-      toast({
-        title: statePermitNotRequired ? 'State Permit Not Required' : 'State Verified',
-        description: statePermitNotRequired
-          ? `${sitesInState.length} sites in ${stateForPermitVerification.state} moved to Locality Permit Status.`
-          : `${sitesInState.length} sites in ${stateForPermitVerification.state} have been verified successfully.`,
-      });
+      // Show appropriate toast message based on what happened
+      if (statePermitJustUploaded) {
+        // State permit was just uploaded - sites move to locality permit tab
+        toast({
+          title: 'State Permit Uploaded',
+          description: sitesInState.length > 1 
+            ? `State permit uploaded. ${sitesInState.length} sites moved to Locality Permit Status. You can now upload locality permits.`
+            : 'State permit uploaded. Site moved to Locality Permit Status. You can now upload locality permits.',
+        });
+      } else if (statePermitNotRequired) {
+        // State permit not required - sites move to locality permit tab
+        toast({
+          title: 'State Permit Not Required',
+          description: sitesInState.length > 1 
+            ? `${sitesInState.length} sites in ${stateForPermitVerification.state} moved to Locality Permit Status.`
+            : `Site in ${stateForPermitVerification.state} moved to Locality Permit Status.`,
+        });
+      } else {
+        // Sites are being verified (both state and locality permits are done)
+        toast({
+          title: 'State Verified',
+          description: `${sitesInState.length} sites in ${stateForPermitVerification.state} have been verified successfully.`,
+        });
+      }
 
       setPermitVerificationDialogOpen(false);
       setStateForPermitVerification(null);
       await refreshMMPFiles();
       
-      if (statePermitNotRequired) {
+      // Switch to appropriate tab
+      if (statePermitJustUploaded || statePermitNotRequired) {
+        // Move to locality permit tab to upload locality permits
         setNewSitesSubTab('local_required');
+        setActiveTab('new');
       } else {
+        // Sites are verified - move to verified tab
         setActiveTab('verified');
       }
       
@@ -1448,13 +1492,14 @@ const CoordinatorSites: React.FC = () => {
       
       // Check if state permit was just uploaded (required_have_it + uploaded: true)
       // In this case, sites should NOT be verified yet - they need locality permits first
-      const statePermitJustUploaded = decision.statePermit.requirement === 'required_have_it' && 
-        decision.statePermit.uploaded === true;
+      const statePermitJustUploaded = decision.statePermit?.requirement === 'required_have_it' && 
+        decision.statePermit?.uploaded === true;
       
       // Determine if sites should be verified now
       // Sites are only verified if:
       // 1. They already have permits_attached status (both state and locality permits are done)
       // 2. OR state permit is not required (can skip to locality permits)
+      // IMPORTANT: When state permit is just uploaded, sites should NOT be verified - they need locality permits first
       const shouldVerifyNow = !statePermitJustUploaded && !statePermitNotRequired;
       
       // Update all sites with permit decision
@@ -1464,15 +1509,19 @@ const CoordinatorSites: React.FC = () => {
           permit_decision: decision,
           ...(pendingVerificationData?.additional_data || {}),
           ...(statePermitNotRequired ? { state_permit_not_required: true } : {}),
+          ...(statePermitJustUploaded ? { state_permit_attached: true } : {}),
         };
 
         // If state permit was just uploaded, don't verify yet - just update additional_data
         // Sites will move to locality permit tab to upload locality permits
         // If state permit not required, also don't verify - move to locality permit tab
         // Only verify if sites already have permits_attached status (both permits done)
+        // IMPORTANT: When statePermitJustUploaded is true, we MUST NOT set status to 'verified'
         const updateData: any = (statePermitJustUploaded || statePermitNotRequired) ? {
+          // Only update additional_data - do NOT change status
           additional_data: additionalData,
         } : {
+          // Sites are being verified (both state and locality permits are done)
           ...(pendingVerificationData || {}),
           status: 'verified',
           verified_at: verifiedAt,
@@ -4173,6 +4222,138 @@ const CoordinatorSites: React.FC = () => {
               }}
             >
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permit Question Dialog - Ask if coordinator has the local permit */}
+      <Dialog open={permitQuestionDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setPermitQuestionDialogOpen(false);
+          setSelectedLocalityForWorkflow(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Local Permit Required</DialogTitle>
+            <DialogDescription>
+              Upload the local permit for <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.stateName || selectedLocalityForWorkflow?.state}</strong> to verify all sites in this locality.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              Do you have the local permit for this locality?
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setPermitQuestionDialogOpen(false);
+                setSelectedLocalityForWorkflow(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => handlePermitQuestionResponse(false)}
+            >
+              No, I don't have it
+            </Button>
+            <Button 
+              onClick={() => handlePermitQuestionResponse(true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, I have it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Locality Permit Upload Dialog */}
+      {selectedLocalityForWorkflow && (
+        <Dialog open={localityPermitUploadDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setLocalityPermitUploadDialogOpen(false);
+            setSelectedLocalityForWorkflow(null);
+          }
+        }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Upload Local Permit</DialogTitle>
+              <DialogDescription>
+                Upload the local permit for <strong>{selectedLocalityForWorkflow.locality}, {selectedLocalityForWorkflow.stateName || selectedLocalityForWorkflow.state}</strong>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {selectedLocalityForWorkflow.sites?.[0]?.mmp_file_id ? (
+                <LocalityPermitUpload
+                  state={selectedLocalityForWorkflow.stateName || selectedLocalityForWorkflow.state || ''}
+                  locality={selectedLocalityForWorkflow.locality || ''}
+                  mmpFileId={selectedLocalityForWorkflow.sites[0].mmp_file_id}
+                  onPermitUploaded={handlePermitUploaded}
+                  onCancel={() => {
+                    setLocalityPermitUploadDialogOpen(false);
+                    setSelectedLocalityForWorkflow(null);
+                  }}
+                />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>Unable to find MMP file ID for this locality.</p>
+                  <p className="text-xs mt-2">Please ensure sites are properly assigned to this locality.</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Work Without Permit Dialog */}
+      <Dialog open={workWithoutPermitDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setWorkWithoutPermitDialogOpen(false);
+          setSelectedLocalityForWorkflow(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Proceed Without Local Permit</DialogTitle>
+            <DialogDescription>
+              Can you continue to complete sites in <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.stateName || selectedLocalityForWorkflow?.state}</strong> without a local permit?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              If you can proceed without the local permit, sites in this locality will be moved to "Permits Attached" and allow immediate verification.
+              If you cannot proceed without the permit, the sites will remain in this locality and wait for the local permit to be uploaded.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setWorkWithoutPermitDialogOpen(false);
+                setSelectedLocalityForWorkflow(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => {
+                setWorkWithoutPermitDialogOpen(false);
+                setSelectedLocalityForWorkflow(null);
+              }}
+            >
+              No, I need the permit
+            </Button>
+            <Button 
+              onClick={handleLocalityProceedWithoutPermit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, proceed without permit
             </Button>
           </DialogFooter>
         </DialogContent>
