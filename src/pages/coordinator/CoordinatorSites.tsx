@@ -2466,7 +2466,7 @@ const CoordinatorSites: React.FC = () => {
             {showActions && (
               <div className="flex flex-col gap-2 mt-4 sm:hidden">
                 {/* Start Visit button - Uber style black pill for startable statuses */}
-                {['dispatched', 'verified', 'approved', 'assigned'].includes(site.status?.toLowerCase()) && (
+                {['dispatched', 'approved', 'assigned'].includes(site.status?.toLowerCase()) && (
                   <Button
                     size="sm"
                     onClick={async (e) => {
