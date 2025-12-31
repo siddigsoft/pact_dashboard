@@ -3763,7 +3763,7 @@ const CoordinatorSites: React.FC = () => {
           setBulkVerificationMode('single');
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
           <DialogHeader>
             <DialogTitle>State & Locality Permit Verification</DialogTitle>
             <DialogDescription>
@@ -4001,7 +4001,7 @@ const CoordinatorSites: React.FC = () => {
             setSelectedStateForSequentialUpload(null);
           }
         }}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
             <DialogHeader>
               <DialogTitle>Upload Permits - {selectedStateForSequentialUpload.state}</DialogTitle>
               <DialogDescription>
@@ -4280,7 +4280,7 @@ const CoordinatorSites: React.FC = () => {
             setSelectedLocalityForWorkflow(null);
           }
         }}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
             <DialogHeader>
               <DialogTitle>Upload Local Permit</DialogTitle>
               <DialogDescription>
