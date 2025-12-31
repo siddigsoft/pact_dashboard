@@ -56,7 +56,11 @@ export const getWorkflowMenuGroups = (
   const isFinancialAdmin = roles.includes('financialAdmin' as AppRole) || defaultRole === 'financialAdmin';
   const isDataCollector = roles.includes('DataCollector' as AppRole) || roles.includes('dataCollector' as AppRole) || defaultRole === 'dataCollector' || defaultRole === 'DataCollector';
   const isCoordinator = roles.includes('Coordinator' as AppRole) || roles.includes('coordinator' as AppRole) || defaultRole === 'coordinator' || defaultRole === 'Coordinator';
-  const isFOM = roles.includes('fom' as AppRole) || defaultRole === 'fom';
+  const isFOM = roles.includes('fom' as AppRole) || 
+                roles.includes('Field Operation Manager (FOM)' as AppRole) ||
+                defaultRole === 'fom' || 
+                defaultRole?.toLowerCase() === 'fom' ||
+                defaultRole === 'Field Operation Manager (FOM)';
   const isSupervisor = roles.includes('supervisor' as AppRole) || defaultRole === 'supervisor';
   const isProjectManager = roles.includes('projectManager' as AppRole) || defaultRole === 'projectManager';
 
@@ -91,7 +95,7 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/projects') && (isAdmin || isICT || isProjectManager || perms.projects)) {
     planningItems.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
   }
-  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isDataCollector)) {
+  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isDataCollector || isFOM)) {
     const mmpTitle = (isDataCollector || isCoordinator) ? 'My Sites Management' : 'MMP Management';
     planningItems.push({ id: 'mmp-management', title: mmpTitle, url: '/mmp', icon: Database, priority: 2, isPinned: isPinned('/mmp') });
   }
