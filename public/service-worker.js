@@ -1,11 +1,12 @@
-const CACHE_NAME = 'pact-v4';
+const CACHE_NAME = 'pact-v5';
 const OFFLINE_URL = '/offline.html';
-const STATIC_CACHE = 'pact-static-v2';
-const API_CACHE = 'pact-api-v2';
-const DYNAMIC_CACHE = 'pact-dynamic-v1';
+const STATIC_CACHE = 'pact-static-v3';
+const API_CACHE = 'pact-api-v3';
+const DYNAMIC_CACHE = 'pact-dynamic-v2';
 
+// Keep HTML out of the pre-cache so we always fetch the latest shell.
+// Hashed assets remain cached safely; HTML will be network-first.
 const STATIC_ASSETS = [
-  '/',
   '/offline.html',
   '/manifest.json',
   '/pact-logo-192.png',
@@ -398,11 +399,22 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => {
+    event.respondWith((async () => {
+      try {
+        // Try network first for fresh content, bypassing any HTTP cache
+        const networkResponse = await fetch(event.request, { cache: 'no-store' });
+        return networkResponse;
+      } catch (err) {
+        // Offline: fall back to cached app shell to keep SPA routing working
+        const cache = await caches.open(STATIC_CACHE);
+        const cachedShell = await cache.match(event.request) ||
+          await cache.match('/index.html') ||
+          await cache.match('/');
+        if (cachedShell) return cachedShell;
+        // Last resort: offline page
         return caches.match(OFFLINE_URL);
-      })
-    );
+      }
+    })());
     return;
   }
 

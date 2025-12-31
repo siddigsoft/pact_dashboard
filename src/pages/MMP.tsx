@@ -1023,6 +1023,10 @@ const MMP = () => {
 
   // Handle completing a site visit
   const handleCompleteVisit = async (site: any) => {
+    // Open the report dialog immediately so the user isn't waiting on network/GPS
+    setSelectedSiteForVisit(site);
+    setVisitReportDialogOpen(true);
+
     try {
       const isOnline = navigator.onLine;
       

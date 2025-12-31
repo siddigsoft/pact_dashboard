@@ -26,6 +26,8 @@ import { LocalityPermitStatus } from '@/types/coordinator-permits';
 import { PermitVerificationQuestions, PermitDecision } from '@/components/PermitVerificationQuestions';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { useGestures } from '@/hooks/use-gestures'; // Assuming this hook exists for swipe gestures
+import { useLocation } from '@/context/location/LocationContext';
+import { useCoordinatorSites, type SiteVisit } from './hooks/useCoordinatorSites';
 
 // Predefined options for dropdowns
 const HUB_OFFICE_OPTIONS = [
@@ -46,50 +48,10 @@ const SURVEY_TOOL_OPTIONS = [
   'Excel', 'Paper-based', 'Other'
 ];
 
-interface Hub {
-  id: string;
-  name: string;
-  description?: string;
-  is_active: boolean;
-}
+// Location types are now imported from LocationContext
+import type { Hub, State, Locality } from '@/context/location/LocationContext';
 
-interface State {
-  id: string;
-  name: string;
-  code: string;
-}
-
-interface Locality {
-  id: string;
-  name: string;
-  state_id: string;
-}
-
-interface SiteVisit {
-  id: string;
-  site_name: string;
-  site_code: string;
-  status: string;
-  state: string;
-  locality: string;
-  activity: string;
-  main_activity: string;
-  visit_date: string;
-  assigned_at: string;
-  comments: string;
-  mmp_file_id: string;
-  hub_office: string;
-  cp_name?: string;
-  activity_at_site?: string[];
-  monitoring_by?: string;
-  survey_tool?: string;
-  use_market_diversion?: boolean;
-  use_warehouse_monitoring?: boolean;
-  verified_at?: string;
-  verified_by?: string;
-  verification_notes?: string;
-  additional_data?: any;
-}
+// SiteVisit type is now imported from useCoordinatorSites hook
 
 interface SiteEditFormProps {
   site: SiteVisit;
@@ -439,35 +401,19 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
   );
 };
 
-interface SiteVisit {
-  id: string;
-  site_name: string;
-  site_code: string;
-  status: string;
-  state: string;
-  locality: string;
-  activity: string;
-  main_activity: string;
-  visit_date: string;
-  assigned_at: string;
-  comments: string;
-  mmp_file_id: string;
-  hub_office: string;
-  verified_at?: string;
-  verified_by?: string;
-  verification_notes?: string;
-  additional_data?: any;
-}
+// SiteVisit type is imported from useCoordinatorSites hook
 
 const CoordinatorSites: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles, loading: contextLoading } = useMMP();
+  const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles } = useMMP();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const siteVisitContext = useSiteVisitContext();
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
+  const { hubs, states, localities, hubStates, loading: loadingLocations } = useLocation();
+  const { coordinatorSites, loading: contextLoading } = useCoordinatorSites();
   const [localitiesData, setLocalitiesData] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('new');
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
@@ -555,6 +501,7 @@ const CoordinatorSites: React.FC = () => {
   const [permitVerificationDialogOpen, setPermitVerificationDialogOpen] = useState(false);
   const [siteForPermitVerification, setSiteForPermitVerification] = useState<SiteVisit | null>(null);
   const [pendingVerificationData, setPendingVerificationData] = useState<any>(null);
+  const [stateForPermitVerification, setStateForPermitVerification] = useState<{state: string; locality: string; mmpFileId: string} | null>(null);
   
   // Bulk permit verification state
   const [bulkSitesForPermitVerification, setBulkSitesForPermitVerification] = useState<SiteVisit[]>([]);
@@ -571,12 +518,7 @@ const CoordinatorSites: React.FC = () => {
   // Sub-tab state for new sites categorization
   const [newSitesSubTab, setNewSitesSubTab] = useState('state_required');
 
-  // Database data for location dropdowns
-  const [hubs, setHubs] = useState<Hub[]>([]);
-  const [states, setStates] = useState<State[]>([]);
-  const [localities, setLocalities] = useState<Locality[]>([]);
-  const [hubStates, setHubStates] = useState<{ hub_id: string; state_id: string; state_name: string; state_code: string; }[]>([]);
-  const [loadingLocations, setLoadingLocations] = useState(true);
+  // Location data is now provided by LocationContext (removed local state)
 
   // Debounce search query
   useEffect(() => {
@@ -588,72 +530,7 @@ const CoordinatorSites: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Filter coordinator-specific sites from MMP context data
-  const coordinatorSites = useMemo(() => {
-    if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
-    
-    // Non-admin users with no project assignments should see nothing
-    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-      return [];
-    }
-
-    const allSites: SiteVisit[] = [];
-    
-    // Collect all site entries from context that are forwarded to this coordinator
-    contextMmpFiles.forEach((mmp: any) => {
-      if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
-      
-      mmp.siteEntries.forEach((entry: any) => {
-        // Filter by forwarded_to_user_id
-        if (entry.forwardedToUserId !== currentUser.id) return;
-        
-        // Exclude sites that have been returned to FOM
-        if (entry.status === 'returned_to_fom') return;
-        
-        // For non-admins, also check project membership
-        if (!isAdminOrSuperUser) {
-          const projectId = mmp.projectId;
-          if (!projectId || !userProjectIds.includes(projectId)) return;
-        }
-
-        // Transform entry to SiteVisit format
-        const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' || 
-                            entry.status === 'assigned' || entry.status === 'inProgress' || 
-                            entry.status === 'in_progress';
-        const visitDate = isUnverified ? null : entry.visitDate;
-
-        allSites.push({
-          id: entry.id,
-          site_name: entry.siteName || entry.site_name,
-          site_code: entry.siteCode || entry.site_code,
-          status: entry.status,
-          state: entry.state,
-          locality: entry.locality,
-          activity: entry.siteActivity || entry.activity_at_site || entry.mainActivity,
-          main_activity: entry.mainActivity || entry.main_activity,
-          activity_at_site: entry.siteActivity 
-            ? (typeof entry.siteActivity === 'string' ? entry.siteActivity.split(', ').filter(a => a.trim() !== '') : entry.siteActivity)
-            : [],
-          visit_date: visitDate,
-          assigned_at: entry.additionalData?.assigned_at || entry.additional_data?.assigned_at,
-          comments: entry.comments,
-          mmp_file_id: mmp.id,
-          hub_office: entry.hubOffice || entry.hub_office,
-          cp_name: entry.cpName || entry.cp_name,
-          monitoring_by: entry.monitoringBy || entry.monitoring_by,
-          survey_tool: entry.surveyTool || entry.survey_tool,
-          use_market_diversion: entry.useMarketDiversion ?? entry.use_market_diversion ?? false,
-          use_warehouse_monitoring: entry.useWarehouseMonitoring ?? entry.use_warehouse_monitoring ?? false,
-          verified_at: entry.verified_at,
-          verified_by: entry.verified_by,
-          verification_notes: entry.verification_notes,
-          additional_data: entry.additionalData || entry.additional_data || {},
-        });
-      });
-    });
-
-    return allSites;
-  }, [contextMmpFiles, contextLoading, currentUser?.id, userProjectIds, isAdminOrSuperUser]);
+  // Coordinator sites are now provided by useCoordinatorSites hook (following MMP.tsx pattern)
 
   // Filter sites by active tab status
   const sitesByTab = useMemo(() => {
@@ -768,74 +645,10 @@ const CoordinatorSites: React.FC = () => {
     return grouped;
   }, [filteredSites]);
 
-  // Fetch location data from database
-  useEffect(() => {
-    const fetchLocationData = async () => {
-      try {
-        setLoadingLocations(true);
-        
-        // Fetch hubs
-        const { data: hubsData, error: hubsError } = await supabase
-          .from('hubs')
-          .select('id, name, description, is_active')
-          .eq('is_active', true)
-          .order('name');
-        
-        if (hubsError) throw hubsError;
-        setHubs(hubsData || []);
-        
-        // Fetch hub_states for hub-state relationships
-        const { data: hubStatesData, error: hubStatesError } = await supabase
-          .from('hub_states')
-          .select('hub_id, state_id, state_name, state_code')
-          .order('state_name');
-        
-        if (hubStatesError) throw hubStatesError;
-        setHubStates(hubStatesData || []);
-        
-        // Fetch localities from sites_registry table (distinct localities)
-        const { data: localitiesData, error: localitiesError } = await supabase
-          .from('sites_registry')
-          .select('locality_id, locality_name, state_id')
-          .order('locality_name');
-        
-        if (localitiesError) throw localitiesError;
-        
-        // Convert to Locality interface format and remove duplicates
-        const uniqueLocalities: Locality[] = [];
-        const seen = new Set<string>();
-        
-        (localitiesData || []).forEach(loc => {
-          const key = `${loc.locality_id}-${loc.state_id}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniqueLocalities.push({
-              id: loc.locality_id,
-              name: loc.locality_name,
-              state_id: loc.state_id
-            });
-          }
-        });
-        
-        setLocalities(uniqueLocalities);
-        
-      } catch (error) {
-        console.error('Error fetching location data:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load location data. Please refresh the page.',
-          variant: 'destructive'
-        });
-      } finally {
-        setLoadingLocations(false);
-      }
-    };
+  // Location data is now provided by LocationContext (no need to fetch manually)
 
-    fetchLocationData();
-  }, [toast]);
-
-  // Calculate badge counts from coordinator sites
-  useEffect(() => {
+  // Calculate badge counts from coordinator sites (using useMemo like MMP.tsx pattern)
+  const badgeCounts = useMemo(() => {
     const newCount = coordinatorSites.filter((e: any) => 
       e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
     ).length;
@@ -855,13 +668,25 @@ const CoordinatorSites: React.FC = () => {
       e.status?.toLowerCase() === 'rejected'
     ).length;
 
-    setNewSitesCount(newCount);
-    setPermitsAttachedCount(permitsAttachedCount);
-    setVerifiedSitesCount(verifiedCount);
-    setApprovedSitesCount(approvedCount);
-    setCompletedSitesCount(completedCount);
-    setRejectedSitesCount(rejectedCount);
+    return {
+      new: newCount,
+      permitsAttached: permitsAttachedCount,
+      verified: verifiedCount,
+      approved: approvedCount,
+      completed: completedCount,
+      rejected: rejectedCount
+    };
   }, [coordinatorSites]);
+
+  // Sync badge counts to state (for backward compatibility with existing code)
+  useEffect(() => {
+    setNewSitesCount(badgeCounts.new);
+    setPermitsAttachedCount(badgeCounts.permitsAttached);
+    setVerifiedSitesCount(badgeCounts.verified);
+    setApprovedSitesCount(badgeCounts.approved);
+    setCompletedSitesCount(badgeCounts.completed);
+    setRejectedSitesCount(badgeCounts.rejected);
+  }, [badgeCounts]);
 
   // Reset search and pagination when tab changes
   useEffect(() => {
@@ -1270,8 +1095,123 @@ const CoordinatorSites: React.FC = () => {
     console.log('bulkVerificationMode:', bulkVerificationMode);
     console.log('bulkSitesForPermitVerification:', bulkSitesForPermitVerification);
     console.log('siteForPermitVerification:', siteForPermitVerification);
+    console.log('stateForPermitVerification:', stateForPermitVerification);
     
-    // Handle bulk mode
+    // Handle state-level verification
+    if (stateForPermitVerification) {
+      // Get all sites in this state from coordinatorSites
+      const sitesToReturn = coordinatorSites.filter(site => 
+        site.state === stateForPermitVerification.state
+      );
+      
+      if (sitesToReturn.length === 0) {
+        toast({
+          title: 'Error',
+          description: `No sites found for ${stateForPermitVerification.state}.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+      
+      // Process return for all sites in state (same logic as below)
+      try {
+        const siteIds = sitesToReturn.map(s => s.id);
+        
+        // Update all sites' status to 'returned_to_fom'
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            status: 'returned_to_fom',
+            verification_notes: reason,
+            verified_at: new Date().toISOString(),
+            verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+          })
+          .in('id', siteIds);
+
+        if (error) throw error;
+
+        // Try to send notification to FOM (find FOM for each unique MMP)
+        const uniqueMmpIds = [...new Set(sitesToReturn.map(s => s.mmp_file_id))];
+        for (const mmpFileId of uniqueMmpIds) {
+          try {
+            const { data: mmpData } = await supabase
+              .from('mmp_files')
+              .select('uploaded_by')
+              .eq('id', mmpFileId)
+              .single();
+
+            if (mmpData?.uploaded_by) {
+              const sitesForThisMmp = sitesToReturn.filter(s => s.mmp_file_id === mmpFileId);
+              await supabase.from('notifications').insert({
+                recipient_id: mmpData.uploaded_by,
+                title_en: 'Sites Returned by Coordinator',
+                title_ar: 'تم إرجاع المواقع من المنسق',
+                message_en: sitesToReturn.length > 1 
+                  ? `${sitesToReturn.length} sites in ${stateForPermitVerification.state} have been returned. Reason: ${reason}`
+                  : `Site has been returned. Reason: ${reason}`,
+                message_ar: sitesToReturn.length > 1 
+                  ? `تم إرجاع ${sitesToReturn.length} مواقع في ${stateForPermitVerification.state}. السبب: ${reason}`
+                  : `تم إرجاع الموقع. السبب: ${reason}`,
+                event_type: 'approvals',
+                status: 'pending',
+                priority: 'high'
+              });
+            }
+          } catch (notifErr) {
+            console.warn('Failed to send notification to FOM:', notifErr);
+          }
+        }
+
+        // Notify hub supervisor about sites being sent back to FOM
+        const hubsNotified = new Set<string>();
+        for (const site of sitesToReturn) {
+          if (site.hub_office && !hubsNotified.has(site.hub_office)) {
+            try {
+              const { data: hubData } = await supabase
+                .from('hubs')
+                .select('id')
+                .eq('name', site.hub_office)
+                .single();
+
+              if (hubData?.id) {
+                const sitesInHub = sitesToReturn.filter(s => s.hub_office === site.hub_office);
+                await NotificationTriggerService.siteReturnedToFOM(
+                  hubData.id,
+                  sitesInHub.length > 1 ? `${sitesInHub.length} sites in ${stateForPermitVerification.state}` : site.site_name,
+                  sitesInHub.length,
+                  reason,
+                  currentUser?.fullName || currentUser?.username || 'Coordinator'
+                );
+                hubsNotified.add(site.hub_office);
+              }
+            } catch (supervisorErr) {
+              console.warn('Failed to notify hub supervisor:', supervisorErr);
+            }
+          }
+        }
+
+        toast({
+          title: 'Sites Returned to FOM',
+          description: `${sitesToReturn.length} site(s) in ${stateForPermitVerification.state} have been sent back to FOM for action.`,
+        });
+
+        // Close dialogs and reload
+        setPermitVerificationDialogOpen(false);
+        setStateForPermitVerification(null);
+        await refreshMMPFiles();
+        return;
+      } catch (error) {
+        console.error('Error sending sites back to FOM:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to send sites back to FOM. Please try again.',
+          variant: 'destructive'
+        });
+        return;
+      }
+    }
+    
+    // Handle bulk mode or single site mode
     const sitesToReturn = bulkVerificationMode !== 'single' && bulkSitesForPermitVerification.length > 0
       ? bulkSitesForPermitVerification
       : siteForPermitVerification ? [siteForPermitVerification] : [];
@@ -1374,6 +1314,7 @@ const CoordinatorSites: React.FC = () => {
       // Close dialogs and reload
       setPermitVerificationDialogOpen(false);
       setSiteForPermitVerification(null);
+      setStateForPermitVerification(null);
       setPendingVerificationData(null);
       setBulkSitesForPermitVerification([]);
       setBulkVerificationMode('single');
@@ -1390,7 +1331,151 @@ const CoordinatorSites: React.FC = () => {
 
   // Handle completion of permit verification questions
   const handlePermitVerificationComplete = async (decision: PermitDecision) => {
-    // Handle bulk mode
+    // Handle state-level verification
+    if (stateForPermitVerification) {
+      // Get all sites in this state from coordinatorSites
+      const sitesInState = coordinatorSites.filter(site => 
+        site.state === stateForPermitVerification.state
+      );
+      
+      if (sitesInState.length === 0) {
+        toast({
+          title: 'No Sites Found',
+          description: `No sites found for ${stateForPermitVerification.state}.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Process all sites in the state
+      const verifiedBy = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
+      const verifiedAt = new Date().toISOString();
+      
+      const statePermitNotRequired = decision.statePermit.requirement === 'not_required' || 
+        (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
+      
+      // Check if state permit was just uploaded (required_have_it + uploaded: true)
+      // In this case, sites should NOT be verified yet - they need locality permits first
+      const statePermitJustUploaded = decision.statePermit.requirement === 'required_have_it' && 
+        decision.statePermit.uploaded === true;
+      
+      // Determine if sites should be verified now
+      // Sites are only verified if:
+      // 1. They already have permits_attached status (both state and locality permits are done)
+      // 2. OR state permit is not required (can skip to locality permits)
+      const shouldVerifyNow = !statePermitJustUploaded && !statePermitNotRequired;
+      
+      // Update all sites in the state
+      for (const site of sitesInState) {
+        const additionalData = {
+          ...(site.additional_data || {}),
+          permit_decision: decision,
+          ...(statePermitNotRequired ? { state_permit_not_required: true } : {}),
+          ...(statePermitJustUploaded ? { state_permit_attached: true } : {}),
+        };
+
+        // If state permit was just uploaded, don't verify yet - just update additional_data
+        // Sites will move to locality permit tab to upload locality permits
+        // If state permit not required, also don't verify - move to locality permit tab
+        // Only verify if sites already have permits_attached status (both permits done)
+        // IMPORTANT: When statePermitJustUploaded is true, we MUST NOT set status to 'verified'
+        const updateData: any = (statePermitJustUploaded || statePermitNotRequired) ? {
+          // Only update additional_data - do NOT change status
+          additional_data: additionalData,
+        } : {
+          // Sites are being verified (both state and locality permits are done)
+          status: 'verified',
+          verified_at: verifiedAt,
+          verified_by: verifiedBy,
+          additional_data: additionalData,
+        };
+
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update(updateData)
+          .eq('id', site.id);
+
+        if (error) {
+          console.error(`Error updating site ${site.id}:`, error);
+          continue;
+        }
+
+        // Update MMP workflow only if sites are being verified now
+        // Don't update workflow if state permit was just uploaded (sites not verified yet)
+        if (shouldVerifyNow) {
+          try {
+            const { data: mmpData } = await supabase
+              .from('mmp_files')
+              .select('workflow, status')
+              .eq('id', site.mmp_file_id)
+              .single();
+
+            if (mmpData) {
+              const workflow = (mmpData.workflow as any) || {};
+              if (!workflow.coordinatorVerified) {
+                const updatedWorkflow = {
+                  ...workflow,
+                  coordinatorVerified: true,
+                  coordinatorVerifiedAt: verifiedAt,
+                  coordinatorVerifiedBy: verifiedBy,
+                  currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
+                  lastUpdated: verifiedAt
+                };
+                await updateMMP(site.mmp_file_id, {
+                  workflow: updatedWorkflow,
+                  status: 'pending'
+                });
+              }
+            }
+          } catch (syncErr) {
+            console.warn('Failed to sync MMP workflow:', syncErr);
+          }
+        }
+      }
+
+      // Show appropriate toast message based on what happened
+      if (statePermitJustUploaded) {
+        // State permit was just uploaded - sites move to locality permit tab
+        toast({
+          title: 'State Permit Uploaded',
+          description: sitesInState.length > 1 
+            ? `State permit uploaded. ${sitesInState.length} sites moved to Locality Permit Status. You can now upload locality permits.`
+            : 'State permit uploaded. Site moved to Locality Permit Status. You can now upload locality permits.',
+        });
+      } else if (statePermitNotRequired) {
+        // State permit not required - sites move to locality permit tab
+        toast({
+          title: 'State Permit Not Required',
+          description: sitesInState.length > 1 
+            ? `${sitesInState.length} sites in ${stateForPermitVerification.state} moved to Locality Permit Status.`
+            : `Site in ${stateForPermitVerification.state} moved to Locality Permit Status.`,
+        });
+      } else {
+        // Sites are being verified (both state and locality permits are done)
+        toast({
+          title: 'State Verified',
+          description: `${sitesInState.length} sites in ${stateForPermitVerification.state} have been verified successfully.`,
+        });
+      }
+
+      setPermitVerificationDialogOpen(false);
+      setStateForPermitVerification(null);
+      await refreshMMPFiles();
+      
+      // Switch to appropriate tab
+      if (statePermitJustUploaded || statePermitNotRequired) {
+        // Move to locality permit tab to upload locality permits
+        setNewSitesSubTab('local_required');
+        setActiveTab('new');
+      } else {
+        // Sites are verified - move to verified tab
+        setActiveTab('verified');
+      }
+      
+      return;
+    }
+
+    // Handle bulk mode or single site mode
     const sitesToVerify = bulkVerificationMode !== 'single' && bulkSitesForPermitVerification.length > 0
       ? bulkSitesForPermitVerification
       : siteForPermitVerification ? [siteForPermitVerification] : [];
@@ -1405,6 +1490,18 @@ const CoordinatorSites: React.FC = () => {
       const statePermitNotRequired = decision.statePermit.requirement === 'not_required' || 
         (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
       
+      // Check if state permit was just uploaded (required_have_it + uploaded: true)
+      // In this case, sites should NOT be verified yet - they need locality permits first
+      const statePermitJustUploaded = decision.statePermit?.requirement === 'required_have_it' && 
+        decision.statePermit?.uploaded === true;
+      
+      // Determine if sites should be verified now
+      // Sites are only verified if:
+      // 1. They already have permits_attached status (both state and locality permits are done)
+      // 2. OR state permit is not required (can skip to locality permits)
+      // IMPORTANT: When state permit is just uploaded, sites should NOT be verified - they need locality permits first
+      const shouldVerifyNow = !statePermitJustUploaded && !statePermitNotRequired;
+      
       // Update all sites with permit decision
       for (const site of sitesToVerify) {
         const additionalData = {
@@ -1412,12 +1509,19 @@ const CoordinatorSites: React.FC = () => {
           permit_decision: decision,
           ...(pendingVerificationData?.additional_data || {}),
           ...(statePermitNotRequired ? { state_permit_not_required: true } : {}),
+          ...(statePermitJustUploaded ? { state_permit_attached: true } : {}),
         };
 
-        // If state permit not required, don't change status to verified - just update additional_data
-        const updateData: any = statePermitNotRequired ? {
+        // If state permit was just uploaded, don't verify yet - just update additional_data
+        // Sites will move to locality permit tab to upload locality permits
+        // If state permit not required, also don't verify - move to locality permit tab
+        // Only verify if sites already have permits_attached status (both permits done)
+        // IMPORTANT: When statePermitJustUploaded is true, we MUST NOT set status to 'verified'
+        const updateData: any = (statePermitJustUploaded || statePermitNotRequired) ? {
+          // Only update additional_data - do NOT change status
           additional_data: additionalData,
         } : {
+          // Sites are being verified (both state and locality permits are done)
           ...(pendingVerificationData || {}),
           status: 'verified',
           verified_at: verifiedAt,
@@ -1432,70 +1536,81 @@ const CoordinatorSites: React.FC = () => {
 
         if (error) throw error;
 
-        // Update MMP workflow for each site
-        try {
-          const { data: mmpData } = await supabase
-            .from('mmp_files')
-            .select('workflow, status')
-            .eq('id', site.mmp_file_id)
-            .single();
-
-          if (mmpData) {
-            const workflow = (mmpData.workflow as any) || {};
-            if (!workflow.coordinatorVerified) {
-              const updatedWorkflow = {
-                ...workflow,
-                coordinatorVerified: true,
-                coordinatorVerifiedAt: verifiedAt,
-                coordinatorVerifiedBy: verifiedBy,
-                currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
-                lastUpdated: verifiedAt
-              };
-              await updateMMP(site.mmp_file_id, {
-                workflow: updatedWorkflow,
-                status: 'pending'
-              });
-            }
-          }
-        } catch (syncErr) {
-          console.warn('Failed to sync MMP workflow:', syncErr);
-        }
-      }
-
-      // Notify hub supervisors about verified sites
-      try {
-        const hubsNotified = new Set<string>();
-        for (const site of sitesToVerify) {
-          if (site.hub_office && !hubsNotified.has(site.hub_office)) {
-            const { data: hubData } = await supabase
-              .from('hubs')
-              .select('id')
-              .eq('name', site.hub_office)
+        // Update MMP workflow only if sites are being verified now
+        // Don't update workflow if state permit was just uploaded (sites not verified yet)
+        if (shouldVerifyNow) {
+          try {
+            const { data: mmpData } = await supabase
+              .from('mmp_files')
+              .select('workflow, status')
+              .eq('id', site.mmp_file_id)
               .single();
-            if (hubData?.id) {
-              const sitesInHub = sitesToVerify.filter(s => s.hub_office === site.hub_office);
-              await NotificationTriggerService.siteOperationNotification(
-                hubData.id,
-                'verified',
-                sitesInHub.length > 1 ? `${sitesInHub.length} sites` : site.site_name,
-                {
-                  actorName: verifiedBy,
-                  siteCount: sitesInHub.length
-                }
-              );
-              hubsNotified.add(site.hub_office);
+
+            if (mmpData) {
+              const workflow = (mmpData.workflow as any) || {};
+              if (!workflow.coordinatorVerified) {
+                const updatedWorkflow = {
+                  ...workflow,
+                  coordinatorVerified: true,
+                  coordinatorVerifiedAt: verifiedAt,
+                  coordinatorVerifiedBy: verifiedBy,
+                  currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
+                  lastUpdated: verifiedAt
+                };
+                await updateMMP(site.mmp_file_id, {
+                  workflow: updatedWorkflow,
+                  status: 'pending'
+                });
+              }
             }
+          } catch (syncErr) {
+            console.warn('Failed to sync MMP workflow:', syncErr);
           }
         }
-      } catch (notifyErr) {
-        console.warn('Failed to notify supervisors about verification:', notifyErr);
       }
 
-      // Check if state permit is not required or user can proceed without it
-      const statePermitNotRequiredForToast = decision.statePermit.requirement === 'not_required' || 
-        (decision.statePermit.requirement === 'required_dont_have_it' && decision.statePermit.canWorkWithout === 'yes');
+      // Notify hub supervisors only if sites are being verified now
+      if (shouldVerifyNow) {
+        try {
+          const hubsNotified = new Set<string>();
+          for (const site of sitesToVerify) {
+            if (site.hub_office && !hubsNotified.has(site.hub_office)) {
+              const { data: hubData } = await supabase
+                .from('hubs')
+                .select('id')
+                .eq('name', site.hub_office)
+                .single();
+              if (hubData?.id) {
+                const sitesInHub = sitesToVerify.filter(s => s.hub_office === site.hub_office);
+                await NotificationTriggerService.siteOperationNotification(
+                  hubData.id,
+                  'verified',
+                  sitesInHub.length > 1 ? `${sitesInHub.length} sites` : site.site_name,
+                  {
+                    actorName: verifiedBy,
+                    siteCount: sitesInHub.length
+                  }
+                );
+                hubsNotified.add(site.hub_office);
+              }
+            }
+          }
+        } catch (notifyErr) {
+          console.warn('Failed to notify supervisors about verification:', notifyErr);
+        }
+      }
 
-      if (statePermitNotRequiredForToast) {
+      // Show appropriate toast message based on what happened
+      if (statePermitJustUploaded) {
+        // State permit was just uploaded - sites move to locality permit tab
+        toast({
+          title: 'State Permit Uploaded',
+          description: sitesToVerify.length > 1 
+            ? `State permit uploaded. ${sitesToVerify.length} sites moved to Locality Permit Status. You can now upload locality permits.`
+            : 'State permit uploaded. Site moved to Locality Permit Status. You can now upload locality permits.',
+        });
+      } else if (statePermitNotRequired) {
+        // State permit not required - sites move to locality permit tab
         toast({
           title: 'State Permit Not Required',
           description: sitesToVerify.length > 1 
@@ -1503,6 +1618,7 @@ const CoordinatorSites: React.FC = () => {
             : 'Site moved to Locality Permit Status.',
         });
       } else {
+        // Sites are being verified (both state and locality permits are done)
         toast({
           title: sitesToVerify.length > 1 ? 'Sites Verified' : 'Site Verified',
           description: sitesToVerify.length > 1 
@@ -1524,9 +1640,12 @@ const CoordinatorSites: React.FC = () => {
       await refreshMMPFiles();
       
       // Switch to appropriate tab
-      if (statePermitNotRequiredForToast) {
+      if (statePermitJustUploaded || statePermitNotRequired) {
+        // Move to locality permit tab to upload locality permits
         setNewSitesSubTab('local_required');
+        setActiveTab('new');
       } else {
+        // Sites are verified - move to verified tab
         setActiveTab('verified');
       }
     } catch (error) {
@@ -2428,29 +2547,42 @@ const CoordinatorSites: React.FC = () => {
   const renderStateCard = (stateData: any) => {
     const isExpanded = expandedStates.has(stateData.state);
 
+    // Get first site from first locality to get state, locality, and mmp_file_id
+    const firstLocality = stateData.localities?.[0];
+    const firstSite = firstLocality?.sites?.[0];
+
+    const handleStateCardClick = () => {
+      // Check if state permits are uploaded by FOM
+      if (!stateData.hasStatePermit) {
+        // Open permit verification questions for state
+        if (firstSite) {
+          setStateForPermitVerification({
+            state: stateData.state,
+            locality: firstSite.locality || firstLocality?.locality || '',
+            mmpFileId: firstSite.mmp_file_id || ''
+          });
+          setPermitVerificationDialogOpen(true);
+        }
+        return;
+      }
+      
+      // If state permits exist, expand to show localities
+      setExpandedStates(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(stateData.state)) {
+          newSet.delete(stateData.state);
+        } else {
+          newSet.add(stateData.state);
+        }
+        return newSet;
+      });
+    };
+
     return (
       <Card 
         key={stateData.state}
         className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
-        onClick={() => {
-          // Check if state permits are uploaded by FOM
-          if (!stateData.hasStatePermit) {
-            setSelectedStateForWorkflow(stateData);
-            setStatePermitQuestionDialogOpen(true);
-            return;
-          }
-          
-          // If state permits exist, expand to show localities
-          setExpandedStates(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(stateData.state)) {
-              newSet.delete(stateData.state);
-            } else {
-              newSet.add(stateData.state);
-            }
-            return newSet;
-          });
-        }}
+        onClick={handleStateCardClick}
       >
         <CardContent className="pt-4">
           <div className="flex items-start gap-3">
@@ -2480,14 +2612,15 @@ const CoordinatorSites: React.FC = () => {
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const mmpFileId = stateData.localities?.[0]?.sites?.[0]?.mmp_file_id;
-                          const stateId = stateData.stateId || stateData.state.toLowerCase().replace(/\s+/g, '-');
-                          setSelectedStateForSequentialUpload({
-                            state: stateData.state,
-                            stateId: stateId,
-                            mmpFileId: mmpFileId
-                          });
-                          setSequentialPermitDialogOpen(true);
+                          // Open permit verification questions for state
+                          if (firstSite) {
+                            setStateForPermitVerification({
+                              state: stateData.state,
+                              locality: firstSite.locality || firstLocality?.locality || '',
+                              mmpFileId: firstSite.mmp_file_id || ''
+                            });
+                            setPermitVerificationDialogOpen(true);
+                          }
                         }}
                         data-testid={`button-upload-permits-${stateData.state}`}
                         className="w-full sm:w-auto min-h-[44px]"
@@ -2856,7 +2989,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {contextLoading || permitsLoading ? (
+                  {contextLoading || permitsLoading || loadingLocations ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                       <p className="text-muted-foreground">Loading states...</p>
@@ -2903,7 +3036,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {contextLoading || permitsLoading ? (
+                  {contextLoading || permitsLoading || loadingLocations ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                       <p className="text-muted-foreground">Loading localities...</p>
@@ -3624,6 +3757,7 @@ const CoordinatorSites: React.FC = () => {
         if (!open) {
           setPermitVerificationDialogOpen(false);
           setSiteForPermitVerification(null);
+          setStateForPermitVerification(null);
           setPendingVerificationData(null);
           setBulkSitesForPermitVerification([]);
           setBulkVerificationMode('single');
@@ -3635,27 +3769,38 @@ const CoordinatorSites: React.FC = () => {
             <DialogDescription>
               Please answer the following questions about permit requirements before completing verification.
             </DialogDescription>
-            {bulkVerificationMode !== 'single' && bulkSitesForPermitVerification.length > 1 && (
+            {bulkVerificationMode !== 'single' && bulkSitesForPermitVerification.length > 1 && siteForPermitVerification && (
               <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
                 <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
                   <CheckSquare className="h-4 w-4" />
                   <span>
-                    This verification will apply to <strong>{bulkSitesForPermitVerification.length} sites</strong> in {siteForPermitVerification?.locality}, {siteForPermitVerification?.state}
+                    This verification will apply to <strong>{bulkSitesForPermitVerification.length} sites</strong> in {siteForPermitVerification.locality}, {siteForPermitVerification.state}
+                  </span>
+                </p>
+              </div>
+            )}
+            {stateForPermitVerification && (
+              <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                <p className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                  <CheckSquare className="h-4 w-4" />
+                  <span>
+                    Verifying permits for <strong>{stateForPermitVerification.state}</strong>
                   </span>
                 </p>
               </div>
             )}
           </DialogHeader>
-          {siteForPermitVerification && (
+          {(siteForPermitVerification || stateForPermitVerification) && (
             <PermitVerificationQuestions
-              state={siteForPermitVerification.state}
-              locality={siteForPermitVerification.locality}
-              mmpFileId={siteForPermitVerification.mmp_file_id}
+              state={siteForPermitVerification?.state || stateForPermitVerification?.state || ''}
+              locality={siteForPermitVerification?.locality || stateForPermitVerification?.locality || ''}
+              mmpFileId={siteForPermitVerification?.mmp_file_id || stateForPermitVerification?.mmpFileId || ''}
               onComplete={handlePermitVerificationComplete}
               onSendBackToFOM={handleSendBackToFOM}
               onCancel={() => {
                 setPermitVerificationDialogOpen(false);
                 setSiteForPermitVerification(null);
+                setStateForPermitVerification(null);
                 setPendingVerificationData(null);
                 setBulkSitesForPermitVerification([]);
                 setBulkVerificationMode('single');
@@ -4077,6 +4222,138 @@ const CoordinatorSites: React.FC = () => {
               }}
             >
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permit Question Dialog - Ask if coordinator has the local permit */}
+      <Dialog open={permitQuestionDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setPermitQuestionDialogOpen(false);
+          setSelectedLocalityForWorkflow(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Local Permit Required</DialogTitle>
+            <DialogDescription>
+              Upload the local permit for <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.stateName || selectedLocalityForWorkflow?.state}</strong> to verify all sites in this locality.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              Do you have the local permit for this locality?
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setPermitQuestionDialogOpen(false);
+                setSelectedLocalityForWorkflow(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => handlePermitQuestionResponse(false)}
+            >
+              No, I don't have it
+            </Button>
+            <Button 
+              onClick={() => handlePermitQuestionResponse(true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, I have it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Locality Permit Upload Dialog */}
+      {selectedLocalityForWorkflow && (
+        <Dialog open={localityPermitUploadDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setLocalityPermitUploadDialogOpen(false);
+            setSelectedLocalityForWorkflow(null);
+          }
+        }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Upload Local Permit</DialogTitle>
+              <DialogDescription>
+                Upload the local permit for <strong>{selectedLocalityForWorkflow.locality}, {selectedLocalityForWorkflow.stateName || selectedLocalityForWorkflow.state}</strong>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {selectedLocalityForWorkflow.sites?.[0]?.mmp_file_id ? (
+                <LocalityPermitUpload
+                  state={selectedLocalityForWorkflow.stateName || selectedLocalityForWorkflow.state || ''}
+                  locality={selectedLocalityForWorkflow.locality || ''}
+                  mmpFileId={selectedLocalityForWorkflow.sites[0].mmp_file_id}
+                  onPermitUploaded={handlePermitUploaded}
+                  onCancel={() => {
+                    setLocalityPermitUploadDialogOpen(false);
+                    setSelectedLocalityForWorkflow(null);
+                  }}
+                />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>Unable to find MMP file ID for this locality.</p>
+                  <p className="text-xs mt-2">Please ensure sites are properly assigned to this locality.</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Work Without Permit Dialog */}
+      <Dialog open={workWithoutPermitDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setWorkWithoutPermitDialogOpen(false);
+          setSelectedLocalityForWorkflow(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Proceed Without Local Permit</DialogTitle>
+            <DialogDescription>
+              Can you continue to complete sites in <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.stateName || selectedLocalityForWorkflow?.state}</strong> without a local permit?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              If you can proceed without the local permit, sites in this locality will be moved to "Permits Attached" and allow immediate verification.
+              If you cannot proceed without the permit, the sites will remain in this locality and wait for the local permit to be uploaded.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setWorkWithoutPermitDialogOpen(false);
+                setSelectedLocalityForWorkflow(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => {
+                setWorkWithoutPermitDialogOpen(false);
+                setSelectedLocalityForWorkflow(null);
+              }}
+            >
+              No, I need the permit
+            </Button>
+            <Button 
+              onClick={handleLocalityProceedWithoutPermit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, proceed without permit
             </Button>
           </DialogFooter>
         </DialogContent>
