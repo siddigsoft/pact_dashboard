@@ -5,22 +5,35 @@
 -- =============================================================================
 
 -- Step 1: Find completed sites that are missing wallet transactions
+-- Updated to check accepted_by, claimed_by, and visit_completed_by
 WITH completed_sites AS (
   SELECT 
     mse.id as site_id,
     mse.site_name,
+    -- Determine user to pay: accepted_by > claimed_by > visit_completed_by
+    -- Handle type mismatch: accepted_by is text, others are uuid
+    CASE 
+      WHEN mse.accepted_by IS NOT NULL THEN mse.accepted_by
+      WHEN mse.claimed_by IS NOT NULL THEN mse.claimed_by::text
+      WHEN mse.visit_completed_by IS NOT NULL THEN mse.visit_completed_by::text
+      ELSE NULL
+    END as user_to_pay,
     mse.accepted_by,
+    mse.claimed_by,
+    mse.visit_completed_by,
     mse.cost,
     mse.enumerator_fee,
     mse.transport_fee,
     mse.visit_completed_at,
     mse.accepted_at,
+    mse.claimed_at,
     COALESCE(mse.cost, 0) + 
     COALESCE(mse.enumerator_fee, 0) + 
     COALESCE(mse.transport_fee, 0) as total_value
   FROM mmp_site_entries mse
   WHERE mse.status IN ('Completed', 'completed', 'Verified', 'verified')
-    AND mse.accepted_by IS NOT NULL
+    -- Check if any user field is set
+    AND (mse.accepted_by IS NOT NULL OR mse.claimed_by IS NOT NULL OR mse.visit_completed_by IS NOT NULL)
     AND (
       COALESCE(mse.cost, 0) > 0 
       OR COALESCE(mse.enumerator_fee, 0) > 0
@@ -29,7 +42,7 @@ WITH completed_sites AS (
 existing_transactions AS (
   SELECT DISTINCT site_visit_id 
   FROM wallet_transactions 
-  WHERE type = 'site_visit_fee'
+  WHERE type = 'earning'
 ),
 missing_payments AS (
   SELECT cs.* 
@@ -40,7 +53,10 @@ missing_payments AS (
 SELECT 
   site_id,
   site_name,
+  user_to_pay,
   accepted_by,
+  claimed_by,
+  visit_completed_by,
   cost,
   enumerator_fee,
   transport_fee,
@@ -53,28 +69,42 @@ ORDER BY visit_completed_at DESC;
 -- This shows which sites need wallet transactions created
 
 -- Step 3: Create wallets for users who don't have one yet
+-- Updated to include users from claimed_by and visit_completed_by
 INSERT INTO wallets (user_id, balances, total_earned, total_withdrawn, created_at, updated_at)
 SELECT DISTINCT 
-  mse.accepted_by,
+  CASE 
+    WHEN mse.accepted_by IS NOT NULL THEN mse.accepted_by::uuid
+    WHEN mse.claimed_by IS NOT NULL THEN mse.claimed_by
+    WHEN mse.visit_completed_by IS NOT NULL THEN mse.visit_completed_by
+    ELSE NULL
+  END as user_id,
   jsonb_build_object('SDG', 0),
   0,
   0,
   NOW(),
   NOW()
 FROM mmp_site_entries mse
-WHERE mse.accepted_by IS NOT NULL
-  AND mse.status IN ('Completed', 'completed', 'Verified', 'verified')
+WHERE mse.status IN ('Completed', 'completed', 'Verified', 'verified')
+  AND (mse.accepted_by IS NOT NULL OR mse.claimed_by IS NOT NULL OR mse.visit_completed_by IS NOT NULL)
   AND NOT EXISTS (
-    SELECT 1 FROM wallets w WHERE w.user_id = mse.accepted_by
+    SELECT 1 FROM wallets w 
+    WHERE w.user_id = CASE 
+      WHEN mse.accepted_by IS NOT NULL THEN mse.accepted_by::uuid
+      WHEN mse.claimed_by IS NOT NULL THEN mse.claimed_by
+      WHEN mse.visit_completed_by IS NOT NULL THEN mse.visit_completed_by
+      ELSE NULL
+    END
   )
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Step 4: Create wallet transactions for completed sites missing them
+-- Updated to check accepted_by, claimed_by, and visit_completed_by
 INSERT INTO wallet_transactions (
   wallet_id,
   user_id,
   type,
   amount,
+  amount_cents,
   currency,
   site_visit_id,
   description,
@@ -84,19 +114,30 @@ INSERT INTO wallet_transactions (
 )
 SELECT 
   w.id as wallet_id,
-  mse.accepted_by as user_id,
-  'site_visit_fee' as type,
+  CASE 
+    WHEN mse.accepted_by IS NOT NULL THEN mse.accepted_by::uuid
+    WHEN mse.claimed_by IS NOT NULL THEN mse.claimed_by
+    WHEN mse.visit_completed_by IS NOT NULL THEN mse.visit_completed_by
+    ELSE NULL
+  END as user_id,
+  'earning' as type,  -- Use 'earning' type to match current codebase
   COALESCE(mse.cost, COALESCE(mse.enumerator_fee, 0) + COALESCE(mse.transport_fee, 0)) as amount,
+  ROUND(COALESCE(mse.cost, COALESCE(mse.enumerator_fee, 0) + COALESCE(mse.transport_fee, 0)) * 100)::bigint as amount_cents,
   'SDG' as currency,
   mse.id as site_visit_id,
-  'Backfill: MMP site completed: ' || COALESCE(mse.site_name, 'Unknown Site') as description,
+  'Backfill: Site visit completed: ' || COALESCE(mse.site_name, 'Unknown Site') as description,
   0 as balance_before,
   COALESCE(mse.cost, COALESCE(mse.enumerator_fee, 0) + COALESCE(mse.transport_fee, 0)) as balance_after,
-  COALESCE(mse.visit_completed_at, mse.accepted_at, NOW()) as created_at
+  COALESCE(mse.visit_completed_at, mse.claimed_at, mse.accepted_at, NOW()) as created_at
 FROM mmp_site_entries mse
-JOIN wallets w ON w.user_id = mse.accepted_by
+JOIN wallets w ON w.user_id = CASE 
+  WHEN mse.accepted_by IS NOT NULL THEN mse.accepted_by::uuid
+  WHEN mse.claimed_by IS NOT NULL THEN mse.claimed_by
+  WHEN mse.visit_completed_by IS NOT NULL THEN mse.visit_completed_by
+  ELSE NULL
+END
 WHERE mse.status IN ('Completed', 'completed', 'Verified', 'verified')
-  AND mse.accepted_by IS NOT NULL
+  AND (mse.accepted_by IS NOT NULL OR mse.claimed_by IS NOT NULL OR mse.visit_completed_by IS NOT NULL)
   AND (
     COALESCE(mse.cost, 0) > 0 
     OR COALESCE(mse.enumerator_fee, 0) > 0
@@ -104,10 +145,11 @@ WHERE mse.status IN ('Completed', 'completed', 'Verified', 'verified')
   AND NOT EXISTS (
     SELECT 1 FROM wallet_transactions wt 
     WHERE wt.site_visit_id = mse.id 
-    AND wt.type = 'site_visit_fee'
+    AND wt.type = 'earning'  -- Check for existing earning transactions
   );
 
 -- Step 5: Update wallet balances based on all transactions
+-- Updated to include both 'earning' and 'site_visit_fee' transaction types
 UPDATE wallets
 SET 
   balances = jsonb_build_object('SDG', COALESCE(tx_sum.total, 0)),
@@ -118,7 +160,7 @@ FROM (
     user_id,
     SUM(amount) as total
   FROM wallet_transactions
-  WHERE type = 'site_visit_fee'
+  WHERE type = 'earning'  -- Sum all earning transactions
   GROUP BY user_id
 ) tx_sum
 WHERE wallets.user_id = tx_sum.user_id;
