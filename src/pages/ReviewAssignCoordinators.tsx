@@ -172,7 +172,9 @@ const ReviewAssignCoordinators: React.FC = () => {
   }, [forwardedSiteIds]);
 
   // Create stable dependency values to prevent unnecessary re-runs
-  const forwardedIdsKey = forwardedSiteIdsArray.join(',');
+  const forwardedIdsKey = useMemo(() => {
+    return forwardedSiteIdsArray.join(',');
+  }, [forwardedSiteIdsArray]);
   const statesLength = states.length;
   const localitiesLength = localities.length;
   const mmpFileId = mmpFile?.id;
@@ -235,27 +237,35 @@ const ReviewAssignCoordinators: React.FC = () => {
     // Create a Set from the array for efficient lookups
     const forwardedSet = new Set(forwardedSiteIdsArray);
     
-    const newSelectedSites: Record<string, Set<string>> = { ...selectedSites };
-    let hasChanges = false;
-    
-    Object.entries(groupMap).forEach(([groupKey, groupSites]) => {
-      // Only initialize if not already set and has unforwarded sites
-      if (!newSelectedSites[groupKey]) {
-        const unforwardedSites = groupSites.filter((site: any) => !forwardedSet.has(site.id));
-        if (unforwardedSites.length > 0) {
-          newSelectedSites[groupKey] = new Set(unforwardedSites.map((site: any) => site.id));
-          hasChanges = true;
+    // Use functional update to avoid stale closure issues
+    setSelectedSites(prevSelectedSites => {
+      const newSelectedSites: Record<string, Set<string>> = { ...prevSelectedSites };
+      let hasChanges = false;
+      
+      Object.entries(groupMap).forEach(([groupKey, groupSites]) => {
+        // Only initialize if not already set and has unforwarded sites
+        if (!newSelectedSites[groupKey]) {
+          const unforwardedSites = groupSites.filter((site: any) => !forwardedSet.has(site.id));
+          if (unforwardedSites.length > 0) {
+            newSelectedSites[groupKey] = new Set(unforwardedSites.map((site: any) => site.id));
+            hasChanges = true;
+          }
         }
+      });
+      
+      // Only update if there are actual changes
+      if (hasChanges) {
+        initializationKeyRef.current = initializationKey;
+        return newSelectedSites;
       }
-    });
-    
-    if (hasChanges) {
-      setSelectedSites(newSelectedSites);
-      initializationKeyRef.current = initializationKey;
-    } else if (initializationKeyRef.current !== initializationKey) {
+      
       // Update key even if no changes to prevent re-running
-      initializationKeyRef.current = initializationKey;
-    }
+      if (initializationKeyRef.current !== initializationKey) {
+        initializationKeyRef.current = initializationKey;
+      }
+      
+      return prevSelectedSites; // Return previous state if no changes
+    });
     // Note: We intentionally don't include states/localities/mmpFile in deps
     // because we only want to re-run when the stable values change
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -573,11 +583,15 @@ const ReviewAssignCoordinators: React.FC = () => {
       
       // Removed: await refreshMMPFiles(); // To prevent page reload on hosted app
 
-      // Update local state to reflect forwarded sites
-      const newForwarded = new Set(forwardedSiteIds);
-      siteIds.forEach(id => newForwarded.add(id));
-      setForwardedSiteIds(newForwarded);
+      // Batch all state updates together to prevent multiple re-renders
+      // Use functional updates to ensure we're working with the latest state
+      setForwardedSiteIds(prev => {
+        const newForwarded = new Set(prev);
+        siteIds.forEach(id => newForwarded.add(id));
+        return newForwarded;
+      });
       
+      // Batch these updates together - React 18 will automatically batch them
       setBatchLoading(b => ({ ...b, [groupKey]: false }));
       setBatchForwarded(f => ({ ...f, [groupKey]: true }));
       setSelectedSites(s => ({ ...s, [groupKey]: new Set() }));
