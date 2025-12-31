@@ -360,7 +360,7 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
         <div className="space-y-4 mt-6">
           <h4 className="text-sm font-medium text-foreground">Permit Details</h4>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium">
                 Issue Date <span className="text-red-500">*</span>

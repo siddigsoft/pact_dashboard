@@ -32,11 +32,25 @@ export function useClaimFeeCalculation(): UseClaimFeeCalculationResult {
     setError(null);
 
     try {
-      const { data: siteEntry, error: siteError } = await supabase
-        .from('mmp_site_entries')
-        .select('transport_fee, enumerator_fee, cost, additional_data')
-        .eq('id', siteId)
-        .single();
+      // Run independent queries in parallel for better performance
+      const [siteResult, classificationResult] = await Promise.all([
+        supabase
+          .from('mmp_site_entries')
+          .select('transport_fee, enumerator_fee, cost, additional_data')
+          .eq('id', siteId)
+          .single(),
+        supabase
+          .from('user_classifications')
+          .select('classification_level, role_scope, is_active')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('effective_from', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      ]);
+
+      const { data: siteEntry, error: siteError } = siteResult;
+      const { data: userClassification, error: classError } = classificationResult;
 
       if (siteError) {
         console.error('Error fetching site entry:', siteError);
@@ -44,26 +58,18 @@ export function useClaimFeeCalculation(): UseClaimFeeCalculationResult {
         return null;
       }
 
-      const transportBudget = Number(siteEntry?.transport_fee) || 0;
-
-      const { data: userClassification, error: classError } = await supabase
-        .from('user_classifications')
-        .select('classification_level, role_scope, is_active')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .order('effective_from', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
       if (classError) {
         console.error('Error fetching user classification:', classError);
       }
+
+      const transportBudget = Number(siteEntry?.transport_fee) || 0;
 
       let enumeratorFee = DEFAULT_ENUMERATOR_FEE_SDG;
       let classificationLevel: ClassificationLevel | null = null;
       let roleScope: ClassificationRoleScope | null = null;
       let feeSource: 'classification' | 'default' = 'default';
 
+      // If user has classification, fetch fee structure
       if (userClassification) {
         classificationLevel = userClassification.classification_level as ClassificationLevel;
         roleScope = userClassification.role_scope as ClassificationRoleScope;
