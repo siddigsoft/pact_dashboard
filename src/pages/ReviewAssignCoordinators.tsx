@@ -20,6 +20,7 @@ import {
   forwardSitesToCoordinator,
   insertNotifications
 } from '@/services/mmpActions';
+import { EmailNotificationService } from '@/services/email-notification.service';
 
 const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -461,6 +462,113 @@ const ReviewAssignCoordinators: React.FC = () => {
       } catch (notifErr) {
         console.warn('Failed to send notifications:', notifErr);
         // Optionally, you could show a separate toast for notification failure here if needed
+      }
+
+      // Send email notification to coordinator
+      try {
+        const coordinator = allCoordinators.find(c => c.id === coordinatorId);
+        if (coordinator?.email) {
+          // Get site names from the site entries
+          const allSiteEntries = mmpFile?.siteEntries || [];
+          const siteNames = allSiteEntries
+            .filter((site: any) => siteIds.includes(site.id))
+            .map((site: any) => site.siteName || site.siteCode || `Site ${site.id}`);
+          
+          // Get location info
+          const stateName = states.find(s => s.id === stateId)?.name || '';
+          const [_, localityId] = groupKey.split('|');
+          const localityName = localityId && localityId !== 'unassigned' ? localities.find(l => l.id === localityId)?.name : '';
+          const locationInfo = `${stateName}${localityName ? ` - ${localityName}` : ''}`;
+          
+          // Get forwarder name
+          const forwarderName = currentUser?.fullName || currentUser?.name || currentUser?.email || 'Field Operations Manager';
+          
+          console.log(`[EMAIL] Sending sites forwarded email to coordinator: ${coordinator.email}`);
+          const emailResult = await EmailNotificationService.sendSitesForwardedToCoordinator(
+            coordinator.email,
+            coordinator.fullName || coordinator.name || 'Coordinator',
+            siteNames.length > 0 ? siteNames : [`${siteIds.length} site(s)`],
+            mmpFile?.name || 'MMP',
+            forwarderName,
+            locationInfo,
+            mmpId
+          );
+          
+          if (emailResult.success) {
+            console.log(`[EMAIL] Successfully sent to coordinator: ${coordinator.email}`);
+          } else {
+            console.error(`[EMAIL] Failed to send to coordinator ${coordinator.email}:`, emailResult.error);
+          }
+        }
+      } catch (emailErr) {
+        console.error('Failed to send email notification to coordinator:', emailErr);
+        // Don't fail the whole operation if email fails
+      }
+
+      // Send email notification to supervisor if selected
+      if (supervisorId) {
+        try {
+          const supervisor = allSupervisors.find(s => s.id === supervisorId);
+          if (supervisor?.email) {
+            // Get site names from the site entries
+            const allSiteEntries = mmpFile?.siteEntries || [];
+            const siteNames = allSiteEntries
+              .filter((site: any) => siteIds.includes(site.id))
+              .map((site: any) => site.siteName || site.siteCode || `Site ${site.id}`);
+            
+            // Get coordinator name
+            const coordinatorName = allCoordinators.find(c => c.id === coordinatorId)?.fullName || 
+                                   allCoordinators.find(c => c.id === coordinatorId)?.name || 
+                                   'Coordinator';
+            
+            // Get location info
+            const stateName = states.find(s => s.id === stateId)?.name || '';
+            const [_, localityId] = groupKey.split('|');
+            const localityName = localityId && localityId !== 'unassigned' ? localities.find(l => l.id === localityId)?.name : '';
+            const locationInfo = `${stateName}${localityName ? ` - ${localityName}` : ''}`;
+            
+            // Get forwarder name
+            const forwarderName = currentUser?.fullName || currentUser?.name || currentUser?.email || 'Field Operations Manager';
+            
+            const titleEn = `Sites Assigned to Coordinator for Verification`;
+            const titleAr = `تم تعيين مواقع للمنسق للتحقق`;
+            
+            const messageEn = `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${coordinatorName} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}. Location: ${locationInfo}`;
+            const messageAr = `${mmpFile?.name || 'خطة المراقبة الشهرية'}: تم تعيين ${siteIds.length} موقع(ات) إلى ${coordinatorName} للتحقق من CP${attachStatePermitMap[groupKey] ? ' (تم إرفاق تصريح الولاية)' : ''}. الموقع: ${locationInfo}`;
+            
+            console.log(`[EMAIL] Sending sites assigned notification email to supervisor: ${supervisor.email}`);
+            const emailResult = await EmailNotificationService.sendNotification(
+              supervisor.email,
+              supervisor.fullName || supervisor.name || 'Supervisor',
+              {
+                title: titleEn,
+                titleAr: titleAr,
+                message: messageEn,
+                messageAr: messageAr,
+                type: 'info',
+                actionUrl: `/supervisor/sites`,
+                actionLabel: 'View Sites',
+                details: [
+                  { label: 'MMP', value: mmpFile?.name || 'MMP' },
+                  { label: 'Sites', value: `${siteIds.length} site(s)` },
+                  { label: 'Coordinator', value: coordinatorName },
+                  { label: 'Location', value: locationInfo },
+                  { label: 'Assigned By', value: forwarderName }
+                ],
+                recipientRole: { en: 'Supervisor', ar: 'المشرف' }
+              }
+            );
+            
+            if (emailResult.success) {
+              console.log(`[EMAIL] Successfully sent to supervisor: ${supervisor.email}`);
+            } else {
+              console.error(`[EMAIL] Failed to send to supervisor ${supervisor.email}:`, emailResult.error);
+            }
+          }
+        } catch (emailErr) {
+          console.error('Failed to send email notification to supervisor:', emailErr);
+          // Don't fail the whole operation if email fails
+        }
       }
       
       // Removed: await refreshMMPFiles(); // To prevent page reload on hosted app

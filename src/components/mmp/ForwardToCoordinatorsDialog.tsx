@@ -197,6 +197,48 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             }
           }
 
+          // Notify supervisors via NotificationTriggerService
+          // Logic: Find the hub for this state, then notify supervisors of that hub
+          try {
+            // Find hub ID for this state (to determine which supervisors to notify)
+            const { data: stateData } = await supabase
+              .from('hub_states')
+              .select('hub_id')
+              .eq('state_id', group.stateId)
+              .single();
+            
+            if (stateData?.hub_id) {
+              const coordinatorNames = coordinatorIds
+                .map(id => coordinators.find(c => c.id === id))
+                .filter(Boolean)
+                .map(c => c?.full_name || c?.username || 'Coordinator')
+                .join(', ');
+              
+              const messageEn = `${mmpName || 'MMP'}: ${siteIdsInGroup.length} site(s) have been assigned to ${coordinatorNames} for CP verification. Location: ${locationInfo}`;
+              const messageAr = `${mmpName || 'خطة المراقبة الشهرية'}: تم تعيين ${siteIdsInGroup.length} موقع(ات) إلى ${coordinatorNames} للتحقق من CP. الموقع: ${locationInfo}`;
+              
+              // notifyHubSupervisor internally finds supervisors by hub_id and sends them notifications
+              await NotificationTriggerService.notifyHubSupervisor(stateData.hub_id, {
+                title: 'Sites Forwarded to Coordinator',
+                titleAr: 'تم إرسال المواقع إلى المنسق',
+                message: messageEn,
+                messageAr: messageAr,
+                type: 'info',
+                category: 'assignments',
+                priority: 'high',
+                link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+                relatedEntityId: mmpId,
+                relatedEntityType: 'mmpFile',
+                sendEmail: true,
+                emailActionUrl: '/supervisor/sites',
+                emailActionLabel: 'View Sites'
+              });
+            }
+          } catch (supervisorErr) {
+            console.error('Failed to notify supervisors:', supervisorErr);
+            // Don't fail the whole operation if supervisor notification fails
+          }
+
           // Notify the forwarder
           try {
             const { data: auth } = await supabase.auth.getUser();
@@ -319,6 +361,74 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           }
         }
 
+        // Notify supervisors via NotificationTriggerService
+        // Logic: Find which hubs the coordinators belong to, then notify supervisors of those hubs
+        try {
+          // Step 1: Get hub IDs from coordinators (to determine which supervisors to notify)
+          // We need to find the hubs that coordinators belong to, so we can notify their supervisors
+          const coordinatorHubs = new Set<string>();
+          for (const coordId of ids) {
+            const coord = coordinators.find(c => c.id === coordId);
+            if (coord?.hub_id) {
+              coordinatorHubs.add(coord.hub_id);
+            }
+          }
+          
+          // Step 2: Fallback - if coordinators don't have hub_id, find hub from site's state
+          if (coordinatorHubs.size === 0 && siteIds && siteIds.length > 0) {
+            const { data: firstSite } = await supabase
+              .from('mmp_site_entries')
+              .select('state')
+              .eq('id', siteIds[0])
+              .single();
+            
+            if (firstSite?.state) {
+              const { data: stateData } = await supabase
+                .from('hub_states')
+                .select('hub_id')
+                .eq('state_name', firstSite.state)
+                .maybeSingle();
+              
+              if (stateData?.hub_id) {
+                coordinatorHubs.add(stateData.hub_id);
+              }
+            }
+          }
+          
+          // Step 3: Prepare coordinator names for the notification message
+          const coordinatorNames = ids
+            .map(id => coordinators.find(c => c.id === id))
+            .filter(Boolean)
+            .map(c => c?.full_name || c?.username || 'Coordinator')
+            .join(', ');
+          
+          const messageEn = `${mmpName || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${coordinatorNames} for CP verification.`;
+          const messageAr = `${mmpName || 'خطة المراقبة الشهرية'}: تم تعيين ${siteIds.length} موقع(ات) إلى ${coordinatorNames} للتحقق من CP.`;
+          
+          // Step 4: Notify supervisors for each hub
+          // notifyHubSupervisor internally finds supervisors by hub_id and sends them notifications
+          for (const hubId of coordinatorHubs) {
+            await NotificationTriggerService.notifyHubSupervisor(hubId, {
+              title: 'Sites Forwarded to Coordinator',
+              titleAr: 'تم إرسال المواقع إلى المنسق',
+              message: messageEn,
+              messageAr: messageAr,
+              type: 'info',
+              category: 'assignments',
+              priority: 'high',
+              link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+              relatedEntityId: mmpId,
+              relatedEntityType: 'mmpFile',
+              sendEmail: true,
+              emailActionUrl: '/supervisor/sites',
+              emailActionLabel: 'View Sites'
+            });
+          }
+        } catch (supervisorErr) {
+          console.error('Failed to notify supervisors:', supervisorErr);
+          // Don't fail the whole operation if supervisor notification fails
+        }
+
         // Notify the forwarder
         try {
           const { data: auth } = await supabase.auth.getUser();
@@ -404,6 +514,74 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
             }
           }
+        }
+
+        // Notify supervisors via NotificationTriggerService
+        // Logic: Find which hubs the coordinators belong to, then notify supervisors of those hubs
+        try {
+          // Step 1: Get hub IDs from coordinators (to determine which supervisors to notify)
+          // We need to find the hubs that coordinators belong to, so we can notify their supervisors
+          const coordinatorHubs = new Set<string>();
+          for (const coordId of ids) {
+            const coord = coordinators.find(c => c.id === coordId);
+            if (coord?.hub_id) {
+              coordinatorHubs.add(coord.hub_id);
+            }
+          }
+          
+          // Step 2: Fallback - if coordinators don't have hub_id, find hub from MMP file sites' state
+          if (coordinatorHubs.size === 0 && mmpId) {
+            const { data: mmpSites } = await supabase
+              .from('mmp_site_entries')
+              .select('state')
+              .eq('mmp_file_id', mmpId)
+              .limit(1);
+            
+            if (mmpSites && mmpSites.length > 0 && mmpSites[0].state) {
+              const { data: stateData } = await supabase
+                .from('hub_states')
+                .select('hub_id')
+                .eq('state_name', mmpSites[0].state)
+                .maybeSingle();
+              
+              if (stateData?.hub_id) {
+                coordinatorHubs.add(stateData.hub_id);
+              }
+            }
+          }
+          
+          // Step 3: Prepare coordinator names for the notification message
+          const coordinatorNames = ids
+            .map(id => coordinators.find(c => c.id === id))
+            .filter(Boolean)
+            .map(c => c?.full_name || c?.username || 'Coordinator')
+            .join(', ');
+          
+          const messageEn = `${mmpName || 'MMP'} has been assigned to ${coordinatorNames} for CP verification.`;
+          const messageAr = `${mmpName || 'خطة المراقبة الشهرية'} تم تعيينها إلى ${coordinatorNames} للتحقق من CP.`;
+          
+          // Step 4: Notify supervisors for each hub
+          // notifyHubSupervisor internally finds supervisors by hub_id and sends them notifications
+          for (const hubId of coordinatorHubs) {
+            await NotificationTriggerService.notifyHubSupervisor(hubId, {
+              title: 'MMP Forwarded to Coordinator',
+              titleAr: 'تم إرسال خطة المراقبة الشهرية إلى المنسق',
+              message: messageEn,
+              messageAr: messageAr,
+              type: 'info',
+              category: 'assignments',
+              priority: 'high',
+              link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+              relatedEntityId: mmpId,
+              relatedEntityType: 'mmpFile',
+              sendEmail: true,
+              emailActionUrl: '/supervisor/sites',
+              emailActionLabel: 'View Sites'
+            });
+          }
+        } catch (supervisorErr) {
+          console.error('Failed to notify supervisors:', supervisorErr);
+          // Don't fail the whole operation if supervisor notification fails
         }
 
         // Notify the forwarder themself

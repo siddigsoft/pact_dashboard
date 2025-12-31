@@ -1506,10 +1506,11 @@ export const NotificationTriggerService = {
         });
         if (sent) successCount++;
 
-        // Send bilingual email directly
+        // Send bilingual email directly - CRITICAL: Always send email even if notification fails
         if (recipientEmail) {
           try {
-            await EmailNotificationService.sendMMPForwardedToFOM(
+            console.log(`[NOTIFICATION] Sending MMP forwarded email to FOM: ${recipientEmail}`);
+            const emailResult = await EmailNotificationService.sendMMPForwardedToFOM(
               recipientEmail,
               recipientName,
               mmpName,
@@ -1517,10 +1518,16 @@ export const NotificationTriggerService = {
               mmpId,
               true // isRecipientFOM
             );
-            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
+            if (emailResult.success) {
+              console.log(`[NOTIFICATION] Successfully sent bilingual MMP forwarded email to FOM: ${recipientEmail}, messageId: ${emailResult.messageId}`);
+            } else {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailResult.error);
+            }
           } catch (emailError) {
-            console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailError);
+            console.error(`[NOTIFICATION] Exception sending bilingual email to FOM ${recipientEmail}:`, emailError);
           }
+        } else {
+          console.warn(`[NOTIFICATION] FOM ${fomId} has no email address - cannot send email notification`);
         }
       }
 

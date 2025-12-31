@@ -58,8 +58,33 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
   const [finishing, setFinishing] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const LAST_KNOWN_LOCATION_KEY = 'visitReport.lastKnownLocation';
+
+  const saveLastKnownLocation = (coords: { latitude: number; longitude: number; accuracy: number }) => {
+    try {
+      localStorage.setItem(
+        LAST_KNOWN_LOCATION_KEY,
+        JSON.stringify({ ...coords, savedAt: Date.now() })
+      );
+    } catch {
+      // ignore storage failures
+    }
+  };
+
+  const loadLastKnownLocation = (): { latitude: number; longitude: number; accuracy: number; savedAt: number } | null => {
+    try {
+      const raw = localStorage.getItem(LAST_KNOWN_LOCATION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.latitude || !parsed?.longitude) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
 
   useEffect(() => {
     if (open && site) {
@@ -69,6 +94,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setShowLocationRequiredDialog(false);
       setAccuracyHistory([]);
       setFinishing(false);
+      setLocationError(null);
 
       if (site.additionalData) {
         const draftData = site.additionalData;
@@ -80,6 +106,17 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           setLocationEnabled(true);
         }
       } else {
+        // Fallback to last known location if available (even when offline for days)
+        const cached = loadLastKnownLocation();
+        if (cached) {
+          setCoordinates({
+            latitude: cached.latitude,
+            longitude: cached.longitude,
+            accuracy: cached.accuracy
+          });
+          setLocationEnabled(true);
+          setLocationError('Using last known location (cached). Refresh when online for better accuracy.');
+        }
         setNotes('');
         setActivities('');
         setPhotos([]);
@@ -99,6 +136,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setVisitDuration(0);
       stopLocationMonitoring();
       setFinishing(false);
+      setLocationError(null);
       if (locationTimeoutRef.current) {
         clearTimeout(locationTimeoutRef.current);
         locationTimeoutRef.current = null;
@@ -138,15 +176,70 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     };
   }, [visitStartTime, open]);
 
+  const formatGeoError = (error: GeolocationPositionError): string => {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        return 'Location permission denied. Please allow location for this site.';
+      case error.POSITION_UNAVAILABLE:
+        return 'Location unavailable. Check GPS/Wi‑Fi signal.';
+      case error.TIMEOUT:
+        return 'Location request timed out. Try again or move to a clearer area.';
+      default:
+        return 'Unable to get location. Please try again.';
+    }
+  };
+
   const startLocationMonitoring = async () => {
     setIsGettingLocation(true);
+    setLocationError(null);
 
     try {
       if (!navigator.geolocation) {
         setLocationEnabled(false);
         setIsGettingLocation(false);
+        setLocationError('This browser does not support location.');
         setShowLocationRequiredDialog(true);
         return;
+      }
+
+      // Quick low-accuracy grab to avoid long waits (allow older cache when offline)
+      let initialCoords: { latitude: number; longitude: number; accuracy: number } | null = null;
+      try {
+        const quickPosition = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: false,
+            timeout: 5000,
+            maximumAge: 1000 * 60 * 60 * 24 * 7 // accept up to 7 days old cache
+          });
+        });
+
+        initialCoords = {
+          latitude: quickPosition.coords.latitude,
+          longitude: quickPosition.coords.longitude,
+          accuracy: quickPosition.coords.accuracy
+        };
+
+        setCoordinates(initialCoords);
+        setLocationEnabled(true);
+        setLocationError(null);
+        setIsGettingLocation(false);
+        saveLastKnownLocation(initialCoords);
+      } catch (quickError: any) {
+        console.warn('Low-accuracy location failed, trying high-accuracy watch:', quickError);
+        // Try cached last known location if available
+        const cached = loadLastKnownLocation();
+        if (cached) {
+          setCoordinates({
+            latitude: cached.latitude,
+            longitude: cached.longitude,
+            accuracy: cached.accuracy
+          });
+          setLocationEnabled(true);
+          setLocationError('Using last known location (cached). Refresh when connection improves.');
+          setIsGettingLocation(false);
+        } else {
+          setLocationError(formatGeoError(quickError));
+        }
       }
 
       const watchId = navigator.geolocation.watchPosition(
@@ -184,26 +277,29 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
           setLocationEnabled(true);
           setIsGettingLocation(false);
+          setLocationError(null);
+          saveLastKnownLocation(newCoords);
         },
         (error) => {
           console.error('Location watch error:', error);
-          setLocationEnabled(false);
+          setLocationEnabled(Boolean(initialCoords));
           setIsGettingLocation(false);
+          setLocationError(formatGeoError(error));
           setShowLocationRequiredDialog(true);
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 5000
+          timeout: 20000,
+          maximumAge: 10000
         }
       );
 
       setLocationWatchId(watchId);
-
     } catch (error: any) {
       console.error('Location monitoring setup error:', error);
       setLocationEnabled(false);
       setIsGettingLocation(false);
+      setLocationError('Unable to start location monitoring.');
       setShowLocationRequiredDialog(true);
     }
   };
@@ -242,6 +338,8 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: `New accuracy: ±${newCoords.accuracy.toFixed(1)} meters`,
         variant: 'default'
       });
+      setLocationError(null);
+      saveLastKnownLocation(newCoords);
 
     } catch (error: any) {
       console.error('Location refresh error:', error);
@@ -250,6 +348,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: 'Could not refresh location. Please try again.',
         variant: 'destructive'
       });
+      if (error?.code !== undefined) {
+        setLocationError(formatGeoError(error));
+      }
     } finally {
       setIsGettingLocation(false);
     }
@@ -324,9 +425,12 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (finishing) return;
+    if (finishing || isSubmitting) return;
     setFinishing(true);
-    if (!site) return;
+    if (!site) {
+      setFinishing(false);
+      return;
+    }
 
     if (!locationEnabled || !coordinates) {
       toast({
@@ -359,105 +463,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     }
 
     try {
-      const coordinatesJsonb = coordinates ? {
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        accuracy: coordinates.accuracy
-      } : {};
-
-      const photoUrls: string[] = [];
-      const photoStoragePaths: string[] = [];
-      
-      for (const photo of photos) {
-        const fileName = `reports/${site.id}/${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('site-visit-photos')
-          .upload(fileName, photo);
-
-        if (uploadError) {
-          console.error('Error uploading photo:', uploadError);
-          
-          if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
-            toast({
-              title: 'Storage Bucket Not Found',
-              description: 'The site-visit-photos storage bucket has not been created.',
-              variant: 'destructive'
-            });
-            setFinishing(false);
-            return;
-          }
-          
-          toast({
-            title: 'Photo Upload Error',
-            description: `Failed to upload ${photo.name}. Please try again.`,
-            variant: 'destructive'
-          });
-          continue;
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('site-visit-photos')
-          .getPublicUrl(fileName);
-
-        if (urlData?.publicUrl) {
-          photoUrls.push(urlData.publicUrl);
-          photoStoragePaths.push(fileName);
-        }
-      }
-
-      if (photoUrls.length === 0) {
-        toast({
-          title: 'Photo Upload Failed',
-          description: 'Failed to upload photos. Please try again.',
-          variant: 'destructive'
-        });
-        setFinishing(false);
-        return;
-      }
-
-      const { data: reportData, error: reportError } = await supabase
-        .from('reports')
-        .insert({
-          site_visit_id: site.id,
-          notes: notes || 'No additional notes provided',
-          activities: activities,
-          duration_minutes: visitDuration,
-          coordinates: coordinatesJsonb,
-          submitted_by: currentUser?.id || null,
-          submitted_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (reportError) {
-        console.error('Error saving to reports table:', reportError);
-        throw reportError;
-      }
-
-      if (!reportData) {
-        throw new Error('Failed to create report record');
-      }
-
-      const reportPhotos = photoUrls.map((photoUrl, index) => ({
-        report_id: reportData.id,
-        photo_url: photoUrl,
-        storage_path: photoStoragePaths[index] || null
-      }));
-
-      const { error: photosError } = await supabase
-        .from('report_photos')
-        .insert(reportPhotos);
-
-      if (photosError) {
-        console.error('Error linking photos to report:', photosError);
-        toast({
-          title: 'Warning',
-          description: 'Report created but some photos may not be linked properly.',
-          variant: 'default'
-        });
-      }
-
+      // Delegate storage + report creation to parent handler to avoid duplicate uploads and delays
       const visitReportData: VisitReportData = {
         notes,
         activities,
@@ -491,6 +497,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: "Failed to complete site visit. Please try again.",
         variant: "destructive",
       });
+    } finally {
       setFinishing(false);
     }
   };
@@ -652,6 +659,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
                      coordinates.accuracy <= 10 ? 'Excellent accuracy' :
                      'Improving accuracy...'}
                   </p>
+                {locationError && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    {locationError}
+                  </p>
+                )}
                 </div>
               </div>
               {coordinates && (
@@ -995,11 +1007,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
             <Button
               type="button"
               onClick={handleSubmit}
-              disabled={isSubmitting || !locationEnabled || !coordinates || !activities.trim() || photos.length === 0}
+              disabled={isSubmitting || finishing || !locationEnabled || !coordinates || !activities.trim() || photos.length === 0}
               className="flex-1 h-12 rounded-full bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 dark:text-black font-bold gap-2"
             >
               <CheckCircle className="h-5 w-5" />
-              {isSubmitting ? 'Submitting...' : 'Finish Visit'}
+              {isSubmitting || finishing ? 'Submitting...' : 'Finish Visit'}
             </Button>
           </div>
         </DialogFooter>
