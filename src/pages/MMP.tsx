@@ -2888,6 +2888,23 @@ const MMP = () => {
     return [...visitRows, ...rows];
   };
 
+  // Calculate total verified sites count across all verified MMPs (for "Verified Sites" tab badge)
+  const totalVerifiedSitesCount = useMemo(() => {
+    const allVerifiedMMPs = categorizedMMPs.verified || [];
+    
+    if (allVerifiedMMPs.length === 0) return 0;
+    
+    // Filter to only count verified sites from any MMP
+    const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      // Show sites that are verified (from mmp_site_entries)
+      // Check both lowercase and capitalized versions
+      const status = row.status?.toLowerCase() || '';
+      return status === 'verified';
+    });
+    
+    return verifiedSites.length;
+  }, [categorizedMMPs.verified, siteVisitRows]);
+
   // Always calculate verified sites count for "newSites" subcategory (for badge display)
   const newSitesVerifiedCount = useMemo(() => {
     const allVerifiedMMPs = categorizedMMPs.verified || [];
@@ -3211,7 +3228,7 @@ const MMP = () => {
                 {!canClaimSites && (
                   <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
                     Verified Sites
-                    <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
+                    <Badge variant="secondary">{totalVerifiedSitesCount}</Badge>
                   </TabsTrigger>
                 )}
               </TabsList>
