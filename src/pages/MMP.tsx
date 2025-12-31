@@ -1111,19 +1111,30 @@ const MMP = () => {
 
       // Process wallet payment for the user who completed the site entry
       try {
-        const acceptedBy = site.accepted_by || site.additional_data?.accepted_by;
+        // Fetch fresh site data from database to ensure we have the latest values
+        const { data: freshSite, error: fetchError } = await supabase
+          .from('mmp_site_entries')
+          .select('enumerator_fee, transport_fee, cost, accepted_by, claimed_by, visit_completed_by')
+          .eq('id', site.id)
+          .single();
+        
+        if (fetchError) {
+          console.error('Failed to fetch fresh site data for wallet payment:', fetchError);
+        }
+        
+        // Check multiple fields to determine who should be paid:
+        // 1. accepted_by (primary field)
+        // 2. claimed_by (fallback if accepted_by is missing)
+        // 3. visit_completed_by (fallback if both above are missing)
+        // Use fresh database values first, then fallback to site object, then current user
+        const acceptedBy = freshSite?.accepted_by || 
+                          freshSite?.claimed_by || 
+                          freshSite?.visit_completed_by ||
+                          site.accepted_by || site.additional_data?.accepted_by || 
+                          site.claimed_by || site.additional_data?.claimed_by ||
+                          site.visit_completed_by || currentUser?.id;
         
         if (acceptedBy) {
-          // Fetch fresh site data from database to ensure we have the latest fee values
-          const { data: freshSite, error: fetchError } = await supabase
-            .from('mmp_site_entries')
-            .select('enumerator_fee, transport_fee, cost')
-            .eq('id', site.id)
-            .single();
-
-          if (fetchError) {
-            console.error('Failed to fetch fresh site data for wallet payment:', fetchError);
-          }
 
           // Get the cost amount from fresh database values (prefer) or fallback to site object
           // Check both snake_case (from DB) and camelCase (from normalized object)
@@ -1208,7 +1219,7 @@ const MMP = () => {
             });
           }
         } else {
-          console.warn(`No accepted_by user found for site entry ${site.id}, skipping wallet payment`);
+          console.warn(`No user found for site entry ${site.id} (checked accepted_by, claimed_by, visit_completed_by), skipping wallet payment`);
         }
       } catch (walletErr) {
         console.error('Failed to process wallet payment for completed site entry:', walletErr);

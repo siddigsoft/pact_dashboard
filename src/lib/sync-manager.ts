@@ -762,7 +762,7 @@ class SyncManager {
 
     const { data: existing, error: fetchError } = await supabase
       .from('mmp_site_entries')
-      .select('additional_data, enumerator_fee, transport_fee, status, updated_at')
+      .select('additional_data, enumerator_fee, transport_fee, cost, status, updated_at, accepted_by, claimed_by, visit_completed_by, site_name')
       .eq('id', siteEntryId)
       .single();
 
@@ -797,15 +797,27 @@ class SyncManager {
     }
 
     // Process wallet transaction for completed visit - with duplicate prevention
-    const fee = (existing?.enumerator_fee || 0) + (existing?.transport_fee || 0);
-    if (fee > 0 && userId) {
+    // Determine user to pay: check accepted_by, claimed_by, visit_completed_by (in priority order)
+    // Use database values first, then fallback to userId from payload
+    const userToPay = existing?.accepted_by || 
+                     existing?.claimed_by || 
+                     existing?.visit_completed_by ||
+                     userId;
+    
+    // Calculate fee: use cost if available, otherwise sum enumerator_fee + transport_fee
+    const directCost = Number(existing?.cost || 0);
+    const enumeratorFee = Number(existing?.enumerator_fee || 0);
+    const transportFee = Number(existing?.transport_fee || 0);
+    const fee = directCost > 0 ? directCost : (enumeratorFee + transportFee);
+    
+    if (fee > 0 && userToPay) {
       // VALIDATION: Check if fee was already recorded for this site visit
       // Check both site_visit_id (from online completion) and reference_id (from offline sync)
       const { data: existingFees, error: feeCheckError } = await supabase
         .from('wallet_transactions')
         .select('id, amount')
         .or(`site_visit_id.eq.${siteEntryId},reference_id.eq.${siteEntryId}`)
-        .in('type', ['earning', 'site_visit_fee']);
+        .eq('type', 'earning');  // Only check 'earning' type (valid enum value)
 
       // CRITICAL: Abort if we cannot verify whether fee exists (fail-safe)
       if (feeCheckError) {
@@ -821,11 +833,66 @@ class SyncManager {
         return;
       }
 
-      const { data: wallet } = await supabase
+      // Convert userToPay to uuid - handle type mismatch between accepted_by (text) and claimed_by/visit_completed_by (uuid)
+      // Priority: use uuid fields if available, otherwise try to use accepted_by as uuid string, fallback to userId
+      let userToPayUuid: string;
+      if (existing?.claimed_by) {
+        userToPayUuid = existing.claimed_by;
+      } else if (existing?.visit_completed_by) {
+        userToPayUuid = existing.visit_completed_by;
+      } else if (existing?.accepted_by) {
+        // accepted_by is text, but should be a valid UUID string - use it directly
+        userToPayUuid = existing.accepted_by;
+      } else {
+        userToPayUuid = userId;
+      }
+      
+      const { data: wallet, error: walletFetchError } = await supabase
         .from('wallets')
         .select('id, total_earned, balances')
-        .eq('user_id', userId)
+        .eq('user_id', userToPayUuid)
         .single();
+      
+      // If wallet doesn't exist, create it
+      if (walletFetchError && walletFetchError.code === 'PGRST116') {
+        const { data: newWallet, error: createError } = await supabase
+          .from('wallets')
+          .insert({
+            user_id: userToPayUuid,
+            balances: { SDG: fee },
+            total_earned: fee,
+          })
+          .select()
+          .single();
+        
+        if (createError) {
+          console.error(`[SyncManager] Failed to create wallet for user ${userToPayUuid}:`, createError);
+          return;
+        }
+        
+        // Create transaction for new wallet
+        await supabase.from('wallet_transactions').insert({
+          wallet_id: newWallet.id,
+          user_id: userToPayUuid,
+          type: 'earning',
+          amount: fee,
+          amount_cents: Math.round(fee * 100),
+          description: `Site visit completion (offline sync)`,
+          site_visit_id: siteEntryId,
+          reference_id: siteEntryId,
+          reference_type: 'site_visit',
+          balance_before: 0,
+          balance_after: fee,
+        });
+        
+        console.log(`[SyncManager] Created wallet and added fee ${fee} SDG for site visit ${siteEntryId} (offline sync)`);
+        return;
+      }
+      
+      if (walletFetchError) {
+        console.error(`[SyncManager] Failed to fetch wallet for user ${userToPayUuid}:`, walletFetchError);
+        return;
+      }
 
       if (wallet) {
         const currentBalance = Number((wallet.balances as any)?.SDG ?? 0) || 0;
@@ -833,11 +900,11 @@ class SyncManager {
 
         await supabase.from('wallet_transactions').insert({
           wallet_id: wallet.id,
-          user_id: userId,
+          user_id: userToPayUuid,
           type: 'earning',
           amount: fee,
           amount_cents: Math.round(fee * 100),
-          description: `Site visit completion (offline sync)`,
+          description: `Site visit completion (offline sync): ${existing?.site_name || 'Unknown Site'}`,
           site_visit_id: siteEntryId, // Use site_visit_id for consistency with online flow
           reference_id: siteEntryId,
           reference_type: 'site_visit',
