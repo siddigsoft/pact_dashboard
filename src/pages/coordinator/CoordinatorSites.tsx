@@ -415,6 +415,9 @@ const CoordinatorSites: React.FC = () => {
   const { hubs, states, localities, hubStates, loading: loadingLocations } = useLocation();
   const { coordinatorSites, loading: contextLoading } = useCoordinatorSites();
   const [localitiesData, setLocalitiesData] = useState<any[]>([]);
+  const isPermitsSectionLoading =
+    (contextLoading || permitsLoading || loadingLocations) &&
+    localitiesData.length === 0;
   const [activeTab, setActiveTab] = useState('new');
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -2989,7 +2992,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {contextLoading || permitsLoading || loadingLocations ? (
+                  {isPermitsSectionLoading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                       <p className="text-muted-foreground">Loading states...</p>
@@ -3036,7 +3039,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {contextLoading || permitsLoading || loadingLocations ? (
+                  {isPermitsSectionLoading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                       <p className="text-muted-foreground">Loading localities...</p>
