@@ -84,19 +84,19 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({
       console.log('[ForwardToFOMDialog] MMP:', mmpName, mmpId);
       console.log('[ForwardToFOMDialog] Forwarder:', forwarderName);
 
-      // Send notifications to FOMs and all Admins/Super Admins with email
-      // This uses NotificationTriggerService which properly inserts into notifications table
-      // and sends emails to all recipients
-      const notificationCount = await NotificationTriggerService.mmpForwardedToFOM(
-        ids,
-        mmpName || 'MMP',
-        mmpId,
-        forwarderName
-      );
+      // Send notifications and update workflow field in parallel (they're independent operations)
+      const [notificationCount] = await Promise.all([
+        NotificationTriggerService.mmpForwardedToFOM(
+          ids,
+          mmpName || 'MMP',
+          mmpId,
+          forwarderName
+        ),
+        appendForwardedToFom(mmpId, ids)
+      ]);
       console.log('[ForwardToFOMDialog] Notifications sent:', notificationCount);
 
-      // Update workflow field
-      await appendForwardedToFom(mmpId, ids);
+      // Refresh MMP files after updates complete
       await refreshMMPFiles();
 
       toast({ 
