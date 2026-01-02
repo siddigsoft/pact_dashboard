@@ -2389,75 +2389,28 @@ const MMP = () => {
 
   // Load approved and costed site entries only when the tab is active
   useEffect(() => {
-    const loadApprovedCostedEntries = async () => {
+    
       if (verifiedSubTab !== 'approvedCosted') {
         setApprovedCostedSiteEntries([]);
+        setLoadingApprovedCosted(false);
         return;
       }
 
-      setLoadingApprovedCosted(true);
-      try {
-        // Use database-level filtering to get only "Approved and Costed" status entries
-        const { data: approvedCostedEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%')
-          .order('created_at', { ascending: false })
-          .limit(1000); // Limit to 1000 entries for performance
+      setLoadingApprovedCosted(false);
 
-        if (allError) throw allError;
+      const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry =>{
+        const status = String(entry.status || '').toLowerCase();
+        return status.includes('approved') && status.includes('costed');
 
-        // Process approved and costed entries
-        const processedEntries = approvedCostedEntries || [];
-
-        // All entries should already be "Approved and Costed" status, no need to filter by cost
-        // But we can ensure they have cost set
-
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = processedEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumFee = entry.enumerator_fee;
-          const transFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumFee,
-            enumeratorFee: enumFee,
-            transport_fee: transFee,
-            transportFee: transFee,
-            cost: entry.cost,
-            status: entry.status,
-            additionalData: additionalData
-          };
-        });
-
-        setApprovedCostedSiteEntries(formattedEntries);
-        // Update count when entries are loaded
-        setApprovedCostedCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load approved and costed site entries:', error);
-        setApprovedCostedSiteEntries([]);
-      } finally {
-        setLoadingApprovedCosted(false);
       }
-    };
+      )
+      setApprovedCostedSiteEntries(formattedEntries);
+      setApprovedCostedCount(formattedEntries.length);
+  }, [verifiedSubTab, allSiteEntries, formatSiteEntry]);
 
-    loadApprovedCostedEntries();
-  }, [verifiedSubTab]);
-
-  // Load dispatched site entries only when the tab is active
-  // Instead of querying Supabase again (which could leave the loading state stuck
-  // if the request hangs), derive the dispatched entries directly from the
+  
   // already-loaded MMP context (allSiteEntries).
   useEffect(() => {
     if (verifiedSubTab !== 'dispatched') {
@@ -2466,9 +2419,7 @@ const MMP = () => {
       return;
     }
 
-    // We are working purely from in-memory context data, so there is no async
-    // loading step here. Ensure the loading flag is cleared so the UI never
-    // gets stuck on "Loading dispatched site entries...".
+    
     setLoadingDispatched(false);
 
     const formattedEntries = allSiteEntries
