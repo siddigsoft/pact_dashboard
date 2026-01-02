@@ -2076,10 +2076,9 @@ const MMP = () => {
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
     const base = categorizedMMPs.forwarded || [];
-    const pending = base.filter(mmp => {
-      const hasFederalPermit = Boolean(mmp.permits && (mmp.permits as any).federal);
-      return !hasFederalPermit && mmp.status !== 'approved' && mmp.status !== 'rejected';
-    });
+    // Pending: All forwarded MMPs that are not yet approved
+    const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
+    // Verified: All forwarded MMPs that have been approved
     const verified = base.filter(mmp => mmp.status === 'approved');
     return { pending, verified };
   }, [categorizedMMPs.forwarded]);
