@@ -164,7 +164,7 @@ const ReviewAssignCoordinators: React.FC = () => {
     };
 
     loadData();
-  }, [id, getMmpById, navigate, toast]);
+  }, [id, navigate, toast]);
 
   // Convert Set to sorted array for stable dependency comparison
   const forwardedSiteIdsArray = useMemo(() => {
