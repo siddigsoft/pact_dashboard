@@ -14,6 +14,7 @@ import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, M
 import { sudanStates } from '@/data/sudanStates';
 import { fetchAllRegistrySites, matchSiteToRegistry, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -482,7 +483,14 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       }
 
       // Step 2: Prepare notifications for collectors AND all team members in same state/locality
-      const notificationRows: any[] = [];
+      // Use NotificationTriggerService to ensure we match the notifications schema
+      const notificationTargets: {
+        userId: string;
+        siteEntryId: string;
+        title: string;
+        message: string;
+        type: 'info' | 'success';
+      }[] = [];
       
       // Get all team members (coordinators, supervisors, admins) in the same state/locality
       const siteStates = new Set<string>();
@@ -544,39 +552,49 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         // Notify all team members in the same region
         for (const memberId of allTeamMemberIds) {
           const isDirectAssignment = dispatchType === 'individual' && targetCollectors.includes(memberId);
-          
-          notificationRows.push({
-            user_id: memberId,
+
+          notificationTargets.push({
+            userId: memberId,
+            siteEntryId: siteEntry.id,
             title: isDirectAssignment ? 'Site Visit Assigned to You' : 'New Site Dispatched in Your Area',
             message: isDirectAssignment 
               ? `Site "${siteName}" has been assigned to you. Transport Budget: ${transportBudget} SDG. Your fee will be calculated based on your classification when you claim.`
               : `Site "${siteName}" in ${siteLocality ? siteLocality + ', ' : ''}${siteState} has been dispatched. Transport Budget: ${transportBudget} SDG`,
-            type: isDirectAssignment ? 'info' : 'success',
-            link: `/mmp?entry=${siteEntry.id}`,
-            related_entity_id: siteEntry.id,
-            related_entity_type: 'mmpFile'
+            type: isDirectAssignment ? 'info' : 'success'
           });
         }
       }
 
-      // Send notifications (deduplicate by user_id + related_entity_id to avoid duplicate notifications)
-      const uniqueNotifications = new Map<string, any>();
-      for (const notif of notificationRows) {
-        const key = `${notif.user_id}-${notif.related_entity_id}`;
+      // Send notifications (deduplicate by userId + siteEntryId to avoid duplicate notifications)
+      const uniqueNotifications = new Map<string, (typeof notificationTargets)[number]>();
+      for (const notif of notificationTargets) {
+        const key = `${notif.userId}-${notif.siteEntryId}`;
         if (!uniqueNotifications.has(key)) {
           uniqueNotifications.set(key, notif);
         }
       }
-      
+
       const finalNotifications = Array.from(uniqueNotifications.values());
       if (finalNotifications.length > 0) {
-        const { error: notifError } = await supabase
-          .from('notifications')
-          .insert(finalNotifications);
-
-        if (notifError) {
-          console.error('Error creating notifications:', notifError);
-        }
+        await Promise.all(
+          finalNotifications.map(async (notif) => {
+            try {
+              await NotificationTriggerService.send({
+                userId: notif.userId,
+                title: notif.title,
+                message: notif.message,
+                type: notif.type,
+                category: 'assignments',
+                priority: 'normal',
+                link: `/mmp?entry=${notif.siteEntryId}`,
+                relatedEntityId: notif.siteEntryId,
+                relatedEntityType: 'siteVisit'
+              });
+            } catch (err) {
+              console.error('Failed to send dispatch notification via NotificationTriggerService:', err);
+            }
+          })
+        );
       }
 
       // Step 3: Mark site entries as dispatched

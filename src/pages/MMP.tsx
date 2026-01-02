@@ -414,76 +414,6 @@ const MMP = () => {
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual' | 'open'>('open');
 
-  // Load smart assigned site entries only when the tab is active
-  useEffect(() => {
-    const loadSmartAssignedEntries = async () => {
-      if (verifiedSubTab !== 'smartAssigned') {
-        setSmartAssignedSiteEntries([]);
-        return;
-      }
-
-      setLoadingSmartAssigned(true);
-      try {
-        // Load entries with status = 'Assigned' (case-insensitive)
-        const { data: smartAssignedEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .ilike('status', 'Assigned')
-          .order('created_at', { ascending: false })
-          .limit(1000);
-
-        if (allError) throw allError;
-
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = smartAssignedEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee;
-          const transportFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumeratorFee,
-            enumeratorFee: enumeratorFee,
-            transport_fee: transportFee,
-            transportFee: transportFee,
-            cost: entry.cost,
-            status: entry.status,
-            verified_by: entry.verified_by,
-            verified_at: entry.verified_at,
-            dispatched_by: entry.dispatched_by,
-            dispatched_at: entry.dispatched_at,
-            accepted_by: entry.accepted_by,
-            accepted_at: entry.accepted_at,
-            cost_acknowledged: entry.cost_acknowledged,
-            updated_at: entry.updated_at,
-            additionalData: additionalData
-          };
-        });
-
-        setSmartAssignedSiteEntries(formattedEntries);
-        setSmartAssignedCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load smart assigned site entries:', error);
-        setSmartAssignedSiteEntries([]);
-        setSmartAssignedCount(0);
-      } finally {
-        setLoadingSmartAssigned(false);
-      }
-    };
-
-    loadSmartAssignedEntries();
-  }, [verifiedSubTab]);
-
   // Cost acknowledgment dialog state for Smart Assigned sites
   const [costAcknowledgmentOpen, setCostAcknowledgmentOpen] = useState(false);
   const [selectedSiteForAcknowledgment, setSelectedSiteForAcknowledgment] = useState<any>(null);
@@ -2076,10 +2006,9 @@ const MMP = () => {
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
     const base = categorizedMMPs.forwarded || [];
-    const pending = base.filter(mmp => {
-      const hasFederalPermit = Boolean(mmp.permits && (mmp.permits as any).federal);
-      return !hasFederalPermit && mmp.status !== 'approved' && mmp.status !== 'rejected';
-    });
+    // Pending: All forwarded MMPs that are not yet approved
+    const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
+    // Verified: All forwarded MMPs that have been approved
     const verified = base.filter(mmp => mmp.status === 'approved');
     return { pending, verified };
   }, [categorizedMMPs.forwarded]);
@@ -2388,436 +2317,214 @@ const MMP = () => {
     setLoadingEnumerator(enumeratorData.loading);
   }, [enumeratorData]);
 
+  // Load smart assigned site entries only when the tab is active
+  useEffect(() => {
+    if (verifiedSubTab !== 'smartAssigned') {
+      setSmartAssignedSiteEntries([]);
+      setLoadingSmartAssigned(false);
+      return;
+    }
+
+    // Using in-memory data only, no async loading
+    setLoadingSmartAssigned(false);
+
+    const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry => {
+        const status = String(entry.status || '').toLowerCase();
+        // adjust this string if your DB uses a different status value
+        return status === 'assigned';
+      })
+      .sort((a, b) => {
+        const aDate =
+          (a as any).created_at ||
+          (a as any).createdAt ||
+          '';
+        const bDate =
+          (b as any).created_at ||
+          (b as any).createdAt ||
+          '';
+        return bDate.localeCompare(aDate);
+      });
+
+    setSmartAssignedSiteEntries(formattedEntries);
+    setSmartAssignedCount(formattedEntries.length);
+  }, [verifiedSubTab, allSiteEntries, formatSiteEntry]);
+
   // Load approved and costed site entries only when the tab is active
   useEffect(() => {
-    const loadApprovedCostedEntries = async () => {
+    
       if (verifiedSubTab !== 'approvedCosted') {
         setApprovedCostedSiteEntries([]);
-        return;
-      }
-
-      setLoadingApprovedCosted(true);
-      try {
-        // Use database-level filtering to get only "Approved and Costed" status entries
-        const { data: approvedCostedEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%')
-          .order('created_at', { ascending: false })
-          .limit(1000); // Limit to 1000 entries for performance
-
-        if (allError) throw allError;
-
-        // Process approved and costed entries
-        const processedEntries = approvedCostedEntries || [];
-
-        // All entries should already be "Approved and Costed" status, no need to filter by cost
-        // But we can ensure they have cost set
-
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = processedEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumFee = entry.enumerator_fee;
-          const transFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumFee,
-            enumeratorFee: enumFee,
-            transport_fee: transFee,
-            transportFee: transFee,
-            cost: entry.cost,
-            status: entry.status,
-            additionalData: additionalData
-          };
-        });
-
-        setApprovedCostedSiteEntries(formattedEntries);
-        // Update count when entries are loaded
-        setApprovedCostedCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load approved and costed site entries:', error);
-        setApprovedCostedSiteEntries([]);
-      } finally {
         setLoadingApprovedCosted(false);
-      }
-    };
-
-    loadApprovedCostedEntries();
-  }, [verifiedSubTab]);
-
-  // Load dispatched site entries only when the tab is active
-  useEffect(() => {
-    const loadDispatchedEntries = async () => {
-      if (verifiedSubTab !== 'dispatched') {
-        setDispatchedSiteEntries([]);
         return;
       }
 
-      setLoadingDispatched(true);
-      try {
-        // Only show entries with status = 'Dispatched' (case-insensitive)
-        // Exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
-        const { data: dispatchedEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .ilike('status', 'Dispatched')
-          .not('status', 'ilike', 'accepted')
-          .is('accepted_by', null)
-          .order('dispatched_at', { ascending: false })
-          .limit(1000); // Limit to 1000 entries for performance
+      setLoadingApprovedCosted(false);
 
-        if (allError) throw allError;
+      const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry =>{
+        const status = String(entry.status || '').toLowerCase();
+        return status.includes('approved') && status.includes('costed');
 
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = dispatchedEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee;
-          const transportFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumeratorFee,
-            enumeratorFee: enumeratorFee,
-            transport_fee: transportFee,
-            transportFee: transportFee,
-            cost: entry.cost,
-            status: entry.status,
-            verified_by: entry.verified_by,
-            verified_at: entry.verified_at,
-            dispatched_by: entry.dispatched_by,
-            dispatched_at: entry.dispatched_at,
-            updated_at: entry.updated_at,
-            additionalData: additionalData
-          };
-        });
-
-        setDispatchedSiteEntries(formattedEntries);
-        // Update count when entries are loaded (count is also loaded separately for badge)
-        setDispatchedCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load dispatched site entries:', error);
-        setDispatchedSiteEntries([]);
-        setDispatchedCount(0);
-      } finally {
-        setLoadingDispatched(false);
       }
-    };
+      )
+      setApprovedCostedSiteEntries(formattedEntries);
+      setApprovedCostedCount(formattedEntries.length);
+  }, [verifiedSubTab, allSiteEntries, formatSiteEntry]);
 
-    loadDispatchedEntries();
-  }, [verifiedSubTab]);
+  
+  // already-loaded MMP context (allSiteEntries).
+  useEffect(() => {
+    if (verifiedSubTab !== 'dispatched') {
+      setDispatchedSiteEntries([]);
+      setLoadingDispatched(false);
+      return;
+    }
+
+    
+    setLoadingDispatched(false);
+
+    const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry => {
+        const status = String(entry.status || '').toLowerCase();
+        const acceptedBy = (entry as any).accepted_by;
+        return status === 'dispatched' && !acceptedBy;
+      })
+      .sort((a, b) => {
+        const aDate = (a as any).dispatched_at || (a as any).dispatchedAt || (a as any).created_at || (a as any).createdAt || '';
+        const bDate = (b as any).dispatched_at || (b as any).dispatchedAt || (b as any).created_at || (b as any).createdAt || '';
+        return bDate.localeCompare(aDate);
+      });
+
+    setDispatchedSiteEntries(formattedEntries);
+    setDispatchedCount(formattedEntries.length);
+  }, [verifiedSubTab, allSiteEntries, formatSiteEntry]);
 
   // Load accepted site entries only when the tab is active
   useEffect(() => {
-    const loadAcceptedEntries = async () => {
+    
       if (verifiedSubTab !== 'accepted') {
         setAcceptedSiteEntries([]);
+        setLoadingAccepted(false);
         return;
       }
 
-      setLoadingAccepted(true);
-      try {
-        // Use database-level filtering: only entries with status = 'accepted'
-        const { data: acceptedEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .ilike('status', 'accepted')
-          .order('accepted_at', { ascending: false })
-          .limit(1000); // Limit to 1000 entries for performance
+      setLoadingAccepted(false);
+      const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry =>{
+        const status = String(entry.status || '').toLowerCase();
+        return status === "accepted";
+      })
+      .sort((a, b) => {
+      const aDate = (a as any).accepted_at || (a as any).updated_at || (a as any).createdAt || '';
+      const bDate = (b as any).accepted_at || (b as any).updated_at || (b as any).createdAt || '';
+      return bDate.localeCompare(aDate);
+    })
 
-        if (allError) throw allError;
+    setAcceptedSiteEntries(formattedEntries);
+    setAcceptedCount(formattedEntries.length);
 
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = acceptedEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee;
-          const transportFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumeratorFee,
-            enumeratorFee: enumeratorFee,
-            transport_fee: transportFee,
-            transportFee: transportFee,
-            cost: entry.cost,
-            status: entry.status,
-            verified_by: entry.verified_by,
-            verified_at: entry.verified_at,
-            dispatched_by: entry.dispatched_by,
-            dispatched_at: entry.dispatched_at,
-            accepted_by: entry.accepted_by,
-            accepted_at: entry.accepted_at,
-            updated_at: entry.updated_at,
-            additionalData: additionalData
-          };
-        });
-
-        setAcceptedSiteEntries(formattedEntries);
-        // Update count when entries are loaded (count is also loaded separately for badge)
-        setAcceptedCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load accepted site entries:', error);
-        setAcceptedSiteEntries([]);
-        setAcceptedCount(0);
-      } finally {
-        setLoadingAccepted(false);
-      }
-    };
-
-    loadAcceptedEntries();
-  }, [verifiedSubTab]);
+    // No async operation needed - using in-memory data
+  }, [verifiedSubTab, allSiteEntries,formatSiteEntry]);
 
   // Load ongoing site entries only when the tab is active
   useEffect(() => {
-    const loadOngoingEntries = async () => {
+    
       if (verifiedSubTab !== 'ongoing') {
         setOngoingSiteEntries([]);
+        setLoadingOngoing(false);
         return;
       }
 
-      setLoadingOngoing(true);
-      try {
-        // Use database-level filtering: entries with status = 'inprogress' or 'in_progress' or 'ongoing'
-        // Use .or() to match either status value (case-insensitive)
-        const { data: ongoingEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .or('status.ilike.%inprogress%,status.ilike.%in_progress%,status.ilike.%ongoing%')
-          .order('updated_at', { ascending: false })
-          .limit(1000); // Limit to 1000 entries for performance
+      setLoadingOngoing(false);
 
-        if (allError) throw allError;
+      const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry =>{
+        const status = String(entry.status || '').toLowerCase();
+        return /inprogress|in_progress|ongoing/.test(status);
+      }
+      )
+       .sort((a, b) => {
+      const aDate = (a as any).updated_at || (a as any).createdAt || '';
+      const bDate = (b as any).updated_at || (b as any).createdAt || '';
+      return bDate.localeCompare(aDate);
+    });
 
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = ongoingEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee;
-          const transportFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumeratorFee,
-            enumeratorFee: enumeratorFee,
-            transport_fee: transportFee,
-            transportFee: transportFee,
-            cost: entry.cost,
-            status: entry.status,
-            verified_by: entry.verified_by,
-            verified_at: entry.verified_at,
-            dispatched_by: entry.dispatched_by,
-            dispatched_at: entry.dispatched_at,
-            accepted_by: entry.accepted_by,
-            accepted_at: entry.accepted_at,
-            updated_at: entry.updated_at,
-            additionalData: additionalData
-          };
-        });
+        
 
         setOngoingSiteEntries(formattedEntries);
         // Update count when entries are loaded (count is also loaded separately for badge)
         setOngoingCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load ongoing site entries:', error);
-        setOngoingSiteEntries([]);
-        setOngoingCount(0);
-      } finally {
-        setLoadingOngoing(false);
-      }
-    };
+       
+    
 
-    loadOngoingEntries();
-  }, [verifiedSubTab]);
+    
+  }, [verifiedSubTab,allSiteEntries,formatSiteEntry]);
 
   // Load completed site entries only when the tab is active
   useEffect(() => {
-    const loadCompletedEntries = async () => {
+    
       if (verifiedSubTab !== 'completed') {
         setCompletedSiteEntries([]);
+        setLoadingCompleted(false);
         return;
       }
 
-      setLoadingCompleted(true);
-      try {
-        // Use database-level filtering: entries with status = 'completed'
-        const { data: completedEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .ilike('status', 'completed')
-          .order('updated_at', { ascending: false })
-          .limit(1000); // Limit to 1000 entries for performance
+      setLoadingCompleted(false);
 
-        if (allError) throw allError;
-
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = completedEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee;
-          const transportFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumeratorFee,
-            enumeratorFee: enumeratorFee,
-            transport_fee: transportFee,
-            transportFee: transportFee,
-            cost: entry.cost,
-            status: entry.status,
-            verified_by: entry.verified_by,
-            verified_at: entry.verified_at,
-            dispatched_by: entry.dispatched_by,
-            dispatched_at: entry.dispatched_at,
-            accepted_by: entry.accepted_by,
-            accepted_at: entry.accepted_at,
-            updated_at: entry.updated_at,
-            additionalData: additionalData
-          };
-        });
-
-        setCompletedSiteEntries(formattedEntries);
-        // Update count when entries are loaded (count is also loaded separately for badge)
-        setCompletedCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load completed site entries:', error);
-        setCompletedSiteEntries([]);
-        setCompletedCount(0);
-      } finally {
-        setLoadingCompleted(false);
+      const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry =>{
+        const status = String(entry.status || '').toLowerCase();
+        return status === "completed";
       }
-    };
+      )
+      .sort((a, b) => {
+      const aDate = (a as any).updated_at || (a as any).createdAt || '';
+      const bDate = (b as any).updated_at || (b as any).createdAt || '';
+      return bDate.localeCompare(aDate);
+    });
 
-    loadCompletedEntries();
-  }, [verifiedSubTab]);
+    setCompletedSiteEntries(formattedEntries);
+    setCompletedCount(formattedEntries.length);
+    
+     
+  }, [verifiedSubTab,allSiteEntries,formatSiteEntry]);
 
   // Load rejected site entries only when the tab is active
   useEffect(() => {
-    const loadRejectedEntries = async () => {
+    
       if (verifiedSubTab !== 'rejected') {
         setRejectedSiteEntries([]);
+        setLoadingRejected(false);
         return;
       }
 
-      setLoadingRejected(true);
-      try {
-        // Use database-level filtering: entries with status = 'rejected'
-        const { data: rejectedEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .ilike('status', 'rejected')
-          .order('rejected_at', { ascending: false, nullsFirst: false })
-          .limit(1000); // Limit to 1000 entries for performance
-
-        if (allError) throw allError;
-
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = rejectedEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee;
-          const transportFee = entry.transport_fee;
-          // Read rejection data from columns first, fallback to additional_data
-          const rejectionComments = entry.rejection_comments ?? additionalData.rejection_comments ?? additionalData.rejection_reason;
-          const rejectedBy = entry.rejected_by ?? additionalData.rejected_by;
-          const rejectedAt = entry.rejected_at ?? additionalData.rejected_at;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumeratorFee,
-            enumeratorFee: enumeratorFee,
-            transport_fee: transportFee,
-            transportFee: transportFee,
-            cost: entry.cost,
-            status: entry.status,
-            verified_by: entry.verified_by,
-            verified_at: entry.verified_at,
-            dispatched_by: entry.dispatched_by,
-            dispatched_at: entry.dispatched_at,
-            accepted_by: entry.accepted_by,
-            accepted_at: entry.accepted_at,
-            // Include rejection data
-            rejection_comments: rejectionComments,
-            rejectionComments: rejectionComments,
-            rejected_by: rejectedBy,
-            rejectedBy: rejectedBy,
-            rejected_at: rejectedAt,
-            rejectedAt: rejectedAt,
-            updated_at: entry.updated_at,
-            additionalData: additionalData
-          };
-        });
-
-        setRejectedSiteEntries(formattedEntries);
-        // Update count when entries are loaded (count is also loaded separately for badge)
-        setRejectedCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load rejected site entries:', error);
-        setRejectedSiteEntries([]);
-        setRejectedCount(0);
-      } finally {
-        setLoadingRejected(false);
+      setLoadingRejected(false);
+      const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry =>{
+        const status = String(entry.status || '').toLowerCase();
+        return status === "rejected";
       }
-    };
+      )
+      .sort((a, b) => {
+      const aDate = (a as any).updated_at || (a as any).createdAt || '';
+      const bDate = (b as any).updated_at || (b as any).createdAt || '';
+      return bDate.localeCompare(aDate);
+    });
+    setRejectedSiteEntries(formattedEntries);
+    setRejectedCount(formattedEntries.length);
+      
+    
 
-    loadRejectedEntries();
-  }, [verifiedSubTab]);
+    
+  }, [verifiedSubTab,allSiteEntries,formatSiteEntry]);
 
   // Verified subcategories for Admin/ICT
   const verifiedSubcategories = useMemo(() => {
@@ -4061,8 +3768,8 @@ const MMP = () => {
                             Drafts
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').trim();
-                                return status.toLowerCase() === 'in progress';
+                                const status = (site.status || '').trim().toLowerCase();
+                                return status === 'in progress' || status === 'ongoing';
                               }).length}
                             </Badge>
                           </Button>
@@ -4228,7 +3935,7 @@ const MMP = () => {
                           {enumeratorSubTab === 'mySites' 
                             ? (mySitesSubTab === 'pending' ? 'Pending Visits' 
                                : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' 
-                               : mySitesSubTab === 'all' ? 'Drafts (In-Progress Visits)'
+                               : mySitesSubTab === 'all' ? 'Drafts (In-Progress & Ongoing Visits)'
                                : 'Completed Sites')
                             : 'Smart Assigned Sites'
                           }
@@ -4240,7 +3947,7 @@ const MMP = () => {
                                 : mySitesSubTab === 'ongoing'
                                 ? 'Completed visits stored offline - will sync automatically when internet is available'
                                 : mySitesSubTab === 'all'
-                                ? 'In-progress site visits (drafts) - sites that have been started but not completed'
+                                ? 'In-progress and ongoing site visits (drafts) - sites that have been started but not completed'
                                 : 'Completed visits that have been successfully submitted and synced')
                             : 'Sites assigned to your area that must be visited'
                           }
@@ -4266,8 +3973,8 @@ const MMP = () => {
                               ? unsyncedCompletedVisits.length
                               : mySitesSubTab === 'all'
                               ? enumeratorMySites.filter(site => {
-                                  const status = (site.status || '').trim();
-                                  return status.toLowerCase() === 'in progress';
+                                  const status = (site.status || '').trim().toLowerCase();
+                                  return status === 'in progress' || status === 'ongoing';
                                 }).length
                               : enumeratorMySites.filter(site => {
                                   const status = (site.status || '').toLowerCase();
@@ -4292,10 +3999,10 @@ const MMP = () => {
                       let sitesToShow: any[] = [];
                       if (enumeratorSubTab === 'mySites') {
                         if (mySitesSubTab === 'all') {
-                          // Drafts: Show only "In Progress" status site entries
+                          // Drafts: Show both "In Progress" and "Ongoing" status site entries
                           sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').trim();
-                            return status.toLowerCase() === 'in progress';
+                            const status = (site.status || '').trim().toLowerCase();
+                            return status === 'in progress' || status === 'ongoing';
                           });
                         } else if (mySitesSubTab === 'pending') {
                           sitesToShow = enumeratorMySites.filter(site => {
@@ -4339,7 +4046,7 @@ const MMP = () => {
                                     : mySitesSubTab === 'ongoing'
                                     ? 'No completed visits waiting to sync. All visits have been submitted.'
                                     : mySitesSubTab === 'all'
-                                    ? 'No in-progress site visits found. Start a visit to see it here.'
+                                    ? 'No in-progress or ongoing site visits found. Start a visit to see it here.'
                                     : 'No completed sites found.')
                                 : 'No sites assigned to you yet.'
                               }
@@ -5213,3 +4920,4 @@ const MMP = () => {
 };
 
 export default MMP;
+
