@@ -414,76 +414,6 @@ const MMP = () => {
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual' | 'open'>('open');
 
-  // Load smart assigned site entries only when the tab is active
-  useEffect(() => {
-    const loadSmartAssignedEntries = async () => {
-      if (verifiedSubTab !== 'smartAssigned') {
-        setSmartAssignedSiteEntries([]);
-        return;
-      }
-
-      setLoadingSmartAssigned(true);
-      try {
-        // Load entries with status = 'Assigned' (case-insensitive)
-        const { data: smartAssignedEntries, error: allError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .ilike('status', 'Assigned')
-          .order('created_at', { ascending: false })
-          .limit(1000);
-
-        if (allError) throw allError;
-
-        // Format entries for MMPSiteEntriesTable
-        const formattedEntries = smartAssignedEntries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee;
-          const transportFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumeratorFee,
-            enumeratorFee: enumeratorFee,
-            transport_fee: transportFee,
-            transportFee: transportFee,
-            cost: entry.cost,
-            status: entry.status,
-            verified_by: entry.verified_by,
-            verified_at: entry.verified_at,
-            dispatched_by: entry.dispatched_by,
-            dispatched_at: entry.dispatched_at,
-            accepted_by: entry.accepted_by,
-            accepted_at: entry.accepted_at,
-            cost_acknowledged: entry.cost_acknowledged,
-            updated_at: entry.updated_at,
-            additionalData: additionalData
-          };
-        });
-
-        setSmartAssignedSiteEntries(formattedEntries);
-        setSmartAssignedCount(formattedEntries.length);
-      } catch (error) {
-        console.error('Failed to load smart assigned site entries:', error);
-        setSmartAssignedSiteEntries([]);
-        setSmartAssignedCount(0);
-      } finally {
-        setLoadingSmartAssigned(false);
-      }
-    };
-
-    loadSmartAssignedEntries();
-  }, [verifiedSubTab]);
-
   // Cost acknowledgment dialog state for Smart Assigned sites
   const [costAcknowledgmentOpen, setCostAcknowledgmentOpen] = useState(false);
   const [selectedSiteForAcknowledgment, setSelectedSiteForAcknowledgment] = useState<any>(null);
@@ -2386,6 +2316,40 @@ const MMP = () => {
     setEnumeratorMySites(enumeratorData.mySites);
     setLoadingEnumerator(enumeratorData.loading);
   }, [enumeratorData]);
+
+  // Load smart assigned site entries only when the tab is active
+  useEffect(() => {
+    if (verifiedSubTab !== 'smartAssigned') {
+      setSmartAssignedSiteEntries([]);
+      setLoadingSmartAssigned(false);
+      return;
+    }
+
+    // Using in-memory data only, no async loading
+    setLoadingSmartAssigned(false);
+
+    const formattedEntries = allSiteEntries
+      .map(formatSiteEntry)
+      .filter(entry => {
+        const status = String(entry.status || '').toLowerCase();
+        // adjust this string if your DB uses a different status value
+        return status === 'assigned';
+      })
+      .sort((a, b) => {
+        const aDate =
+          (a as any).created_at ||
+          (a as any).createdAt ||
+          '';
+        const bDate =
+          (b as any).created_at ||
+          (b as any).createdAt ||
+          '';
+        return bDate.localeCompare(aDate);
+      });
+
+    setSmartAssignedSiteEntries(formattedEntries);
+    setSmartAssignedCount(formattedEntries.length);
+  }, [verifiedSubTab, allSiteEntries, formatSiteEntry]);
 
   // Load approved and costed site entries only when the tab is active
   useEffect(() => {
