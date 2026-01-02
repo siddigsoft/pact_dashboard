@@ -129,10 +129,11 @@ async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?:
       return;
     }
 
-    // Send notifications with email enabled using NotificationTriggerService
-    const notificationPromises = allUserIds.map(async (uid) => {
+    // Create in-app notifications only (no emails)
+    let notificationCount = 0;
+    
+    for (const uid of allUserIds) {
       try {
-        console.log(`[notifyStakeholdersOnUpload] Sending notification to user: ${uid}`);
         const result = await NotificationTriggerService.send({
           userId: uid,
           title: 'New MMP uploaded',
@@ -145,19 +146,15 @@ async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?:
           link: `/mmp/${mmp.id}`,
           relatedEntityId: mmp.id,
           relatedEntityType: 'mmpFile',
-          sendEmail: true // Enable email sending for MMP upload notifications
+          sendEmail: false // No emails for MMP uploads
         });
-        console.log(`[notifyStakeholdersOnUpload] Notification result for ${uid}:`, result);
-        return result;
+        if (result) notificationCount++;
       } catch (err) {
-        console.error(`[notifyStakeholdersOnUpload] Failed to send notification to ${uid}:`, err);
-        return false;
+        console.error(`[notifyStakeholdersOnUpload] Failed to create in-app notification for ${uid}:`, err);
       }
-    });
-
-    const results = await Promise.all(notificationPromises);
-    const successCount = results.filter(r => r === true).length;
-    console.log(`[notifyStakeholdersOnUpload] Completed: ${successCount}/${allUserIds.length} notifications sent successfully`);
+    }
+    
+    console.log(`[notifyStakeholdersOnUpload] Completed: ${notificationCount} in-app notifications created`);
   } catch (error) {
     console.error('[notifyStakeholdersOnUpload] Error sending notifications:', error);
   }

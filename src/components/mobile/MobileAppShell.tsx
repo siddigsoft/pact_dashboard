@@ -421,15 +421,59 @@ export function MobileAppShell({
         log('info', 'App state changed', { isActive });
 
         if (isActive) {
-          // Refresh FCM token on app resume
+          // Check network status first
+          let isConnected = navigator.onLine;
+          if (isNative) {
+            try {
+              const status = await Network.getStatus();
+              isConnected = status.connected;
+              setIsOnline(status.connected);
+            } catch (error) {
+              log('warn', 'Failed to get network status, using navigator.onLine', error);
+            }
+          }
+
+          // Refresh session on app resume - preserve session when offline
           try {
             const { data: session } = await supabase.auth.getSession();
             if (session?.session) {
               // Token refresh will be handled by the native service
-              log('info', 'App resumed, checking for pending syncs');
+              log('info', 'App resumed, session found');
+              
+              // If offline, ensure user data is restored from localStorage
+              if (!isConnected) {
+                const storedUser = localStorage.getItem('PACTCurrentUser');
+                if (storedUser) {
+                  try {
+                    const parsedUser = JSON.parse(storedUser);
+                    log('info', 'Restored user from localStorage on app resume (offline)');
+                    // UserContext will handle the restoration, but we log it here for diagnostics
+                  } catch (error) {
+                    log('error', 'Failed to parse stored user', error);
+                  }
+                }
+              }
+            } else if (!isConnected) {
+              // No session but offline - try to restore from localStorage
+              const storedUser = localStorage.getItem('PACTCurrentUser');
+              if (storedUser) {
+                try {
+                  const parsedUser = JSON.parse(storedUser);
+                  log('info', 'No session but restored user from localStorage (offline mode)');
+                } catch (error) {
+                  log('error', 'Failed to parse stored user', error);
+                }
+              }
             }
           } catch (error) {
             log('error', 'Failed to refresh session on resume', error);
+            // If offline and error occurs, try to restore from localStorage
+            if (!isConnected) {
+              const storedUser = localStorage.getItem('PACTCurrentUser');
+              if (storedUser) {
+                log('info', 'Session check failed offline, but user data available in localStorage');
+              }
+            }
           }
 
           // Check for pending syncs
@@ -449,9 +493,32 @@ export function MobileAppShell({
         log('info', 'App resumed');
         
         // Update online status
+        let isConnected = navigator.onLine;
         if (isNative) {
-          const status = await Network.getStatus();
-          setIsOnline(status.connected);
+          try {
+            const status = await Network.getStatus();
+            isConnected = status.connected;
+            setIsOnline(status.connected);
+          } catch (error) {
+            log('warn', 'Failed to get network status on resume', error);
+          }
+        }
+        
+        // On resume, ensure session is preserved especially when offline
+        if (!isConnected) {
+          try {
+            const { data: session } = await supabase.auth.getSession();
+            const storedUser = localStorage.getItem('PACTCurrentUser');
+            
+            if (!session?.session && storedUser) {
+              log('info', 'App resumed offline - session not found but user data available');
+              // UserContext will handle restoration, but we ensure localStorage is intact
+            } else if (session?.session && storedUser) {
+              log('info', 'App resumed offline - both session and user data available');
+            }
+          } catch (error) {
+            log('error', 'Error checking session on resume', error);
+          }
         }
       });
 

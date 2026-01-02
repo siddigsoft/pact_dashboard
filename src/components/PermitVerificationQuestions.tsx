@@ -96,16 +96,46 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
   };
 
   const handleStatePermitUploaded = () => {
+    // Ensure statePermitRequirement is set (should be 'required_have_it' at this point)
+    if (!statePermitRequirement || statePermitRequirement !== 'required_have_it') {
+      console.error('State permit uploaded but requirement is not set correctly:', statePermitRequirement);
+      // Still proceed but log the issue
+    }
     setStatePermitUploaded(true);
-    handleComplete();
+    handleComplete(true);
   };
 
-  const handleComplete = () => {
+  const handleComplete = (uploadedOverride?: boolean) => {
+    // Validate that we have the required information
+    if (!statePermitRequirement) {
+      console.error('Cannot complete: statePermitRequirement is not set');
+      return;
+    }
+
+    // Determine the effective uploaded flag. When coming from
+    // handleStatePermitUploaded we pass uploadedOverride=true so we
+    // don't rely on the async state update of setStatePermitUploaded.
+    const effectiveUploaded = uploadedOverride ?? statePermitUploaded;
+
+    // Additional validation: if requirement is 'required_have_it', uploaded must be true
+    if (statePermitRequirement === 'required_have_it' && !effectiveUploaded) {
+      console.error('Cannot complete: state permit is required but not uploaded');
+      // This shouldn't happen in normal flow, but if it does, we should handle it
+      // For now, we'll still create the decision but log the issue
+      // This is important to avoid blocking the user if there's a state management issue
+    }
+
+    // Additional validation: if requirement is 'required_dont_have_it', canWorkWithout must be set
+    if (statePermitRequirement === 'required_dont_have_it' && !stateCanWorkWithout) {
+      console.error('Cannot complete: state permit is required but canWorkWithout is not set');
+      return;
+    }
+
     const decision: PermitDecision = {
       statePermit: {
         requirement: statePermitRequirement,
         canWorkWithout: stateCanWorkWithout,
-        uploaded: statePermitUploaded,
+        uploaded: effectiveUploaded,
       },
       localityPermit: {
         requirement: null,
@@ -114,16 +144,25 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
       },
     };
 
+    // Debug logging for state permit upload scenario
+    if (statePermitRequirement === 'required_have_it' && effectiveUploaded) {
+      console.log('[PermitVerificationQuestions] State permit uploaded - decision:', {
+        requirement: decision.statePermit.requirement,
+        uploaded: decision.statePermit.uploaded,
+        state
+      });
+    }
+
     // Generate summary message based on decision
     let message = '';
     if (statePermitRequirement === 'not_required') {
-      message = `State permit is not required for ${state}. Proceeding to next step.`;
-    } else if (statePermitRequirement === 'required_have_it' && statePermitUploaded) {
-      message = `State permit uploaded successfully for ${state}. Proceeding to next step.`;
+      message = `No state permit is required for ${state}. The verification process for the state permit is complete. You will now proceed to verify the permits for the localities.`;
+    } else if (statePermitRequirement === 'required_have_it' && effectiveUploaded) {
+      message = `The state permit for ${state} has been uploaded successfully. The verification process for the state permit is complete. You will now proceed to verify the permits for the localities.`;
     } else if (statePermitRequirement === 'required_dont_have_it' && stateCanWorkWithout === 'yes') {
-      message = `State permit is required but you can proceed without it for ${state}. Proceeding to next step.`;
+      message = `A state permit is required for ${state}, but you can proceed without it. The verification process for the state permit is complete. You will now proceed to verify the permits for the localities.`;
     } else if (statePermitRequirement === 'required_dont_have_it' && stateCanWorkWithout === 'no') {
-      message = `MMP sent back to FOM because state permit is required and cannot proceed without it for ${state}.`;
+      message = `The MMP has been sent back to FOM because a state permit is required for ${state} and you cannot proceed without it. No further action is needed here.`;
     }
 
     setConfirmationMessage(message);

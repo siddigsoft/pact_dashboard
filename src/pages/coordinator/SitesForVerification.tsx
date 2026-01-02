@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { useAppContext } from '@/context/AppContext';
@@ -197,14 +196,14 @@ const SitesForVerification: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-4 sm:py-8">
+    <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-8"> {/* Adjusted padding for mobile */}
       <Card className="max-w-4xl mx-auto">
-        <CardHeader className="pb-4 sm:pb-6">
-          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-            <MapPin className="h-5 w-5 sm:h-6 sm:w-6" />
+        <CardHeader className="pb-3 sm:pb-6"> {/* Responsive padding */}
+          <CardTitle className="flex items-center gap-2 text-base sm:text-xl"> {/* Responsive text size */}
+            <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
             Sites for Verification
           </CardTitle>
-          <div className="text-sm text-gray-600 leading-relaxed">
+          <div className="text-xs sm:text-sm text-gray-600 leading-relaxed"> {/* Smaller text on mobile */}
             {totalLocalities > 0 ? (
               <>
                 You have sites assigned in {totalLocalities} localit{totalLocalities !== 1 ? 'ies' : 'y'}.
@@ -224,7 +223,7 @@ const SitesForVerification: React.FC = () => {
             )}
           </div>
         </CardHeader>
-        <CardContent className="px-4 sm:px-6">
+        <CardContent className="px-3 sm:px-6"> {/* Adjusted padding */}
           {localitiesWithPermitStatus.length === 0 ? (
             <div className="text-center py-8 sm:py-12">
               <MapPin className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 mx-auto mb-4" />
@@ -234,7 +233,7 @@ const SitesForVerification: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="space-y-4 sm:space-y-6">
+            <div className="space-y-3 sm:space-y-6"> {/* Adjusted spacing */}
               {/* Localities without permits - show upload prompts */}
               {localitiesWithoutPermits.map((locality) => (
                 <CoordinatorLocalityPermitUpload
@@ -265,9 +264,9 @@ const SitesForVerification: React.FC = () => {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div className="text-sm text-gray-600 space-y-1">
+                  <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6"> {/* Responsive padding */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4"> {/* Better stacking on mobile */}
+                      <div className="text-xs sm:text-sm text-gray-600 space-y-1"> {/* Responsive text */}
                         <p>Permit uploaded: {new Date(locality.permit?.uploadedAt || '').toLocaleDateString()}</p>
                         <p className="text-xs">
                           File: {locality.permit?.permitFileName}
@@ -276,36 +275,36 @@ const SitesForVerification: React.FC = () => {
 
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button className="bg-green-600 hover:bg-green-700 w-full sm:w-auto min-h-[44px] py-3 px-4 active:scale-95 transition-all shadow-sm hover:shadow-md">
+                          <Button className="bg-green-600 hover:bg-green-700 w-full sm:w-auto min-h-[44px] py-3 px-3 sm:px-4 active:scale-95 transition-all shadow-sm hover:shadow-md">
                             <Eye className="h-4 w-4 mr-2" />
                             View Sites ({locality.siteCount})
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto mx-4 sm:mx-auto">
+                        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto mx-3 sm:mx-auto"> {/* Adjusted max height and margins for mobile */}
                           <DialogHeader className="pb-4">
                             <DialogTitle className="text-lg sm:text-xl">
                               Sites in {locality.locality}, {locality.state}
                             </DialogTitle>
                           </DialogHeader>
-                          <div className="space-y-3 sm:space-y-4 mt-4">
+                          <div className="space-y-2 sm:space-y-4 mt-4"> {/* Adjusted spacing */}
                             {locality.sites.map((site) => (
-                              <div key={site.id} className="border rounded-lg p-3 sm:p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                                  <div className="flex-1 space-y-3">
+                              <div key={site.id} className="border rounded-lg p-2 sm:p-4 bg-white shadow-sm hover:shadow-md transition-shadow"> {/* Responsive padding */}
+                                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 sm:gap-4"> {/* Better mobile layout */}
+                                  <div className="flex-1 space-y-2 sm:space-y-3"> {/* Adjusted spacing */}
                                     <div>
-                                      <div className="font-bold text-base sm:text-lg text-gray-900 leading-tight">
+                                      <div className="font-bold text-sm sm:text-base lg:text-lg text-gray-900 leading-tight"> {/* Responsive text sizes */}
                                         {site.siteName}
-                                        <span className="text-sm font-normal text-gray-500 ml-2">
+                                        <span className="text-xs sm:text-sm font-normal text-gray-500 ml-2">
                                           ({site.siteCode})
                                         </span>
                                       </div>
-                                      <div className="text-sm text-gray-600 flex items-center mt-1">
+                                      <div className="text-xs sm:text-sm text-gray-600 flex items-center mt-1">
                                         <MapPin className="h-3 w-3 mr-1 text-primary/70 flex-shrink-0" />
                                         {site.state} / {site.locality}
                                       </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm"> {/* Responsive grid */}
                                       <div className="flex flex-col sm:flex-row sm:justify-between">
                                         <span className="font-medium text-gray-700 text-xs sm:text-sm">Project:</span>
                                         <span className="text-gray-900 text-sm sm:text-base mt-0.5 sm:mt-0">
@@ -343,7 +342,7 @@ const SitesForVerification: React.FC = () => {
                                     <Button
                                       size="sm"
                                       onClick={() => navigate(`/mmp/${site.mmpDetails?.mmpId}/verification`)}
-                                      className="w-full sm:w-auto min-h-[40px] py-2 px-4 active:scale-95 transition-all shadow-sm hover:shadow-md"
+                                      className="w-full sm:w-auto min-h-[40px] py-2 px-3 sm:px-4 active:scale-95 transition-all shadow-sm hover:shadow-md" // Touch-friendly button
                                     >
                                       Review & Verify
                                     </Button>
@@ -361,8 +360,8 @@ const SitesForVerification: React.FC = () => {
             </div>
           )}
         </CardContent>
-        <CardFooter className="px-4 sm:px-6 py-4 sm:py-6">
-          <Button variant="outline" onClick={() => navigate(-1)} className="w-full sm:w-auto min-h-[44px] py-3 px-6 active:scale-95">
+        <CardFooter className="px-3 sm:px-6 py-3 sm:py-6"> {/* Responsive padding */}
+          <Button variant="outline" onClick={() => navigate(-1)} className="w-full sm:w-auto min-h-[44px] py-3 px-4 sm:px-6 active:scale-95"> {/* Touch-friendly button */}
             Back
           </Button>
         </CardFooter>

@@ -159,7 +159,7 @@ export function MobileDashboardScreen({
               navigate('/calendar');
             }}
             onSOS={() => {
-              hapticPresets.impact();
+              hapticPresets.error();
               navigate('/sos');
             }}
             onChat={() => {
