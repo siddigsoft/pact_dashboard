@@ -26,6 +26,7 @@ import GlobalCallOverlay from '@/components/communication/GlobalCallOverlay';
 import { GlobalPresenceProvider } from '@/context/presence/GlobalPresenceContext';
 import { MobilePushNotificationOverlay } from '@/components/mobile/MobilePushNotificationOverlay';
 import { SyncStatusProvider } from './sync/SyncStatusContext';
+import { LocationProvider } from './location/LocationContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -150,8 +151,9 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
               <WalletProvider>
                 <SiteVisitProvider>
                   <MMPProvider>
-                    <ProjectProvider>
-                      <SettingsProvider>
+                    <LocationProvider>
+                      <ProjectProvider>
+                        <SettingsProvider>
                         <ArchiveProvider>
                           <RoleManagementProvider>
                             <CompositeContextProvider>
@@ -185,7 +187,8 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                           </RoleManagementProvider>
                         </ArchiveProvider>
                       </SettingsProvider>
-                    </ProjectProvider>
+                      </ProjectProvider>
+                    </LocationProvider>
                   </MMPProvider>
                 </SiteVisitProvider>
               </WalletProvider>

@@ -41,6 +41,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const [notes, setNotes] = useState('');
   const [activities, setActivities] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
+  const [draftPhotoUrls, setDraftPhotoUrls] = useState<string[]>([]); // Track already-uploaded photo URLs from drafts
   const [visitDuration, setVisitDuration] = useState(0);
   const [visitStartTime, setVisitStartTime] = useState<Date | null>(null);
   const [coordinates, setCoordinates] = useState<{latitude: number; longitude: number; accuracy: number} | null>(null);
@@ -58,8 +59,33 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
   const [finishing, setFinishing] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const LAST_KNOWN_LOCATION_KEY = 'visitReport.lastKnownLocation';
+
+  const saveLastKnownLocation = (coords: { latitude: number; longitude: number; accuracy: number }) => {
+    try {
+      localStorage.setItem(
+        LAST_KNOWN_LOCATION_KEY,
+        JSON.stringify({ ...coords, savedAt: Date.now() })
+      );
+    } catch {
+      // ignore storage failures
+    }
+  };
+
+  const loadLastKnownLocation = (): { latitude: number; longitude: number; accuracy: number; savedAt: number } | null => {
+    try {
+      const raw = localStorage.getItem(LAST_KNOWN_LOCATION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.latitude || !parsed?.longitude) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
 
   useEffect(() => {
     if (open && site) {
@@ -69,6 +95,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setShowLocationRequiredDialog(false);
       setAccuracyHistory([]);
       setFinishing(false);
+      setLocationError(null);
 
       if (site.additionalData) {
         const draftData = site.additionalData;
@@ -79,10 +106,30 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           setCoordinates(draftData.draft_coordinates);
           setLocationEnabled(true);
         }
+        
+        // Load photos from draft_photo_urls
+        if (draftData.draft_photo_urls && Array.isArray(draftData.draft_photo_urls) && draftData.draft_photo_urls.length > 0) {
+          // Store the URLs - we'll display them directly without converting to Files
+          setDraftPhotoUrls(draftData.draft_photo_urls);
+        } else {
+          setDraftPhotoUrls([]);
+        }
       } else {
+        // Fallback to last known location if available (even when offline for days)
+        const cached = loadLastKnownLocation();
+        if (cached) {
+          setCoordinates({
+            latitude: cached.latitude,
+            longitude: cached.longitude,
+            accuracy: cached.accuracy
+          });
+          setLocationEnabled(true);
+          setLocationError('Using last known location (cached). Refresh when online for better accuracy.');
+        }
         setNotes('');
         setActivities('');
         setPhotos([]);
+        setDraftPhotoUrls([]);
         setVisitDuration(0);
       }
 
@@ -99,6 +146,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setVisitDuration(0);
       stopLocationMonitoring();
       setFinishing(false);
+      setLocationError(null);
       if (locationTimeoutRef.current) {
         clearTimeout(locationTimeoutRef.current);
         locationTimeoutRef.current = null;
@@ -138,15 +186,70 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     };
   }, [visitStartTime, open]);
 
+  const formatGeoError = (error: GeolocationPositionError): string => {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        return 'Location permission denied. Please allow location for this site.';
+      case error.POSITION_UNAVAILABLE:
+        return 'Location unavailable. Check GPS/Wi‑Fi signal.';
+      case error.TIMEOUT:
+        return 'Location request timed out. Try again or move to a clearer area.';
+      default:
+        return 'Unable to get location. Please try again.';
+    }
+  };
+
   const startLocationMonitoring = async () => {
     setIsGettingLocation(true);
+    setLocationError(null);
 
     try {
       if (!navigator.geolocation) {
         setLocationEnabled(false);
         setIsGettingLocation(false);
+        setLocationError('This browser does not support location.');
         setShowLocationRequiredDialog(true);
         return;
+      }
+
+      // Quick low-accuracy grab to avoid long waits (allow older cache when offline)
+      let initialCoords: { latitude: number; longitude: number; accuracy: number } | null = null;
+      try {
+        const quickPosition = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: false,
+            timeout: 5000,
+            maximumAge: 1000 * 60 * 60 * 24 * 7 // accept up to 7 days old cache
+          });
+        });
+
+        initialCoords = {
+          latitude: quickPosition.coords.latitude,
+          longitude: quickPosition.coords.longitude,
+          accuracy: quickPosition.coords.accuracy
+        };
+
+        setCoordinates(initialCoords);
+        setLocationEnabled(true);
+        setLocationError(null);
+        setIsGettingLocation(false);
+        saveLastKnownLocation(initialCoords);
+      } catch (quickError: any) {
+        console.warn('Low-accuracy location failed, trying high-accuracy watch:', quickError);
+        // Try cached last known location if available
+        const cached = loadLastKnownLocation();
+        if (cached) {
+          setCoordinates({
+            latitude: cached.latitude,
+            longitude: cached.longitude,
+            accuracy: cached.accuracy
+          });
+          setLocationEnabled(true);
+          setLocationError('Using last known location (cached). Refresh when connection improves.');
+          setIsGettingLocation(false);
+        } else {
+          setLocationError(formatGeoError(quickError));
+        }
       }
 
       const watchId = navigator.geolocation.watchPosition(
@@ -184,26 +287,29 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
           setLocationEnabled(true);
           setIsGettingLocation(false);
+          setLocationError(null);
+          saveLastKnownLocation(newCoords);
         },
         (error) => {
           console.error('Location watch error:', error);
-          setLocationEnabled(false);
+          setLocationEnabled(Boolean(initialCoords));
           setIsGettingLocation(false);
+          setLocationError(formatGeoError(error));
           setShowLocationRequiredDialog(true);
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 5000
+          timeout: 20000,
+          maximumAge: 10000
         }
       );
 
       setLocationWatchId(watchId);
-
     } catch (error: any) {
       console.error('Location monitoring setup error:', error);
       setLocationEnabled(false);
       setIsGettingLocation(false);
+      setLocationError('Unable to start location monitoring.');
       setShowLocationRequiredDialog(true);
     }
   };
@@ -242,6 +348,8 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: `New accuracy: ±${newCoords.accuracy.toFixed(1)} meters`,
         variant: 'default'
       });
+      setLocationError(null);
+      saveLastKnownLocation(newCoords);
 
     } catch (error: any) {
       console.error('Location refresh error:', error);
@@ -250,6 +358,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: 'Could not refresh location. Please try again.',
         variant: 'destructive'
       });
+      if (error?.code !== undefined) {
+        setLocationError(formatGeoError(error));
+      }
     } finally {
       setIsGettingLocation(false);
     }
@@ -264,7 +375,32 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   };
 
   const removePhoto = (index: number) => {
-    setPhotos(prev => prev.filter((_, i) => i !== index));
+    const allPhotos = getAllPhotos();
+    const photoToRemove = allPhotos[index];
+    
+    if (typeof photoToRemove === 'string') {
+      // It's a draft URL - remove from draftPhotoUrls
+      setDraftPhotoUrls(prev => prev.filter((_, i) => i !== index));
+    } else {
+      // It's a File - need to find its index in the photos array
+      const draftCount = draftPhotoUrls.length;
+      const fileIndex = index - draftCount;
+      if (fileIndex >= 0) {
+        setPhotos(prev => prev.filter((_, i) => i !== fileIndex));
+      }
+    }
+  };
+
+  const getPhotoSrc = (photo: File | string): string => {
+    if (photo instanceof File) {
+      return URL.createObjectURL(photo);
+    }
+    return photo; // It's already a URL string
+  };
+
+  // Get all photos (both draft URLs and new File uploads) for display
+  const getAllPhotos = (): (File | string)[] => {
+    return [...draftPhotoUrls, ...photos];
   };
 
   const openCamera = async () => {
@@ -324,9 +460,12 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (finishing) return;
+    if (finishing || isSubmitting) return;
     setFinishing(true);
-    if (!site) return;
+    if (!site) {
+      setFinishing(false);
+      return;
+    }
 
     if (!locationEnabled || !coordinates) {
       toast({
@@ -348,7 +487,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       return;
     }
 
-    if (photos.length === 0) {
+    if (getAllPhotos().length === 0) {
       toast({
         title: 'Photo Required',
         description: 'At least one photo is required to complete the site visit.',
@@ -359,109 +498,31 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     }
 
     try {
-      const coordinatesJsonb = coordinates ? {
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        accuracy: coordinates.accuracy
-      } : {};
-
-      const photoUrls: string[] = [];
-      const photoStoragePaths: string[] = [];
+      // Convert draft photo URLs to File objects for submission
+      const allPhotoFiles: File[] = [...photos]; // Start with new File uploads
       
-      for (const photo of photos) {
-        const fileName = `reports/${site.id}/${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('site-visit-photos')
-          .upload(fileName, photo);
-
-        if (uploadError) {
-          console.error('Error uploading photo:', uploadError);
-          
-          if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
-            toast({
-              title: 'Storage Bucket Not Found',
-              description: 'The site-visit-photos storage bucket has not been created.',
-              variant: 'destructive'
-            });
-            setFinishing(false);
-            return;
+      // Convert draft URLs to Files
+      if (draftPhotoUrls.length > 0) {
+        for (const photoUrl of draftPhotoUrls) {
+          try {
+            const response = await fetch(photoUrl);
+            const blob = await response.blob();
+            const urlParts = photoUrl.split('/');
+            const fileName = urlParts[urlParts.length - 1] || `draft-photo-${Date.now()}.jpg`;
+            const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+            allPhotoFiles.push(file);
+          } catch (fetchError) {
+            console.warn('Failed to convert draft photo URL to File:', photoUrl, fetchError);
+            // Continue with other photos
           }
-          
-          toast({
-            title: 'Photo Upload Error',
-            description: `Failed to upload ${photo.name}. Please try again.`,
-            variant: 'destructive'
-          });
-          continue;
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('site-visit-photos')
-          .getPublicUrl(fileName);
-
-        if (urlData?.publicUrl) {
-          photoUrls.push(urlData.publicUrl);
-          photoStoragePaths.push(fileName);
         }
       }
 
-      if (photoUrls.length === 0) {
-        toast({
-          title: 'Photo Upload Failed',
-          description: 'Failed to upload photos. Please try again.',
-          variant: 'destructive'
-        });
-        setFinishing(false);
-        return;
-      }
-
-      const { data: reportData, error: reportError } = await supabase
-        .from('reports')
-        .insert({
-          site_visit_id: site.id,
-          notes: notes || 'No additional notes provided',
-          activities: activities,
-          duration_minutes: visitDuration,
-          coordinates: coordinatesJsonb,
-          submitted_by: currentUser?.id || null,
-          submitted_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (reportError) {
-        console.error('Error saving to reports table:', reportError);
-        throw reportError;
-      }
-
-      if (!reportData) {
-        throw new Error('Failed to create report record');
-      }
-
-      const reportPhotos = photoUrls.map((photoUrl, index) => ({
-        report_id: reportData.id,
-        photo_url: photoUrl,
-        storage_path: photoStoragePaths[index] || null
-      }));
-
-      const { error: photosError } = await supabase
-        .from('report_photos')
-        .insert(reportPhotos);
-
-      if (photosError) {
-        console.error('Error linking photos to report:', photosError);
-        toast({
-          title: 'Warning',
-          description: 'Report created but some photos may not be linked properly.',
-          variant: 'default'
-        });
-      }
-
+      // Delegate storage + report creation to parent handler to avoid duplicate uploads and delays
       const visitReportData: VisitReportData = {
         notes,
         activities,
-        photos,
+        photos: allPhotoFiles,
         visitDuration,
         locationData: [],
         coordinates
@@ -472,6 +533,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setNotes('');
       setActivities('');
       setPhotos([]);
+      setDraftPhotoUrls([]);
       setVisitDuration(0);
       setVisitStartTime(null);
       setCoordinates(null);
@@ -491,6 +553,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: "Failed to complete site visit. Please try again.",
         variant: "destructive",
       });
+    } finally {
       setFinishing(false);
     }
   };
@@ -498,65 +561,76 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const handleSaveDraft = async () => {
     if (!site) return;
 
-    if (!locationEnabled || !coordinates) {
-      toast({
-        title: 'Location Required',
-        description: 'Location access is required to save as draft.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    if (coordinates.accuracy > 10) {
-      toast({
-        title: 'Location Accuracy Too Low',
-        description: `Current accuracy is ±${coordinates.accuracy.toFixed(1)} meters. Please wait for better accuracy.`,
-        variant: 'destructive'
-      });
-      return;
-    }
+    // Location is optional for drafts - user can improve it later
+    // But we still want to save coordinates if available
+    const hasLocation = locationEnabled && coordinates;
 
     try {
       const now = new Date().toISOString();
+      
+      // Start with existing draft photo URLs (already uploaded)
+      const photoUrls: string[] = [...draftPhotoUrls];
 
-      const photoUrls: string[] = [];
+      // Upload new photos that are File objects (not yet uploaded)
       for (const photo of photos) {
-        const fileName = `draft-photos/${site.id}/${Date.now()}-${photo.name}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('site-visit-photos')
-          .upload(fileName, photo);
-
-        if (uploadError) {
-          console.error('Error uploading draft photo:', uploadError);
+        // Only upload if it's a File object (new photo)
+        // Photos loaded from draft URLs are already in draftPhotoUrls, so we skip re-uploading them
+        if (photo instanceof File) {
+          const fileName = `draft-photos/${site.id}/${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
           
-          if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
-            toast({
-              title: 'Storage Bucket Not Found',
-              description: 'The storage bucket has not been created.',
-              variant: 'destructive'
-            });
-            return;
+          try {
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('site-visit-photos')
+              .upload(fileName, photo);
+
+            if (uploadError) {
+              console.error('Error uploading draft photo:', uploadError);
+              
+              // If file already exists, try to get its public URL
+              if (uploadError.message?.includes('already exists') || uploadError.message?.includes('duplicate')) {
+                const { data: urlData } = supabase.storage
+                  .from('site-visit-photos')
+                  .getPublicUrl(fileName);
+                if (urlData?.publicUrl && !photoUrls.includes(urlData.publicUrl)) {
+                  photoUrls.push(urlData.publicUrl);
+                }
+                continue;
+              }
+              
+              if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
+                toast({
+                  title: 'Storage Bucket Not Found',
+                  description: 'The storage bucket has not been created.',
+                  variant: 'destructive'
+                });
+                // Continue saving other data even if photo upload fails
+                continue;
+              }
+              continue;
+            }
+
+            const { data: urlData } = supabase.storage
+              .from('site-visit-photos')
+              .getPublicUrl(fileName);
+
+            if (urlData?.publicUrl && !photoUrls.includes(urlData.publicUrl)) {
+              photoUrls.push(urlData.publicUrl);
+            }
+          } catch (photoError) {
+            console.error('Error processing draft photo:', photoError);
+            // Continue with other photos
           }
-          continue;
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('site-visit-photos')
-          .getPublicUrl(fileName);
-
-        if (urlData?.publicUrl) {
-          photoUrls.push(urlData.publicUrl);
         }
       }
 
       const draftData = {
-        draft_notes: notes,
-        draft_activities: activities,
+        draft_notes: notes || '',
+        draft_activities: activities || '',
         draft_photo_urls: photoUrls,
-        draft_visit_duration: visitDuration,
-        draft_coordinates: coordinates,
+        draft_visit_duration: visitDuration || 0,
+        draft_coordinates: hasLocation ? coordinates : (site.additionalData?.draft_coordinates || null),
         draft_saved_at: now,
-        draft_location_accuracy: coordinates.accuracy,
+        draft_location_accuracy: hasLocation ? coordinates.accuracy : (site.additionalData?.draft_location_accuracy || null),
         status: 'In Progress'
       };
 
@@ -578,11 +652,12 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
       toast({
         title: 'Draft Saved',
-        description: 'Your site visit progress has been saved as a draft.',
+        description: 'Your site visit progress has been saved as a draft. All data including photos, notes, and activities have been preserved.',
         variant: 'default'
       });
 
-      onOpenChange(false);
+      // Don't close the dialog automatically - let user continue working
+      // onOpenChange(false);
 
     } catch (error) {
       console.error('Error saving draft:', error);
@@ -652,6 +727,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
                      coordinates.accuracy <= 10 ? 'Excellent accuracy' :
                      'Improving accuracy...'}
                   </p>
+                {locationError && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    {locationError}
+                  </p>
+                )}
                 </div>
               </div>
               {coordinates && (
@@ -808,13 +888,13 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
               className="hidden"
             />
 
-            {photos.length > 0 && (
+            {getAllPhotos().length > 0 && (
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
-                  {photos.map((photo, index) => (
+                  {getAllPhotos().map((photo, index) => (
                     <div key={index} className="relative group">
                       <img
-                        src={URL.createObjectURL(photo)}
+                        src={getPhotoSrc(photo)}
                         alt={`Site photo ${index + 1}`}
                         className="w-full h-20 object-cover rounded-xl"
                       />
@@ -834,7 +914,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-black dark:text-white" />
                   <span className="text-sm font-medium text-black dark:text-white">
-                    {photos.length} photo{photos.length !== 1 ? 's' : ''} added
+                    {getAllPhotos().length} photo{getAllPhotos().length !== 1 ? 's' : ''} added
                   </span>
                 </div>
               </div>
@@ -986,7 +1066,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
             <Button
               type="button"
               onClick={handleSaveDraft}
-              disabled={isSubmitting || !locationEnabled || !coordinates || coordinates.accuracy > 10}
+              disabled={isSubmitting}
               className="h-12 rounded-full bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20 text-black dark:text-white font-semibold gap-2 px-5"
             >
               <Save className="h-4 w-4" />
@@ -995,11 +1075,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
             <Button
               type="button"
               onClick={handleSubmit}
-              disabled={isSubmitting || !locationEnabled || !coordinates || !activities.trim() || photos.length === 0}
+              disabled={isSubmitting || finishing || !locationEnabled || !coordinates || !activities.trim() || getAllPhotos().length === 0}
               className="flex-1 h-12 rounded-full bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 dark:text-black font-bold gap-2"
             >
               <CheckCircle className="h-5 w-5" />
-              {isSubmitting ? 'Submitting...' : 'Finish Visit'}
+              {isSubmitting || finishing ? 'Submitting...' : 'Finish Visit'}
             </Button>
           </div>
         </DialogFooter>

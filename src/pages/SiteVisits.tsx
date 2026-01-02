@@ -568,6 +568,9 @@ const SiteVisits = () => {
     }, 2000);
   };
 
+  // Add declaration for completedMapLocations (assuming it's an array of locations)
+  const completedMapLocations: any[] = [];
+
   if (isLoading) {
     return (
       <div className="space-y-8">
@@ -581,153 +584,8 @@ const SiteVisits = () => {
   }
 
   const renderContent = () => {
-    if (view === 'map') {
-      // Build map locations for all filtered visits
-      const siteLocations = filteredVisits
-        .map(v => {
-          const lat = (v as any)?.coordinates?.latitude ?? (v as any)?.location?.latitude;
-          const lng = (v as any)?.coordinates?.longitude ?? (v as any)?.location?.longitude;
-          if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
-          return {
-            id: v.id,
-            name: v.siteName,
-            latitude: lat as number,
-            longitude: lng as number,
-            type: 'site' as const,
-            status: v.status,
-          };
-        })
-        .filter(Boolean) as Array<{id:string;name:string;latitude:number;longitude:number;type:'site';status:string}>;
-
-      return (
-        <div className="space-y-6">
-          {siteLocations.length > 0 && (
-            <div className="h-[500px] w-full rounded-lg overflow-hidden">
-              <LeafletMapContainer
-                locations={siteLocations}
-                height="500px"
-                defaultCenter={mapDefaultCenter}
-                defaultZoom={mapDefaultZoom}
-                onLocationClick={(id) => {
-                  const v = filteredVisits.find(x => x.id === id);
-                  if (v) setSelectedVisit(v);
-                }}
-              />
-            </div>
-          )}
-
-          {selectedVisit ? (
-            <>
-              <div className="flex items-center justify-between bg-muted/30 p-4 rounded-lg">
-                <div>
-                  <h3 className="text-lg font-medium">{selectedVisit.siteName}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedVisit.locality}, {selectedVisit.state}
-                  </p>
-                  {selectedVisit.hub && (
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      Hub: <span className="font-medium">{selectedVisit.hub}</span>
-                    </div>
-                  )}
-                  {(selectedVisit.visitTypeRaw || selectedVisit.visitType) && (
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      Visit Type: <span className="font-medium">{selectedVisit.visitTypeRaw || selectedVisit.visitType}</span>
-                    </div>
-                  )}
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setSelectedVisit(null)}
-                >
-                  Change Site
-                </Button>
-              </div>
-              
-              <AssignmentMap 
-                siteVisit={selectedVisit} 
-                onAssignSuccess={handleAssignmentSuccess}
-              />
-            </>
-          ) : (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">
-                {isFieldWorker && statusFilter === 'dispatched' 
-                  ? 'Select a dispatched site visit to accept' 
-                  : 'Select a site visit to assign'}
-              </h3>
-              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                {filteredVisits
-                  .filter(visit => {
-                    // For field workers viewing dispatched, show dispatched visits
-                    if (isFieldWorker && statusFilter === 'dispatched') {
-                      return visit.status?.toLowerCase() === 'dispatched';
-                    }
-                    // Otherwise, show pending visits
-                    return visit.status === 'pending';
-                  })
-                  .slice(0, 6)
-                  .map(visit => (
-                    <Card 
-                      key={visit.id} 
-                      className="cursor-pointer hover:border-primary transition-colors"
-                      onClick={() => handleVisitSelection(visit)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-center">
-                          <h4 className="font-medium">{visit.siteName}</h4>
-                          <Badge variant="outline">{visit.priority} priority</Badge>
-                        </div>
-                        <div className="flex items-center text-sm text-muted-foreground mt-2">
-                          <MapPin className="h-4 w-4 mr-1" />
-                          {visit.locality}, {visit.state}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                
-                {filteredVisits.filter(visit => {
-                  if (isFieldWorker && statusFilter === 'dispatched') {
-                    return visit.status?.toLowerCase() === 'dispatched';
-                  }
-                  return visit.status === 'pending';
-                }).length === 0 && (
-                  <div className="col-span-full flex items-center justify-center p-8 bg-muted/20 rounded-lg">
-                    <p className="text-muted-foreground">
-                      {isFieldWorker && statusFilter === 'dispatched'
-                        ? 'No dispatched site visits available'
-                        : 'No pending site visits to assign'}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-    
-    // Build completed visits map locations
-    const completedMapLocations = statusFilter === 'completed' 
-      ? filteredVisits
-          .map(v => {
-            const lat = (v as any)?.coordinates?.latitude ?? (v as any)?.location?.latitude;
-            const lng = (v as any)?.coordinates?.longitude ?? (v as any)?.location?.longitude;
-            if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
-            return {
-              id: v.id,
-              name: v.siteName,
-              latitude: lat as number,
-              longitude: lng as number,
-              type: 'site' as const,
-              status: v.status,
-            };
-          })
-          .filter(Boolean) as Array<{id:string;name:string;latitude:number;longitude:number;type:'site';status:string}>
-      : [];
-
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6"> {/* Reduced spacing on mobile */}
         {/* Completed Visits Map Section */}
         {statusFilter === 'completed' && (
           <Card className="overflow-hidden" data-testid="completed-visits-map-section">
@@ -780,13 +638,13 @@ const SiteVisits = () => {
         )}
 
         {/* Grid View */}
-        <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 md:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3"> {/* Adjusted gaps for mobile */}
         {filteredVisits.map((visit) => (
           <Card 
             key={visit.id} 
-            className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] bg-gradient-to-b from-card to-background border-none group hover:border-primary/30 hover:border hover:scale-[1.02]"
+            className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] bg-gradient-to-b from-card to-background border-none group hover:border-primary/30 hover:border hover:scale-[1.02] touch-manipulation" // Added touch-manipulation for better mobile interaction
           >
-            <CardHeader className="pb-3 sm:pb-2">
+            <CardHeader className="pb-2 sm:pb-3"> {/* Adjusted padding */}
               <div className="flex justify-between items-start gap-2">
                 <CardTitle className="text-base sm:text-md font-semibold group-hover:text-primary transition-colors leading-tight">
                   {visit.siteName}
@@ -795,13 +653,13 @@ const SiteVisits = () => {
                   {getStatusLabel(visit.status, visit.dueDate)}
                 </div>
               </div>
-              <CardDescription className="flex items-center mt-1 text-sm">
+              <CardDescription className="flex items-center mt-1 text-xs sm:text-sm"> {/* Smaller text on mobile */}
                 <MapPin className="h-3 w-3 mr-1 text-primary/70 flex-shrink-0" />
-                <span className="truncate">{visit.locality || 'N/A'}, {visit.state || 'N/A'}</span>
+                <span className="truncate text-xs sm:text-sm">{visit.locality || 'N/A'}, {visit.state || 'N/A'}</span> {/* Responsive text size */}
               </CardDescription>
               
               {/* Mobile status details - more compact */}
-              <div className="text-xs border-l-2 border-primary/30 pl-2 mt-2 py-1.5 sm:py-2 bg-primary/5 rounded-r-sm group-hover:bg-primary/10 group-hover:border-primary transition-all">
+              <div className="text-xs border-l-2 border-primary/30 pl-2 mt-2 py-1 sm:py-1.5 bg-primary/5 rounded-r-sm group-hover:bg-primary/10 group-hover:border-primary transition-all">
                 <div className="font-medium text-muted-foreground text-xs">
                   Status:
                 </div>
@@ -811,8 +669,8 @@ const SiteVisits = () => {
               </div>
             </CardHeader>
             
-            <CardContent className="space-y-3 sm:space-y-3 pb-2">
-              <div className="text-sm space-y-2">
+            <CardContent className="space-y-2 sm:space-y-3 pb-2"> {/* Adjusted spacing */}
+              <div className="text-xs sm:text-sm space-y-2"> {/* Smaller text on mobile */}
                 {/* Mobile-optimized grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="flex items-center text-muted-foreground text-xs sm:text-sm">

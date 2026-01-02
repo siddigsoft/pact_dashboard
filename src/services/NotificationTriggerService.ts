@@ -1614,83 +1614,97 @@ export const NotificationTriggerService = {
     hubId?: string
   ): Promise<number> {
     try {
-      let successCount = 0;
       const sender = forwarderName || 'Admin';
 
-      // 1. Build CC list: Super Admins + Hub Supervisor for accountability
-      const ccEmails = await getAllCcEmails(hubId);
+      // 1. Fetch FOM user details and admin users in parallel
+      const [fomUsersResult, adminUsersResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', fomUserIds),
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, role')
+          .in('role', ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'])
+          .eq('status', 'approved')
+      ]);
 
-      // 2. Fetch FOM user details for bilingual emails
-      const { data: fomUsers, error: fomError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', fomUserIds);
+      const fomUsers = fomUsersResult.data;
+      const adminUsers = adminUsersResult.data;
 
-      if (fomError) {
-        console.error('Error fetching FOM user details:', fomError);
+      if (fomUsersResult.error) {
+        console.error('Error fetching FOM user details:', fomUsersResult.error);
+      }
+      if (adminUsersResult.error) {
+        console.error('Error fetching admins for MMP forward notification:', adminUsersResult.error);
       }
 
-      // 3. Notify all selected FOMs with bilingual email (CC super admins + hub supervisor)
-      // Each FOM gets ONE email with CC recipients - NO separate emails to CC recipients
-      for (const fomId of fomUserIds) {
+      // 2. Build parallel notification and email tasks for FOMs
+      const fomTasks = (fomUserIds || []).map(async (fomId) => {
         const fomUser = fomUsers?.find(u => u.id === fomId);
         const recipientName = fomUser?.full_name || 'Field Operations Manager';
         const recipientEmail = fomUser?.email;
 
-        // Create in-app notification for FOM
-        const sent = await this.send({
-          userId: fomId,
-          title: 'MMP Forwarded to You',
-          message: `MMP "${mmpName}" has been forwarded to you for permits attachment by ${sender}`,
-          type: 'info',
-          category: 'assignments',
-          priority: 'high',
-          link: `/mmp/${mmpId}`,
-          relatedEntityId: mmpId,
-          relatedEntityType: 'mmpFile',
-          sendEmail: false // We send bilingual email separately
-        });
-        if (sent) successCount++;
+        // Send notification and email in parallel
+        const [notificationResult, emailResult] = await Promise.allSettled([
+          this.send({
+            userId: fomId,
+            title: 'MMP Forwarded to You',
+            message: `MMP "${mmpName}" has been forwarded to you for permits attachment by ${sender}`,
+            type: 'info',
+            category: 'assignments',
+            priority: 'high',
+            link: `/mmp/${mmpId}`,
+            relatedEntityId: mmpId,
+            relatedEntityType: 'mmpFile',
+            sendEmail: false // We send bilingual email separately
+          }),
+          // Send bilingual email directly - CRITICAL: Always send email even if notification fails
+          recipientEmail
+            ? EmailNotificationService.sendMMPForwardedToFOM(
+                recipientEmail,
+                recipientName,
+                mmpName,
+                sender,
+                mmpId,
+                true // isRecipientFOM
+              )
+            : Promise.resolve({ success: false })
+        ]);
 
-        // Send ONE bilingual email to FOM with CC to super admins + hub supervisor
-        if (recipientEmail) {
-          try {
-            console.log(`[NOTIFICATION] Sending MMP forward email to FOM: ${recipientEmail}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
-            await EmailNotificationService.sendMMPForwardedToFOM(
-              recipientEmail,
-              recipientName,
-              mmpName,
-              sender,
-              mmpId,
-              true, // isRecipientFOM
-              undefined, // recipientRole
-              0, // retryCount
-              ccEmails.length > 0 ? ccEmails : undefined // CC recipients
-            );
-            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail} with ${ccEmails.length} CC recipients`);
-          } catch (emailError) {
-            console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailError);
-          }
+        const notificationSuccess = notificationResult.status === 'fulfilled' && notificationResult.value === true;
+        const emailSuccess = emailResult.status === 'fulfilled' && 
+          emailResult.value && 
+          typeof emailResult.value === 'object' && 
+          'success' in emailResult.value && 
+          emailResult.value.success === true;
+
+        if (notificationSuccess) {
+          console.log(`[NOTIFICATION] Successfully sent notification to FOM: ${fomId}`);
         }
-      }
+        if (recipientEmail) {
+          if (emailSuccess) {
+            console.log(`[NOTIFICATION] Successfully sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
+          } else if (emailResult.status === 'rejected') {
+            console.error(`[NOTIFICATION] Exception sending bilingual email to FOM ${recipientEmail}:`, emailResult.reason);
+          } else if (emailResult.status === 'fulfilled' && emailResult.value && typeof emailResult.value === 'object' && 'success' in emailResult.value && !emailResult.value.success) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, 'error' in emailResult.value ? emailResult.value.error : 'Unknown error');
+          }
+        } else {
+          console.warn(`[NOTIFICATION] FOM ${fomId} has no email address - cannot send email notification`);
+        }
 
-      // 3. Fetch approved Super Admins and regular Admins
-      const { data: adminUsers, error: adminError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, role')
-        .in('role', ['super_admin', 'superAdmin', 'SuperAdmin', 'admin', 'Admin'])
-        .eq('status', 'approved');
+        return notificationSuccess;
+      });
 
-      if (adminError) {
-        console.error('Error fetching admins for MMP forward notification:', adminError);
-      } else if (adminUsers && adminUsers.length > 0) {
-        // 4. Notify both Super Admins and regular Admins with bilingual email
-        for (const adminUser of adminUsers) {
-          const isSuperAdmin = ['super_admin', 'superAdmin', 'SuperAdmin'].includes(adminUser.role || '');
-          const recipientName = adminUser.full_name || (isSuperAdmin ? 'Super Administrator' : 'Administrator');
-          
-          // Create in-app notification
-          const sent = await this.send({
+      // 3. Build parallel notification and email tasks for admins
+      const adminTasks = (adminUsers || []).map(async (adminUser) => {
+        const isSuperAdmin = ['super_admin', 'superAdmin', 'SuperAdmin'].includes(adminUser.role || '');
+        const recipientName = adminUser.full_name || (isSuperAdmin ? 'Super Administrator' : 'Administrator');
+
+        // Send notification and email in parallel
+        const [notificationResult, emailResult] = await Promise.allSettled([
+          this.send({
             userId: adminUser.id,
             title: 'MMP Forwarded to FOM',
             message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s) by ${sender}`,
@@ -1700,28 +1714,52 @@ export const NotificationTriggerService = {
             link: `/mmp/${mmpId}`,
             relatedEntityId: mmpId,
             relatedEntityType: 'mmpFile',
-            sendEmail: false
-          });
-          if (sent) successCount++;
-
+            sendEmail: false // We send bilingual email separately
+          }),
           // Send bilingual email directly to admin
-          if (adminUser.email) {
-            try {
-              await EmailNotificationService.sendMMPForwardedToFOM(
+          adminUser.email
+            ? EmailNotificationService.sendMMPForwardedToFOM(
                 adminUser.email,
                 recipientName,
                 mmpName,
                 sender,
                 mmpId,
                 false // isRecipientFOM (admin gets info notification, not action required)
-              );
-              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to ${isSuperAdmin ? 'Super Admin' : 'Admin'}: ${adminUser.email}`);
-            } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to ${isSuperAdmin ? 'Super Admin' : 'Admin'} ${adminUser.email}:`, emailError);
-            }
+              )
+            : Promise.resolve({ success: false })
+        ]);
+
+        const notificationSuccess = notificationResult.status === 'fulfilled' && notificationResult.value === true;
+        const emailSuccess = emailResult.status === 'fulfilled' && 
+          emailResult.value && 
+          typeof emailResult.value === 'object' && 
+          'success' in emailResult.value && 
+          emailResult.value.success === true;
+
+        if (adminUser.email) {
+          if (emailSuccess) {
+            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to ${isSuperAdmin ? 'Super Admin' : 'Admin'}: ${adminUser.email}`);
+          } else if (emailResult.status === 'rejected') {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${isSuperAdmin ? 'Super Admin' : 'Admin'} ${adminUser.email}:`, emailResult.reason);
+          } else if (emailResult.status === 'fulfilled' && emailResult.value && typeof emailResult.value === 'object' && 'success' in emailResult.value && !emailResult.value.success) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${isSuperAdmin ? 'Super Admin' : 'Admin'} ${adminUser.email}:`, 'error' in emailResult.value ? emailResult.value.error : 'Unknown error');
           }
         }
-      }
+
+        return notificationSuccess;
+      });
+
+      // 4. Execute all FOM and admin tasks in parallel
+      const [fomResults, adminResults] = await Promise.all([
+        Promise.allSettled(fomTasks),
+        Promise.allSettled(adminTasks)
+      ]);
+
+      // Count successful notifications
+      const successCount = [
+        ...fomResults.filter(r => r.status === 'fulfilled' && r.value === true),
+        ...adminResults.filter(r => r.status === 'fulfilled' && r.value === true)
+      ].length;
 
       return successCount;
     } catch (error) {
