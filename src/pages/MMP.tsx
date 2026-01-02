@@ -3768,8 +3768,8 @@ const MMP = () => {
                             Drafts
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').trim();
-                                return status.toLowerCase() === 'in progress';
+                                const status = (site.status || '').trim().toLowerCase();
+                                return status === 'in progress' || status === 'ongoing';
                               }).length}
                             </Badge>
                           </Button>
@@ -3935,7 +3935,7 @@ const MMP = () => {
                           {enumeratorSubTab === 'mySites' 
                             ? (mySitesSubTab === 'pending' ? 'Pending Visits' 
                                : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' 
-                               : mySitesSubTab === 'all' ? 'Drafts (In-Progress Visits)'
+                               : mySitesSubTab === 'all' ? 'Drafts (In-Progress & Ongoing Visits)'
                                : 'Completed Sites')
                             : 'Smart Assigned Sites'
                           }
@@ -3947,7 +3947,7 @@ const MMP = () => {
                                 : mySitesSubTab === 'ongoing'
                                 ? 'Completed visits stored offline - will sync automatically when internet is available'
                                 : mySitesSubTab === 'all'
-                                ? 'In-progress site visits (drafts) - sites that have been started but not completed'
+                                ? 'In-progress and ongoing site visits (drafts) - sites that have been started but not completed'
                                 : 'Completed visits that have been successfully submitted and synced')
                             : 'Sites assigned to your area that must be visited'
                           }
@@ -3973,8 +3973,8 @@ const MMP = () => {
                               ? unsyncedCompletedVisits.length
                               : mySitesSubTab === 'all'
                               ? enumeratorMySites.filter(site => {
-                                  const status = (site.status || '').trim();
-                                  return status.toLowerCase() === 'in progress';
+                                  const status = (site.status || '').trim().toLowerCase();
+                                  return status === 'in progress' || status === 'ongoing';
                                 }).length
                               : enumeratorMySites.filter(site => {
                                   const status = (site.status || '').toLowerCase();
@@ -3999,10 +3999,10 @@ const MMP = () => {
                       let sitesToShow: any[] = [];
                       if (enumeratorSubTab === 'mySites') {
                         if (mySitesSubTab === 'all') {
-                          // Drafts: Show only "In Progress" status site entries
+                          // Drafts: Show both "In Progress" and "Ongoing" status site entries
                           sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').trim();
-                            return status.toLowerCase() === 'in progress';
+                            const status = (site.status || '').trim().toLowerCase();
+                            return status === 'in progress' || status === 'ongoing';
                           });
                         } else if (mySitesSubTab === 'pending') {
                           sitesToShow = enumeratorMySites.filter(site => {
@@ -4046,7 +4046,7 @@ const MMP = () => {
                                     : mySitesSubTab === 'ongoing'
                                     ? 'No completed visits waiting to sync. All visits have been submitted.'
                                     : mySitesSubTab === 'all'
-                                    ? 'No in-progress site visits found. Start a visit to see it here.'
+                                    ? 'No in-progress or ongoing site visits found. Start a visit to see it here.'
                                     : 'No completed sites found.')
                                 : 'No sites assigned to you yet.'
                               }
