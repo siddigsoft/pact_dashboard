@@ -604,6 +604,10 @@ export default function CostPredictions() {
     if (mainTab === 'upload') {
       loadRegistrySites();
     }
+    if (mainTab === 'analytics' && historicalDataStats.total === 0) {
+      // Auto-load historical data when viewing analytics
+      fetchUploadedHistoricalData(0);
+    }
   }, [mainTab]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -645,7 +649,10 @@ export default function CostPredictions() {
           existingMonthKeys.add(siteKey);
         }
       });
-      console.log('[CostPredictions] Found', existingMonthKeys.size, 'existing site-month combinations');
+      console.log('[CostPredictions] Found', existingCosts?.length || 0, 'existing records and', existingMonthKeys.size, 'unique site-month combinations');
+      if (existingMonthKeys.size > 0) {
+        console.log('[CostPredictions] Sample existing keys:', Array.from(existingMonthKeys).slice(0, 5));
+      }
       
       const data = await uploadFile.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
@@ -768,6 +775,9 @@ export default function CostPredictions() {
                   validationStatus = 'error';
                   validationMessage = `Duplicate: Cost for this site already exists for ${monthKey}`;
                   isDuplicate = true;
+                  if (rowCounter <= 5) {
+                    console.log('[CostPredictions] Duplicate found:', dupCheckKey);
+                  }
                 }
               }
             } catch (e) {
@@ -1315,7 +1325,7 @@ export default function CostPredictions() {
                       ) : (
                         <Database className="h-4 w-4 mr-2" />
                       )}
-                      Import {parsedRecords.filter(r => r.actualCost && r.actualCost > 0).length} Records
+                      Import {parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error').length} Records
                     </Button>
                   </div>
                 </div>
