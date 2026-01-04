@@ -173,6 +173,12 @@ export default function CostPredictions() {
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
   const [historicalCostData, setHistoricalCostData] = useState<Map<string, Array<{date: string; cost: number}>>>(new Map());
   const [algorithmStats, setAlgorithmStats] = useState<{algorithm: string; count: number; avgConfidence: number}[]>([]);
+  
+  // Historical data viewer state
+  const [uploadedHistoricalData, setUploadedHistoricalData] = useState<any[]>([]);
+  const [historicalDataStats, setHistoricalDataStats] = useState({ total: 0, linked: 0, unlinked: 0 });
+  const [loadingHistoricalData, setLoadingHistoricalData] = useState(false);
+  const [historicalDataPage, setHistoricalDataPage] = useState(0);
 
   const fetchAccuracyMetrics = async () => {
     try {
@@ -183,6 +189,27 @@ export default function CostPredictions() {
       console.error('Error fetching accuracy metrics:', err);
     } finally {
       setLoadingAccuracy(false);
+    }
+  };
+
+  const fetchUploadedHistoricalData = async (page: number = 0) => {
+    try {
+      setLoadingHistoricalData(true);
+      const result = await CostPredictionService.getHistoricalCosts({ 
+        limit: 50, 
+        offset: page * 50 
+      });
+      setUploadedHistoricalData(result.data);
+      setHistoricalDataStats({
+        total: result.total,
+        linked: result.linked_count,
+        unlinked: result.unlinked_count
+      });
+      setHistoricalDataPage(page);
+    } catch (err) {
+      console.error('Error fetching historical data:', err);
+    } finally {
+      setLoadingHistoricalData(false);
     }
   };
 
@@ -1916,6 +1943,155 @@ export default function CostPredictions() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Uploaded Historical Data Viewer */}
+      <Card data-testid="card-historical-data">
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Uploaded Historical Cost Data
+              </CardTitle>
+              <CardDescription>
+                View imported cost records and their registry linkage status
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchUploadedHistoricalData(0)}
+              disabled={loadingHistoricalData}
+              data-testid="button-refresh-historical"
+            >
+              {loadingHistoricalData ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Load Data
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {historicalDataStats.total > 0 ? (
+            <div className="space-y-4">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="text-sm text-muted-foreground mb-1">Total Records</div>
+                  <div className="text-2xl font-bold">{historicalDataStats.total}</div>
+                </div>
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    Linked to Registry
+                  </div>
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                    {historicalDataStats.linked}
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      ({historicalDataStats.total > 0 ? Math.round((historicalDataStats.linked / historicalDataStats.total) * 100) : 0}%)
+                    </span>
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                    New Sites (Not in Registry)
+                  </div>
+                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-500">
+                    {historicalDataStats.unlinked}
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      ({historicalDataStats.total > 0 ? Math.round((historicalDataStats.unlinked / historicalDataStats.total) * 100) : 0}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Table */}
+              <ScrollArea className="h-[400px] rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="sticky top-0 bg-background">Site Name</TableHead>
+                      <TableHead className="sticky top-0 bg-background">State</TableHead>
+                      <TableHead className="sticky top-0 bg-background">Locality</TableHead>
+                      <TableHead className="sticky top-0 bg-background text-right">Cost</TableHead>
+                      <TableHead className="sticky top-0 bg-background">Visit Date</TableHead>
+                      <TableHead className="sticky top-0 bg-background">Registry Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {uploadedHistoricalData.map((record, idx) => (
+                      <TableRow key={record.id || idx}>
+                        <TableCell className="font-medium">{record.site_name || '-'}</TableCell>
+                        <TableCell>{record.state_id || '-'}</TableCell>
+                        <TableCell>{record.locality_id || '-'}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(record.actual_cost || 0)}
+                        </TableCell>
+                        <TableCell>
+                          {record.visit_date ? format(new Date(record.visit_date), 'dd MMM yyyy') : '-'}
+                        </TableCell>
+                        <TableCell>
+                          {record.registry_site ? (
+                            <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Linked
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              New Site
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+
+              {/* Pagination */}
+              {historicalDataStats.total > 50 && (
+                <div className="flex items-center justify-between gap-2 pt-2">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {historicalDataPage * 50 + 1} to {Math.min((historicalDataPage + 1) * 50, historicalDataStats.total)} of {historicalDataStats.total}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchUploadedHistoricalData(historicalDataPage - 1)}
+                      disabled={historicalDataPage === 0 || loadingHistoricalData}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchUploadedHistoricalData(historicalDataPage + 1)}
+                      disabled={(historicalDataPage + 1) * 50 >= historicalDataStats.total || loadingHistoricalData}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : loadingHistoricalData ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <Database className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No historical data loaded</p>
+              <p className="text-sm mt-1">Click "Load Data" to view uploaded cost records and their registry linkage status.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Alerts & Recommendations */}
       <Card data-testid="card-alerts">

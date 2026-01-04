@@ -1133,6 +1133,89 @@ export class CostPredictionService {
     return assignments;
   }
 
+  static async getHistoricalCosts(options?: { limit?: number; offset?: number }): Promise<{
+    data: Array<HistoricalSiteCost & { registry_site?: { id: string; site_name: string; gps_latitude?: number; gps_longitude?: number } | null }>;
+    total: number;
+    linked_count: number;
+    unlinked_count: number;
+  }> {
+    const limit = options?.limit || 100;
+    const offset = options?.offset || 0;
+
+    // Get total count
+    const { count } = await supabase
+      .from('historical_site_costs')
+      .select('*', { count: 'exact', head: true });
+
+    // Get historical costs
+    const { data: historicalData, error } = await supabase
+      .from('historical_site_costs')
+      .select('*')
+      .order('uploaded_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('[CostPrediction] Error fetching historical costs:', error);
+      return { data: [], total: 0, linked_count: 0, unlinked_count: 0 };
+    }
+
+    // Get registry sites for matching
+    const { data: registrySites } = await supabase
+      .from('sites_registry')
+      .select('id, site_code, site_name, state_name, locality_name, gps_latitude, gps_longitude');
+
+    // Build lookup maps
+    const registryByUUID = new Map<string, any>();
+    const registryBySiteCode = new Map<string, any>();
+    const registryByKey = new Map<string, any>();
+
+    registrySites?.forEach(site => {
+      if (site.id) registryByUUID.set(site.id, site);
+      if (site.site_code) registryBySiteCode.set(site.site_code.toLowerCase(), site);
+      const key = `${site.site_name?.toLowerCase()}-${site.state_name?.toLowerCase()}-${site.locality_name?.toLowerCase()}`;
+      registryByKey.set(key, site);
+    });
+
+    // Match historical records to registry
+    let linked_count = 0;
+    let unlinked_count = 0;
+
+    const enrichedData = historicalData?.map(record => {
+      let registry_site = null;
+      
+      // Try UUID match first
+      if (record.site_id && registryByUUID.has(record.site_id)) {
+        registry_site = registryByUUID.get(record.site_id);
+      }
+      // Try site_code match
+      else if (record.site_id && registryBySiteCode.has(record.site_id.toLowerCase())) {
+        registry_site = registryBySiteCode.get(record.site_id.toLowerCase());
+      }
+      // Try name+state+locality match
+      else {
+        const key = `${record.site_name?.toLowerCase()}-${record.state_id?.toLowerCase()}-${record.locality_id?.toLowerCase()}`;
+        if (registryByKey.has(key)) {
+          registry_site = registryByKey.get(key);
+        }
+      }
+
+      if (registry_site) {
+        linked_count++;
+      } else {
+        unlinked_count++;
+      }
+
+      return { ...record, registry_site };
+    }) || [];
+
+    return {
+      data: enrichedData,
+      total: count || 0,
+      linked_count,
+      unlinked_count
+    };
+  }
+
   static async saveHistoricalCosts(records: HistoricalSiteCost[]): Promise<{ success: boolean; inserted: number; errors: string[] }> {
     const errors: string[] = [];
     let inserted = 0;
