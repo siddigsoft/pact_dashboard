@@ -612,28 +612,70 @@ export default function CostPredictions() {
         const jsonData = XLSX.utils.sheet_to_json(sheet);
         console.log('[CostPredictions] Sheet', sheetName, 'has', jsonData.length, 'rows');
         
+        // Log first row columns for debugging
+        if (jsonData.length > 0) {
+          const firstRow = jsonData[0] as any;
+          console.log('[CostPredictions] Available columns:', Object.keys(firstRow));
+          console.log('[CostPredictions] First row data:', firstRow);
+        }
+        
         for (const row of jsonData as any[]) {
           rowCounter++;
-          const siteName = row['1.10 Select The activity site'] || row['Site Name'] || row['site_name'] || '';
-          const state = row['1.8 State of the site/where the site is located'] || row['State'] || row['state'] || '';
-          const locality = row['1.9 Locality of the site/where the site is located'] || row['Locality'] || row['locality'] || '';
-          const hub = row['1.7 WFP HUB'] || row['Hub'] || row['hub'] || '';
-          const visitDate = row['Visit Date'] || row['visit_date'] || row['2.1 Date of visit'] || '';
-          const actualCost = parseFloat(
-            row['Actual Cost'] || 
-            row['actual_cost'] || 
-            row['Total Cost'] || 
-            row['total_cost'] || 
-            row['Transportation Cost'] || 
-            row['transportation_cost'] ||
-            row['Cost'] ||
-            row['cost'] ||
-            row['3.1 Total transportation cost'] ||
-            row['Amount'] ||
-            row['amount'] ||
-            '0'
-          ) || 0;
-          const transportMode = row['Transportation Means'] || row['Transport Mode'] || row['transport_mode'] || row['2.2 Transportation means'] || '';
+          
+          // Helper to find column value case-insensitively
+          const getColumnValue = (keys: string[]): string => {
+            for (const key of keys) {
+              if (row[key] !== undefined && row[key] !== null && row[key] !== '') return String(row[key]);
+              // Try case-insensitive match
+              const rowKey = Object.keys(row).find(k => k.toLowerCase().trim() === key.toLowerCase().trim());
+              if (rowKey && row[rowKey] !== undefined && row[rowKey] !== null && row[rowKey] !== '') {
+                return String(row[rowKey]);
+              }
+            }
+            return '';
+          };
+          
+          // Find cost column with flexible matching
+          const getCostValue = (): number => {
+            const costKeys = [
+              'Actual Cost', 'actual_cost', 'ActualCost',
+              'Total Cost', 'total_cost', 'TotalCost',
+              'Transportation Cost', 'transportation_cost', 'TransportationCost',
+              'Cost', 'cost',
+              '3.1 Total transportation cost',
+              'Amount', 'amount'
+            ];
+            
+            // Direct key match
+            for (const key of costKeys) {
+              if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
+                const val = parseFloat(String(row[key]).replace(/[^0-9.-]/g, ''));
+                if (!isNaN(val) && val > 0) return val;
+              }
+            }
+            
+            // Case-insensitive partial match
+            for (const rowKey of Object.keys(row)) {
+              const lowerKey = rowKey.toLowerCase();
+              if (lowerKey.includes('cost') || lowerKey.includes('amount') || lowerKey.includes('price')) {
+                const val = parseFloat(String(row[rowKey]).replace(/[^0-9.-]/g, ''));
+                if (!isNaN(val) && val > 0) {
+                  if (rowCounter === 1) console.log('[CostPredictions] Found cost in column:', rowKey, 'value:', val);
+                  return val;
+                }
+              }
+            }
+            
+            return 0;
+          };
+          
+          const siteName = getColumnValue(['1.10 Select The activity site', 'Site Name', 'site_name', 'SiteName', 'Site']);
+          const state = getColumnValue(['1.8 State of the site/where the site is located', 'State', 'state']);
+          const locality = getColumnValue(['1.9 Locality of the site/where the site is located', 'Locality', 'locality']);
+          const hub = getColumnValue(['1.7 WFP HUB', 'Hub', 'hub', 'WFP HUB']);
+          const visitDate = getColumnValue(['Visit Date', 'visit_date', '2.1 Date of visit', 'Date', 'date']);
+          const actualCost = getCostValue();
+          const transportMode = getColumnValue(['Transportation Means', 'Transport Mode', 'transport_mode', '2.2 Transportation means', 'TransportMode']);
 
           if (!siteName || !state || !locality) {
             continue;
