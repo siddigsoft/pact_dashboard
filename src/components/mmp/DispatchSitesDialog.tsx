@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
@@ -51,6 +52,30 @@ import {
 } from "@/utils/sitesRegistryMatcher";
 import { EmailNotificationService } from "@/services/email-notification.service";
 import { NotificationTriggerService } from "@/services/NotificationTriggerService";
+=======
+import React, { useState, useEffect, useMemo } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, MapPin, TrendingUp, Sparkles, Wand2, Info } from 'lucide-react';
+import { sudanStates } from '@/data/sudanStates';
+import { fetchAllRegistrySites, matchSiteToRegistry, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
+import { EmailNotificationService } from '@/services/email-notification.service';
+import { CostPredictionService, type CostPrediction, type VarianceAlert } from '@/services/costPrediction.service';
+import { VarianceAlertBanner } from './VarianceAlertBanner';
+import { CostSparkline } from './CostSparkline';
+
+>>>>>>> 0efe44e (Add variance alerts and accuracy metrics for cost predictions)
 interface DispatchSitesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -106,6 +131,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     Map<string, CostPrediction>
   >(new Map());
   const [loadingPredictions, setLoadingPredictions] = useState(false);
+  const [varianceAlerts, setVarianceAlerts] = useState<VarianceAlert[]>([]);
   const { toast } = useToast();
 
   // Load data collectors
@@ -412,6 +438,35 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       return newCosts;
     });
   };
+
+  useEffect(() => {
+    if (siteCosts.size === 0 || costPredictions.size === 0) {
+      setVarianceAlerts([]);
+      return;
+    }
+
+    const alerts: VarianceAlert[] = [];
+    siteCosts.forEach((cost, siteId) => {
+      const prediction = costPredictions.get(siteId);
+      if (prediction && cost.transportation > 0) {
+        const alert = CostPredictionService.checkVariance(
+          cost.siteName,
+          siteId,
+          prediction.predicted_cost,
+          cost.transportation
+        );
+        if (alert) {
+          alerts.push(alert);
+        }
+      }
+    });
+
+    setVarianceAlerts(alerts.sort((a, b) => {
+      if (a.severity === 'critical' && b.severity !== 'critical') return -1;
+      if (b.severity === 'critical' && a.severity !== 'critical') return 1;
+      return b.variance_pct - a.variance_pct;
+    }));
+  }, [siteCosts, costPredictions]);
 
   const applyBulkCostToAll = () => {
     if (bulkCost.transportation <= 0) {
@@ -1511,6 +1566,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               </CardContent>
             </Card>
 
+            {varianceAlerts.length > 0 && (
+              <VarianceAlertBanner 
+                alerts={varianceAlerts} 
+                onDismiss={() => setVarianceAlerts([])}
+              />
+            )}
+
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Users className="h-4 w-4" />
               <span>
@@ -1556,6 +1618,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                                     SDG
                                   </Badge>
                                 </TooltipTrigger>
+<<<<<<< HEAD
                                 <TooltipContent>
                                   <p>Confidence: {prediction.confidence}%</p>
                                   <p>Algorithm: {prediction.algorithm_used}</p>
@@ -1569,6 +1632,41 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                                 value={prediction.confidence}
                                 className="h-1.5 w-16"
                               />
+=======
+                                <TooltipContent className="max-w-xs">
+                                  <div className="space-y-1.5">
+                                    <p className="font-medium">{prediction.provenance?.method || prediction.algorithm_used}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {prediction.provenance?.description || `Based on ${prediction.visit_count} historical visits`}
+                                    </p>
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <span>Confidence: {prediction.confidence}%</span>
+                                      {prediction.provenance?.trend && (
+                                        <Badge variant="outline" className="text-xs py-0">
+                                          {prediction.provenance.trend === 'increasing' ? 'Trending up' : 
+                                           prediction.provenance.trend === 'decreasing' ? 'Trending down' : 'Stable'}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {prediction.provenance?.min_cost !== undefined && (
+                                      <p className="text-xs">
+                                        Range: {prediction.provenance.min_cost.toLocaleString()} - {prediction.provenance.max_cost?.toLocaleString()} SDG
+                                      </p>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Progress value={prediction.confidence} className="h-1.5 w-16" />
+                              {prediction.history && prediction.history.length >= 2 && (
+                                <CostSparkline 
+                                  history={prediction.history} 
+                                  currentPrediction={prediction.predicted_cost}
+                                  width={60}
+                                  height={20}
+                                  showTrend={false}
+                                />
+                              )}
+>>>>>>> 0efe44e (Add variance alerts and accuracy metrics for cost predictions)
                             </div>
                           )}
                         </div>
