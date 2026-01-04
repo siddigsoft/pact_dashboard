@@ -845,6 +845,21 @@ export default function CostPredictions() {
       const uniqueStates = new Set(allRecords.map(r => r.state));
       const uniqueLocalities = new Set(allRecords.map(r => r.locality));
 
+      // Calculate importable records (non-duplicate, has cost)
+      const importableRecords = allRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error');
+      
+      // Build error messages
+      const errors: string[] = [];
+      if (duplicateRecords.length > 0) {
+        errors.push(`${duplicateRecords.length} duplicate records will be skipped`);
+      }
+      if (duplicateRecords.length === recordsWithCosts.length && recordsWithCosts.length > 0) {
+        errors.push('ALL records in this file already exist in the database. This file appears to have been uploaded before.');
+      }
+      if (importableRecords.length === 0 && allRecords.length > 0) {
+        errors.push('No new records to import - all records are either duplicates or missing cost data');
+      }
+      
       const summary = {
         totalRecords: allRecords.length,
         matchedSites: matchedSites.length,
@@ -857,7 +872,7 @@ export default function CostPredictions() {
         invalidStates: [],
         validatedLocalities: uniqueLocalities.size,
         invalidLocalities: [],
-        errors: duplicateRecords.length > 0 ? [`${duplicateRecords.length} duplicate records will be skipped`] : []
+        errors
       };
       
       console.log('[CostPredictions] Validation complete:', summary);
@@ -1405,23 +1420,36 @@ export default function CostPredictions() {
                     </CardContent>
                   </Card>
 
-                  {/* Show error message if validation has errors */}
+                  {/* Show warning/error message based on duplicate status */}
                   {validationSummary && validationSummary.errors.length > 0 && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Cannot Import</AlertTitle>
-                      <AlertDescription>
-                        Please fix {validationSummary.errors.length} validation error(s) before importing:
-                        <ul className="list-disc list-inside mt-2">
-                          {validationSummary.errors.slice(0, 5).map((err, i) => (
-                            <li key={i} className="text-sm">{err}</li>
-                          ))}
-                          {validationSummary.errors.length > 5 && (
-                            <li className="text-sm">... and {validationSummary.errors.length - 5} more</li>
-                          )}
-                        </ul>
-                      </AlertDescription>
-                    </Alert>
+                    <>
+                      {parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error').length === 0 ? (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertTitle>Cannot Import - All Records Are Duplicates</AlertTitle>
+                          <AlertDescription>
+                            This file appears to have been imported already. All {validationSummary.duplicateRecords} records match existing data in the database.
+                            <ul className="list-disc list-inside mt-2">
+                              {validationSummary.errors.map((err, i) => (
+                                <li key={i} className="text-sm">{err}</li>
+                              ))}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <Alert className="bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+                          <AlertTitle className="text-amber-800 dark:text-amber-200">Some Records Will Be Skipped</AlertTitle>
+                          <AlertDescription className="text-amber-700 dark:text-amber-300">
+                            <ul className="list-disc list-inside mt-2">
+                              {validationSummary.errors.map((err, i) => (
+                                <li key={i} className="text-sm">{err}</li>
+                              ))}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </>
                   )}
 
                   <div className="flex items-center justify-between">
@@ -1430,7 +1458,7 @@ export default function CostPredictions() {
                     </Button>
                     <Button 
                       onClick={handleImportData} 
-                      disabled={importing || (validationSummary?.errors && validationSummary.errors.length > 0)} 
+                      disabled={importing || parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error').length === 0} 
                       data-testid="button-import"
                     >
                       {importing ? (
