@@ -641,11 +641,13 @@ export default function CostPredictions() {
         .select('site_id, site_name, state_id, locality_id, visit_date');
       
       // Build a set of existing site+month combinations for duplicate detection
+      // Use normalized site_name + state_id + month as the key
       const existingMonthKeys = new Set<string>();
       existingCosts?.forEach(cost => {
-        if (cost.visit_date) {
+        if (cost.visit_date && cost.site_name) {
           const monthKey = cost.visit_date.substring(0, 7); // YYYY-MM
-          const siteKey = `${(cost.site_name || '').toLowerCase()}-${(cost.state_id || '').toLowerCase()}-${monthKey}`;
+          // Store with state_id for matching after normalization
+          const siteKey = `${(cost.site_name || '').toLowerCase().trim()}-${(cost.state_id || '').toLowerCase().trim()}-${monthKey}`;
           existingMonthKeys.add(siteKey);
         }
       });
@@ -772,7 +774,9 @@ export default function CostPredictions() {
               
               if (parsedDate && !isNaN(parsedDate.getTime())) {
                 const monthKey = parsedDate.toISOString().substring(0, 7); // YYYY-MM
-                const dupCheckKey = `${siteName.toLowerCase()}-${state.toLowerCase()}-${monthKey}`;
+                // Normalize state name to state_id format to match database keys
+                const normalizedStateForKey = normalizeStateId(state) || state.toLowerCase().trim().replace(/\s+/g, '-');
+                const dupCheckKey = `${siteName.toLowerCase().trim()}-${normalizedStateForKey}-${monthKey}`;
                 
                 if (existingMonthKeys.has(dupCheckKey)) {
                   validationStatus = 'error';
