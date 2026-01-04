@@ -1137,39 +1137,58 @@ export class CostPredictionService {
     const errors: string[] = [];
     let inserted = 0;
 
-    for (const record of records) {
+    // Batch insert in chunks of 100 for better performance
+    const BATCH_SIZE = 100;
+    const batches = [];
+    for (let i = 0; i < records.length; i += BATCH_SIZE) {
+      batches.push(records.slice(i, i + BATCH_SIZE));
+    }
+
+    console.log(`[CostPrediction] Inserting ${records.length} records in ${batches.length} batches`);
+
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      console.log(`[CostPrediction] Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} records)`);
+      
       try {
-        const { error } = await supabase
+        const recordsToInsert = batch.map(record => ({
+          site_id: record.site_id,
+          site_name: record.site_name,
+          state_id: record.state_id,
+          locality_id: record.locality_id,
+          hub_id: record.hub_id,
+          visit_date: record.visit_date,
+          actual_cost: record.actual_cost,
+          transport_mode: record.transport_mode,
+          gps_latitude: record.gps_latitude,
+          gps_longitude: record.gps_longitude,
+          gps_source: record.gps_source,
+          data_collector_id: record.data_collector_id,
+          collector_distance_km: record.collector_distance_km,
+          mmp_id: record.mmp_id,
+          source: record.source,
+          uploaded_at: new Date().toISOString()
+        }));
+
+        const { error, data } = await supabase
           .from('historical_site_costs')
-          .insert({
-            site_id: record.site_id,
-            site_name: record.site_name,
-            state_id: record.state_id,
-            locality_id: record.locality_id,
-            hub_id: record.hub_id,
-            visit_date: record.visit_date,
-            actual_cost: record.actual_cost,
-            transport_mode: record.transport_mode,
-            gps_latitude: record.gps_latitude,
-            gps_longitude: record.gps_longitude,
-            gps_source: record.gps_source,
-            data_collector_id: record.data_collector_id,
-            collector_distance_km: record.collector_distance_km,
-            mmp_id: record.mmp_id,
-            source: record.source,
-            uploaded_at: new Date().toISOString()
-          });
+          .insert(recordsToInsert)
+          .select('id');
 
         if (error) {
-          errors.push(`Failed to insert ${record.site_name}: ${error.message}`);
+          console.error(`[CostPrediction] Batch ${batchIndex + 1} error:`, error);
+          errors.push(`Batch ${batchIndex + 1} failed: ${error.message}`);
         } else {
-          inserted++;
+          inserted += data?.length || batch.length;
+          console.log(`[CostPrediction] Batch ${batchIndex + 1} inserted ${data?.length || batch.length} records`);
         }
       } catch (err: any) {
-        errors.push(`Error inserting ${record.site_name}: ${err.message}`);
+        console.error(`[CostPrediction] Batch ${batchIndex + 1} exception:`, err);
+        errors.push(`Batch ${batchIndex + 1} error: ${err.message}`);
       }
     }
 
+    console.log(`[CostPrediction] Import complete: ${inserted} inserted, ${errors.length} errors`);
     return { success: errors.length === 0, inserted, errors };
   }
 }
