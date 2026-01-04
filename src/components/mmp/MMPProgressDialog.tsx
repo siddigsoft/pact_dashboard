@@ -752,7 +752,7 @@ const MMPProgressDialog: React.FC<MMPProgressDialogProps> = ({ open, onOpenChang
                       <div className="flex items-center gap-2">
                         {(selectedSite as any).visitDate ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-amber-600" />}
                         <div>
-                          <span className="text-sm font-medium">Verification and Set Visit Date</span>
+                          <span className="text-sm font-medium">Verification and Visit Date</span>
                           <p className="text-xs text-muted-foreground">Site verification and visit scheduling</p>
                         </div>
                       </div>
