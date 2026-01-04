@@ -615,6 +615,67 @@ export default function CostPredictions() {
     }
   }, [mainTab]);
 
+  // Download template for historical cost data upload
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Site Name': 'Example Site ABC',
+        'State': 'Red Sea',
+        'Locality': 'Port Sudan',
+        'Hub': 'Port Sudan Hub',
+        'Month': '2024-01-01',
+        'Actual Cost': 50000,
+        'Transportation Means': 'Vehicle'
+      },
+      {
+        'Site Name': 'Another Site XYZ',
+        'State': 'Kassala',
+        'Locality': 'Kassala Town',
+        'Hub': 'Kassala Hub',
+        'Month': '2024-02-01',
+        'Actual Cost': 35000,
+        'Transportation Means': 'Motorcycle'
+      }
+    ];
+    
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 25 }, // Site Name
+      { wch: 15 }, // State
+      { wch: 20 }, // Locality
+      { wch: 18 }, // Hub
+      { wch: 12 }, // Month
+      { wch: 12 }, // Actual Cost
+      { wch: 20 }, // Transportation Means
+    ];
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Historical Costs');
+    
+    // Add instructions sheet
+    const instructionsData = [
+      { Field: 'Site Name', Required: 'Yes', Description: 'Name of the site (must match registry or MMP uploaded sites)' },
+      { Field: 'State', Required: 'Yes', Description: 'State where the site is located' },
+      { Field: 'Locality', Required: 'Yes', Description: 'Locality where the site is located' },
+      { Field: 'Hub', Required: 'No', Description: 'WFP Hub managing this site' },
+      { Field: 'Month', Required: 'Yes', Description: 'Month of the visit (YYYY-MM-DD format, use first day of month e.g. 2024-01-01)' },
+      { Field: 'Actual Cost', Required: 'Yes', Description: 'Transportation cost in SDG (numbers only)' },
+      { Field: 'Transportation Means', Required: 'No', Description: 'Mode of transportation (Vehicle, Motorcycle, etc.)' },
+    ];
+    const wsInstructions = XLSX.utils.json_to_sheet(instructionsData);
+    wsInstructions['!cols'] = [
+      { wch: 22 },
+      { wch: 10 },
+      { wch: 60 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsInstructions, 'Instructions');
+    
+    XLSX.writeFile(wb, 'historical_cost_template.xlsx');
+    toast.success('Template downloaded successfully');
+  };
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -1389,9 +1450,24 @@ export default function CostPredictions() {
               <CardDescription>
                 Import historical site visit costs to enable accurate predictions. 
                 The system will validate sites against your registry and enrich with GPS data.
+                <span className="block mt-1 font-medium">Note: Sites must be registered via MMP upload first.</span>
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Download Template */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border">
+                <div>
+                  <p className="font-medium">Download Template</p>
+                  <p className="text-sm text-muted-foreground">
+                    Get an Excel template with all required columns and instructions
+                  </p>
+                </div>
+                <Button variant="outline" onClick={handleDownloadTemplate} data-testid="button-download-template">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Template
+                </Button>
+              </div>
+              
               {/* Step indicator */}
               <div className="flex items-center gap-2">
                 <div className={`flex items-center gap-1 ${uploadStep === 'select' ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
