@@ -1206,44 +1206,71 @@ export default function CostPredictions() {
                               <TableHead>Site Name</TableHead>
                               <TableHead>State</TableHead>
                               <TableHead>Locality</TableHead>
-                              <TableHead>Hub</TableHead>
+                              <TableHead>Month</TableHead>
                               <TableHead>Cost</TableHead>
-                              <TableHead>GPS</TableHead>
+                              <TableHead>Notes</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {parsedRecords.slice(0, 50).map((record, idx) => (
-                              <TableRow key={idx}>
-                                <TableCell>
-                                  {record.validationStatus === 'valid' && (
-                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                  )}
-                                  {record.validationStatus === 'warning' && (
-                                    <AlertCircle className="h-4 w-4 text-amber-500" />
-                                  )}
-                                  {record.validationStatus === 'error' && (
-                                    <XCircle className="h-4 w-4 text-red-500" />
-                                  )}
-                                </TableCell>
-                                <TableCell className="font-medium">{record.siteName}</TableCell>
-                                <TableCell>{record.state}</TableCell>
-                                <TableCell>{record.locality}</TableCell>
-                                <TableCell>{record.hub}</TableCell>
-                                <TableCell>{record.actualCost ? formatCurrency(record.actualCost) : '-'}</TableCell>
-                                <TableCell>
-                                  {record.hasGps ? (
-                                    <Badge variant="secondary" className="text-xs">
-                                      <MapPin className="h-3 w-3 mr-1" />
-                                      GPS
+                            {parsedRecords.slice(0, 50).map((record, idx) => {
+                              // Parse the visit date to extract month
+                              let monthDisplay = '-';
+                              if (record.visitDate) {
+                                try {
+                                  let parsedDate: Date | null = null;
+                                  const dateVal = record.visitDate;
+                                  if (!isNaN(Number(dateVal))) {
+                                    // Excel serial date
+                                    parsedDate = new Date((Number(dateVal) - 25569) * 86400 * 1000);
+                                  } else {
+                                    parsedDate = new Date(dateVal);
+                                  }
+                                  if (parsedDate && !isNaN(parsedDate.getTime())) {
+                                    monthDisplay = format(parsedDate, 'MMM yyyy');
+                                  }
+                                } catch (e) {
+                                  monthDisplay = record.visitDate;
+                                }
+                              }
+                              
+                              return (
+                                <TableRow key={idx} className={record.validationStatus === 'error' ? 'bg-red-50 dark:bg-red-900/10' : ''}>
+                                  <TableCell>
+                                    {record.validationStatus === 'valid' && (
+                                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                    )}
+                                    {record.validationStatus === 'warning' && (
+                                      <AlertCircle className="h-4 w-4 text-amber-500" />
+                                    )}
+                                    {record.validationStatus === 'error' && (
+                                      <XCircle className="h-4 w-4 text-red-500" />
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="font-medium">{record.siteName}</TableCell>
+                                  <TableCell>{record.state}</TableCell>
+                                  <TableCell>{record.locality}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="font-mono text-xs">
+                                      <Calendar className="h-3 w-3 mr-1" />
+                                      {monthDisplay}
                                     </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-xs text-muted-foreground">
-                                      No GPS
-                                    </Badge>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ))}
+                                  </TableCell>
+                                  <TableCell>{record.actualCost ? formatCurrency(record.actualCost) : '-'}</TableCell>
+                                  <TableCell>
+                                    {record.validationMessage ? (
+                                      <span className={`text-xs ${record.validationStatus === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                                        {record.validationMessage}
+                                      </span>
+                                    ) : record.hasGps ? (
+                                      <Badge variant="secondary" className="text-xs">
+                                        <MapPin className="h-3 w-3 mr-1" />
+                                        GPS
+                                      </Badge>
+                                    ) : null}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                         {parsedRecords.length > 50 && (
