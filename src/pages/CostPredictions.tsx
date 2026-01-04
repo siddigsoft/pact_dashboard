@@ -117,6 +117,7 @@ interface ValidationSummary {
   matchedWithoutGps: number;
   newSites: number;
   recordsWithCosts: number;
+  duplicateRecords?: number;
   validatedStates: number;
   invalidStates: string[];
   validatedLocalities: number;
@@ -630,6 +631,22 @@ export default function CostPredictions() {
       
       console.log('[CostPredictions] Starting validation with', siteMap.size, 'registry sites');
       
+      // Load existing historical costs to check for duplicates
+      const { data: existingCosts } = await supabase
+        .from('historical_site_costs')
+        .select('site_id, site_name, state_id, locality_id, visit_date');
+      
+      // Build a set of existing site+month combinations for duplicate detection
+      const existingMonthKeys = new Set<string>();
+      existingCosts?.forEach(cost => {
+        if (cost.visit_date) {
+          const monthKey = cost.visit_date.substring(0, 7); // YYYY-MM
+          const siteKey = `${(cost.site_name || '').toLowerCase()}-${(cost.state_id || '').toLowerCase()}-${monthKey}`;
+          existingMonthKeys.add(siteKey);
+        }
+      });
+      console.log('[CostPredictions] Found', existingMonthKeys.size, 'existing site-month combinations');
+      
       const data = await uploadFile.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       
@@ -729,13 +746,43 @@ export default function CostPredictions() {
           
           let validationStatus: 'valid' | 'warning' | 'error' = 'valid';
           let validationMessage = '';
+          let isDuplicate = false;
 
-          if (!matchedSite) {
-            validationStatus = 'warning';
-            validationMessage = 'New site - will be added to registry';
-          } else if (!matchedSite.gps_latitude || !matchedSite.gps_longitude) {
-            validationStatus = 'warning';
-            validationMessage = 'Site found but missing GPS coordinates';
+          // Check for duplicate month
+          if (visitDate) {
+            let parsedDate: Date | null = null;
+            try {
+              // Handle various date formats
+              if (typeof visitDate === 'number') {
+                // Excel serial date
+                parsedDate = new Date((visitDate - 25569) * 86400 * 1000);
+              } else {
+                parsedDate = new Date(visitDate);
+              }
+              
+              if (parsedDate && !isNaN(parsedDate.getTime())) {
+                const monthKey = parsedDate.toISOString().substring(0, 7); // YYYY-MM
+                const dupCheckKey = `${siteName.toLowerCase()}-${state.toLowerCase()}-${monthKey}`;
+                
+                if (existingMonthKeys.has(dupCheckKey)) {
+                  validationStatus = 'error';
+                  validationMessage = `Duplicate: Cost for this site already exists for ${monthKey}`;
+                  isDuplicate = true;
+                }
+              }
+            } catch (e) {
+              // Date parsing failed, skip duplicate check
+            }
+          }
+
+          if (!isDuplicate) {
+            if (!matchedSite) {
+              validationStatus = 'warning';
+              validationMessage = 'New site - will be added to registry';
+            } else if (!matchedSite.gps_latitude || !matchedSite.gps_longitude) {
+              validationStatus = 'warning';
+              validationMessage = 'Site found but missing GPS coordinates';
+            }
           }
 
           allRecords.push({
@@ -761,6 +808,7 @@ export default function CostPredictions() {
       const matchedWithoutGps = matchedSites.filter(r => !r.hasGps);
       const newSites = allRecords.filter(r => r.isNewSite);
       const recordsWithCosts = allRecords.filter(r => r.actualCost && r.actualCost > 0);
+      const duplicateRecords = allRecords.filter(r => r.validationStatus === 'error' && r.validationMessage?.includes('Duplicate'));
       const uniqueStates = new Set(allRecords.map(r => r.state));
       const uniqueLocalities = new Set(allRecords.map(r => r.locality));
 
@@ -771,11 +819,12 @@ export default function CostPredictions() {
         matchedWithoutGps: matchedWithoutGps.length,
         newSites: newSites.length,
         recordsWithCosts: recordsWithCosts.length,
+        duplicateRecords: duplicateRecords.length,
         validatedStates: uniqueStates.size,
         invalidStates: [],
         validatedLocalities: uniqueLocalities.size,
         invalidLocalities: [],
-        errors: []
+        errors: duplicateRecords.length > 0 ? [`${duplicateRecords.length} duplicate records will be skipped`] : []
       };
       
       console.log('[CostPredictions] Validation complete:', summary);
@@ -808,8 +857,9 @@ export default function CostPredictions() {
 
     setImporting(true);
     try {
+      // Filter out duplicates and records without cost
       const recordsToInsert: HistoricalSiteCost[] = parsedRecords
-        .filter(r => r.actualCost && r.actualCost > 0)
+        .filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error')
         .map(r => {
           const matchedSite = r.matchedSiteId ? registrySites.get(r.matchedSiteId) : null;
           
@@ -1057,7 +1107,7 @@ export default function CostPredictions() {
                     </AlertDescription>
                   </Alert>
 
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                     <Card>
                       <CardContent className="pt-4">
                         <div className="text-2xl font-bold">{validationSummary.totalRecords}</div>
@@ -1090,7 +1140,26 @@ export default function CostPredictions() {
                         <p className="text-sm text-muted-foreground">With Cost Data</p>
                       </CardContent>
                     </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className={`text-2xl font-bold ${(validationSummary.duplicateRecords || 0) > 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                          {validationSummary.duplicateRecords || 0}
+                        </div>
+                        <p className="text-sm text-muted-foreground">Duplicates (Skipped)</p>
+                      </CardContent>
+                    </Card>
                   </div>
+                  
+                  {(validationSummary.duplicateRecords || 0) > 0 && (
+                    <Alert className="border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-900/20">
+                      <XCircle className="h-4 w-4 text-red-600" />
+                      <AlertTitle className="text-red-800 dark:text-red-400">Duplicate Records Detected</AlertTitle>
+                      <AlertDescription className="text-red-700 dark:text-red-300">
+                        {validationSummary.duplicateRecords} records already exist in the database for the same site and month. 
+                        These will be skipped during import to prevent duplicate cost entries.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   
                   {validationSummary.recordsWithCosts === 0 && (
                     <Alert variant="destructive">
