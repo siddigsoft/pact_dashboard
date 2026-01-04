@@ -688,8 +688,18 @@ export default function CostPredictions() {
         if (jsonData.length > 0) {
           const firstRow = jsonData[0] as any;
           const columns = Object.keys(firstRow);
-          console.log('[CostPredictions] Available columns:', columns);
+          console.log('[CostPredictions] Available columns (with index):', columns.map((c, i) => `${i+1}:${c}`));
           console.log('[CostPredictions] First row data:', firstRow);
+          
+          // Log date-related columns specifically
+          const dateColumns = columns.filter(col => 
+            col.toLowerCase().includes('date') || 
+            col.toLowerCase().includes('month') || 
+            col.toLowerCase().includes('period') ||
+            col.toLowerCase().includes('visit')
+          );
+          console.log('[CostPredictions] Potential date columns found:', dateColumns);
+          
           setDetectedColumns(columns);
           
           // Find any column that might contain cost data
@@ -759,7 +769,12 @@ export default function CostPredictions() {
           const state = getColumnValue(['1.8 State of the site/where the site is located', 'State', 'state']);
           const locality = getColumnValue(['1.9 Locality of the site/where the site is located', 'Locality', 'locality']);
           const hub = getColumnValue(['1.7 WFP HUB', 'Hub', 'hub', 'WFP HUB']);
-          const visitDate = getColumnValue(['Visit Date', 'visit_date', '2.1 Date of visit', 'Date', 'date']);
+          const visitDate = getColumnValue([
+            'Visit Date', 'visit_date', '2.1 Date of visit', 'Date', 'date',
+            'Month', 'month', 'Visit Month', 'visit_month', 'Period', 'period',
+            'Report Month', 'report_month', 'Data Collection Date', 'data_collection_date',
+            '1.6 Date of visit', '1.5 Date of visit', 'VisitDate', 'visitDate'
+          ]);
           const actualCost = getCostValue();
           const transportMode = getColumnValue(['Transportation Means', 'Transport Mode', 'transport_mode', '2.2 Transportation means', 'TransportMode']);
 
