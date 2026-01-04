@@ -540,7 +540,7 @@ export default function CostPredictions() {
     }).format(amount);
   };
 
-  const loadRegistrySites = async () => {
+  const loadRegistrySites = async (): Promise<Map<string, any>> => {
     try {
       const { data, error } = await supabase
         .from('sites_registry')
@@ -551,14 +551,21 @@ export default function CostPredictions() {
         data.forEach(site => {
           const key = `${site.site_name?.toLowerCase()}-${site.state_name?.toLowerCase()}-${site.locality_name?.toLowerCase()}`;
           siteMap.set(key, site);
+          if (site.id) {
+            siteMap.set(site.id, site);
+          }
           if (site.site_code) {
             siteMap.set(site.site_code.toLowerCase(), site);
           }
         });
         setRegistrySites(siteMap);
+        console.log('[CostPredictions] Loaded', data.length, 'registry sites');
+        return siteMap;
       }
+      return new Map();
     } catch (err) {
       console.error('Error loading registry sites:', err);
+      return new Map();
     }
   };
 
@@ -584,6 +591,15 @@ export default function CostPredictions() {
 
     setValidating(true);
     try {
+      // Ensure registry is loaded and use the returned map directly
+      let siteMap = registrySites;
+      if (registrySites.size === 0) {
+        console.log('[CostPredictions] Registry not loaded, loading now...');
+        siteMap = await loadRegistrySites();
+      }
+      
+      console.log('[CostPredictions] Starting validation with', siteMap.size, 'registry sites');
+      
       const data = await uploadFile.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
       
@@ -593,6 +609,7 @@ export default function CostPredictions() {
       for (const sheetName of workbook.SheetNames) {
         const sheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(sheet);
+        console.log('[CostPredictions] Sheet', sheetName, 'has', jsonData.length, 'rows');
         
         for (const row of jsonData as any[]) {
           rowCounter++;
@@ -609,7 +626,7 @@ export default function CostPredictions() {
           }
 
           const siteKey = `${siteName.toLowerCase()}-${state.toLowerCase()}-${locality.toLowerCase()}`;
-          const matchedSite = registrySites.get(siteKey);
+          const matchedSite = siteMap.get(siteKey);
           
           let validationStatus: 'valid' | 'warning' | 'error' = 'valid';
           let validationMessage = '';
@@ -647,7 +664,7 @@ export default function CostPredictions() {
       const uniqueStates = new Set(allRecords.map(r => r.state));
       const uniqueLocalities = new Set(allRecords.map(r => r.locality));
 
-      setValidationSummary({
+      const summary = {
         totalRecords: allRecords.length,
         matchedSites: matchedSites.length,
         matchedWithGps: matchedWithGps.length,
@@ -658,8 +675,11 @@ export default function CostPredictions() {
         validatedLocalities: uniqueLocalities.size,
         invalidLocalities: [],
         errors: []
-      });
-
+      };
+      
+      console.log('[CostPredictions] Validation complete:', summary);
+      
+      setValidationSummary(summary);
       setParsedRecords(allRecords);
       setUploadStep('validate');
     } catch (err: any) {
