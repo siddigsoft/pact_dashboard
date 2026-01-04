@@ -158,6 +158,8 @@ export default function CostPredictions() {
   const [importing, setImporting] = useState(false);
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
   const [parsedRecords, setParsedRecords] = useState<ParsedRecord[]>([]);
+  const [detectedColumns, setDetectedColumns] = useState<string[]>([]);
+  const [detectedCostColumns, setDetectedCostColumns] = useState<string[]>([]);
   const [uploadStep, setUploadStep] = useState<'select' | 'validate' | 'import' | 'complete'>('select');
   const [importResult, setImportResult] = useState<{ success: boolean; inserted: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -615,8 +617,22 @@ export default function CostPredictions() {
         // Log first row columns for debugging
         if (jsonData.length > 0) {
           const firstRow = jsonData[0] as any;
-          console.log('[CostPredictions] Available columns:', Object.keys(firstRow));
+          const columns = Object.keys(firstRow);
+          console.log('[CostPredictions] Available columns:', columns);
           console.log('[CostPredictions] First row data:', firstRow);
+          setDetectedColumns(columns);
+          
+          // Find any column that might contain cost data
+          const costColumns = columns.filter(col => 
+            col.toLowerCase().includes('cost') || 
+            col.toLowerCase().includes('amount') || 
+            col.toLowerCase().includes('price')
+          );
+          console.log('[CostPredictions] Potential cost columns found:', costColumns);
+          setDetectedCostColumns(costColumns);
+          costColumns.forEach(col => {
+            console.log(`[CostPredictions] Column "${col}" has value:`, firstRow[col], 'type:', typeof firstRow[col]);
+          });
         }
         
         for (const row of jsonData as any[]) {
@@ -1053,10 +1069,30 @@ export default function CostPredictions() {
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>No Cost Data Found</AlertTitle>
-                      <AlertDescription>
-                        The uploaded file does not contain cost data in a recognized column format. 
-                        Expected columns: "Actual Cost", "Total Cost", "Transportation Cost", "Amount", or similar.
-                        This upload can register new sites but cannot add historical cost data for predictions.
+                      <AlertDescription className="space-y-2">
+                        <p>
+                          The uploaded file does not contain valid cost data. 
+                          {detectedCostColumns.length > 0 ? (
+                            <span> Found cost column(s): <strong>{detectedCostColumns.join(', ')}</strong>, but all values appear to be empty or zero.</span>
+                          ) : (
+                            <span> No cost-related columns detected.</span>
+                          )}
+                        </p>
+                        {detectedColumns.length > 0 && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-sm">View all {detectedColumns.length} detected columns</summary>
+                            <div className="mt-1 text-xs bg-muted p-2 rounded max-h-32 overflow-y-auto">
+                              {detectedColumns.map((col, i) => (
+                                <span key={i} className="inline-block mr-2 mb-1 px-1 bg-background rounded">
+                                  {col}
+                                </span>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                        <p className="text-sm">
+                          Expected columns: "Actual Cost", "Total Cost", "Transportation Cost", "Amount", or any column containing "cost".
+                        </p>
                       </AlertDescription>
                     </Alert>
                   )}
