@@ -836,8 +836,9 @@ export default function CostPredictions() {
 
           if (!isDuplicate && validationStatus !== 'error') {
             if (!matchedSite) {
-              validationStatus = 'warning';
-              validationMessage = 'New site - will be added to registry';
+              // BLOCKING: Sites must exist in registry or MMP uploads
+              validationStatus = 'error';
+              validationMessage = 'Site not found in registry - must be uploaded via MMP first';
             } else if (!matchedSite.gps_latitude || !matchedSite.gps_longitude) {
               validationStatus = 'warning';
               validationMessage = 'Site found but missing GPS coordinates';
@@ -906,8 +907,14 @@ export default function CostPredictions() {
         }
       });
       
+      // Count unmatched sites (sites not in registry)
+      const unmatchedSiteRecords = allRecords.filter(r => r.validationStatus === 'error' && r.validationMessage?.includes('Site not found in registry'));
+      
       // Build error messages
       const errors: string[] = [];
+      if (unmatchedSiteRecords.length > 0) {
+        errors.push(`${unmatchedSiteRecords.length} records have sites not found in the registry - these must be uploaded via MMP first`);
+      }
       if (missingDateRecords.length > 0) {
         errors.push(`${missingDateRecords.length} records are missing or have invalid visit dates (month is required)`);
       }
@@ -918,7 +925,7 @@ export default function CostPredictions() {
         errors.push('ALL records in this file already exist in the database. This file appears to have been uploaded before.');
       }
       if (importableRecords.length === 0 && allRecords.length > 0) {
-        errors.push('No new records to import - all records are either duplicates, missing dates, or missing cost data');
+        errors.push('No new records to import - all records are either duplicates, missing dates, unmatched sites, or missing cost data');
       }
       if (sitesExceeding12Months.length > 0) {
         errors.push(`Warning: ${sitesExceeding12Months.length} site(s) will have more than 12 months of data: ${sitesExceeding12Months.slice(0, 3).join(', ')}${sitesExceeding12Months.length > 3 ? '...' : ''}`);
@@ -929,7 +936,8 @@ export default function CostPredictions() {
         matchedSites: matchedSites.length,
         matchedWithGps: matchedWithGps.length,
         matchedWithoutGps: matchedWithoutGps.length,
-        newSites: newSites.length,
+        newSites: newSites.length, // Now counted as errors (sites not in registry)
+        unmatchedSites: unmatchedSiteRecords.length, // Sites not found in registry
         recordsWithCosts: recordsWithCosts.length,
         duplicateRecords: duplicateRecords.length,
         validatedStates: uniqueStates.size,
