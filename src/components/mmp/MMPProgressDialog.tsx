@@ -46,13 +46,10 @@ const MMPProgressDialog: React.FC<MMPProgressDialogProps> = ({ open, onOpenChang
 
   const calculateProgress = () => {
     let completed = 0;
-    let total = 6; // Upload, First Approval, Final Approval, Permits, Site Processing, Verification
+    let total = 3; // Upload, Permits, Verification
 
     if (mmpFile.status !== 'pending') completed++;
-    if (mmpFile.approvalWorkflow?.firstApproval) completed++;
-    if (mmpFile.approvalWorkflow?.finalApproval) completed++;
     if (mmpFile.permits?.federal) completed++;
-    if (mmpFile.processedEntries && mmpFile.entries && mmpFile.processedEntries >= mmpFile.entries) completed++;
     if (mmpFile.comprehensiveVerification?.overallStatus === 'complete') completed++;
 
     return Math.round((completed / total) * 100);
@@ -295,64 +292,6 @@ const MMPProgressDialog: React.FC<MMPProgressDialogProps> = ({ open, onOpenChang
 
                   <div className="flex items-center justify-between p-3 border rounded">
                     <div className="flex items-center gap-2">
-                      {mmpFile.approvalWorkflow?.firstApproval ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-amber-600" />}
-                      <div>
-                        <span className="text-sm font-medium">First Approval</span>
-                        <p className="text-xs text-muted-foreground">Initial review and approval</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={mmpFile.approvalWorkflow?.firstApproval ? 'default' : 'secondary'}>
-                        {mmpFile.approvalWorkflow?.firstApproval ? 'Done' : 'Pending'}
-                      </Badge>
-                      {mmpFile.approvalWorkflow?.firstApproval ? (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          By: {mmpFile.approvalWorkflow.firstApproval.approvedBy || 'Unknown'}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Awaiting: Admin/ICT
-                        </p>
-                      )}
-                      {mmpFile.approvalWorkflow?.firstApproval?.approvedAt && (
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(mmpFile.approvalWorkflow.firstApproval.approvedAt), 'MMM d, yyyy \'at\' h:mm a')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 border rounded">
-                    <div className="flex items-center gap-2">
-                      {mmpFile.approvalWorkflow?.finalApproval ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-amber-600" />}
-                      <div>
-                        <span className="text-sm font-medium">Final Approval</span>
-                        <p className="text-xs text-muted-foreground">Final review and approval</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={mmpFile.approvalWorkflow?.finalApproval ? 'default' : 'secondary'}>
-                        {mmpFile.approvalWorkflow?.finalApproval ? 'Done' : 'Pending'}
-                      </Badge>
-                      {mmpFile.approvalWorkflow?.finalApproval ? (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          By: {mmpFile.approvalWorkflow.finalApproval.approvedBy || 'Unknown'}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Awaiting: Super Admin
-                        </p>
-                      )}
-                      {mmpFile.approvalWorkflow?.finalApproval?.approvedAt && (
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(mmpFile.approvalWorkflow.finalApproval.approvedAt), 'MMM d, yyyy \'at\' h:mm a')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 border rounded">
-                    <div className="flex items-center gap-2">
                       {mmpFile.permits?.federal ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
                       <div>
                         <span className="text-sm font-medium">Federal Permit</span>
@@ -372,32 +311,19 @@ const MMPProgressDialog: React.FC<MMPProgressDialogProps> = ({ open, onOpenChang
                           Awaiting: FOM Team
                         </p>
                       )}
+                      {mmpFile.permits?.federal && mmpFile.permits.documents?.[0] && (
+                        <div className="mt-1 space-y-1">
+                          <p className="text-xs text-muted-foreground">
+                            Issue Date: {mmpFile.permits.documents[0].issueDate ? format(new Date(mmpFile.permits.documents[0].issueDate), 'MMM d, yyyy') : 'N/A'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Expiry Date: {mmpFile.permits.documents[0].expiryDate ? format(new Date(mmpFile.permits.documents[0].expiryDate), 'MMM d, yyyy') : 'N/A'}
+                          </p>
+                        </div>
+                      )}
                       {mmpFile.permits?.documents?.[0]?.uploadedAt && (
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(mmpFile.permits.documents[0].uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 border rounded">
-                    <div className="flex items-center gap-2">
-                      {(mmpFile.processedEntries || 0) >= (mmpFile.entries || 0) ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-amber-600" />}
-                      <div>
-                        <span className="text-sm font-medium">Site Processing</span>
-                        <p className="text-xs text-muted-foreground">All site entries processed</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={(mmpFile.processedEntries || 0) >= (mmpFile.entries || 0) ? 'default' : 'secondary'}>
-                        {(mmpFile.processedEntries || 0) >= (mmpFile.entries || 0) ? 'Done' : 'Pending'}
-                      </Badge>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Processed by: Coordinator Team
-                      </p>
-                      {(mmpFile.processedEntries || 0) >= (mmpFile.entries || 0) && (mmpFile as any).updatedAt && (
-                        <p className="text-xs text-muted-foreground">
-                          Completed: {format(new Date((mmpFile as any).updatedAt), 'MMM d, yyyy \'at\' h:mm a')}
+                          Date of attachment: {format(new Date(mmpFile.permits.documents[0].uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}
                         </p>
                       )}
                     </div>
@@ -423,6 +349,43 @@ const MMPProgressDialog: React.FC<MMPProgressDialogProps> = ({ open, onOpenChang
                           {format(new Date(mmpFile.comprehensiveVerification.lastUpdated), 'MMM d, yyyy \'at\' h:mm a')}
                         </p>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Coordinator Assignments Section */}
+                  <div className="flex items-center justify-between p-3 border rounded">
+                    <div className="flex items-center gap-2">
+                      {coordinatorIds.length > 0 ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-amber-600" />}
+                      <div>
+                        <span className="text-sm font-medium">Coordinator Assignments</span>
+                        <p className="text-xs text-muted-foreground">Coordinators assigned to states/localities</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={coordinatorIds.length > 0 ? 'default' : 'secondary'}>
+                        {coordinatorIds.length > 0 ? 'Assigned' : 'Pending'}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Assigned by: FOM Team
+                      </p>
+                      <details className="mt-2">
+                        <summary className="text-blue-600 hover:text-blue-800 text-xs underline cursor-pointer">
+                          View Assignments ({coordinatorIds.length})
+                        </summary>
+                        <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                          {coordinatorIds.length > 0 ? (
+                            coordinatorIds.map((id: string) => (
+                              <div key={id} className="text-xs text-muted-foreground">
+                                • {getUserName(id)}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-xs text-muted-foreground">
+                              No coordinators assigned yet. Check workflow data.
+                            </div>
+                          )}
+                        </div>
+                      </details>
                     </div>
                   </div>
                 </div>
