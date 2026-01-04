@@ -92,6 +92,7 @@ const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 const EmailManagement = lazy(() => import('./pages/EmailManagement'));
 const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement'));
+const CostPredictions = lazy(() => import('./pages/CostPredictions'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -222,6 +223,7 @@ const AppRoutes = () => {
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
         <Route path="/finance-approval" element={<FinanceApproval />} />
         <Route path="/down-payment-approval" element={<DownPaymentApproval />} />
+        <Route path="/cost-predictions" element={<CostPredictions />} />
         <Route path="/supervisor-approvals" element={<SupervisorApprovals />} />
         <Route path="/wallet-reports" element={<WalletReports />} />
         <Route path="/budget" element={<BudgetPage />} />
