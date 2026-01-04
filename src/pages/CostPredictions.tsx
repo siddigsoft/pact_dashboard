@@ -882,29 +882,84 @@ export default function CostPredictions() {
     setImporting(true);
     try {
       // Filter out duplicates and records without cost
-      const recordsToInsert: HistoricalSiteCost[] = parsedRecords
-        .filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error')
-        .map(r => {
-          const matchedSite = r.matchedSiteId ? registrySites.get(r.matchedSiteId) : null;
-          
+      const validRecords = parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error');
+      
+      // Step 1: Register new sites to the sites_registry first
+      const newSiteRecords = validRecords.filter(r => r.isNewSite);
+      const uniqueNewSites = new Map<string, typeof newSiteRecords[0]>();
+      
+      // Deduplicate new sites by name+state+locality
+      newSiteRecords.forEach(r => {
+        const key = `${r.siteName.toLowerCase()}-${r.state.toLowerCase()}-${r.locality.toLowerCase()}`;
+        if (!uniqueNewSites.has(key)) {
+          uniqueNewSites.set(key, r);
+        }
+      });
+      
+      let registeredSitesCount = 0;
+      const newSiteIdMap = new Map<string, string>(); // Map old key to new site ID
+      
+      if (uniqueNewSites.size > 0) {
+        console.log(`[CostPredictions] Registering ${uniqueNewSites.size} new sites to registry...`);
+        
+        const sitesToRegister = Array.from(uniqueNewSites.values()).map(r => {
           const normalizedStateId = normalizeStateId(r.state) || r.state.toLowerCase().trim().replace(/\s+/g, '-');
           const normalizedLocalityId = normalizeLocalityId(r.locality, normalizedStateId) || r.locality.toLowerCase().trim().replace(/\s+/g, '-');
           
           return {
-            site_id: r.matchedSiteId || `NEW-${r.siteName.replace(/\s+/g, '-').toUpperCase()}`,
-            site_name: r.siteName,
-            state_id: normalizedStateId,
-            locality_id: normalizedLocalityId,
-            hub_id: r.hub?.toLowerCase().trim().replace(/\s+/g, '-') || r.hub,
-            visit_date: r.visitDate || format(new Date(), 'yyyy-MM-dd'),
-            actual_cost: r.actualCost!,
-            transport_mode: r.transportMode,
-            gps_latitude: matchedSite?.gps_latitude || null,
-            gps_longitude: matchedSite?.gps_longitude || null,
-            gps_source: matchedSite?.gps_latitude ? 'registry' : undefined,
-            source: 'historical_upload' as const
+            site_name: r.siteName.trim(),
+            state_name: r.state.trim(),
+            locality_name: r.locality.trim(),
+            hub_id: r.hub?.toLowerCase().trim().replace(/\s+/g, '-') || null,
+            created_at: new Date().toISOString(),
+            source: 'historical_upload'
           };
         });
+        
+        const { data: insertedSites, error: registryError } = await supabase
+          .from('sites_registry')
+          .insert(sitesToRegister)
+          .select('id, site_name, state_name, locality_name');
+        
+        if (registryError) {
+          console.error('[CostPredictions] Failed to register sites:', registryError);
+        } else if (insertedSites) {
+          registeredSitesCount = insertedSites.length;
+          console.log(`[CostPredictions] Registered ${registeredSitesCount} new sites`);
+          
+          // Build mapping from site key to new ID
+          insertedSites.forEach(site => {
+            const key = `${site.site_name?.toLowerCase()}-${site.state_name?.toLowerCase()}-${site.locality_name?.toLowerCase()}`;
+            newSiteIdMap.set(key, site.id);
+          });
+        }
+      }
+      
+      // Step 2: Now insert historical costs with proper site IDs
+      const recordsToInsert: HistoricalSiteCost[] = validRecords.map(r => {
+        const matchedSite = r.matchedSiteId ? registrySites.get(r.matchedSiteId) : null;
+        const normalizedStateId = normalizeStateId(r.state) || r.state.toLowerCase().trim().replace(/\s+/g, '-');
+        const normalizedLocalityId = normalizeLocalityId(r.locality, normalizedStateId) || r.locality.toLowerCase().trim().replace(/\s+/g, '-');
+        
+        // Check if this was a new site that we just registered
+        const siteKey = `${r.siteName.toLowerCase()}-${r.state.toLowerCase()}-${r.locality.toLowerCase()}`;
+        const newSiteId = newSiteIdMap.get(siteKey);
+        
+        return {
+          site_id: r.matchedSiteId || newSiteId || `NEW-${r.siteName.replace(/\s+/g, '-').toUpperCase()}`,
+          site_name: r.siteName,
+          state_id: normalizedStateId,
+          locality_id: normalizedLocalityId,
+          hub_id: r.hub?.toLowerCase().trim().replace(/\s+/g, '-') || r.hub,
+          visit_date: r.visitDate || format(new Date(), 'yyyy-MM-dd'),
+          actual_cost: r.actualCost!,
+          transport_mode: r.transportMode,
+          gps_latitude: matchedSite?.gps_latitude || null,
+          gps_longitude: matchedSite?.gps_longitude || null,
+          gps_source: matchedSite?.gps_latitude ? 'registry' : undefined,
+          source: 'historical_upload' as const
+        };
+      });
 
       if (recordsToInsert.length === 0) {
         setImportResult({
@@ -916,6 +971,13 @@ export default function CostPredictions() {
       }
 
       const result = await CostPredictionService.saveHistoricalCosts(recordsToInsert);
+      
+      // Add info about registered sites to the result
+      if (registeredSitesCount > 0) {
+        result.errors = result.errors || [];
+        result.errors.unshift(`Also registered ${registeredSitesCount} new sites to the registry`);
+      }
+      
       setImportResult(result);
       setUploadStep('complete');
     } catch (err: any) {
