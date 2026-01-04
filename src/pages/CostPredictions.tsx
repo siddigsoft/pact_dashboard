@@ -659,6 +659,9 @@ export default function CostPredictions() {
       
       const allRecords: ParsedRecord[] = [];
       let rowCounter = 0;
+      
+      // Track site+month combinations within THIS upload file to detect in-file duplicates
+      const uploadFileMonthKeys = new Set<string>();
 
       for (const sheetName of workbook.SheetNames) {
         const sheet = workbook.Sheets[sheetName];
@@ -773,11 +776,22 @@ export default function CostPredictions() {
                 
                 if (existingMonthKeys.has(dupCheckKey)) {
                   validationStatus = 'error';
-                  validationMessage = `Duplicate: Cost for this site already exists for ${monthKey}`;
+                  validationMessage = `Duplicate: Cost for this site already exists in database for ${monthKey}`;
                   isDuplicate = true;
                   if (rowCounter <= 5) {
-                    console.log('[CostPredictions] Duplicate found:', dupCheckKey);
+                    console.log('[CostPredictions] Database duplicate found:', dupCheckKey);
                   }
+                } else if (uploadFileMonthKeys.has(dupCheckKey)) {
+                  // Duplicate within the same upload file
+                  validationStatus = 'error';
+                  validationMessage = `Duplicate: This site appears multiple times in your file for ${monthKey}`;
+                  isDuplicate = true;
+                  if (rowCounter <= 5) {
+                    console.log('[CostPredictions] In-file duplicate found:', dupCheckKey);
+                  }
+                } else {
+                  // Add to tracking set for in-file duplicate detection
+                  uploadFileMonthKeys.add(dupCheckKey);
                 }
               }
             } catch (e) {
