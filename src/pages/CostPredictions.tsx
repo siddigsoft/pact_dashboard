@@ -10,6 +10,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { 
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger 
+} from '@/components/ui/tooltip';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -36,11 +43,18 @@ import {
   XCircle,
   AlertCircle,
   Loader2,
-  Database
+  Database,
+  Info,
+  Navigation,
+  Cpu,
+  Search,
+  Eye
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
-import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord, type AccuracyMetrics } from '@/services/costPrediction.service';
+import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord, type AccuracyMetrics, type CostPrediction, type VarianceAlert } from '@/services/costPrediction.service';
+import { CostSparkline } from '@/components/mmp/CostSparkline';
+import { VarianceAlertBanner } from '@/components/mmp/VarianceAlertBanner';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import * as XLSX from 'xlsx';
 import { 
@@ -149,6 +163,13 @@ export default function CostPredictions() {
   const [registrySites, setRegistrySites] = useState<Map<string, any>>(new Map());
   const [accuracyMetrics, setAccuracyMetrics] = useState<AccuracyMetrics | null>(null);
   const [loadingAccuracy, setLoadingAccuracy] = useState(false);
+  
+  const [sitePredictions, setSitePredictions] = useState<CostPrediction[]>([]);
+  const [loadingSitePredictions, setLoadingSitePredictions] = useState(false);
+  const [varianceAlerts, setVarianceAlerts] = useState<VarianceAlert[]>([]);
+  const [siteSearchQuery, setSiteSearchQuery] = useState('');
+  const [historicalCostData, setHistoricalCostData] = useState<Map<string, Array<{date: string; cost: number}>>>(new Map());
+  const [algorithmStats, setAlgorithmStats] = useState<{algorithm: string; count: number; avgConfidence: number}[]>([]);
 
   const fetchAccuracyMetrics = async () => {
     try {
@@ -159,6 +180,146 @@ export default function CostPredictions() {
       console.error('Error fetching accuracy metrics:', err);
     } finally {
       setLoadingAccuracy(false);
+    }
+  };
+
+  const fetchSitePredictions = async () => {
+    try {
+      setLoadingSitePredictions(true);
+      
+      const { data: sites, error } = await supabase
+        .from('sites_registry')
+        .select('id, site_code, site_name, state_name, locality_name, hub_id, gps_latitude, gps_longitude')
+        .limit(100);
+      
+      if (error || !sites) {
+        console.error('Error fetching sites:', error);
+        return;
+      }
+
+      const sitesForPrediction = sites.map(s => ({
+        id: s.id,
+        site_id: s.site_code || s.id,
+        state: s.state_name,
+        state_name: s.state_name,
+        locality: s.locality_name,
+        locality_name: s.locality_name,
+        hub_id: s.hub_id
+      }));
+      
+      const predictionsMap = await CostPredictionService.batchPredictCosts(sitesForPrediction);
+      
+      const predictionsArray: CostPrediction[] = [];
+      const algoCounts: Record<string, { count: number; totalConfidence: number }> = {};
+      
+      predictionsMap.forEach((pred, siteId) => {
+        const site = sites.find(s => s.id === siteId);
+        if (pred && site) {
+          predictionsArray.push({
+            ...pred,
+            site_id: siteId,
+            site_name: site.site_name
+          } as CostPrediction & { site_name: string });
+          
+          const algo = pred.algorithm_used || 'unknown';
+          if (!algoCounts[algo]) {
+            algoCounts[algo] = { count: 0, totalConfidence: 0 };
+          }
+          algoCounts[algo].count++;
+          algoCounts[algo].totalConfidence += pred.confidence || 0;
+        }
+      });
+      
+      setSitePredictions(predictionsArray);
+      
+      const statsArray = Object.entries(algoCounts).map(([algorithm, data]) => ({
+        algorithm,
+        count: data.count,
+        avgConfidence: Math.round(data.totalConfidence / data.count)
+      })).sort((a, b) => b.count - a.count);
+      
+      setAlgorithmStats(statsArray);
+      
+      const siteIdLookups = sites.map(s => s.site_code || s.id);
+      const { data: historicalData } = await supabase
+        .from('historical_site_costs')
+        .select('site_id, actual_cost, visit_date')
+        .in('site_id', siteIdLookups)
+        .order('visit_date', { ascending: true });
+      
+      if (historicalData) {
+        const costMap = new Map<string, Array<{date: string; cost: number}>>();
+        historicalData.forEach(record => {
+          const site = sites.find(s => (s.site_code || s.id) === record.site_id);
+          if (site) {
+            const existing = costMap.get(site.id) || [];
+            existing.push({
+              date: record.visit_date || new Date().toISOString(),
+              cost: record.actual_cost
+            });
+            costMap.set(site.id, existing);
+          }
+        });
+        setHistoricalCostData(costMap);
+      }
+      
+    } catch (err) {
+      console.error('Error fetching site predictions:', err);
+    } finally {
+      setLoadingSitePredictions(false);
+    }
+  };
+
+  const fetchVarianceAlerts = async () => {
+    try {
+      const { data: recentCosts, error } = await supabase
+        .from('cost_submissions')
+        .select('site_visit_id, total_cost, transportation_cost, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (error || !recentCosts) return;
+      
+      const alerts: VarianceAlert[] = [];
+      
+      for (const cost of recentCosts) {
+        if (!cost.site_visit_id) continue;
+        
+        const { data: visit } = await supabase
+          .from('site_visits')
+          .select('site_name, site_id, state, locality, hub_id')
+          .eq('id', cost.site_visit_id)
+          .single();
+        
+        if (!visit) continue;
+        
+        const siteIdentifier = visit.site_id || visit.site_name;
+        if (!siteIdentifier) continue;
+        
+        const prediction = await CostPredictionService.predictCostForSite(
+          siteIdentifier,
+          visit.state,
+          visit.locality,
+          visit.hub_id
+        );
+        if (!prediction) continue;
+        
+        const actualCost = cost.total_cost || cost.transportation_cost || 0;
+        const alert = CostPredictionService.checkVariance(
+          visit.site_name || 'Unknown Site',
+          siteIdentifier,
+          prediction.predicted_cost,
+          actualCost
+        );
+        
+        if (alert) {
+          alerts.push(alert);
+        }
+      }
+      
+      setVarianceAlerts(alerts);
+    } catch (err) {
+      console.error('Error fetching variance alerts:', err);
     }
   };
 
@@ -325,12 +486,49 @@ export default function CostPredictions() {
   useEffect(() => {
     fetchCostData();
     fetchAccuracyMetrics();
+    fetchSitePredictions();
+    fetchVarianceAlerts();
   }, [selectedPeriod, selectedHub]);
 
   const handleRefresh = () => {
     setRefreshing(true);
     fetchCostData();
     fetchAccuracyMetrics();
+    fetchSitePredictions();
+    fetchVarianceAlerts();
+  };
+
+  const filteredPredictions = useMemo(() => {
+    if (!siteSearchQuery.trim()) return sitePredictions;
+    const query = siteSearchQuery.toLowerCase();
+    return sitePredictions.filter(p => 
+      (p as any).site_name?.toLowerCase().includes(query) ||
+      p.site_id?.toLowerCase().includes(query)
+    );
+  }, [sitePredictions, siteSearchQuery]);
+
+  const getAlgorithmLabel = (algo: string): string => {
+    const labels: Record<string, string> = {
+      'exponential_smoothing': 'Exponential Smoothing',
+      'site_average': 'Site Average',
+      'locality_median': 'Locality Median',
+      'state_median': 'State Median',
+      'hub_median': 'Hub Median',
+      'unknown': 'Unknown'
+    };
+    return labels[algo] || algo;
+  };
+
+  const getAlgorithmColor = (algo: string): string => {
+    const colors: Record<string, string> = {
+      'exponential_smoothing': 'hsl(var(--chart-1))',
+      'site_average': 'hsl(var(--chart-2))',
+      'locality_median': 'hsl(var(--chart-3))',
+      'state_median': 'hsl(var(--chart-4))',
+      'hub_median': 'hsl(var(--chart-5))',
+      'unknown': 'hsl(var(--muted))'
+    };
+    return colors[algo] || 'hsl(var(--muted))';
   };
 
   const formatCurrency = (amount: number) => {
@@ -619,14 +817,25 @@ export default function CostPredictions() {
 
       {/* Main Tabs */}
       <Tabs value={mainTab} onValueChange={setMainTab} className="space-y-4">
-        <TabsList data-testid="main-tabs">
+        <TabsList data-testid="main-tabs" className="flex-wrap">
           <TabsTrigger value="analytics" data-testid="tab-analytics">
             <BarChart3 className="h-4 w-4 mr-2" />
             Analytics
           </TabsTrigger>
+          <TabsTrigger value="site-predictions" data-testid="tab-site-predictions">
+            <Cpu className="h-4 w-4 mr-2" />
+            Site Predictions
+          </TabsTrigger>
+          <TabsTrigger value="variance-alerts" data-testid="tab-variance-alerts">
+            <AlertTriangle className="h-4 w-4 mr-2" />
+            Variance Alerts
+            {varianceAlerts.length > 0 && (
+              <Badge variant="destructive" className="ml-2">{varianceAlerts.length}</Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="upload" data-testid="tab-upload">
             <Upload className="h-4 w-4 mr-2" />
-            Upload Historical Data
+            Upload Data
           </TabsTrigger>
         </TabsList>
 
@@ -886,6 +1095,347 @@ export default function CostPredictions() {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Site Predictions Tab Content */}
+        <TabsContent value="site-predictions" className="space-y-6">
+          {/* Algorithm Distribution */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Cpu className="h-5 w-5" />
+                  Prediction Algorithm Distribution
+                </CardTitle>
+                <CardDescription>
+                  How predictions are generated across different methods
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {algorithmStats.length > 0 ? (
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={algorithmStats} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis type="number" />
+                        <YAxis 
+                          type="category" 
+                          dataKey="algorithm" 
+                          width={150} 
+                          tickFormatter={(v) => getAlgorithmLabel(v)}
+                          className="text-xs"
+                        />
+                        <Tooltip 
+                          formatter={(value: number, name: string) => [
+                            name === 'count' ? `${value} sites` : `${value}%`,
+                            name === 'count' ? 'Sites' : 'Avg Confidence'
+                          ]}
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))',
+                            borderColor: 'hsl(var(--border))',
+                            borderRadius: '8px'
+                          }}
+                        />
+                        <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} name="count" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    <div className="text-center">
+                      <Cpu className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No prediction data available</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Algorithm Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {algorithmStats.map((stat, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 rounded-lg border">
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-full" 
+                        style={{ backgroundColor: getAlgorithmColor(stat.algorithm) }}
+                      />
+                      <span className="text-sm font-medium">{getAlgorithmLabel(stat.algorithm)}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-bold">{stat.count} sites</div>
+                      <div className="text-xs text-muted-foreground">{stat.avgConfidence}% confidence</div>
+                    </div>
+                  </div>
+                ))}
+                {algorithmStats.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No algorithm statistics available
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Site Predictions Table */}
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5" />
+                    Site-Level Predictions
+                  </CardTitle>
+                  <CardDescription>
+                    Individual predictions with provenance details showing how each was calculated
+                  </CardDescription>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search sites..."
+                    value={siteSearchQuery}
+                    onChange={(e) => setSiteSearchQuery(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-site-search"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingSitePredictions ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredPredictions.length > 0 ? (
+                <ScrollArea className="h-[500px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Site</TableHead>
+                        <TableHead>Predicted Cost</TableHead>
+                        <TableHead>Confidence</TableHead>
+                        <TableHead>Algorithm</TableHead>
+                        <TableHead>History</TableHead>
+                        <TableHead>Provenance</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredPredictions.slice(0, 50).map((pred, idx) => {
+                        const siteName = (pred as any).site_name || pred.site_id;
+                        const historyCosts = historicalCostData.get(pred.site_id) || [];
+                        
+                        return (
+                          <TableRow key={pred.site_id || idx} data-testid={`row-prediction-${idx}`}>
+                            <TableCell className="font-medium max-w-[200px] truncate">
+                              {siteName}
+                            </TableCell>
+                            <TableCell className="font-bold">
+                              {formatCurrency(pred.predicted_cost)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Progress value={pred.confidence} className="h-2 w-16" />
+                                <span className="text-xs text-muted-foreground">{pred.confidence}%</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary" className="text-xs">
+                                {getAlgorithmLabel(pred.algorithm_used)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {historyCosts.length > 0 ? (
+                                <CostSparkline 
+                                  history={historyCosts} 
+                                  width={80} 
+                                  height={24}
+                                  showTrend
+                                />
+                              ) : (
+                                <span className="text-xs text-muted-foreground">No history</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {pred.provenance ? (
+                                <TooltipProvider>
+                                  <UITooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="icon" variant="ghost">
+                                        <Info className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="left" className="max-w-[300px]">
+                                      <div className="space-y-2">
+                                        <p className="font-medium">{pred.provenance.method}</p>
+                                        <p className="text-xs">{pred.provenance.description}</p>
+                                        {pred.provenance.data_points && (
+                                          <p className="text-xs">Data points: {pred.provenance.data_points}</p>
+                                        )}
+                                        {pred.provenance.min_cost !== undefined && (
+                                          <p className="text-xs">
+                                            Range: {formatCurrency(pred.provenance.min_cost)} - {formatCurrency(pred.provenance.max_cost || 0)}
+                                          </p>
+                                        )}
+                                        {pred.provenance.avg_cost !== undefined && (
+                                          <p className="text-xs">Average: {formatCurrency(pred.provenance.avg_cost)}</p>
+                                        )}
+                                        {pred.provenance.trend && (
+                                          <p className="text-xs">Trend: {pred.provenance.trend}</p>
+                                        )}
+                                        {pred.provenance.source_area && (
+                                          <p className="text-xs">Source: {pred.provenance.source_area}</p>
+                                        )}
+                                      </div>
+                                    </TooltipContent>
+                                  </UITooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              ) : (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <div className="text-center">
+                    <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No site predictions available</p>
+                    <p className="text-xs mt-1">Upload historical data to enable predictions</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Variance Alerts Tab Content */}
+        <TabsContent value="variance-alerts" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                Cost Variance Alerts
+              </CardTitle>
+              <CardDescription>
+                Sites where actual costs deviated significantly from predictions (warning: 20%+, critical: 50%+)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {varianceAlerts.length > 0 ? (
+                <VarianceAlertBanner alerts={varianceAlerts} />
+              ) : (
+                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                  <div className="text-center">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500" />
+                    <p className="font-medium">No Variance Alerts</p>
+                    <p className="text-xs mt-1">All recent costs are within acceptable prediction ranges</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Variance Summary Statistics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Critical Alerts</CardTitle>
+                <XCircle className="h-4 w-4 text-red-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600 dark:text-red-500">
+                  {varianceAlerts.filter(a => a.severity === 'critical').length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Variance 50%+ above predicted
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Warning Alerts</CardTitle>
+                <AlertCircle className="h-4 w-4 text-amber-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-amber-600 dark:text-amber-500">
+                  {varianceAlerts.filter(a => a.severity === 'warning').length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Variance 20-50% above predicted
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Variance</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(varianceAlerts.reduce((sum, a) => sum + a.variance_amount, 0))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Total over-prediction amount
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Distance-Based Analysis */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Navigation className="h-5 w-5" />
+                Distance-Based Adjustments
+              </CardTitle>
+              <CardDescription>
+                How distance affects cost predictions (long distances add up to 15%, short distances reduce by 10%)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <span className="text-sm font-medium">Long Distance (&gt;50km)</span>
+                  </div>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-500">+15%</p>
+                  <p className="text-xs text-muted-foreground mt-1">Maximum distance adjustment</p>
+                </div>
+                
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full bg-amber-500" />
+                    <span className="text-sm font-medium">Medium Distance</span>
+                  </div>
+                  <p className="text-2xl font-bold">0%</p>
+                  <p className="text-xs text-muted-foreground mt-1">Base distance (50km reference)</p>
+                </div>
+                
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                    <span className="text-sm font-medium">Short Distance (&lt;10km)</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-500">-10%</p>
+                  <p className="text-xs text-muted-foreground mt-1">Minimum distance adjustment</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
