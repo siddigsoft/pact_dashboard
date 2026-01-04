@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
-import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord } from '@/services/costPrediction.service';
+import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord, type AccuracyMetrics } from '@/services/costPrediction.service';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import * as XLSX from 'xlsx';
 import { 
@@ -147,6 +147,20 @@ export default function CostPredictions() {
   const [importResult, setImportResult] = useState<{ success: boolean; inserted: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [registrySites, setRegistrySites] = useState<Map<string, any>>(new Map());
+  const [accuracyMetrics, setAccuracyMetrics] = useState<AccuracyMetrics | null>(null);
+  const [loadingAccuracy, setLoadingAccuracy] = useState(false);
+
+  const fetchAccuracyMetrics = async () => {
+    try {
+      setLoadingAccuracy(true);
+      const metrics = await CostPredictionService.calculateAccuracyMetrics();
+      setAccuracyMetrics(metrics);
+    } catch (err) {
+      console.error('Error fetching accuracy metrics:', err);
+    } finally {
+      setLoadingAccuracy(false);
+    }
+  };
 
   const fetchCostData = async () => {
     try {
@@ -310,11 +324,13 @@ export default function CostPredictions() {
 
   useEffect(() => {
     fetchCostData();
+    fetchAccuracyMetrics();
   }, [selectedPeriod, selectedHub]);
 
   const handleRefresh = () => {
     setRefreshing(true);
     fetchCostData();
+    fetchAccuracyMetrics();
   };
 
   const formatCurrency = (amount: number) => {
@@ -976,6 +992,82 @@ export default function CostPredictions() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Prediction Accuracy Section */}
+      <Card data-testid="card-prediction-accuracy">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            Prediction Accuracy
+          </CardTitle>
+          <CardDescription>
+            Historical accuracy of cost predictions compared to actual expenses
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingAccuracy ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : accuracyMetrics && accuracyMetrics.total_predictions > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 rounded-lg border bg-card" data-testid="accuracy-total">
+                <div className="text-sm font-medium text-muted-foreground mb-1">Total Predictions</div>
+                <div className="text-2xl font-bold">{accuracyMetrics.total_predictions}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Based on live feedback data
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg border bg-card" data-testid="accuracy-within-10">
+                <div className="text-sm font-medium text-muted-foreground mb-1">Within 10%</div>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-500">
+                  {accuracyMetrics.total_predictions > 0 ? Math.round((accuracyMetrics.within_10_pct / accuracyMetrics.total_predictions) * 100) : 0}%
+                </div>
+                <Progress 
+                  value={accuracyMetrics.total_predictions > 0 ? (accuracyMetrics.within_10_pct / accuracyMetrics.total_predictions) * 100 : 0} 
+                  className="h-2 mt-2 [&>div]:bg-green-500"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {accuracyMetrics.within_10_pct} highly accurate
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg border bg-card" data-testid="accuracy-within-20">
+                <div className="text-sm font-medium text-muted-foreground mb-1">Within 20%</div>
+                <div className="text-2xl font-bold text-amber-600 dark:text-amber-500">
+                  {accuracyMetrics.total_predictions > 0 ? Math.round(((accuracyMetrics.within_10_pct + accuracyMetrics.within_20_pct) / accuracyMetrics.total_predictions) * 100) : 0}%
+                </div>
+                <Progress 
+                  value={accuracyMetrics.total_predictions > 0 ? ((accuracyMetrics.within_10_pct + accuracyMetrics.within_20_pct) / accuracyMetrics.total_predictions) * 100 : 0} 
+                  className="h-2 mt-2 [&>div]:bg-amber-500"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {accuracyMetrics.within_10_pct + accuracyMetrics.within_20_pct} acceptable range
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg border bg-card" data-testid="accuracy-error">
+                <div className="text-sm font-medium text-muted-foreground mb-1">Mean Absolute Error</div>
+                <div className="text-2xl font-bold">{formatCurrency(accuracyMetrics.mean_absolute_error || 0)}</div>
+                <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                  <span className={accuracyMetrics.over_predicted > accuracyMetrics.under_predicted ? 'text-blue-600' : 'text-red-600'}>
+                    {accuracyMetrics.over_predicted > accuracyMetrics.under_predicted 
+                      ? `${accuracyMetrics.over_predicted} over-predicted` 
+                      : `${accuracyMetrics.under_predicted} under-predicted`}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No prediction feedback data available yet.</p>
+              <p className="text-xs mt-1">Accuracy metrics will appear as live cost data is recorded.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
