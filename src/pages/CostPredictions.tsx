@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,8 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -27,10 +29,20 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Clock,
-  Activity
+  Activity,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Loader2,
+  Database
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord } from '@/services/costPrediction.service';
+import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
+import * as XLSX from 'xlsx';
 import { 
   BarChart, 
   Bar, 
@@ -84,6 +96,35 @@ interface Prediction {
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
 
+interface ValidationSummary {
+  totalRecords: number;
+  matchedSites: number;
+  matchedWithGps: number;
+  matchedWithoutGps: number;
+  newSites: number;
+  validatedStates: number;
+  invalidStates: string[];
+  validatedLocalities: number;
+  invalidLocalities: string[];
+  errors: string[];
+}
+
+interface ParsedRecord {
+  rowNumber: number;
+  siteName: string;
+  state: string;
+  locality: string;
+  hub: string;
+  visitDate?: string;
+  actualCost?: number;
+  transportMode?: string;
+  matchedSiteId?: string;
+  hasGps: boolean;
+  isNewSite: boolean;
+  validationStatus: 'valid' | 'warning' | 'error';
+  validationMessage?: string;
+}
+
 export default function CostPredictions() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,6 +135,18 @@ export default function CostPredictions() {
   const [hubCosts, setHubCosts] = useState<HubCost[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [budgetData, setBudgetData] = useState({ allocated: 0, spent: 0, remaining: 0 });
+  
+  const [mainTab, setMainTab] = useState('analytics');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
+  const [parsedRecords, setParsedRecords] = useState<ParsedRecord[]>([]);
+  const [uploadStep, setUploadStep] = useState<'select' | 'validate' | 'import' | 'complete'>('select');
+  const [importResult, setImportResult] = useState<{ success: boolean; inserted: number; errors: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [registrySites, setRegistrySites] = useState<Map<string, any>>(new Map());
 
   const fetchCostData = async () => {
     try {
@@ -273,6 +326,210 @@ export default function CostPredictions() {
     }).format(amount);
   };
 
+  const loadRegistrySites = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sites_registry')
+        .select('*');
+      
+      if (data) {
+        const siteMap = new Map();
+        data.forEach(site => {
+          const key = `${site.site_name?.toLowerCase()}-${site.state_name?.toLowerCase()}-${site.locality_name?.toLowerCase()}`;
+          siteMap.set(key, site);
+          if (site.site_code) {
+            siteMap.set(site.site_code.toLowerCase(), site);
+          }
+        });
+        setRegistrySites(siteMap);
+      }
+    } catch (err) {
+      console.error('Error loading registry sites:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (mainTab === 'upload') {
+      loadRegistrySites();
+    }
+  }, [mainTab]);
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setUploadFile(file);
+      setUploadStep('select');
+      setValidationSummary(null);
+      setParsedRecords([]);
+      setImportResult(null);
+    }
+  };
+
+  const handleValidateFile = async () => {
+    if (!uploadFile) return;
+
+    setValidating(true);
+    try {
+      const data = await uploadFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      const allRecords: ParsedRecord[] = [];
+      let rowCounter = 0;
+
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(sheet);
+        
+        for (const row of jsonData as any[]) {
+          rowCounter++;
+          const siteName = row['1.10 Select The activity site'] || row['Site Name'] || row['site_name'] || '';
+          const state = row['1.8 State of the site/where the site is located'] || row['State'] || row['state'] || '';
+          const locality = row['1.9 Locality of the site/where the site is located'] || row['Locality'] || row['locality'] || '';
+          const hub = row['1.7 WFP HUB'] || row['Hub'] || row['hub'] || '';
+          const visitDate = row['Visit Date'] || row['visit_date'] || '';
+          const actualCost = parseFloat(row['Actual Cost'] || row['actual_cost'] || '0') || 0;
+          const transportMode = row['Transportation Means'] || row['Transport Mode'] || row['transport_mode'] || '';
+
+          if (!siteName || !state || !locality) {
+            continue;
+          }
+
+          const siteKey = `${siteName.toLowerCase()}-${state.toLowerCase()}-${locality.toLowerCase()}`;
+          const matchedSite = registrySites.get(siteKey);
+          
+          let validationStatus: 'valid' | 'warning' | 'error' = 'valid';
+          let validationMessage = '';
+
+          if (!matchedSite) {
+            validationStatus = 'warning';
+            validationMessage = 'New site - will be added to registry';
+          } else if (!matchedSite.gps_latitude || !matchedSite.gps_longitude) {
+            validationStatus = 'warning';
+            validationMessage = 'Site found but missing GPS coordinates';
+          }
+
+          allRecords.push({
+            rowNumber: rowCounter,
+            siteName: siteName.trim(),
+            state: state.trim(),
+            locality: locality.trim(),
+            hub: hub.trim(),
+            visitDate: visitDate ? String(visitDate) : undefined,
+            actualCost: actualCost || undefined,
+            transportMode: transportMode?.trim() || undefined,
+            matchedSiteId: matchedSite?.id,
+            hasGps: !!(matchedSite?.gps_latitude && matchedSite?.gps_longitude),
+            isNewSite: !matchedSite,
+            validationStatus,
+            validationMessage
+          });
+        }
+      }
+
+      const matchedSites = allRecords.filter(r => !r.isNewSite);
+      const matchedWithGps = matchedSites.filter(r => r.hasGps);
+      const matchedWithoutGps = matchedSites.filter(r => !r.hasGps);
+      const newSites = allRecords.filter(r => r.isNewSite);
+      const uniqueStates = new Set(allRecords.map(r => r.state));
+      const uniqueLocalities = new Set(allRecords.map(r => r.locality));
+
+      setValidationSummary({
+        totalRecords: allRecords.length,
+        matchedSites: matchedSites.length,
+        matchedWithGps: matchedWithGps.length,
+        matchedWithoutGps: matchedWithoutGps.length,
+        newSites: newSites.length,
+        validatedStates: uniqueStates.size,
+        invalidStates: [],
+        validatedLocalities: uniqueLocalities.size,
+        invalidLocalities: [],
+        errors: []
+      });
+
+      setParsedRecords(allRecords);
+      setUploadStep('validate');
+    } catch (err: any) {
+      console.error('Error validating file:', err);
+      setValidationSummary({
+        totalRecords: 0,
+        matchedSites: 0,
+        matchedWithGps: 0,
+        matchedWithoutGps: 0,
+        newSites: 0,
+        validatedStates: 0,
+        invalidStates: [],
+        validatedLocalities: 0,
+        invalidLocalities: [],
+        errors: [`Failed to parse file: ${err.message}`]
+      });
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleImportData = async () => {
+    if (parsedRecords.length === 0) return;
+
+    setImporting(true);
+    try {
+      const recordsToInsert: HistoricalSiteCost[] = parsedRecords
+        .filter(r => r.actualCost && r.actualCost > 0)
+        .map(r => {
+          const matchedSite = r.matchedSiteId ? registrySites.get(r.matchedSiteId) : null;
+          
+          const normalizedStateId = normalizeStateId(r.state) || r.state.toLowerCase().trim().replace(/\s+/g, '-');
+          const normalizedLocalityId = normalizeLocalityId(r.locality, normalizedStateId) || r.locality.toLowerCase().trim().replace(/\s+/g, '-');
+          
+          return {
+            site_id: r.matchedSiteId || `NEW-${r.siteName.replace(/\s+/g, '-').toUpperCase()}`,
+            site_name: r.siteName,
+            state_id: normalizedStateId,
+            locality_id: normalizedLocalityId,
+            hub_id: r.hub?.toLowerCase().trim().replace(/\s+/g, '-') || r.hub,
+            visit_date: r.visitDate || format(new Date(), 'yyyy-MM-dd'),
+            actual_cost: r.actualCost!,
+            transport_mode: r.transportMode,
+            gps_latitude: matchedSite?.gps_latitude || null,
+            gps_longitude: matchedSite?.gps_longitude || null,
+            gps_source: matchedSite?.gps_latitude ? 'registry' : undefined,
+            source: 'historical_upload' as const
+          };
+        });
+
+      if (recordsToInsert.length === 0) {
+        setImportResult({
+          success: false,
+          inserted: 0,
+          errors: ['No records with actual cost data to import']
+        });
+        return;
+      }
+
+      const result = await CostPredictionService.saveHistoricalCosts(recordsToInsert);
+      setImportResult(result);
+      setUploadStep('complete');
+    } catch (err: any) {
+      setImportResult({
+        success: false,
+        inserted: 0,
+        errors: [`Import failed: ${err.message}`]
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const resetUpload = () => {
+    setUploadFile(null);
+    setUploadStep('select');
+    setValidationSummary(null);
+    setParsedRecords([]);
+    setImportResult(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const costBreakdown = useMemo(() => {
     if (!costData) return [];
     return [
@@ -318,27 +575,307 @@ export default function CostPredictions() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-[140px]" data-testid="select-period">
-              <SelectValue placeholder="Period" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1month">Last Month</SelectItem>
-              <SelectItem value="3months">Last 3 Months</SelectItem>
-              <SelectItem value="6months">Last 6 Months</SelectItem>
-              <SelectItem value="12months">Last Year</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" onClick={handleRefresh} disabled={refreshing} data-testid="button-refresh">
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button variant="outline" data-testid="button-export">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          {mainTab === 'analytics' && (
+            <>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger className="w-[140px]" data-testid="select-period">
+                  <SelectValue placeholder="Period" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1month">Last Month</SelectItem>
+                  <SelectItem value="3months">Last 3 Months</SelectItem>
+                  <SelectItem value="6months">Last 6 Months</SelectItem>
+                  <SelectItem value="12months">Last Year</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={handleRefresh} disabled={refreshing} data-testid="button-refresh">
+                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button variant="outline" data-testid="button-export">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Main Tabs */}
+      <Tabs value={mainTab} onValueChange={setMainTab} className="space-y-4">
+        <TabsList data-testid="main-tabs">
+          <TabsTrigger value="analytics" data-testid="tab-analytics">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Analytics
+          </TabsTrigger>
+          <TabsTrigger value="upload" data-testid="tab-upload">
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Historical Data
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Upload Tab Content */}
+        <TabsContent value="upload" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5" />
+                Upload Historical Cost Data
+              </CardTitle>
+              <CardDescription>
+                Import historical site visit costs to enable accurate predictions. 
+                The system will validate sites against your registry and enrich with GPS data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Step indicator */}
+              <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-1 ${uploadStep === 'select' ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${uploadStep === 'select' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>1</div>
+                  Select File
+                </div>
+                <div className="flex-1 h-px bg-border" />
+                <div className={`flex items-center gap-1 ${uploadStep === 'validate' ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${uploadStep === 'validate' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>2</div>
+                  Validate
+                </div>
+                <div className="flex-1 h-px bg-border" />
+                <div className={`flex items-center gap-1 ${uploadStep === 'complete' ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${uploadStep === 'complete' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>3</div>
+                  Import
+                </div>
+              </div>
+
+              {/* File selection */}
+              {uploadStep === 'select' && (
+                <div className="space-y-4">
+                  <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                      data-testid="input-file-upload"
+                    />
+                    <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-lg font-medium mb-2">
+                      {uploadFile ? uploadFile.name : 'Select Excel or CSV file'}
+                    </p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Supports .xlsx, .xls, and .csv formats
+                    </p>
+                    <Button onClick={() => fileInputRef.current?.click()} data-testid="button-choose-file">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Choose File
+                    </Button>
+                  </div>
+
+                  {uploadFile && (
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileSpreadsheet className="h-8 w-8 text-green-600" />
+                        <div>
+                          <p className="font-medium">{uploadFile.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {(uploadFile.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" onClick={resetUpload} data-testid="button-clear-file">
+                          Clear
+                        </Button>
+                        <Button onClick={handleValidateFile} disabled={validating} data-testid="button-validate">
+                          {validating ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                          )}
+                          Validate
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Validation results */}
+              {uploadStep === 'validate' && validationSummary && (
+                <div className="space-y-4">
+                  <Alert>
+                    <Database className="h-4 w-4" />
+                    <AlertDescription>
+                      Validation complete. Review the results below before importing.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-2xl font-bold">{validationSummary.totalRecords}</div>
+                        <p className="text-sm text-muted-foreground">Total Records</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-2xl font-bold text-green-600">{validationSummary.matchedWithGps}</div>
+                        <p className="text-sm text-muted-foreground">Matched with GPS</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-2xl font-bold text-amber-600">{validationSummary.matchedWithoutGps}</div>
+                        <p className="text-sm text-muted-foreground">Matched (no GPS)</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-2xl font-bold text-blue-600">{validationSummary.newSites}</div>
+                        <p className="text-sm text-muted-foreground">New Sites</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Preview Records</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ScrollArea className="h-[300px]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Site Name</TableHead>
+                              <TableHead>State</TableHead>
+                              <TableHead>Locality</TableHead>
+                              <TableHead>Hub</TableHead>
+                              <TableHead>Cost</TableHead>
+                              <TableHead>GPS</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {parsedRecords.slice(0, 50).map((record, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell>
+                                  {record.validationStatus === 'valid' && (
+                                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                  )}
+                                  {record.validationStatus === 'warning' && (
+                                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                                  )}
+                                  {record.validationStatus === 'error' && (
+                                    <XCircle className="h-4 w-4 text-red-500" />
+                                  )}
+                                </TableCell>
+                                <TableCell className="font-medium">{record.siteName}</TableCell>
+                                <TableCell>{record.state}</TableCell>
+                                <TableCell>{record.locality}</TableCell>
+                                <TableCell>{record.hub}</TableCell>
+                                <TableCell>{record.actualCost ? formatCurrency(record.actualCost) : '-'}</TableCell>
+                                <TableCell>
+                                  {record.hasGps ? (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <MapPin className="h-3 w-3 mr-1" />
+                                      GPS
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-xs text-muted-foreground">
+                                      No GPS
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {parsedRecords.length > 50 && (
+                          <p className="text-sm text-muted-foreground text-center py-2">
+                            Showing first 50 of {parsedRecords.length} records
+                          </p>
+                        )}
+                      </ScrollArea>
+                    </CardContent>
+                  </Card>
+
+                  {/* Show error message if validation has errors */}
+                  {validationSummary && validationSummary.errors.length > 0 && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Cannot Import</AlertTitle>
+                      <AlertDescription>
+                        Please fix {validationSummary.errors.length} validation error(s) before importing:
+                        <ul className="list-disc list-inside mt-2">
+                          {validationSummary.errors.slice(0, 5).map((err, i) => (
+                            <li key={i} className="text-sm">{err}</li>
+                          ))}
+                          {validationSummary.errors.length > 5 && (
+                            <li className="text-sm">... and {validationSummary.errors.length - 5} more</li>
+                          )}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <Button variant="outline" onClick={resetUpload} data-testid="button-cancel-import">
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleImportData} 
+                      disabled={importing || (validationSummary?.errors && validationSummary.errors.length > 0)} 
+                      data-testid="button-import"
+                    >
+                      {importing ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Database className="h-4 w-4 mr-2" />
+                      )}
+                      Import {parsedRecords.filter(r => r.actualCost && r.actualCost > 0).length} Records
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Import complete */}
+              {uploadStep === 'complete' && importResult && (
+                <div className="space-y-4">
+                  {importResult.success ? (
+                    <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-green-800 dark:text-green-200">
+                        Successfully imported {importResult.inserted} historical cost records. 
+                        The cost prediction system will now use this data for future predictions.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Alert variant="destructive">
+                      <XCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Import failed. {importResult.errors.join(', ')}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="flex items-center justify-center gap-4">
+                    <Button variant="outline" onClick={resetUpload} data-testid="button-upload-another">
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Another File
+                    </Button>
+                    <Button onClick={() => setMainTab('analytics')} data-testid="button-view-analytics">
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      View Analytics
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Analytics Tab Content */}
+        <TabsContent value="analytics" className="space-y-6">
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -649,6 +1186,8 @@ export default function CostPredictions() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

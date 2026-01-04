@@ -1,0 +1,654 @@
+import { supabase } from '@/integrations/supabase/client';
+import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
+
+export interface HistoricalSiteCost {
+  id?: string;
+  site_id: string;
+  site_name: string;
+  state_id: string;
+  locality_id: string;
+  hub_id?: string;
+  visit_date: string;
+  actual_cost: number;
+  transport_mode?: string;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
+  gps_source?: 'registry' | 'mmp' | 'upload' | 'manual' | string;
+  data_collector_id?: string | null;
+  collector_distance_km?: number | null;
+  mmp_id?: string | null;
+  source: 'historical_upload' | 'live';
+  uploaded_at?: string;
+}
+
+export interface CostPrediction {
+  site_id: string;
+  predicted_cost: number;
+  confidence: number;
+  algorithm_used: 'exponential_smoothing' | 'locality_median' | 'state_median' | 'hub_median';
+  visit_count: number;
+  last_calculated: string;
+  history?: { date: string; cost: number }[];
+}
+
+export interface CollectorWithDistance {
+  id: string;
+  full_name: string;
+  email?: string;
+  locality_id?: string;
+  locality_name?: string;
+  state_id?: string;
+  state_name?: string;
+  hub_id?: string;
+  current_latitude?: number;
+  current_longitude?: number;
+  distance_km: number | null;
+  current_workload: number;
+  is_same_locality: boolean;
+  is_same_state: boolean;
+  status: 'available' | 'busy' | 'offline';
+  recommendation_score: number;
+}
+
+export interface ValidationResult {
+  total_records: number;
+  matched_sites: number;
+  matched_with_gps: number;
+  matched_without_gps: number;
+  new_sites: number;
+  validated_states: number;
+  invalid_states: string[];
+  validated_localities: number;
+  invalid_localities: string[];
+  records: ParsedHistoricalRecord[];
+  errors: string[];
+}
+
+export interface ParsedHistoricalRecord {
+  site_name: string;
+  state: string;
+  locality: string;
+  hub: string;
+  visit_date?: string;
+  actual_cost?: number;
+  transport_mode?: string;
+  matched_site_id?: string;
+  has_gps: boolean;
+  gps_latitude?: number;
+  gps_longitude?: number;
+  is_new_site: boolean;
+  validation_status: 'valid' | 'warning' | 'error';
+  validation_message?: string;
+}
+
+const SMOOTHING_FACTOR = 0.3;
+
+export class CostPredictionService {
+  static async predictCostForSite(
+    siteId: string,
+    stateName?: string,
+    localityName?: string,
+    hubId?: string
+  ): Promise<CostPrediction | null> {
+    try {
+      const { data: historicalCosts, error } = await supabase
+        .from('historical_site_costs')
+        .select('*')
+        .eq('site_id', siteId)
+        .order('visit_date', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching historical costs:', error);
+        return null;
+      }
+
+      const visitCount = historicalCosts?.length || 0;
+
+      if (visitCount >= 3) {
+        return this.exponentialSmoothing(siteId, historicalCosts!);
+      } else if (visitCount > 0 && visitCount < 3) {
+        const localityMedian = await this.getLocalityMedian(localityName || '', stateName);
+        if (localityMedian) {
+          return {
+            site_id: siteId,
+            predicted_cost: localityMedian,
+            confidence: 60 + (visitCount * 5),
+            algorithm_used: 'locality_median',
+            visit_count: visitCount,
+            last_calculated: new Date().toISOString(),
+            history: historicalCosts?.map(c => ({ date: c.visit_date, cost: c.actual_cost }))
+          };
+        }
+      }
+
+      const localityMedian = await this.getLocalityMedian(localityName || '', stateName);
+      if (localityMedian) {
+        return {
+          site_id: siteId,
+          predicted_cost: localityMedian,
+          confidence: 55,
+          algorithm_used: 'locality_median',
+          visit_count: 0,
+          last_calculated: new Date().toISOString()
+        };
+      }
+
+      const stateMedian = await this.getStateMedian(stateName || '');
+      if (stateMedian) {
+        return {
+          site_id: siteId,
+          predicted_cost: stateMedian,
+          confidence: 45,
+          algorithm_used: 'state_median',
+          visit_count: 0,
+          last_calculated: new Date().toISOString()
+        };
+      }
+
+      const hubMedian = await this.getHubMedian(hubId || '');
+      if (hubMedian) {
+        return {
+          site_id: siteId,
+          predicted_cost: hubMedian,
+          confidence: 35,
+          algorithm_used: 'hub_median',
+          visit_count: 0,
+          last_calculated: new Date().toISOString()
+        };
+      }
+
+      return null;
+    } catch (err) {
+      console.error('Error predicting cost:', err);
+      return null;
+    }
+  }
+
+  private static exponentialSmoothing(
+    siteId: string,
+    historicalCosts: any[]
+  ): CostPrediction {
+    const costs = historicalCosts.map(c => c.actual_cost).reverse();
+    
+    let smoothedValue = costs[0];
+    for (let i = 1; i < costs.length; i++) {
+      smoothedValue = SMOOTHING_FACTOR * costs[i] + (1 - SMOOTHING_FACTOR) * smoothedValue;
+    }
+
+    const variance = this.calculateVariance(costs);
+    const confidence = Math.min(95, 75 + Math.floor(costs.length * 2) - Math.min(variance / 100, 15));
+
+    return {
+      site_id: siteId,
+      predicted_cost: Math.round(smoothedValue),
+      confidence: Math.max(60, confidence),
+      algorithm_used: 'exponential_smoothing',
+      visit_count: costs.length,
+      last_calculated: new Date().toISOString(),
+      history: historicalCosts.map(c => ({ date: c.visit_date, cost: c.actual_cost }))
+    };
+  }
+
+  private static calculateVariance(values: number[]): number {
+    if (values.length === 0) return 0;
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
+    return squaredDiffs.reduce((a, b) => a + b, 0) / values.length;
+  }
+
+  private static isCanonicalId(value: string): boolean {
+    return /^[a-z0-9-]+$/.test(value) && value.includes('-');
+  }
+
+  private static async getLocalityMedian(localityNameOrId: string, stateNameOrId?: string): Promise<number | null> {
+    if (!localityNameOrId || localityNameOrId.trim() === '') return null;
+    
+    try {
+      let lookupIds: string[] = [];
+      
+      if (this.isCanonicalId(localityNameOrId)) {
+        lookupIds.push(localityNameOrId);
+      }
+      
+      if (stateNameOrId) {
+        const normalizedStateId = normalizeStateId(stateNameOrId);
+        if (normalizedStateId) {
+          const normalizedLocalityId = normalizeLocalityId(localityNameOrId, normalizedStateId);
+          if (normalizedLocalityId && !lookupIds.includes(normalizedLocalityId)) {
+            lookupIds.push(normalizedLocalityId);
+          }
+        }
+      }
+      
+      const kebabLocality = localityNameOrId.toLowerCase().trim().replace(/\s+/g, '-');
+      if (!lookupIds.includes(kebabLocality)) {
+        lookupIds.push(kebabLocality);
+      }
+      
+      if (lookupIds.length === 0) {
+        console.warn(`[CostPrediction] Could not resolve locality ID for: ${localityNameOrId}`);
+        return null;
+      }
+      
+      for (const lookupId of lookupIds) {
+        const { data, error } = await supabase
+          .from('historical_site_costs')
+          .select('actual_cost')
+          .eq('locality_id', lookupId);
+
+        if (!error && data && data.length > 0) {
+          const costs = data.map(d => d.actual_cost).sort((a, b) => a - b);
+          const mid = Math.floor(costs.length / 2);
+          return costs.length % 2 !== 0 ? costs[mid] : (costs[mid - 1] + costs[mid]) / 2;
+        }
+      }
+      
+      return null;
+    } catch (err) {
+      console.error('[CostPrediction] Error in getLocalityMedian:', err);
+      return null;
+    }
+  }
+
+  private static async getStateMedian(stateNameOrId: string): Promise<number | null> {
+    if (!stateNameOrId || stateNameOrId.trim() === '') return null;
+    
+    try {
+      let lookupIds: string[] = [];
+      
+      if (this.isCanonicalId(stateNameOrId)) {
+        lookupIds.push(stateNameOrId);
+      }
+      
+      const normalizedStateId = normalizeStateId(stateNameOrId);
+      if (normalizedStateId && !lookupIds.includes(normalizedStateId)) {
+        lookupIds.push(normalizedStateId);
+      }
+      
+      const kebabState = stateNameOrId.toLowerCase().trim().replace(/\s+/g, '-');
+      if (!lookupIds.includes(kebabState)) {
+        lookupIds.push(kebabState);
+      }
+      
+      if (lookupIds.length === 0) {
+        console.warn(`[CostPrediction] Could not resolve state ID for: ${stateNameOrId}`);
+        return null;
+      }
+      
+      for (const lookupId of lookupIds) {
+        const { data, error } = await supabase
+          .from('historical_site_costs')
+          .select('actual_cost')
+          .eq('state_id', lookupId);
+
+        if (!error && data && data.length > 0) {
+          const costs = data.map(d => d.actual_cost).sort((a, b) => a - b);
+          const mid = Math.floor(costs.length / 2);
+          return costs.length % 2 !== 0 ? costs[mid] : (costs[mid - 1] + costs[mid]) / 2;
+        }
+      }
+      
+      return null;
+    } catch (err) {
+      console.error('[CostPrediction] Error in getStateMedian:', err);
+      return null;
+    }
+  }
+
+  static async batchPredictCosts(sites: Array<{
+    id: string;
+    site_id?: string;
+    state?: string;
+    state_name?: string;
+    locality?: string;
+    locality_name?: string;
+    hub_id?: string;
+  }>): Promise<Map<string, CostPrediction>> {
+    const predictions = new Map<string, CostPrediction>();
+    
+    if (sites.length === 0) return predictions;
+    
+    try {
+      const siteIds = sites.map(s => s.site_id || s.id);
+      
+      const { data: historicalData, error } = await supabase
+        .from('historical_site_costs')
+        .select('site_id, actual_cost, visit_date')
+        .in('site_id', siteIds)
+        .order('visit_date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching batch historical costs:', error);
+        return predictions;
+      }
+
+      const costsBySite = new Map<string, number[]>();
+      historicalData?.forEach(record => {
+        const existing = costsBySite.get(record.site_id) || [];
+        existing.push(record.actual_cost);
+        costsBySite.set(record.site_id, existing);
+      });
+
+      for (const site of sites) {
+        const siteId = site.site_id || site.id;
+        const costs = costsBySite.get(siteId) || [];
+        
+        if (costs.length >= 3) {
+          const smoothedCosts = costs.slice(0, 10).reverse();
+          let smoothedValue = smoothedCosts[0];
+          for (let i = 1; i < smoothedCosts.length; i++) {
+            smoothedValue = 0.3 * smoothedCosts[i] + 0.7 * smoothedValue;
+          }
+          
+          predictions.set(site.id, {
+            site_id: siteId,
+            predicted_cost: Math.round(smoothedValue),
+            confidence: Math.min(95, 75 + costs.length * 2),
+            algorithm_used: 'exponential_smoothing',
+            visit_count: costs.length,
+            last_calculated: new Date().toISOString()
+          });
+        } else if (costs.length > 0) {
+          const avg = costs.reduce((a, b) => a + b, 0) / costs.length;
+          predictions.set(site.id, {
+            site_id: siteId,
+            predicted_cost: Math.round(avg),
+            confidence: 50 + costs.length * 10,
+            algorithm_used: 'locality_median',
+            visit_count: costs.length,
+            last_calculated: new Date().toISOString()
+          });
+        } else {
+          const localityName = site.locality || site.locality_name || '';
+          const stateName = site.state || site.state_name || '';
+          
+          const localityMedian = await this.getLocalityMedian(localityName, stateName);
+          if (localityMedian) {
+            predictions.set(site.id, {
+              site_id: siteId,
+              predicted_cost: localityMedian,
+              confidence: 55,
+              algorithm_used: 'locality_median',
+              visit_count: 0,
+              last_calculated: new Date().toISOString()
+            });
+          } else {
+            const stateMedian = await this.getStateMedian(stateName);
+            if (stateMedian) {
+              predictions.set(site.id, {
+                site_id: siteId,
+                predicted_cost: stateMedian,
+                confidence: 45,
+                algorithm_used: 'state_median',
+                visit_count: 0,
+                last_calculated: new Date().toISOString()
+              });
+            } else if (site.hub_id) {
+              const hubMedian = await this.getHubMedian(site.hub_id);
+              if (hubMedian) {
+                predictions.set(site.id, {
+                  site_id: siteId,
+                  predicted_cost: hubMedian,
+                  confidence: 35,
+                  algorithm_used: 'hub_median',
+                  visit_count: 0,
+                  last_calculated: new Date().toISOString()
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error in batch prediction:', err);
+    }
+    
+    return predictions;
+  }
+
+  private static async getHubMedian(hubId: string): Promise<number | null> {
+    try {
+      const { data, error } = await supabase
+        .from('historical_site_costs')
+        .select('actual_cost')
+        .eq('hub_id', hubId);
+
+      if (error || !data || data.length === 0) return null;
+
+      const costs = data.map(d => d.actual_cost).sort((a, b) => a - b);
+      const mid = Math.floor(costs.length / 2);
+      return costs.length % 2 !== 0 ? costs[mid] : (costs[mid - 1] + costs[mid]) / 2;
+    } catch {
+      return null;
+    }
+  }
+
+  static calculateDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ): number {
+    const R = 6371;
+    const dLat = this.toRad(lat2 - lat1);
+    const dLon = this.toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c * 10) / 10;
+  }
+
+  private static toRad(deg: number): number {
+    return deg * (Math.PI / 180);
+  }
+
+  static async findNearestCollectors(
+    siteLat: number | null,
+    siteLon: number | null,
+    siteState: string,
+    siteLocality: string,
+    siteHubId?: string
+  ): Promise<CollectorWithDistance[]> {
+    try {
+      const { data: collectors, error } = await supabase
+        .from('profiles')
+        .select(`
+          id, 
+          full_name, 
+          email, 
+          locality_id, 
+          state_id, 
+          hub_id,
+          current_latitude,
+          current_longitude,
+          status,
+          availability
+        `)
+        .in('role', ['dataCollector', 'datacollector', 'DataCollector'])
+        .eq('status', 'active');
+
+      if (error || !collectors) {
+        console.error('Error fetching collectors:', error);
+        return [];
+      }
+
+      const { data: siteVisits } = await supabase
+        .from('site_visits')
+        .select('assigned_to, status')
+        .in('status', ['assigned', 'confirmed', 'in_progress', 'ongoing']);
+
+      const workloadMap: Record<string, number> = {};
+      siteVisits?.forEach(sv => {
+        if (sv.assigned_to) {
+          workloadMap[sv.assigned_to] = (workloadMap[sv.assigned_to] || 0) + 1;
+        }
+      });
+
+      const collectorsWithDistance: CollectorWithDistance[] = collectors.map(collector => {
+        let distance: number | null = null;
+        
+        if (siteLat && siteLon && collector.current_latitude && collector.current_longitude) {
+          distance = this.calculateDistance(
+            siteLat,
+            siteLon,
+            collector.current_latitude,
+            collector.current_longitude
+          );
+        }
+
+        const isSameLocality = collector.locality_id?.toLowerCase() === siteLocality?.toLowerCase();
+        const isSameState = collector.state_id?.toLowerCase() === siteState?.toLowerCase();
+        const currentWorkload = workloadMap[collector.id] || 0;
+
+        const distanceScore = distance !== null ? distance : 1000;
+        const workloadScore = currentWorkload * 2;
+        const localityBonus = isSameLocality ? -15 : 0;
+        const stateBonus = isSameState && !isSameLocality ? -5 : 0;
+        
+        const recommendationScore = distanceScore + workloadScore + localityBonus + stateBonus;
+
+        return {
+          id: collector.id,
+          full_name: collector.full_name || 'Unknown',
+          email: collector.email,
+          locality_id: collector.locality_id,
+          state_id: collector.state_id,
+          hub_id: collector.hub_id,
+          current_latitude: collector.current_latitude,
+          current_longitude: collector.current_longitude,
+          distance_km: distance,
+          current_workload: currentWorkload,
+          is_same_locality: isSameLocality,
+          is_same_state: isSameState,
+          status: collector.availability === 'offline' ? 'offline' : 'available',
+          recommendation_score: recommendationScore
+        };
+      });
+
+      return collectorsWithDistance
+        .filter(c => c.is_same_locality || c.is_same_state || (siteHubId && c.hub_id === siteHubId))
+        .sort((a, b) => a.recommendation_score - b.recommendation_score);
+    } catch (err) {
+      console.error('Error finding nearest collectors:', err);
+      return [];
+    }
+  }
+
+  static async bulkAutoAssign(
+    sites: Array<{
+      id: string;
+      site_id: string;
+      site_name: string;
+      state: string;
+      locality: string;
+      hub_id?: string;
+      gps_latitude?: number;
+      gps_longitude?: number;
+    }>,
+    strategy: 'balance_workload' | 'minimize_distance' | 'minimize_cost' = 'balance_workload'
+  ): Promise<Map<string, { collector_id: string; collector_name: string; predicted_cost: number; distance_km: number | null }>> {
+    const assignments = new Map();
+
+    const allCollectors = await this.findNearestCollectors(null, null, '', '', undefined);
+    const workloadTracker: Record<string, number> = {};
+    allCollectors.forEach(c => {
+      workloadTracker[c.id] = c.current_workload;
+    });
+
+    for (const site of sites) {
+      const collectors = await this.findNearestCollectors(
+        site.gps_latitude || null,
+        site.gps_longitude || null,
+        site.state,
+        site.locality,
+        site.hub_id
+      );
+
+      if (collectors.length === 0) continue;
+
+      let selectedCollector: CollectorWithDistance | null = null;
+
+      if (strategy === 'minimize_distance') {
+        selectedCollector = collectors
+          .filter(c => c.distance_km !== null)
+          .sort((a, b) => (a.distance_km || 999) - (b.distance_km || 999))[0] || collectors[0];
+      } else if (strategy === 'minimize_cost') {
+        selectedCollector = collectors
+          .filter(c => c.distance_km !== null)
+          .sort((a, b) => (a.distance_km || 999) - (b.distance_km || 999))[0] || collectors[0];
+      } else {
+        selectedCollector = collectors
+          .map(c => ({
+            ...c,
+            current_workload: workloadTracker[c.id] || 0
+          }))
+          .sort((a, b) => a.current_workload - b.current_workload)[0];
+      }
+
+      if (selectedCollector) {
+        workloadTracker[selectedCollector.id] = (workloadTracker[selectedCollector.id] || 0) + 1;
+
+        const prediction = await this.predictCostForSite(
+          site.site_id,
+          site.state,
+          site.locality,
+          site.hub_id
+        );
+
+        assignments.set(site.id, {
+          collector_id: selectedCollector.id,
+          collector_name: selectedCollector.full_name,
+          predicted_cost: prediction?.predicted_cost || 0,
+          distance_km: selectedCollector.distance_km
+        });
+      }
+    }
+
+    return assignments;
+  }
+
+  static async saveHistoricalCosts(records: HistoricalSiteCost[]): Promise<{ success: boolean; inserted: number; errors: string[] }> {
+    const errors: string[] = [];
+    let inserted = 0;
+
+    for (const record of records) {
+      try {
+        const { error } = await supabase
+          .from('historical_site_costs')
+          .insert({
+            site_id: record.site_id,
+            site_name: record.site_name,
+            state_id: record.state_id,
+            locality_id: record.locality_id,
+            hub_id: record.hub_id,
+            visit_date: record.visit_date,
+            actual_cost: record.actual_cost,
+            transport_mode: record.transport_mode,
+            gps_latitude: record.gps_latitude,
+            gps_longitude: record.gps_longitude,
+            gps_source: record.gps_source,
+            data_collector_id: record.data_collector_id,
+            collector_distance_km: record.collector_distance_km,
+            mmp_id: record.mmp_id,
+            source: record.source,
+            uploaded_at: new Date().toISOString()
+          });
+
+        if (error) {
+          errors.push(`Failed to insert ${record.site_name}: ${error.message}`);
+        } else {
+          inserted++;
+        }
+      } catch (err: any) {
+        errors.push(`Error inserting ${record.site_name}: ${err.message}`);
+      }
+    }
+
+    return { success: errors.length === 0, inserted, errors };
+  }
+}
+
+export default CostPredictionService;
