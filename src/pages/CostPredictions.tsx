@@ -646,14 +646,23 @@ export default function CostPredictions() {
         .select('site_id, site_name, state_id, locality_id, visit_date');
       
       // Build a set of existing site+month combinations for duplicate detection
-      // Use normalized site_name + state_id + month as the key
+      // Use site_id + month as primary key (more reliable than name matching)
+      // Also build fallback keys using site_name + state_id for new sites
       const existingMonthKeys = new Set<string>();
       existingCosts?.forEach(cost => {
-        if (cost.visit_date && cost.site_name) {
+        if (cost.visit_date) {
           const monthKey = cost.visit_date.substring(0, 7); // YYYY-MM
-          // Store with state_id for matching after normalization
-          const siteKey = `${(cost.site_name || '').toLowerCase().trim()}-${(cost.state_id || '').toLowerCase().trim()}-${monthKey}`;
-          existingMonthKeys.add(siteKey);
+          
+          // Primary key: site_id + month (for matched sites)
+          if (cost.site_id) {
+            existingMonthKeys.add(`${cost.site_id}-${monthKey}`);
+          }
+          
+          // Fallback key: site_name + state_id + month (for new sites comparison)
+          if (cost.site_name && cost.state_id) {
+            const fallbackKey = `${(cost.site_name || '').toLowerCase().trim()}-${(cost.state_id || '').toLowerCase().trim()}-${monthKey}`;
+            existingMonthKeys.add(fallbackKey);
+          }
         }
       });
       console.log('[CostPredictions] Found', existingCosts?.length || 0, 'existing records and', existingMonthKeys.size, 'unique site-month combinations');
@@ -764,28 +773,44 @@ export default function CostPredictions() {
           let validationStatus: 'valid' | 'warning' | 'error' = 'valid';
           let validationMessage = '';
           let isDuplicate = false;
+          let parsedMonthKey: string | null = null;
 
-          // Check for duplicate month
-          if (visitDate) {
+          // MANDATORY: Visit date/month is required
+          let normalizedDateStr: string | null = null; // YYYY-MM-01 format
+          
+          if (!visitDate) {
+            validationStatus = 'error';
+            validationMessage = 'Missing visit date - month is required for all records';
+          } else {
             let parsedDate: Date | null = null;
             try {
               // Handle various date formats
               if (typeof visitDate === 'number') {
-                // Excel serial date
+                // Excel serial date - convert properly
                 parsedDate = new Date((visitDate - 25569) * 86400 * 1000);
-              } else {
+              } else if (typeof visitDate === 'string') {
+                // Try parsing string date
                 parsedDate = new Date(visitDate);
               }
               
-              if (parsedDate && !isNaN(parsedDate.getTime())) {
-                const monthKey = parsedDate.toISOString().substring(0, 7); // YYYY-MM
-                // Normalize state name to state_id format to match database keys
+              if (!parsedDate || isNaN(parsedDate.getTime())) {
+                validationStatus = 'error';
+                validationMessage = `Invalid date format: "${visitDate}" - please use YYYY-MM-DD format`;
+              } else {
+                // Normalize to first day of month for consistent storage
+                parsedMonthKey = parsedDate.toISOString().substring(0, 7); // YYYY-MM
+                normalizedDateStr = `${parsedMonthKey}-01`; // YYYY-MM-01
+                
+                // Use site_id for duplicate detection (more reliable than site_name+state)
+                // For matched sites, use their ID; for new sites, use normalized name+state
                 const normalizedStateForKey = normalizeStateId(state) || state.toLowerCase().trim().replace(/\s+/g, '-');
-                const dupCheckKey = `${siteName.toLowerCase().trim()}-${normalizedStateForKey}-${monthKey}`;
+                const dupCheckKey = matchedSite 
+                  ? `${matchedSite.id}-${parsedMonthKey}` 
+                  : `${siteName.toLowerCase().trim()}-${normalizedStateForKey}-${parsedMonthKey}`;
                 
                 if (existingMonthKeys.has(dupCheckKey)) {
                   validationStatus = 'error';
-                  validationMessage = `Duplicate: Cost for this site already exists in database for ${monthKey}`;
+                  validationMessage = `Duplicate: Cost for this site already exists in database for ${parsedMonthKey}`;
                   isDuplicate = true;
                   if (rowCounter <= 5) {
                     console.log('[CostPredictions] Database duplicate found:', dupCheckKey);
@@ -793,7 +818,7 @@ export default function CostPredictions() {
                 } else if (uploadFileMonthKeys.has(dupCheckKey)) {
                   // Duplicate within the same upload file
                   validationStatus = 'error';
-                  validationMessage = `Duplicate: This site appears multiple times in your file for ${monthKey}`;
+                  validationMessage = `Duplicate: This site appears multiple times in your file for ${parsedMonthKey}`;
                   isDuplicate = true;
                   if (rowCounter <= 5) {
                     console.log('[CostPredictions] In-file duplicate found:', dupCheckKey);
@@ -804,11 +829,12 @@ export default function CostPredictions() {
                 }
               }
             } catch (e) {
-              // Date parsing failed, skip duplicate check
+              validationStatus = 'error';
+              validationMessage = `Date parsing error: "${visitDate}"`;
             }
           }
 
-          if (!isDuplicate) {
+          if (!isDuplicate && validationStatus !== 'error') {
             if (!matchedSite) {
               validationStatus = 'warning';
               validationMessage = 'New site - will be added to registry';
@@ -824,7 +850,7 @@ export default function CostPredictions() {
             state: state.trim(),
             locality: locality.trim(),
             hub: hub.trim(),
-            visitDate: visitDate ? String(visitDate) : undefined,
+            visitDate: normalizedDateStr || (visitDate ? String(visitDate) : undefined), // Use normalized YYYY-MM-01 format
             actualCost: actualCost || undefined,
             transportMode: transportMode?.trim() || undefined,
             matchedSiteId: matchedSite?.id,
@@ -842,14 +868,49 @@ export default function CostPredictions() {
       const newSites = allRecords.filter(r => r.isNewSite);
       const recordsWithCosts = allRecords.filter(r => r.actualCost && r.actualCost > 0);
       const duplicateRecords = allRecords.filter(r => r.validationStatus === 'error' && r.validationMessage?.includes('Duplicate'));
+      const missingDateRecords = allRecords.filter(r => r.validationStatus === 'error' && (r.validationMessage?.includes('Missing visit date') || r.validationMessage?.includes('Invalid date')));
       const uniqueStates = new Set(allRecords.map(r => r.state));
       const uniqueLocalities = new Set(allRecords.map(r => r.locality));
 
-      // Calculate importable records (non-duplicate, has cost)
+      // Calculate importable records (non-duplicate, has cost, valid date)
       const importableRecords = allRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error');
+      
+      // Check 12 months limit per site
+      const siteMonthCounts = new Map<string, Set<string>>();
+      existingCosts?.forEach(cost => {
+        if (cost.site_id && cost.visit_date) {
+          if (!siteMonthCounts.has(cost.site_id)) {
+            siteMonthCounts.set(cost.site_id, new Set());
+          }
+          siteMonthCounts.get(cost.site_id)!.add(cost.visit_date.substring(0, 7));
+        }
+      });
+      
+      // Check if any importable records would exceed 12 months limit
+      const sitesExceeding12Months: string[] = [];
+      importableRecords.forEach(r => {
+        if (r.matchedSiteId && r.visitDate) {
+          const existingMonths = siteMonthCounts.get(r.matchedSiteId) || new Set();
+          // Count unique months if this record is added
+          let parsedDate: Date | null = null;
+          if (typeof r.visitDate === 'string') {
+            parsedDate = new Date(r.visitDate);
+          }
+          if (parsedDate && !isNaN(parsedDate.getTime())) {
+            const monthKey = parsedDate.toISOString().substring(0, 7);
+            existingMonths.add(monthKey);
+            if (existingMonths.size > 12 && !sitesExceeding12Months.includes(r.siteName)) {
+              sitesExceeding12Months.push(r.siteName);
+            }
+          }
+        }
+      });
       
       // Build error messages
       const errors: string[] = [];
+      if (missingDateRecords.length > 0) {
+        errors.push(`${missingDateRecords.length} records are missing or have invalid visit dates (month is required)`);
+      }
       if (duplicateRecords.length > 0) {
         errors.push(`${duplicateRecords.length} duplicate records will be skipped`);
       }
@@ -857,7 +918,10 @@ export default function CostPredictions() {
         errors.push('ALL records in this file already exist in the database. This file appears to have been uploaded before.');
       }
       if (importableRecords.length === 0 && allRecords.length > 0) {
-        errors.push('No new records to import - all records are either duplicates or missing cost data');
+        errors.push('No new records to import - all records are either duplicates, missing dates, or missing cost data');
+      }
+      if (sitesExceeding12Months.length > 0) {
+        errors.push(`Warning: ${sitesExceeding12Months.length} site(s) will have more than 12 months of data: ${sitesExceeding12Months.slice(0, 3).join(', ')}${sitesExceeding12Months.length > 3 ? '...' : ''}`);
       }
       
       const summary = {
@@ -1053,6 +1117,121 @@ export default function CostPredictions() {
       setDeleting(false);
     }
   };
+
+  const [deletingDuplicates, setDeletingDuplicates] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+  const [showDeleteDuplicatesConfirm, setShowDeleteDuplicatesConfirm] = useState(false);
+
+  // Find and count duplicate records (same site_id + month)
+  // Paginates through all records to handle large datasets
+  const findDuplicates = async () => {
+    const allCosts: Array<{ id: string; site_id: string | null; site_name: string | null; state_id: string | null; visit_date: string | null; created_at: string | null }> = [];
+    let page = 0;
+    const pageSize = 1000;
+    
+    // Paginate through all records
+    while (true) {
+      const { data: pageCosts, error } = await supabase
+        .from('historical_site_costs')
+        .select('id, site_id, site_name, state_id, visit_date, created_at')
+        .order('created_at', { ascending: true })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (error) {
+        console.error('[CostPredictions] Error fetching costs for duplicate check:', error);
+        break;
+      }
+      
+      if (!pageCosts || pageCosts.length === 0) break;
+      
+      allCosts.push(...pageCosts);
+      
+      if (pageCosts.length < pageSize) break; // Last page
+      page++;
+    }
+
+    if (allCosts.length === 0) {
+      setDuplicateCount(0);
+      return { duplicateIds: [], count: 0 };
+    }
+
+    console.log(`[CostPredictions] Checking ${allCosts.length} records for duplicates`);
+
+    // Group by site_id + month
+    const groups = new Map<string, typeof allCosts>();
+    allCosts.forEach(cost => {
+      if (cost.visit_date) {
+        const monthKey = cost.visit_date.substring(0, 7); // YYYY-MM
+        const siteKey = cost.site_id || `${cost.site_name}-${cost.state_id}`;
+        const groupKey = `${siteKey}-${monthKey}`;
+        
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, []);
+        }
+        groups.get(groupKey)!.push(cost);
+      }
+    });
+
+    // Find duplicates (all records after the first in each group)
+    const duplicateIds: string[] = [];
+    groups.forEach(records => {
+      if (records.length > 1) {
+        // Keep the first (oldest), mark rest as duplicates
+        records.slice(1).forEach(r => duplicateIds.push(r.id));
+      }
+    });
+
+    console.log(`[CostPredictions] Found ${duplicateIds.length} duplicate records`);
+    setDuplicateCount(duplicateIds.length);
+    return { duplicateIds, count: duplicateIds.length };
+  };
+
+  const handleDeleteDuplicatesOnly = async () => {
+    setDeletingDuplicates(true);
+    try {
+      const { duplicateIds, count } = await findDuplicates();
+      
+      if (count === 0) {
+        toast.success('No duplicate records found');
+        setShowDeleteDuplicatesConfirm(false);
+        return;
+      }
+
+      // Delete duplicates in batches of 100
+      let deletedCount = 0;
+      for (let i = 0; i < duplicateIds.length; i += 100) {
+        const batch = duplicateIds.slice(i, i + 100);
+        const { error } = await supabase
+          .from('historical_site_costs')
+          .delete()
+          .in('id', batch);
+        
+        if (error) {
+          console.error('[CostPredictions] Batch delete failed:', error);
+          throw error;
+        }
+        deletedCount += batch.length;
+      }
+
+      toast.success(`Deleted ${deletedCount} duplicate records`);
+      setShowDeleteDuplicatesConfirm(false);
+      setDuplicateCount(0);
+      // Refresh stats
+      fetchUploadedHistoricalData(0);
+    } catch (err: any) {
+      console.error('[CostPredictions] Delete duplicates error:', err);
+      toast.error('Failed to delete duplicates: ' + err.message);
+    } finally {
+      setDeletingDuplicates(false);
+    }
+  };
+
+  // Check for duplicates when tab opens
+  useEffect(() => {
+    if (mainTab === 'upload' && historicalDataStats.total > 0) {
+      findDuplicates();
+    }
+  }, [mainTab, historicalDataStats.total]);
 
   const costBreakdown = useMemo(() => {
     if (!costData) return [];
@@ -1535,46 +1714,99 @@ export default function CostPredictions() {
               </div>
 
               {historicalDataStats.total > 0 && (
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <p className="text-sm text-muted-foreground">
-                    Delete all historical data to start fresh or re-upload corrected data
-                  </p>
-                  {!showDeleteConfirm ? (
-                    <Button 
-                      variant="destructive" 
-                      onClick={() => setShowDeleteConfirm(true)}
-                      data-testid="button-show-delete-confirm"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete All Data
-                    </Button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-destructive font-medium">Are you sure?</span>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setShowDeleteConfirm(false)}
-                        data-testid="button-cancel-delete"
-                      >
-                        Cancel
-                      </Button>
-                      <Button 
-                        variant="destructive" 
-                        size="sm"
-                        onClick={handleDeleteAllHistoricalData}
-                        disabled={deleting}
-                        data-testid="button-confirm-delete"
-                      >
-                        {deleting ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
+                <div className="space-y-4 pt-4 border-t">
+                  {/* Delete Duplicates Only */}
+                  {duplicateCount > 0 && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+                      <div>
+                        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                          {duplicateCount} duplicate records found
+                        </p>
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          These are records with the same site and month that were uploaded multiple times
+                        </p>
+                      </div>
+                      {!showDeleteDuplicatesConfirm ? (
+                        <Button 
+                          variant="outline"
+                          className="border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300"
+                          onClick={() => setShowDeleteDuplicatesConfirm(true)}
+                          data-testid="button-show-delete-duplicates"
+                        >
                           <Trash2 className="h-4 w-4 mr-2" />
-                        )}
-                        Yes, Delete All
-                      </Button>
+                          Delete Duplicates Only
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setShowDeleteDuplicatesConfirm(false)}
+                            data-testid="button-cancel-delete-duplicates"
+                          >
+                            Cancel
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            size="sm"
+                            onClick={handleDeleteDuplicatesOnly}
+                            disabled={deletingDuplicates}
+                            data-testid="button-confirm-delete-duplicates"
+                          >
+                            {deletingDuplicates ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4 mr-2" />
+                            )}
+                            Yes, Delete {duplicateCount}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
+
+                  {/* Delete All Data */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Delete all historical data to start fresh or re-upload corrected data
+                    </p>
+                    {!showDeleteConfirm ? (
+                      <Button 
+                        variant="destructive" 
+                        onClick={() => setShowDeleteConfirm(true)}
+                        data-testid="button-show-delete-confirm"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete All Data
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-destructive font-medium">Are you sure?</span>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setShowDeleteConfirm(false)}
+                          data-testid="button-cancel-delete"
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          onClick={handleDeleteAllHistoricalData}
+                          disabled={deleting}
+                          data-testid="button-confirm-delete"
+                        >
+                          {deleting ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4 mr-2" />
+                          )}
+                          Yes, Delete All
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
