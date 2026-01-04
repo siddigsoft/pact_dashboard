@@ -116,6 +116,7 @@ interface ValidationSummary {
   matchedWithGps: number;
   matchedWithoutGps: number;
   newSites: number;
+  recordsWithCosts: number;
   validatedStates: number;
   invalidStates: string[];
   validatedLocalities: number;
@@ -617,9 +618,22 @@ export default function CostPredictions() {
           const state = row['1.8 State of the site/where the site is located'] || row['State'] || row['state'] || '';
           const locality = row['1.9 Locality of the site/where the site is located'] || row['Locality'] || row['locality'] || '';
           const hub = row['1.7 WFP HUB'] || row['Hub'] || row['hub'] || '';
-          const visitDate = row['Visit Date'] || row['visit_date'] || '';
-          const actualCost = parseFloat(row['Actual Cost'] || row['actual_cost'] || '0') || 0;
-          const transportMode = row['Transportation Means'] || row['Transport Mode'] || row['transport_mode'] || '';
+          const visitDate = row['Visit Date'] || row['visit_date'] || row['2.1 Date of visit'] || '';
+          const actualCost = parseFloat(
+            row['Actual Cost'] || 
+            row['actual_cost'] || 
+            row['Total Cost'] || 
+            row['total_cost'] || 
+            row['Transportation Cost'] || 
+            row['transportation_cost'] ||
+            row['Cost'] ||
+            row['cost'] ||
+            row['3.1 Total transportation cost'] ||
+            row['Amount'] ||
+            row['amount'] ||
+            '0'
+          ) || 0;
+          const transportMode = row['Transportation Means'] || row['Transport Mode'] || row['transport_mode'] || row['2.2 Transportation means'] || '';
 
           if (!siteName || !state || !locality) {
             continue;
@@ -661,6 +675,7 @@ export default function CostPredictions() {
       const matchedWithGps = matchedSites.filter(r => r.hasGps);
       const matchedWithoutGps = matchedSites.filter(r => !r.hasGps);
       const newSites = allRecords.filter(r => r.isNewSite);
+      const recordsWithCosts = allRecords.filter(r => r.actualCost && r.actualCost > 0);
       const uniqueStates = new Set(allRecords.map(r => r.state));
       const uniqueLocalities = new Set(allRecords.map(r => r.locality));
 
@@ -670,6 +685,7 @@ export default function CostPredictions() {
         matchedWithGps: matchedWithGps.length,
         matchedWithoutGps: matchedWithoutGps.length,
         newSites: newSites.length,
+        recordsWithCosts: recordsWithCosts.length,
         validatedStates: uniqueStates.size,
         invalidStates: [],
         validatedLocalities: uniqueLocalities.size,
@@ -690,6 +706,7 @@ export default function CostPredictions() {
         matchedWithGps: 0,
         matchedWithoutGps: 0,
         newSites: 0,
+        recordsWithCosts: 0,
         validatedStates: 0,
         invalidStates: [],
         validatedLocalities: 0,
@@ -955,7 +972,7 @@ export default function CostPredictions() {
                     </AlertDescription>
                   </Alert>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <Card>
                       <CardContent className="pt-4">
                         <div className="text-2xl font-bold">{validationSummary.totalRecords}</div>
@@ -980,7 +997,27 @@ export default function CostPredictions() {
                         <p className="text-sm text-muted-foreground">New Sites</p>
                       </CardContent>
                     </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className={`text-2xl font-bold ${validationSummary.recordsWithCosts > 0 ? 'text-primary' : 'text-muted-foreground'}`}>
+                          {validationSummary.recordsWithCosts}
+                        </div>
+                        <p className="text-sm text-muted-foreground">With Cost Data</p>
+                      </CardContent>
+                    </Card>
                   </div>
+                  
+                  {validationSummary.recordsWithCosts === 0 && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>No Cost Data Found</AlertTitle>
+                      <AlertDescription>
+                        The uploaded file does not contain cost data in a recognized column format. 
+                        Expected columns: "Actual Cost", "Total Cost", "Transportation Cost", "Amount", or similar.
+                        This upload can register new sites but cannot add historical cost data for predictions.
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
                   <Card>
                     <CardHeader className="pb-2">
