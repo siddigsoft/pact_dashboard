@@ -718,16 +718,32 @@ export default function CostPredictions() {
         for (const row of jsonData as any[]) {
           rowCounter++;
           
-          // Helper to find column value case-insensitively
-          const getColumnValue = (keys: string[]): string => {
+          // Helper to find column value case-insensitively with flexible matching
+          const getColumnValue = (keys: string[], allowPartialMatch = false): string => {
+            // First try exact matches (case-insensitive)
             for (const key of keys) {
               if (row[key] !== undefined && row[key] !== null && row[key] !== '') return String(row[key]);
-              // Try case-insensitive match
+              // Try case-insensitive match with trimming
               const rowKey = Object.keys(row).find(k => k.toLowerCase().trim() === key.toLowerCase().trim());
               if (rowKey && row[rowKey] !== undefined && row[rowKey] !== null && row[rowKey] !== '') {
                 return String(row[rowKey]);
               }
             }
+            
+            // If partial match allowed, try finding columns that contain the key
+            if (allowPartialMatch) {
+              for (const key of keys) {
+                const lowerKey = key.toLowerCase().trim();
+                const rowKey = Object.keys(row).find(k => 
+                  k.toLowerCase().trim().includes(lowerKey) || 
+                  lowerKey.includes(k.toLowerCase().trim())
+                );
+                if (rowKey && row[rowKey] !== undefined && row[rowKey] !== null && row[rowKey] !== '') {
+                  return String(row[rowKey]);
+                }
+              }
+            }
+            
             return '';
           };
           
@@ -769,12 +785,23 @@ export default function CostPredictions() {
           const state = getColumnValue(['1.8 State of the site/where the site is located', 'State', 'state']);
           const locality = getColumnValue(['1.9 Locality of the site/where the site is located', 'Locality', 'locality']);
           const hub = getColumnValue(['1.7 WFP HUB', 'Hub', 'hub', 'WFP HUB']);
-          const visitDate = getColumnValue([
+          // Try exact match first, then partial match for date column
+          let visitDate = getColumnValue([
             'Visit Date', 'visit_date', '2.1 Date of visit', 'Date', 'date',
             'Month', 'month', 'Visit Month', 'visit_month', 'Period', 'period',
             'Report Month', 'report_month', 'Data Collection Date', 'data_collection_date',
             '1.6 Date of visit', '1.5 Date of visit', 'VisitDate', 'visitDate'
-          ]);
+          ], false);
+          
+          // If no date found, try partial matching
+          if (!visitDate) {
+            visitDate = getColumnValue(['month', 'date', 'visit', 'period'], true);
+          }
+          
+          // Log first few rows to debug
+          if (rowCounter <= 3) {
+            console.log(`[CostPredictions] Row ${rowCounter} visitDate:`, visitDate, '| Raw row keys:', Object.keys(row));
+          }
           const actualCost = getCostValue();
           const transportMode = getColumnValue(['Transportation Means', 'Transport Mode', 'transport_mode', '2.2 Transportation means', 'TransportMode']);
 
