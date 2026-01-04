@@ -48,8 +48,10 @@ import {
   Navigation,
   Cpu,
   Search,
-  Eye
+  Eye,
+  Trash2
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord, type AccuracyMetrics, type CostPrediction, type VarianceAlert } from '@/services/costPrediction.service';
@@ -180,6 +182,8 @@ export default function CostPredictions() {
   const [historicalDataStats, setHistoricalDataStats] = useState({ total: 0, linked: 0, unlinked: 0 });
   const [loadingHistoricalData, setLoadingHistoricalData] = useState(false);
   const [historicalDataPage, setHistoricalDataPage] = useState(0);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchAccuracyMetrics = async () => {
     try {
@@ -603,6 +607,7 @@ export default function CostPredictions() {
   useEffect(() => {
     if (mainTab === 'upload') {
       loadRegistrySites();
+      fetchUploadedHistoricalData(0); // Load stats for the manage section
     }
     if (mainTab === 'analytics' && historicalDataStats.total === 0) {
       // Auto-load historical data when viewing analytics
@@ -1003,6 +1008,34 @@ export default function CostPredictions() {
     setImportResult(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteAllHistoricalData = async () => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('historical_site_costs')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all records
+      
+      if (error) {
+        console.error('[CostPredictions] Delete failed:', error);
+        toast.error('Failed to delete historical data: ' + error.message);
+      } else {
+        toast.success('All historical cost data has been deleted');
+        setShowDeleteConfirm(false);
+        // Refresh the historical data stats
+        setHistoricalDataStats({ total: 0, linked: 0, unlinked: 0 });
+        setUploadedHistoricalData([]);
+        // Reset upload state so user can re-upload
+        resetUpload();
+      }
+    } catch (err: any) {
+      console.error('[CostPredictions] Delete error:', err);
+      toast.error('Failed to delete: ' + err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1441,6 +1474,87 @@ export default function CostPredictions() {
                       View Analytics
                     </Button>
                   </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Manage Historical Data Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Manage Historical Data
+              </CardTitle>
+              <CardDescription>
+                View statistics and manage your uploaded historical cost data
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-lg bg-muted/50">
+                  <p className="text-sm text-muted-foreground">Total Records</p>
+                  <p className="text-2xl font-bold">{historicalDataStats.total}</p>
+                </div>
+                <div className="p-4 rounded-lg bg-muted/50">
+                  <p className="text-sm text-muted-foreground">Linked to Registry</p>
+                  <p className="text-2xl font-bold text-green-600">{historicalDataStats.linked}</p>
+                </div>
+                <div className="p-4 rounded-lg bg-muted/50">
+                  <p className="text-sm text-muted-foreground">Unlinked Sites</p>
+                  <p className="text-2xl font-bold text-amber-600">{historicalDataStats.unlinked}</p>
+                </div>
+              </div>
+
+              {historicalDataStats.total > 0 && (
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Delete all historical data to start fresh or re-upload corrected data
+                  </p>
+                  {!showDeleteConfirm ? (
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => setShowDeleteConfirm(true)}
+                      data-testid="button-show-delete-confirm"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete All Data
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-destructive font-medium">Are you sure?</span>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        data-testid="button-cancel-delete"
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={handleDeleteAllHistoricalData}
+                        disabled={deleting}
+                        data-testid="button-confirm-delete"
+                      >
+                        {deleting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 mr-2" />
+                        )}
+                        Yes, Delete All
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {historicalDataStats.total === 0 && (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Database className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No historical data uploaded yet</p>
+                  <p className="text-sm">Upload a file above to get started</p>
                 </div>
               )}
             </CardContent>
