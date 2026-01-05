@@ -1647,16 +1647,6 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVerifyDialogOpen(false);
       await refreshMMPFiles();
-      
-      // Switch to appropriate tab
-      if (statePermitJustUploaded || statePermitNotRequired) {
-        // Move to locality permit tab to upload locality permits
-        setNewSitesSubTab('local_required');
-        setActiveTab('new');
-      } else {
-        // Sites are verified - move to verified tab
-        setActiveTab('verified');
-      }
     } catch (error) {
       console.error('Error completing verification:', error);
       toast({
@@ -3397,13 +3387,7 @@ const CoordinatorSites: React.FC = () => {
 
                   // Only set verification fields if shouldVerify is true
                   if (shouldVerify) {
-                    // For sites with permits_attached status, trigger permit verification questions first
-                    if (selectedSiteForEdit.status?.toLowerCase() === 'permits_attached') {
-                      // Open permit verification questions dialog instead of immediate verification
-                      startPermitVerificationWorkflow(selectedSiteForEdit, updateData);
-                      return; // Exit - verification will be completed after permit questions
-                    }
-                    
+                    // Always verify directly, do not open permit verification dialog for single-site edit
                     updateData.status = 'verified';
                     updateData.verified_at = new Date().toISOString();
                     updateData.verified_by = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
