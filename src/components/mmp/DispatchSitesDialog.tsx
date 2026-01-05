@@ -1,58 +1,3 @@
-<<<<<<< HEAD
-import React, { useState, useEffect, useMemo } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import {
-  Loader2,
-  DollarSign,
-  AlertCircle,
-  ArrowRight,
-  ArrowLeft,
-  Copy,
-  Users,
-  MapPin,
-  TrendingUp,
-  Sparkles,
-  Wand2,
-  Info,
-} from "lucide-react";
-import { sudanStates } from "@/data/sudanStates";
-import {
-  fetchAllRegistrySites,
-  matchSiteToRegistry,
-  RegistryLinkage,
-} from "@/utils/sitesRegistryMatcher";
-import { EmailNotificationService } from "@/services/email-notification.service";
-import { NotificationTriggerService } from "@/services/NotificationTriggerService";
-=======
 import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -75,7 +20,6 @@ import { CostPredictionService, type CostPrediction, type VarianceAlert } from '
 import { VarianceAlertBanner } from './VarianceAlertBanner';
 import { CostSparkline } from './CostSparkline';
 
->>>>>>> 0efe44e (Add variance alerts and accuracy metrics for cost predictions)
 interface DispatchSitesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1618,21 +1562,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                                     SDG
                                   </Badge>
                                 </TooltipTrigger>
-<<<<<<< HEAD
-                                <TooltipContent>
-                                  <p>Confidence: {prediction.confidence}%</p>
-                                  <p>Algorithm: {prediction.algorithm_used}</p>
-                                  <p>
-                                    Based on {prediction.visit_count} historical
-                                    visits
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Progress
-                                value={prediction.confidence}
-                                className="h-1.5 w-16"
-                              />
-=======
                                 <TooltipContent className="max-w-xs">
                                   <div className="space-y-1.5">
                                     <p className="font-medium">{prediction.provenance?.method || prediction.algorithm_used}</p>
@@ -1666,7 +1595,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                                   showTrend={false}
                                 />
                               )}
->>>>>>> 0efe44e (Add variance alerts and accuracy metrics for cost predictions)
                             </div>
                           )}
                         </div>
