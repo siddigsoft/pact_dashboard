@@ -17,8 +17,11 @@ import { sudanStates } from '@/data/sudanStates';
 import { fetchAllRegistrySites, matchSiteToRegistry, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { CostPredictionService, type CostPrediction, type VarianceAlert } from '@/services/costPrediction.service';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { VarianceAlertBanner } from './VarianceAlertBanner';
 import { CostSparkline } from './CostSparkline';
+import { ExchangeRatePanel } from './ExchangeRatePanel';
+import { ExchangeRateService } from '@/services/exchangeRate.service';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -76,6 +79,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   >(new Map());
   const [loadingPredictions, setLoadingPredictions] = useState(false);
   const [varianceAlerts, setVarianceAlerts] = useState<VarianceAlert[]>([]);
+  const [currentExchangeRate, setCurrentExchangeRate] = useState<number>(602.00);
   const { toast } = useToast();
 
   // Load data collectors
@@ -1269,6 +1273,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
         {step === "costs" && (
           <div className="space-y-4 py-4">
+            {/* Exchange Rate Banner */}
+            <ExchangeRatePanel 
+              variant="banner" 
+              showRefresh={true}
+              onRateChange={setCurrentExchangeRate}
+            />
+
             <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-4 rounded-md">
               <div className="flex gap-2">
                 <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-500 flex-shrink-0 mt-0.5" />
