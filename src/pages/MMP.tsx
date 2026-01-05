@@ -41,6 +41,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 import { useOffline } from '@/hooks/use-offline';
+import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -1040,118 +1041,27 @@ const MMP = () => {
       }
 
       // Process wallet payment for the user who completed the site entry
+      // Using centralized wallet transaction function (single point of truth)
       try {
-        // Fetch fresh site data from database to ensure we have the latest values
-        const { data: freshSite, error: fetchError } = await supabase
-          .from('mmp_site_entries')
-          .select('enumerator_fee, transport_fee, cost, accepted_by, claimed_by, visit_completed_by')
-          .eq('id', site.id)
-          .single();
-        
-        if (fetchError) {
-          console.error('Failed to fetch fresh site data for wallet payment:', fetchError);
-        }
-        
-        // Check multiple fields to determine who should be paid:
-        // 1. accepted_by (primary field)
-        // 2. claimed_by (fallback if accepted_by is missing)
-        // 3. visit_completed_by (fallback if both above are missing)
-        // Use fresh database values first, then fallback to site object, then current user
-        const acceptedBy = freshSite?.accepted_by || 
-                          freshSite?.claimed_by || 
-                          freshSite?.visit_completed_by ||
-                          site.accepted_by || site.additional_data?.accepted_by || 
-                          site.claimed_by || site.additional_data?.claimed_by ||
-                          site.visit_completed_by || currentUser?.id;
-        
-        if (acceptedBy) {
+        const result = await createSiteVisitWalletTransaction({
+          siteVisitId: site.id,
+          description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
+          showNotifications: true,
+          toast: toast,
+        });
 
-          // Get the cost amount from fresh database values (prefer) or fallback to site object
-          // Check both snake_case (from DB) and camelCase (from normalized object)
-          const enumeratorFee = freshSite?.enumerator_fee || site.enumerator_fee || site.enumeratorFee || 0;
-          const transportFee = freshSite?.transport_fee || site.transport_fee || site.transportFee || 0;
-          const directCost = freshSite?.cost || site.cost || 0;
-          
-          console.log('💰 Wallet payment calculation:', { enumeratorFee, transportFee, directCost, siteId: site.id });
-          
-          // Calculate total cost: use direct cost if available, otherwise sum fees
-          const totalCost = directCost > 0 
-            ? directCost 
-            : (Number(enumeratorFee) + Number(transportFee));
-          
-          if (totalCost > 0) {
-            console.log(`💵 Processing wallet payment of ${totalCost} SDG for user ${acceptedBy}`);
-            
-            // Get or create wallet for the user
-            const { data: walletData, error: walletError } = await supabase
-              .from('wallets')
-              .select('*')
-              .eq('user_id', acceptedBy)
-              .single();
-
-            let walletId: string;
-            let currentBalance = 0;
-
-            if (walletError && walletError.code === 'PGRST116') {
-              // Wallet doesn't exist, create it
-              const { data: newWallet, error: createError } = await supabase
-                .from('wallets')
-                .insert({
-                  user_id: acceptedBy,
-                  balances: { SDG: totalCost },
-                  total_earned: totalCost,
-                })
-                .select()
-                .single();
-
-              if (createError) throw createError;
-              walletId = newWallet.id;
-            } else if (walletError) {
-              throw walletError;
-            } else {
-              walletId = walletData.id;
-              currentBalance = parseFloat(walletData.balances?.SDG || 0);
-              const newBalance = currentBalance + totalCost;
-
-              // Update wallet balance
-              await supabase
-                .from('wallets')
-                .update({
-                  balances: { ...walletData.balances, SDG: newBalance },
-                  total_earned: parseFloat(walletData.total_earned || 0) + totalCost,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', walletId);
-            }
-
-            // Create wallet transaction
-            await supabase.from('wallet_transactions').insert({
-              wallet_id: walletId,
-              user_id: acceptedBy,
-              type: 'earning',
-              amount: totalCost,
-              amount_cents: Math.round(totalCost * 100),
-              currency: 'SDG',
-              site_visit_id: site.id,
-              description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
-              balance_before: currentBalance,
-              balance_after: currentBalance + totalCost,
-              created_by: currentUser?.id,
-            });
-
-            console.log(`Payment of ${totalCost} SDG added to wallet for user ${acceptedBy} for site entry ${site.id}`);
-          } else {
-            console.warn(`⚠️ Total cost is 0 for site ${site.id}. Fee might not have been set during claim/accept.`);
-            toast({
-              title: 'Fee Not Set',
-              description: 'The site visit fee was not calculated at claim time. Please contact admin to adjust.',
-              variant: 'default',
-            });
-          }
+        if (result.success) {
+          console.log(`✅ Wallet transaction created successfully: ${result.message}`);
         } else {
-          console.warn(`No user found for site entry ${site.id} (checked accepted_by, claimed_by, visit_completed_by), skipping wallet payment`);
+          console.warn(`⚠️ Wallet transaction creation failed: ${result.message}`);
+          // Don't fail the entire operation if wallet payment fails
+          toast({
+            title: 'Payment Warning',
+            description: result.message || 'Site visit completed but wallet payment failed. Please contact support.',
+            variant: 'destructive',
+          });
         }
-      } catch (walletErr) {
+      } catch (walletErr: any) {
         console.error('Failed to process wallet payment for completed site entry:', walletErr);
         // Don't fail the entire operation if wallet payment fails
         toast({
@@ -1462,19 +1372,45 @@ const MMP = () => {
       }
 
       // Update site status to 'Completed' and save report info
+      // CRITICAL: Ensure visit_completed_at and visit_completed_by are set if not already set
       if (isOnline) {
         console.log('🔄 Updating site status to Completed...');
+        
+        // First, check if visit_completed_at is already set
+        const { data: currentSite, error: fetchError } = await supabase
+          .from('mmp_site_entries')
+          .select('visit_completed_at, visit_completed_by')
+          .eq('id', site.id)
+          .single();
+
+        if (fetchError) {
+          console.error('❌ Error fetching current site data:', fetchError);
+        }
+
+        // Prepare update data - ensure visit_completed_at and visit_completed_by are set
+        const updatePayload: any = {
+          status: 'Completed',
+          additional_data: {
+            ...(site.additional_data || {}),
+            visit_report_submitted: true,
+            visit_report_id: report?.id || null,
+            visit_report_submitted_at: now
+          }
+        };
+
+        // Only set visit_completed_at and visit_completed_by if they're not already set
+        if (!currentSite?.visit_completed_at) {
+          updatePayload.visit_completed_at = now;
+          console.log('📝 Setting visit_completed_at (was null)');
+        }
+        if (!currentSite?.visit_completed_by) {
+          updatePayload.visit_completed_by = currentUser?.id;
+          console.log('📝 Setting visit_completed_by (was null)');
+        }
+
         const { data: updateData, error: updateError } = await supabase
           .from('mmp_site_entries')
-          .update({
-            status: 'Completed',
-            additional_data: {
-              ...(site.additional_data || {}),
-              visit_report_submitted: true,
-              visit_report_id: report?.id || null,
-              visit_report_submitted_at: now
-            }
-          })
+          .update(updatePayload)
           .eq('id', site.id)
           .select();
 
@@ -1488,26 +1424,50 @@ const MMP = () => {
         console.log('🔄 Offline mode - site status update included in completion sync');
       }
 
-      // Wallet reconciliation (only when online)
+      // CRITICAL: Create wallet transaction if it doesn't exist
+      // This ensures wallet transactions are created even if handleCompleteVisit wasn't called
       if (isOnline) {
         try {
-          console.log('💰 Reconciling wallet for completed site:', site.id);
-          const result = await reconcileSiteVisitFee(site.id);
-          if (result.success) {
+          console.log('💰 Creating wallet transaction for completed site:', site.id);
+          const walletResult = await createSiteVisitWalletTransaction({
+            siteVisitId: site.id,
+            description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
+            showNotifications: true,
+            toast: toast,
+          });
+
+          if (walletResult.success) {
+            console.log('✅ Wallet transaction created:', walletResult.message);
             toast({
-              title: 'Payment Added',
-              description: result.message,
+              title: 'Payment Processed',
+              description: walletResult.message,
               variant: 'default'
             });
           } else {
-            console.warn('[Wallet] ' + result.message);
+            // If transaction already exists, that's okay - just log it
+            if (walletResult.message.includes('already exists')) {
+              console.log('ℹ️ Wallet transaction already exists (skipped duplicate)');
+            } else {
+              console.warn('⚠️ Wallet transaction creation failed:', walletResult.message);
+              toast({
+                title: 'Payment Warning',
+                description: walletResult.message || 'Wallet payment could not be processed. Please contact support.',
+                variant: 'destructive'
+              });
+            }
           }
-        } catch (walletErr) {
-          console.error('Wallet reconciliation error:', walletErr);
+        } catch (walletErr: any) {
+          console.error('❌ Wallet transaction error:', walletErr);
+          // Don't fail the entire operation if wallet transaction fails
+          toast({
+            title: 'Payment Warning',
+            description: 'Site visit completed but wallet payment failed. Please contact support.',
+            variant: 'destructive'
+          });
         }
       } else {
-        // Wallet reconciliation will be handled when syncing site_visit_complete
-        console.log('💰 Wallet reconciliation will be processed when syncing completion');
+        // Wallet transaction will be handled when syncing site_visit_complete
+        console.log('💰 Wallet transaction will be processed when syncing completion');
       }
 
       toast({
