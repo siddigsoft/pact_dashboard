@@ -57,6 +57,7 @@ import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord, type AccuracyMetrics, type CostPrediction, type VarianceAlert, type SiteEnrichmentData } from '@/services/costPrediction.service';
 import { CostSparkline } from '@/components/mmp/CostSparkline';
 import { VarianceAlertBanner } from '@/components/mmp/VarianceAlertBanner';
+import { ExchangeRatePanel } from '@/components/mmp/ExchangeRatePanel';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import * as XLSX from 'xlsx';
 import { 
@@ -1463,6 +1464,10 @@ export default function CostPredictions() {
             <Upload className="h-4 w-4 mr-2" />
             Upload Data
           </TabsTrigger>
+          <TabsTrigger value="exchange-rates" data-testid="tab-exchange-rates">
+            <DollarSign className="h-4 w-4 mr-2" />
+            Exchange Rates
+          </TabsTrigger>
         </TabsList>
 
         {/* Upload Tab Content */}
@@ -2363,6 +2368,81 @@ export default function CostPredictions() {
                   </div>
                   <p className="text-2xl font-bold text-green-600 dark:text-green-500">-10%</p>
                   <p className="text-xs text-muted-foreground mt-1">Minimum distance adjustment</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Exchange Rates Tab Content */}
+        <TabsContent value="exchange-rates" className="space-y-6">
+          <ExchangeRatePanel variant="full" showRefresh={true} />
+          
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Info className="h-5 w-5" />
+                About Exchange Rates
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <h4 className="font-medium mb-2">How Exchange Rates Are Used</h4>
+                <p className="text-sm text-muted-foreground">
+                  Exchange rates from Sudan's top banks are used to calculate transportation costs 
+                  when historical data is unavailable. This helps estimate costs for new sites 
+                  based on Uganda baseline costs converted to SDG.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Bank of Sudan</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Official central bank rate. Used as primary reference.
+                  </p>
+                </div>
+                
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Bank of Khartoum</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Largest commercial bank. Provides buy/sell spreads.
+                  </p>
+                </div>
+                
+                <div className="p-4 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Faisal Islamic Bank</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Major Islamic bank. Provides alternative rate reference.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg">
+                <div className="flex gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-amber-800 dark:text-amber-200">
+                      Fallback Options When No Historical Data
+                    </p>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                      When dispatching sites without cost history, you'll see three options:
+                    </p>
+                    <ul className="text-sm text-amber-700 dark:text-amber-300 mt-2 space-y-1 list-disc list-inside">
+                      <li><strong>Algorithm + Rate:</strong> Uses Uganda baseline converted at current rate</li>
+                      <li><strong>Locality/State Median:</strong> Uses median from similar sites in the area</li>
+                      <li><strong>Manual Entry:</strong> Enter custom amount with justification (for audit)</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </CardContent>
