@@ -417,7 +417,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
       
-      const { data: profileData } = await supabase
+      let { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
