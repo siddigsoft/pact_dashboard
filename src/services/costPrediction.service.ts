@@ -77,6 +77,14 @@ export interface ValidationResult {
   errors: string[];
 }
 
+export interface SiteEnrichmentData {
+  completed_visits_last_12m: number;
+  last_three_costs: { visit_date: string; actual_cost: number }[];
+  predicted_cost?: number;
+  prediction_confidence?: number;
+  prediction_algorithm?: string;
+}
+
 export interface ParsedHistoricalRecord {
   site_name: string;
   state: string;
@@ -92,6 +100,7 @@ export interface ParsedHistoricalRecord {
   is_new_site: boolean;
   validation_status: 'valid' | 'warning' | 'error';
   validation_message?: string;
+  enrichment?: SiteEnrichmentData;
 }
 
 const SMOOTHING_FACTOR = 0.3;
@@ -1214,6 +1223,89 @@ export class CostPredictionService {
       linked_count,
       unlinked_count
     };
+  }
+
+  /**
+   * Get enrichment data for a batch of matched site IDs
+   * Returns visit counts (last 12 months), last 3 costs, and predictions
+   */
+  static async getSiteEnrichmentBatch(
+    siteIds: string[],
+    siteMetadata: Map<string, { state: string; locality: string; hub?: string }>
+  ): Promise<Map<string, SiteEnrichmentData>> {
+    const result = new Map<string, SiteEnrichmentData>();
+    
+    if (siteIds.length === 0) return result;
+    
+    try {
+      // Calculate date 12 months ago
+      const twelveMonthsAgo = new Date();
+      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+      const startDate = twelveMonthsAgo.toISOString().substring(0, 10);
+      
+      // Fetch all historical costs for these sites in the last 12 months
+      const { data: historicalCosts, error } = await supabase
+        .from('historical_site_costs')
+        .select('site_id, visit_date, actual_cost')
+        .in('site_id', siteIds)
+        .gte('visit_date', startDate)
+        .order('visit_date', { ascending: false });
+      
+      if (error) {
+        console.error('[CostPrediction] Error fetching enrichment data:', error);
+        return result;
+      }
+      
+      // Group costs by site
+      const costsBySite = new Map<string, { visit_date: string; actual_cost: number }[]>();
+      historicalCosts?.forEach(cost => {
+        if (!costsBySite.has(cost.site_id)) {
+          costsBySite.set(cost.site_id, []);
+        }
+        costsBySite.get(cost.site_id)!.push({
+          visit_date: cost.visit_date,
+          actual_cost: cost.actual_cost
+        });
+      });
+      
+      // Process each site
+      for (const siteId of siteIds) {
+        const siteCosts = costsBySite.get(siteId) || [];
+        const metadata = siteMetadata.get(siteId);
+        
+        // Count unique months with costs (completed visits)
+        const uniqueMonths = new Set(siteCosts.map(c => c.visit_date.substring(0, 7)));
+        const completedVisitsLast12M = uniqueMonths.size;
+        
+        // Get last 3 costs (already sorted desc)
+        const lastThreeCosts = siteCosts.slice(0, 3);
+        
+        // Get prediction if we have enough data
+        let prediction: CostPrediction | null = null;
+        if (siteCosts.length > 0 && metadata) {
+          prediction = await this.predictCostForSite(
+            siteId,
+            metadata.state,
+            metadata.locality,
+            metadata.hub
+          );
+        }
+        
+        result.set(siteId, {
+          completed_visits_last_12m: completedVisitsLast12M,
+          last_three_costs: lastThreeCosts,
+          predicted_cost: prediction?.predicted_cost,
+          prediction_confidence: prediction?.confidence,
+          prediction_algorithm: prediction?.algorithm_used
+        });
+      }
+      
+      console.log(`[CostPrediction] Enriched ${result.size} sites with visit history and predictions`);
+      return result;
+    } catch (err) {
+      console.error('[CostPrediction] Error in getSiteEnrichmentBatch:', err);
+      return result;
+    }
   }
 
   static async saveHistoricalCosts(records: HistoricalSiteCost[]): Promise<{ success: boolean; inserted: number; errors: string[] }> {
