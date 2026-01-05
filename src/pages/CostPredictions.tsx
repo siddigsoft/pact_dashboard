@@ -54,7 +54,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
-import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord, type AccuracyMetrics, type CostPrediction, type VarianceAlert } from '@/services/costPrediction.service';
+import { CostPredictionService, type HistoricalSiteCost, type ParsedHistoricalRecord, type AccuracyMetrics, type CostPrediction, type VarianceAlert, type SiteEnrichmentData } from '@/services/costPrediction.service';
 import { CostSparkline } from '@/components/mmp/CostSparkline';
 import { VarianceAlertBanner } from '@/components/mmp/VarianceAlertBanner';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
@@ -141,6 +141,7 @@ interface ParsedRecord {
   isNewSite: boolean;
   validationStatus: 'valid' | 'warning' | 'error';
   validationMessage?: string;
+  enrichment?: SiteEnrichmentData;
 }
 
 export default function CostPredictions() {
@@ -1052,6 +1053,31 @@ export default function CostPredictions() {
       
       console.log('[CostPredictions] Validation complete:', summary);
       
+      // Enrich matched sites with visit history and predictions
+      const matchedSiteIds = [...new Set(matchedSites.map(r => r.matchedSiteId).filter(Boolean) as string[])];
+      if (matchedSiteIds.length > 0) {
+        console.log(`[CostPredictions] Enriching ${matchedSiteIds.length} matched sites with visit history...`);
+        
+        // Build metadata map for predictions
+        const siteMetadata = new Map<string, { state: string; locality: string; hub?: string }>();
+        matchedSites.forEach(r => {
+          if (r.matchedSiteId) {
+            siteMetadata.set(r.matchedSiteId, { state: r.state, locality: r.locality, hub: r.hub || undefined });
+          }
+        });
+        
+        const enrichmentData = await CostPredictionService.getSiteEnrichmentBatch(matchedSiteIds, siteMetadata);
+        
+        // Attach enrichment data to records
+        allRecords.forEach(r => {
+          if (r.matchedSiteId && enrichmentData.has(r.matchedSiteId)) {
+            r.enrichment = enrichmentData.get(r.matchedSiteId);
+          }
+        });
+        
+        console.log(`[CostPredictions] Enrichment complete for ${enrichmentData.size} sites`);
+      }
+      
       setValidationSummary(summary);
       setParsedRecords(allRecords);
       setUploadStep('validate');
@@ -1651,6 +1677,9 @@ export default function CostPredictions() {
                               <TableHead>Locality</TableHead>
                               <TableHead>Month</TableHead>
                               <TableHead>Cost</TableHead>
+                              <TableHead>Visits (12M)</TableHead>
+                              <TableHead>Recent Costs</TableHead>
+                              <TableHead>Predicted</TableHead>
                               <TableHead>Notes</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -1699,6 +1728,58 @@ export default function CostPredictions() {
                                     </Badge>
                                   </TableCell>
                                   <TableCell>{record.actualCost ? formatCurrency(record.actualCost) : '-'}</TableCell>
+                                  <TableCell>
+                                    {record.enrichment ? (
+                                      <Badge variant={record.enrichment.completed_visits_last_12m > 0 ? "secondary" : "outline"} className="text-xs">
+                                        {record.enrichment.completed_visits_last_12m}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">-</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {record.enrichment && record.enrichment.last_three_costs.length > 0 ? (
+                                      <UITooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="flex items-center gap-1 cursor-help">
+                                            <span className="text-xs font-mono">
+                                              {record.enrichment.last_three_costs.slice(0, 3).map(c => formatCurrency(c.actual_cost).replace('SDG', '')).join(', ')}
+                                            </span>
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <div className="text-xs space-y-1">
+                                            <p className="font-medium">Last {record.enrichment.last_three_costs.length} visits:</p>
+                                            {record.enrichment.last_three_costs.map((c, i) => (
+                                              <p key={i}>{format(new Date(c.visit_date), 'MMM yyyy')}: {formatCurrency(c.actual_cost)}</p>
+                                            ))}
+                                          </div>
+                                        </TooltipContent>
+                                      </UITooltip>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">-</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {record.enrichment?.predicted_cost ? (
+                                      <UITooltip>
+                                        <TooltipTrigger asChild>
+                                          <Badge variant="outline" className="text-xs cursor-help">
+                                            <TrendingUp className="h-3 w-3 mr-1" />
+                                            {formatCurrency(record.enrichment.predicted_cost)}
+                                          </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <div className="text-xs space-y-1">
+                                            <p><span className="font-medium">Algorithm:</span> {record.enrichment.prediction_algorithm?.replace(/_/g, ' ')}</p>
+                                            <p><span className="font-medium">Confidence:</span> {record.enrichment.prediction_confidence}%</p>
+                                          </div>
+                                        </TooltipContent>
+                                      </UITooltip>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">-</span>
+                                    )}
+                                  </TableCell>
                                   <TableCell>
                                     {record.validationMessage ? (
                                       <span className={`text-xs ${record.validationStatus === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
