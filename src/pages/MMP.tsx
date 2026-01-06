@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle } from 'lucide-react';
+import { Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle, Activity } from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
 import { useMMP } from '@/context/mmp/MMPContext';
@@ -41,6 +41,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 import { useOffline } from '@/hooks/use-offline';
+import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -2949,6 +2950,12 @@ const MMP = () => {
                     <Badge variant="secondary">{totalVerifiedSitesCount}</Badge>
                   </TabsTrigger>
                 )}
+                {!canClaimSites && (
+                  <TabsTrigger value="tracker" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                    <Activity className="h-4 w-4" />
+                    MMP Tracker
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -4199,6 +4206,13 @@ const MMP = () => {
                     })()}
                   </div>
                 ) : null}
+              </TabsContent>
+            )}
+            
+            {/* MMP Tracker Status Tab */}
+            {!canClaimSites && (
+              <TabsContent value="tracker">
+                <WorkflowTrackerTab mmpFiles={mmpFiles} />
               </TabsContent>
             )}
           </Tabs>
