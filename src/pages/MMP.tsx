@@ -1546,10 +1546,12 @@ const MMP = () => {
         }
       }
 
-      // Still do a full page reload as fallback
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // Still do a full page reload as fallback, but only if online
+      if (navigator.onLine) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
 
     } catch (error: any) {
       console.error('❌ Failed to submit visit report:', error);
