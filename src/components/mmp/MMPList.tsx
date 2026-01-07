@@ -32,6 +32,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import MMPProgressDialog from './MMPProgressDialog'; // Add import for new dialog
 
 interface MMPListProps {
   mmpFiles: MMPFile[];
@@ -51,6 +52,8 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const { refreshMMPFiles } = useMMP();
   const { toast } = useToast();
   const [recallingId, setRecallingId] = useState<string | null>(null);
+  const [showProgressDialog, setShowProgressDialog] = useState(false); // Add state for progress dialog
+  const [selectedMMPForProgress, setSelectedMMPForProgress] = useState<MMPFile | null>(null); // Add state for selected MMP
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -116,6 +119,11 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     } finally {
       setRecallingId(null);
     }
+  };
+
+  const handleViewProgress = (mmp: MMPFile) => {
+    setSelectedMMPForProgress(mmp);
+    setShowProgressDialog(true);
   };
 
   if (!mmpFiles.length) {
@@ -204,6 +212,10 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         View Details
                       </DropdownMenuItem>
                       
+                      <DropdownMenuItem onClick={() => handleViewProgress(mmp)}>
+                        MMP Progress
+                      </DropdownMenuItem>
+                      
                       {((canEditMMP && !isForwarded) || (isFOM && isForwarded)) && (
                         <DropdownMenuItem onClick={() => navigate(`/mmp/${mmp.id}/edit?tab=sites`)}>
                           Edit Site Entries
@@ -282,6 +294,13 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           onForwarded={handleForwardComplete}
         />
       )}
+
+      {/* MMP Progress Dialog */}
+      <MMPProgressDialog
+        open={showProgressDialog}
+        onOpenChange={setShowProgressDialog}
+        mmpFile={selectedMMPForProgress}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={confirmId !== null} onOpenChange={open => { if (!open) setConfirmId(null); }}>
