@@ -923,7 +923,7 @@ const Settings = () => {
   }
 
   return (
-    <div className="container mx-auto p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
+    <div className="container mx-auto p-3 pt-36 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-24 sm:pb-8">
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
