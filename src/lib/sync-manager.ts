@@ -15,6 +15,7 @@ import {
   type PendingSyncAction,
 } from './offline-db';
 import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
+import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 
 export interface SyncProgress {
   total: number;
@@ -759,7 +760,7 @@ class SyncManager {
   }
 
   private async syncSiteVisitComplete(action: PendingSyncAction): Promise<void> {
-    const { siteEntryId, completedAt, location, notes, userId } = action.payload;
+    const { siteEntryId, completedAt, location, notes, userId, gpsForRegistry } = action.payload;
 
     const { data: existing, error: fetchError } = await supabase
       .from('mmp_site_entries')
@@ -794,6 +795,36 @@ class SyncManager {
         if (error) throw error;
       } else {
         console.log(`[SyncManager] Skipping status update due to conflict resolution, but will check wallet payout.`);
+      }
+    }
+
+    // Save GPS coordinates to Sites Registry if provided in payload (from offline completion)
+    if (gpsForRegistry && gpsForRegistry.latitude && gpsForRegistry.longitude) {
+      try {
+        console.log(`[SyncManager] 📍 Saving GPS coordinates to Sites Registry for site ${siteEntryId}`);
+        const gpsResult = await saveGPSToRegistryFromSiteEntry(
+          siteEntryId,
+          {
+            latitude: gpsForRegistry.latitude,
+            longitude: gpsForRegistry.longitude,
+            accuracy: gpsForRegistry.accuracy,
+          },
+          {
+            userId: gpsForRegistry.userId || userId || 'system',
+            sourceType: gpsForRegistry.sourceType || 'site_visit',
+            overwriteExisting: gpsForRegistry.overwriteExisting ?? false,
+          }
+        );
+
+        if (gpsResult.success) {
+          console.log(`[SyncManager] ✅ GPS coordinates saved to Sites Registry for site ${siteEntryId}`);
+        } else {
+          // Log but don't throw - GPS save failure shouldn't block sync
+          console.warn(`[SyncManager] ⚠️ Failed to save GPS to registry for site ${siteEntryId}: ${gpsResult.error}`);
+        }
+      } catch (gpsError: any) {
+        // Log but don't throw - GPS save failure shouldn't block sync
+        console.error(`[SyncManager] Error saving GPS to registry for site ${siteEntryId}:`, gpsError);
       }
     }
 

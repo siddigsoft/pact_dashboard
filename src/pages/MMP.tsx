@@ -1208,6 +1208,16 @@ const MMP = () => {
         accuracy: reportData.coordinates.accuracy
       } : {};
 
+      // Prepare GPS coordinates for Sites Registry (used in both online and offline flows)
+      const siteEntryId = site.id || site.siteId || site.entry_id;
+      const gpsCoordinates = siteEntryId && reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude
+        ? {
+            latitude: reportData.coordinates.latitude,
+            longitude: reportData.coordinates.longitude,
+            accuracy: reportData.coordinates.accuracy,
+          }
+        : undefined;
+
       let report: any = null;
 
       if (isOnline) {
@@ -1263,7 +1273,17 @@ const MMP = () => {
         console.log('💾 Offline mode - queuing report submission...');
         const { addPendingSync, saveSiteVisitOffline, getOfflineSiteVisit, updateSiteVisitOffline } = await import('@/lib/offline-db');
         
-        // Queue sync action
+        // Prepare GPS coordinates for registry save during sync (if available)
+        const gpsForRegistry = gpsCoordinates ? {
+          latitude: gpsCoordinates.latitude,
+          longitude: gpsCoordinates.longitude,
+          accuracy: gpsCoordinates.accuracy,
+          userId: currentUser?.id || 'system',
+          sourceType: 'site_visit' as const,
+          overwriteExisting: false
+        } : undefined;
+        
+        // Queue sync action - include GPS coordinates for registry save during sync
         await addPendingSync({
           type: 'site_visit_complete',
           payload: {
@@ -1282,7 +1302,9 @@ const MMP = () => {
               durationMinutes: reportData.visitDuration,
               coordinates: coordinatesJsonb,
               submittedAt: now
-            }
+            },
+            // Include GPS coordinates for Sites Registry save during sync
+            gpsForRegistry
           }
         });
 
@@ -1320,49 +1342,51 @@ const MMP = () => {
       }
 
       // Save GPS coordinates to Sites Registry (if coordinates were captured and site has valid ID)
-      const siteEntryId = site.id || site.siteId || site.entry_id;
-      if (siteEntryId && reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude) {
-        console.log('📍 Saving GPS to Sites Registry for site entry:', siteEntryId);
-        try {
-          const gpsResult = await saveGPSToRegistryFromSiteEntry(
-            siteEntryId,
-            {
-              latitude: reportData.coordinates.latitude,
-              longitude: reportData.coordinates.longitude,
-              accuracy: reportData.coordinates.accuracy,
-            },
-            {
-              userId: currentUser?.id || 'system',
-              sourceType: 'site_visit',
-              overwriteExisting: false, // Don't overwrite if GPS already exists
+      // IMPORTANT: Only attempt GPS save when online. When offline, GPS data is included in sync payload
+      if (siteEntryId && gpsCoordinates) {
+        if (isOnline) {
+          // Online: Save GPS immediately
+          console.log('📍 Saving GPS to Sites Registry for site entry:', siteEntryId);
+          try {
+            const gpsResult = await saveGPSToRegistryFromSiteEntry(
+              siteEntryId,
+              gpsCoordinates,
+              {
+                userId: currentUser?.id || 'system',
+                sourceType: 'site_visit',
+                overwriteExisting: false, // Don't overwrite if GPS already exists
+              }
+            );
+            if (gpsResult.success) {
+              console.log('✅ GPS saved to Sites Registry');
+              toast({
+                title: 'GPS Coordinates Saved',
+                description: 'Site GPS coordinates have been saved to the Sites Registry.',
+                variant: 'default'
+              });
+            } else {
+              console.warn('⚠️ Failed to save GPS to registry:', gpsResult.error);
+              // Show warning toast but don't fail the visit completion
+              toast({
+                title: 'GPS Save Warning',
+                description: gpsResult.error || 'GPS coordinates could not be saved to the Sites Registry.',
+                variant: 'destructive'
+              });
             }
-          );
-          if (gpsResult.success) {
-            console.log('✅ GPS saved to Sites Registry');
+          } catch (gpsError) {
+            console.error('❌ Error saving GPS to registry:', gpsError);
+            // Non-blocking - don't fail the visit completion for GPS errors
             toast({
-              title: 'GPS Coordinates Saved',
-              description: 'Site GPS coordinates have been saved to the Sites Registry.',
-              variant: 'default'
-            });
-          } else {
-            console.warn('⚠️ Failed to save GPS to registry:', gpsResult.error);
-            // Show warning toast but don't fail the visit completion
-            toast({
-              title: 'GPS Save Warning',
-              description: gpsResult.error || 'GPS coordinates could not be saved to the Sites Registry.',
+              title: 'GPS Save Error',
+              description: 'An error occurred while saving GPS coordinates. Please contact support if this persists.',
               variant: 'destructive'
             });
           }
-        } catch (gpsError) {
-          console.error('❌ Error saving GPS to registry:', gpsError);
-          // Non-blocking - don't fail the visit completion for GPS errors
-          toast({
-            title: 'GPS Save Error',
-            description: 'An error occurred while saving GPS coordinates. Please contact support if this persists.',
-            variant: 'destructive'
-          });
+        } else {
+          // Offline: GPS data will be saved during sync (included in payload below)
+          console.log('📍 Offline mode - GPS coordinates will be saved to registry during sync');
         }
-      } else if (reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude) {
+      } else if (gpsCoordinates) {
         console.warn('⚠️ Cannot save GPS: No valid site entry ID available');
         toast({
           title: 'GPS Not Saved',
@@ -1514,32 +1538,36 @@ const MMP = () => {
             setUnsyncedCompletedVisits(completedUnsynced);
           }
 
-          // Load updated my sites data
-          const { data: mySitesData, error: mySitesError } = await supabase
-            .from('mmp_site_entries')
-            .select('*')
-            .eq('accepted_by', currentUser.id)
-            .order('created_at', { ascending: false })
-            .limit(1000);
+          // Load updated my sites data (only when online)
+          if (isOnline) {
+            const { data: mySitesData, error: mySitesError } = await supabase
+              .from('mmp_site_entries')
+              .select('*')
+              .eq('accepted_by', currentUser.id)
+              .order('created_at', { ascending: false })
+              .limit(1000);
 
-          if (!mySitesError && mySitesData) {
-            const formatEntries = (entries: any[]) => entries.map(entry => {
-              const enumeratorFee = entry.enumerator_fee;
-              const transportFee = entry.transport_fee;
-              return {
-                ...entry,
-                siteName: entry.site_name,
-                siteCode: entry.site_code,
-                enumerator_fee: enumeratorFee,
-                enumeratorFee: enumeratorFee,
-                transport_fee: transportFee,
-                transportFee: transportFee,
-              };
-            });
+            if (!mySitesError && mySitesData) {
+              const formatEntries = (entries: any[]) => entries.map(entry => {
+                const enumeratorFee = entry.enumerator_fee;
+                const transportFee = entry.transport_fee;
+                return {
+                  ...entry,
+                  siteName: entry.site_name,
+                  siteCode: entry.site_code,
+                  enumerator_fee: enumeratorFee,
+                  enumeratorFee: enumeratorFee,
+                  transport_fee: transportFee,
+                  transportFee: transportFee,
+                };
+              });
 
-            const formattedMySites = formatEntries(mySitesData);
-            setEnumeratorMySites(formattedMySites);
-            console.log('✅ Enumerator My Sites updated:', formattedMySites.length, 'sites');
+              const formattedMySites = formatEntries(mySitesData);
+              setEnumeratorMySites(formattedMySites);
+              console.log('✅ Enumerator My Sites updated:', formattedMySites.length, 'sites');
+            }
+          } else {
+            console.log('📴 Offline mode - skipping data reload, will sync when online');
           }
         } catch (error) {
           console.error('❌ Failed to reload enumerator data:', error);
