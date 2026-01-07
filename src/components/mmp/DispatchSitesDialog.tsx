@@ -1034,8 +1034,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     <Input
                       id="bulk-transportation"
                       type="number"
-                      value={bulkCost.transportation || ''}
-                      onChange={(e) => setBulkCost(prev => ({ ...prev, transportation: parseFloat(e.target.value) || 0 }))}
+                      value={bulkCost.transportation === 0 ? '' : bulkCost.transportation}
+                      onChange={(e) => setBulkCost(prev => ({ ...prev, transportation: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
                       placeholder="Enter amount"
                       data-testid="input-bulk-transportation"
                     />
@@ -1045,8 +1045,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     <Input
                       id="bulk-accommodation"
                       type="number"
-                      value={bulkCost.accommodation || ''}
-                      onChange={(e) => setBulkCost(prev => ({ ...prev, accommodation: parseFloat(e.target.value) || 0 }))}
+                      value={bulkCost.accommodation === 0 ? '' : bulkCost.accommodation}
+                      onChange={(e) => setBulkCost(prev => ({ ...prev, accommodation: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
                       placeholder="Optional"
                       data-testid="input-bulk-accommodation"
                     />
@@ -1056,8 +1056,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     <Input
                       id="bulk-meal"
                       type="number"
-                      value={bulkCost.mealAllowance || ''}
-                      onChange={(e) => setBulkCost(prev => ({ ...prev, mealAllowance: parseFloat(e.target.value) || 0 }))}
+                      value={bulkCost.mealAllowance === 0 ? '' : bulkCost.mealAllowance}
+                      onChange={(e) => setBulkCost(prev => ({ ...prev, mealAllowance: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
                       placeholder="Optional"
                       data-testid="input-bulk-meal"
                     />
@@ -1067,8 +1067,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     <Input
                       id="bulk-other"
                       type="number"
-                      value={bulkCost.otherCosts || ''}
-                      onChange={(e) => setBulkCost(prev => ({ ...prev, otherCosts: parseFloat(e.target.value) || 0 }))}
+                      value={bulkCost.otherCosts === 0 ? '' : bulkCost.otherCosts}
+                      onChange={(e) => setBulkCost(prev => ({ ...prev, otherCosts: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
                       placeholder="Optional"
                       data-testid="input-bulk-other"
                     />
@@ -1150,8 +1150,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           <Input
                             id={`transportation-${siteId}`}
                             type="number"
-                            value={costs.transportation}
-                            onChange={(e) => updateSiteCost(siteId, 'transportation', parseFloat(e.target.value) || 0)}
+                            value={costs.transportation === 0 ? '' : costs.transportation}
+                            onChange={(e) => updateSiteCost(siteId, 'transportation', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
                             placeholder="Required"
                             data-testid={`input-transportation-${siteId}`}
                           />
@@ -1163,8 +1163,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           <Input
                             id={`accommodation-${siteId}`}
                             type="number"
-                            value={costs.accommodation}
-                            onChange={(e) => updateSiteCost(siteId, 'accommodation', parseFloat(e.target.value) || 0)}
+                            value={costs.accommodation === 0 ? '' : costs.accommodation}
+                            onChange={(e) => updateSiteCost(siteId, 'accommodation', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
                             placeholder="Optional"
                             data-testid={`input-accommodation-${siteId}`}
                           />
@@ -1176,8 +1176,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           <Input
                             id={`meal-${siteId}`}
                             type="number"
-                            value={costs.mealAllowance}
-                            onChange={(e) => updateSiteCost(siteId, 'mealAllowance', parseFloat(e.target.value) || 0)}
+                            value={costs.mealAllowance === 0 ? '' : costs.mealAllowance}
+                            onChange={(e) => updateSiteCost(siteId, 'mealAllowance', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
                             placeholder="Optional"
                             data-testid={`input-meal-${siteId}`}
                           />
@@ -1189,8 +1189,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           <Input
                             id={`other-${siteId}`}
                             type="number"
-                            value={costs.otherCosts}
-                            onChange={(e) => updateSiteCost(siteId, 'otherCosts', parseFloat(e.target.value) || 0)}
+                            value={costs.otherCosts === 0 ? '' : costs.otherCosts}
+                            onChange={(e) => updateSiteCost(siteId, 'otherCosts', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
                             placeholder="Optional"
                             data-testid={`input-other-${siteId}`}
                           />
