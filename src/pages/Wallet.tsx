@@ -536,7 +536,7 @@ const WalletPage = () => {
             <WalletIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(currentBalance)}
             </div>
             <p className="text-xs text-blue-300/70 mt-1">
@@ -553,7 +553,7 @@ const WalletPage = () => {
             <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.totalEarned || 0)}
             </div>
             <p className="text-xs text-purple-300/70 mt-1 flex items-center gap-1">
@@ -571,7 +571,7 @@ const WalletPage = () => {
             <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 animate-pulse" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.pendingWithdrawals || 0)}
             </div>
             <p className="text-xs text-orange-300/70 mt-1">
@@ -588,7 +588,7 @@ const WalletPage = () => {
             <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.totalWithdrawn || 0)}
             </div>
             <p className="text-xs text-cyan-300/70 mt-1">
@@ -608,7 +608,7 @@ const WalletPage = () => {
             <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-teal-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold tabular-nums bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.weeklyEarnings || 0)}
             </div>
             <p className="text-xs text-teal-300/70 mt-1">
@@ -625,7 +625,7 @@ const WalletPage = () => {
             <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold tabular-nums bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.monthlyEarnings || 0)}
             </div>
             <p className="text-xs text-rose-300/70 mt-1">
@@ -662,7 +662,7 @@ const WalletPage = () => {
             <CardTitle className="text-sm font-medium uppercase tracking-wide text-indigo-300">Average Transaction</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
               {transactions.length > 0
                 ? formatCurrency(transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length)
                 : formatCurrency(0)}
