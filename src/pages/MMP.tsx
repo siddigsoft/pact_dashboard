@@ -958,27 +958,9 @@ const MMP = () => {
     setSelectedSiteForVisit(site);
     setVisitReportDialogOpen(true);
 
-    // Helper function to check if error is a network error
-    const isNetworkError = (error: any): boolean => {
-      if (!error) return false;
-      const errorMessage = error.message?.toLowerCase() || '';
-      const errorCode = error.code?.toLowerCase() || '';
-      
-      return (
-        !navigator.onLine ||
-        errorMessage.includes('network') ||
-        errorMessage.includes('fetch') ||
-        errorMessage.includes('connection') ||
-        errorMessage.includes('timeout') ||
-        errorMessage.includes('failed to fetch') ||
-        errorCode === 'network_error' ||
-        errorCode === 'connection_error' ||
-        error?.name === 'NetworkError' ||
-        error?.name === 'TypeError'
-      );
-    };
-
     try {
+      const isOnline = navigator.onLine;
+      
       // Get final location
       let location: { lat: number; lng: number; accuracy?: number } | undefined;
       try {
@@ -998,9 +980,6 @@ const MMP = () => {
       // Stop location tracking
       stopLocationTracking(site.id);
 
-      // Check if offline or if we should use offline mode
-      const isOnline = navigator.onLine;
-      
       // If offline, use offline hook to save completion
       if (!isOnline) {
         console.log('[CompleteVisit] Offline mode - saving visit completion locally');
@@ -1031,101 +1010,91 @@ const MMP = () => {
         }
       }
 
-      // Online mode - try to update database, but catch network errors
-      try {
-        // Update site with visit completion time and final location (but don't change status yet)
-        const { error: updateError } = await supabase
-          .from('mmp_site_entries')
-          .update({
-            updated_at: now,
-            visit_completed_at: now,
-            visit_completed_by: currentUser?.id,
-            additional_data: {
-              ...(site.additional_data || {}),
-              final_location: location
-            }
-          })
-          .eq('id', site.id);
-
-        // If network error, fall back to offline mode
-        if (updateError && isNetworkError(updateError)) {
-          throw updateError;
-        }
-
-        if (updateError) {
-          throw updateError;
-        }
-
-        // Save final location to site_locations table (optional, don't fail if this fails)
-        if (location) {
-          try {
-            await supabase
-              .from('site_locations')
-              .insert({
-                site_id: site.id,
-                user_id: currentUser?.id || null,
-                latitude: location.lat,
-                longitude: location.lng,
-                accuracy: location.accuracy || 10,
-                notes: 'Visit end location',
-                recorded_at: now
-              });
-          } catch (locError) {
-            console.warn('[CompleteVisit] Failed to save location (non-critical):', locError);
-            // Don't fail the entire operation if location save fails
+      // Online mode - proceed with database update
+      // Update site with visit completion time and final location (but don't change status yet)
+      await supabase
+        .from('mmp_site_entries')
+        .update({
+          updated_at: now,
+          visit_completed_at: now,
+          visit_completed_by: currentUser?.id,
+          additional_data: {
+            ...(site.additional_data || {}),
+            final_location: location
           }
-        }
+        })
+        .eq('id', site.id);
 
-        // Process wallet payment for the user who completed the site entry
-        // Using centralized wallet transaction function (single point of truth)
-        try {
-          const result = await createSiteVisitWalletTransaction({
-            siteVisitId: site.id,
-            description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
-            showNotifications: true,
-            toast: toast,
+      // Save final location to site_locations table
+      if (location) {
+        await supabase
+          .from('site_locations')
+          .insert({
+            site_id: site.id,
+            user_id: currentUser?.id || null,
+            latitude: location.lat,
+            longitude: location.lng,
+            accuracy: location.accuracy || 10,
+            notes: 'Visit end location',
+            recorded_at: now
           });
+      }
 
-          if (result.success) {
-            console.log(`✅ Wallet transaction created successfully: ${result.message}`);
-          } else {
-            console.warn(`⚠️ Wallet transaction creation failed: ${result.message}`);
-            // Don't fail the entire operation if wallet payment fails
-            toast({
-              title: 'Payment Warning',
-              description: result.message || 'Site visit completed but wallet payment failed. Please contact support.',
-              variant: 'destructive',
-            });
-          }
-        } catch (walletErr: any) {
-          console.error('Failed to process wallet payment for completed site entry:', walletErr);
+      // Process wallet payment for the user who completed the site entry
+      // Using centralized wallet transaction function (single point of truth)
+      try {
+        const result = await createSiteVisitWalletTransaction({
+          siteVisitId: site.id,
+          description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
+          showNotifications: true,
+          toast: toast,
+        });
+
+        if (result.success) {
+          console.log(`✅ Wallet transaction created successfully: ${result.message}`);
+        } else {
+          console.warn(`⚠️ Wallet transaction creation failed: ${result.message}`);
           // Don't fail the entire operation if wallet payment fails
           toast({
             title: 'Payment Warning',
-            description: 'Site visit completed but wallet payment failed. Please contact support.',
+            description: result.message || 'Site visit completed but wallet payment failed. Please contact support.',
             variant: 'destructive',
           });
         }
-
-        // Set the site for visit report and open dialog
-        setSelectedSiteForVisit(site);
-        setVisitReportDialogOpen(true);
-
+      } catch (walletErr: any) {
+        console.error('Failed to process wallet payment for completed site entry:', walletErr);
+        // Don't fail the entire operation if wallet payment fails
         toast({
-          title: 'Visit Completed',
-          description: 'Site visit has been completed. Please submit your report.',
-          variant: 'default'
+          title: 'Payment Warning',
+          description: 'Site visit completed but wallet payment failed. Please contact support.',
+          variant: 'destructive',
         });
+      }
 
-      } catch (networkError: any) {
-        // Network error occurred - fall back to offline mode
-        if (isNetworkError(networkError)) {
-          console.log('[CompleteVisit] Network error detected, falling back to offline mode:', networkError);
+      // Set the site for visit report and open dialog
+      setSelectedSiteForVisit(site);
+      setVisitReportDialogOpen(true);
+
+      toast({
+        title: 'Visit Completed',
+        description: 'Site visit has been completed. Please submit your report.',
+        variant: 'default'
+      });
+
+    } catch (error: any) {
+      console.error('Failed to complete visit:', error);
+      
+      // If online and error occurred, try offline fallback
+      if (navigator.onLine && error) {
+        console.log('[CompleteVisit] Online update failed, attempting offline save...');
+        try {
+          const site = selectedSiteForVisit;
+          const location: { lat: number; lng: number; accuracy?: number } | undefined = undefined;
           
           const result = await completeSiteVisitOffline({
             siteEntryId: site.id,
             userId: currentUser?.id || '',
-            location: location ? { lat: location.lat, lng: location.lng, accuracy: location.accuracy } : undefined,
+            location,
             notes: undefined,
             photos: []
           });
@@ -1139,40 +1108,10 @@ const MMP = () => {
             setSelectedSiteForVisit(site);
             setVisitReportDialogOpen(true);
             return;
-          } else {
-            throw new Error(result.error || 'Failed to save visit completion offline');
           }
-        } else {
-          // Non-network error - rethrow
-          throw networkError;
+        } catch (offlineError) {
+          console.error('[CompleteVisit] Offline fallback also failed:', offlineError);
         }
-      }
-
-    } catch (error: any) {
-      console.error('Failed to complete visit:', error);
-      
-      // Final fallback - try offline save one more time
-      try {
-        const result = await completeSiteVisitOffline({
-          siteEntryId: site.id,
-          userId: currentUser?.id || '',
-          location: undefined,
-          notes: undefined,
-          photos: []
-        });
-
-        if (result.success) {
-          toast({
-            title: 'Visit Completed (Saved Offline)',
-            description: 'Visit has been completed and will be synced when connection is restored.',
-            variant: 'default'
-          });
-          setSelectedSiteForVisit(site);
-          setVisitReportDialogOpen(true);
-          return;
-        }
-      } catch (offlineError) {
-        console.error('[CompleteVisit] Final offline fallback also failed:', offlineError);
       }
       
       toast({
