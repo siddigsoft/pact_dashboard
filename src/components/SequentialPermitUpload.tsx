@@ -601,28 +601,42 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-            <CardTitle className="text-foreground">State Permit Uploaded</CardTitle>
+            <div className="flex flex-col">
+              <CardTitle className="text-foreground" lang="en">State Permit Uploaded</CardTitle>
+              <p lang="ar" dir="rtl" className="text-sm font-normal text-muted-foreground text-right">تم رفع تصريح الولاية</p>
+            </div>
           </div>
           <CardDescription>
-            {state} state permit has been uploaded successfully
+            <span lang="en">{state} state permit has been uploaded successfully</span>
+            <p lang="ar" dir="rtl" className="text-muted-foreground mt-1 text-right">تم رفع تصريح ولاية {state} بنجاح</p>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950">
             <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <AlertDescription className="text-foreground">
-              <strong>{state}</strong> has <strong>{localities.length}</strong> localities. 
-              Do you need to upload locality permits?
+              <p lang="en"><strong>{state}</strong> has <strong>{localities.length}</strong> localities. Do you need to upload locality permits?</p>
+              <p lang="ar" dir="rtl" className="mt-2 text-sm text-right"><strong>{state}</strong> تحتوي على <strong>{localities.length}</strong> محلية. هل تحتاج إلى رفع تصاريح المحليات؟</p>
             </AlertDescription>
           </Alert>
 
-          <div className="flex gap-3">
-            <Button onClick={handleYesLocalityPermits} className="flex-1" data-testid="button-yes-locality-permits">
-              <CheckCircle2 className="h-4 w-4 mr-2" /> Yes, upload locality permits
-            </Button>
-            <Button variant="outline" onClick={handleNoLocalityPermits} className="flex-1" data-testid="button-no-locality-permits">
-              <SkipForward className="h-4 w-4 mr-2" /> No, skip locality permits
-            </Button>
+          <div className="text-base font-medium text-gray-800 dark:text-gray-200">
+            <p lang="en">Do you require a Locality permit?</p>
+            <p lang="ar" dir="rtl" className="text-sm text-muted-foreground mt-1 text-right">هل تحتاج إلى تصريح محلية؟</p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-3">
+              <Button onClick={handleYesLocalityPermits} className="flex-1" data-testid="button-yes-locality-permits">
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                <span lang="en">Yes, upload locality permits</span>
+              </Button>
+              <Button variant="outline" onClick={handleNoLocalityPermits} className="flex-1" data-testid="button-no-locality-permits">
+                <SkipForward className="h-4 w-4 mr-2" />
+                <span lang="en">No, skip locality permits</span>
+              </Button>
+            </div>
+            <p lang="ar" dir="rtl" className="text-xs text-muted-foreground text-right">نعم، رفع تصاريح المحليات | لا، تخطي تصاريح المحليات</p>
           </div>
         </CardContent>
       </Card>
@@ -755,26 +769,46 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-            <CardTitle className="text-foreground">Permits Complete</CardTitle>
+            <div className="flex flex-col">
+              <CardTitle className="text-foreground" lang="en">Permits Complete</CardTitle>
+              <p lang="ar" dir="rtl" className="text-sm font-normal text-muted-foreground text-right">اكتملت التصاريح</p>
+            </div>
           </div>
-          <CardDescription>All permit uploads for {state} are complete</CardDescription>
+          <CardDescription>
+            <span lang="en">All permit uploads for {state} are complete</span>
+            <p lang="ar" dir="rtl" className="text-muted-foreground mt-1 text-right">اكتملت جميع عمليات رفع التصاريح لـ {state}</p>
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950">
             <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
             <AlertDescription className="text-foreground">
-              <strong>Summary:</strong>
-              <ul className="mt-2 space-y-1">
-                <li>State Permit: Uploaded</li>
-                {uploadedCount > 0 && <li>Locality Permits Uploaded: {uploadedCount}</li>}
-                {skippedCount > 0 && <li>Localities Skipped: {skippedCount}</li>}
-              </ul>
+              <div lang="en">
+                <strong>Summary:</strong>
+                <ul className="mt-2 space-y-1">
+                  <li>State Permit: Uploaded</li>
+                  {uploadedCount > 0 && <li>Locality Permits Uploaded: {uploadedCount}</li>}
+                  {skippedCount > 0 && <li>Localities Skipped: {skippedCount}</li>}
+                </ul>
+              </div>
+              <div lang="ar" dir="rtl" className="mt-3 border-t pt-2 text-right">
+                <strong>ملخص:</strong>
+                <ul className="mt-2 space-y-1">
+                  <li>تصريح الولاية: تم الرفع</li>
+                  {uploadedCount > 0 && <li>تصاريح المحليات المرفوعة: {uploadedCount}</li>}
+                  {skippedCount > 0 && <li>المحليات المتخطاة: {skippedCount}</li>}
+                </ul>
+              </div>
             </AlertDescription>
           </Alert>
 
-          <Button onClick={onComplete} className="w-full" data-testid="button-complete-permits">
-            <CheckCircle2 className="h-4 w-4 mr-2" /> Done
-          </Button>
+          <div className="flex flex-col gap-1">
+            <Button onClick={onComplete} className="w-full" data-testid="button-complete-permits">
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              <span lang="en">Done</span>
+            </Button>
+            <p lang="ar" dir="rtl" className="text-xs text-muted-foreground text-right">تم</p>
+          </div>
         </CardContent>
       </Card>
     );
