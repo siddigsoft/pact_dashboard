@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { safeUploadFile } from '@/lib/safeUpload';
 
 export interface ChatAttachment {
   url: string;
@@ -38,36 +39,19 @@ export async function uploadChatAttachment(
   const fileName = `${timestamp}_${randomId}.${fileExt}`;
   const filePath = `${chatId}/${userId}/${fileName}`;
 
-  // Upload to Supabase Storage
-  const { data, error } = await supabase.storage
-    .from('chat-attachments')
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-      metadata: {
-        uploaded_by: userId,
-        chat_id: chatId,
-        original_name: file.name,
-        content_type: file.type,
-      },
-    });
-
-  if (error) {
-    console.error('Error uploading chat attachment:', error);
-    throw new Error(`Failed to upload file: ${error.message}`);
+  // Upload using safeUploadFile
+  const uploadResult = await safeUploadFile(file, {
+    bucket: 'chat-attachments',
+    path: `${chatId}/${userId}`,
+    allowedTypes: undefined, // allow all types for chat attachments
+    maxSizeBytes: maxSize
+  });
+  if (!uploadResult.success || !uploadResult.url) {
+    console.error('Error uploading chat attachment:', uploadResult.error);
+    throw new Error(`Failed to upload file: ${uploadResult.error || 'Unknown error'}`);
   }
-
-  // Get public URL
-  const { data: urlData } = supabase.storage
-    .from('chat-attachments')
-    .getPublicUrl(filePath);
-
-  if (!urlData?.publicUrl) {
-    throw new Error('Failed to get public URL for uploaded file');
-  }
-
   return {
-    url: urlData.publicUrl,
+    url: uploadResult.url,
     name: file.name,
     type: file.type,
     size: file.size,

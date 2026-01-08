@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, ChangeEvent } from 'react';
+import { safeUploadFile, UPLOAD_CONFIGS } from '@/lib/safeUpload';
 import { User } from '@/types';
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -50,58 +51,33 @@ const AvatarUpload: React.FC<AvatarUploadProps> = ({
     }
   };
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File",
-        description: "Please upload an image file",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File Too Large",
-        description: "Image must be less than 5MB",
-        variant: "destructive"
-      });
-      return;
-    }
-
     setIsUploading(true);
-    
-    // Create a FileReader to convert the image to a data URL
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      
-      // In a real app, you'd upload to a server here and get a URL back
-      // For now, we'll use the data URL directly
-      onAvatarUpload(result);
-      
-      setIsUploading(false);
+
+    // Use safeUploadFile for secure, session-aware upload
+    const result = await safeUploadFile(file, {
+      ...UPLOAD_CONFIGS.avatars,
+      allowedTypes: [...UPLOAD_CONFIGS.avatars.allowedTypes],
+    });
+
+    setIsUploading(false);
+
+    if (result.success && result.url) {
+      onAvatarUpload(result.url);
       toast({
         title: "Avatar Updated",
         description: "Your profile picture has been updated"
       });
-    };
-    
-    reader.onerror = () => {
-      setIsUploading(false);
+    } else {
       toast({
         title: "Upload Failed",
-        description: "Failed to process the image",
+        description: result.error || "Failed to upload avatar",
         variant: "destructive"
       });
-    };
-    
-    reader.readAsDataURL(file);
+    }
   };
 
   const handleRemoveAvatar = () => {
