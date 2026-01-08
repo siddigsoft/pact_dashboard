@@ -288,7 +288,19 @@ const UserDetail: React.FC = () => {
 
     try {
       // Check if email was changed - if so, update in Auth first
-      const emailChanged = editForm.email && editForm.email.toLowerCase() !== user.email?.toLowerCase();
+      // Normalize both emails for comparison (trim whitespace, lowercase)
+      const normalizedEditEmail = (editForm.email || '').trim().toLowerCase();
+      const normalizedUserEmail = (user.email || '').trim().toLowerCase();
+      const emailChanged = normalizedEditEmail !== '' && normalizedEditEmail !== normalizedUserEmail;
+      
+      console.log('Email comparison:', { 
+        editFormEmail: editForm.email, 
+        userEmail: user.email, 
+        normalizedEditEmail,
+        normalizedUserEmail,
+        emailChanged 
+      });
+      
       let newEmail = editForm.email;
       
       if (emailChanged && isAdmin && adminUpdateUserEmail) {
