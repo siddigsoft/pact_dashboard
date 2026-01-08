@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { safeUploadFile } from '@/lib/safeUpload';
 import { CoordinatorLocalityPermit, LocalityPermitStatus } from '@/types/coordinator-permits';
 import { useAppContext } from '@/context/AppContext';
 
@@ -98,20 +99,19 @@ export const useCoordinatorLocalityPermits = () => {
     setError(null);
 
     try {
-      // Upload file to storage
-      const fileName = `${Date.now()}_${file.name}`;
-      const filePath = `coordinator-permits/${currentUser.id}/${stateId}/${localityId}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('mmp-files')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('mmp-files')
-        .getPublicUrl(filePath);
+      // Upload file using safeUploadFile
+      const filePath = `coordinator-permits/${currentUser.id}/${stateId}/${localityId}`;
+      const uploadResult = await safeUploadFile(file, {
+        bucket: 'mmp-files',
+        path: filePath,
+        allowedTypes: undefined, // allow all types
+        maxSizeBytes: 10 * 1024 * 1024
+      });
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.error || 'Failed to upload file');
+      }
+      const publicUrl = uploadResult.url;
 
       const uploadedAt = new Date().toISOString();
       const inserted: CoordinatorLocalityPermit = {

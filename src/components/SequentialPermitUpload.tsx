@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { safeUploadFile } from '@/lib/safeUpload';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -167,19 +168,20 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
 
     setUploading(true);
     try {
+
       const stateSegment = sanitizeSegment(state);
-      const fileName = `state-permit-${stateSegment}-${Date.now()}-${selectedFile.name}`;
-      const filePath = `permits/${mmpFileId}/state/${stateSegment}/${fileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('mmp-files')
-        .upload(filePath, selectedFile, { upsert: true, contentType: selectedFile.type || undefined });
+      const filePath = `permits/${mmpFileId}/state/${stateSegment}`;
+      const uploadResult = await safeUploadFile(selectedFile, {
+        bucket: 'mmp-files',
+        path: filePath,
+        allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+        maxSizeBytes: 10 * 1024 * 1024
+      });
 
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('mmp-files')
-        .getPublicUrl(filePath);
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.error || 'Failed to upload file');
+      }
+      const publicUrl = uploadResult.url;
 
       const { data: mmpData, error: fetchError } = await supabase
         .from('mmp_files')
@@ -263,20 +265,21 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
 
     setUploading(true);
     try {
+
       const stateSegment = sanitizeSegment(state);
       const localitySegment = sanitizeSegment(currentLocality.localityName);
-      const fileName = `locality-permit-${stateSegment}-${localitySegment}-${Date.now()}-${selectedFile.name}`;
-      const filePath = `permits/${mmpFileId}/local/${localitySegment}/${fileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('mmp-files')
-        .upload(filePath, selectedFile, { upsert: true, contentType: selectedFile.type || undefined });
+      const filePath = `permits/${mmpFileId}/local/${localitySegment}`;
+      const uploadResult = await safeUploadFile(selectedFile, {
+        bucket: 'mmp-files',
+        path: filePath,
+        allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+        maxSizeBytes: 10 * 1024 * 1024
+      });
 
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('mmp-files')
-        .getPublicUrl(filePath);
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.error || 'Failed to upload file');
+      }
+      const publicUrl = uploadResult.url;
 
       const { data: mmpData, error: fetchError } = await supabase
         .from('mmp_files')

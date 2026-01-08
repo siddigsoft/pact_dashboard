@@ -2503,7 +2503,7 @@ const CoordinatorSites: React.FC = () => {
                   className="flex-1 min-h-[44px]"
                 >
                   <FileCheck className="h-4 w-4 mr-2" />
-                  Upload Permit
+                  Permit Status
                 </Button>
                 <Button
                   variant="outline"
@@ -2696,42 +2696,54 @@ const CoordinatorSites: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 gap-1 h-auto p-1"> {/* Responsive grid */}
-          <TabsTrigger value="new" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <span>New</span>
-            <Badge variant="secondary" className="ml-2">
-              {newSitesCount}
-            </Badge>
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 gap-1 h-auto p-1">
+          <TabsTrigger value="new" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
+            <div className="flex items-center gap-1">
+              <span>New</span>
+              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
+                {newSitesCount}
+              </Badge>
+            </div>
           </TabsTrigger>
-          <TabsTrigger value="permits_attached" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <span>CP Verification</span>
-            <Badge variant="secondary" className="ml-2">
-              {permitsAttachedCount}
-            </Badge>
+          <TabsTrigger value="permits_attached" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
+            <div className="flex items-center gap-1">
+              <span>CP Verification</span>
+              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
+                {permitsAttachedCount}
+              </Badge>
+            </div>
           </TabsTrigger>
-          <TabsTrigger value="verified" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <span>Verified</span>
-            <Badge variant="secondary" className="ml-2">
-              {verifiedSitesCount}
-            </Badge>
+          <TabsTrigger value="verified" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
+            <div className="flex items-center gap-1">
+              <span>Verified</span>
+              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
+                {verifiedSitesCount}
+              </Badge>
+            </div>
           </TabsTrigger>
-          <TabsTrigger value="approved" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <span>Approved</span>
-            <Badge variant="secondary" className="ml-2">
-              {approvedSitesCount}
-            </Badge>
+          <TabsTrigger value="approved" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
+            <div className="flex items-center gap-1">
+              <span>Approved</span>
+              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
+                {approvedSitesCount}
+              </Badge>
+            </div>
           </TabsTrigger>
-          <TabsTrigger value="completed" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <span>Completed</span>
-            <Badge variant="secondary" className="ml-2">
-              {completedSitesCount}
-            </Badge>
+          <TabsTrigger value="completed" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
+            <div className="flex items-center gap-1">
+              <span>Completed</span>
+              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
+                {completedSitesCount}
+              </Badge>
+            </div>
           </TabsTrigger>
-          <TabsTrigger value="rejected" className={`flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'} text-xs sm:text-sm`}>
-            <span>Rejected</span>
-            <Badge variant="secondary" className="ml-2">
-              {rejectedSitesCount}
-            </Badge>
+          <TabsTrigger value="rejected" className={`flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'} text-xs sm:text-sm`}>
+            <div className="flex items-center gap-1">
+              <span>Rejected</span>
+              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
+                {rejectedSitesCount}
+              </Badge>
+            </div>
           </TabsTrigger>
         </TabsList>
 
@@ -3823,7 +3835,7 @@ const CoordinatorSites: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Proceed Without Local Permit</DialogTitle>
             <DialogDescription>
-              Can you continue to complete <strong>{selectedSiteForWithoutPermit?.site_name}</strong> without a local permit?
+              Can you work on <strong>{selectedSiteForWithoutPermit?.site_name}</strong> without a local permit?
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
