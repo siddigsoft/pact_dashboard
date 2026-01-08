@@ -33,7 +33,7 @@ const availableRoles = VISIBLE_ROLE_CODES;
 
 const UserDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { users, currentUser, updateUser, approveUser, rejectUser, refreshUsers, adminConfirmUserEmail } = useUser();
+  const { users, currentUser, updateUser, approveUser, rejectUser, refreshUsers, adminConfirmUserEmail, adminUpdateUserEmail } = useUser();
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -287,7 +287,34 @@ const UserDetail: React.FC = () => {
     setIsSaving(true);
 
     try {
-      const updatedUser: User = { ...user, ...editForm };
+      // Check if email was changed - if so, update in Auth first
+      const emailChanged = editForm.email && editForm.email.toLowerCase() !== user.email?.toLowerCase();
+      let newEmail = editForm.email;
+      
+      if (emailChanged && isAdmin && adminUpdateUserEmail) {
+        const emailSuccess = await adminUpdateUserEmail(user.id, editForm.email!);
+        if (!emailSuccess) {
+          toast({
+            title: "Email update failed",
+            description: "The profile was not updated. Please try again.",
+            variant: "destructive"
+          });
+          setIsSaving(false);
+          return;
+        }
+        // Email was successfully updated via edge function (both Auth and profile)
+        // Update editForm to reflect the new email for local state
+        newEmail = editForm.email!.toLowerCase();
+      }
+      
+      // Build updatedUser - if email was changed via edge function, it's already in profile
+      // so we use the new email to keep local state in sync
+      const updatedUser: User = { 
+        ...user, 
+        ...editForm,
+        email: emailChanged ? newEmail : (editForm.email || user.email)
+      };
+      
       const success = await updateUser(updatedUser);
 
       if (success) {

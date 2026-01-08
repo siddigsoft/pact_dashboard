@@ -34,6 +34,7 @@ interface UserContextType {
   sendPasswordRecoveryEmail: (email: string) => Promise<boolean>;
   adminSetUserPassword: (email: string, newPassword: string) => Promise<boolean>;
   adminConfirmUserEmail: (userId: string) => Promise<boolean>;
+  adminUpdateUserEmail: (userId: string, newEmail: string) => Promise<boolean>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -1426,6 +1427,53 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const adminUpdateUserEmail = async (userId: string, newEmail: string): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast({
+          title: 'Authentication required',
+          description: 'Please log in to perform this action.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const { data, error } = await supabase.functions.invoke('admin-update-email', {
+        body: { userId, newEmail: newEmail.toLowerCase() },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error || !data?.success) {
+        console.error('Email update error:', error || data?.error);
+        toast({
+          title: 'Email update failed',
+          description: error?.message || data?.error || 'An error occurred while updating the email.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Email updated',
+        description: 'The user\'s email has been updated successfully. They should use the new email to log in.',
+      });
+
+      await refreshUsers();
+      return true;
+    } catch (error: any) {
+      console.error('Admin update email error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update user email.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const contextValue: UserContextType = {
     currentUser,
     authReady,
@@ -1452,6 +1500,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sendPasswordRecoveryEmail,
     adminSetUserPassword,
     adminConfirmUserEmail,
+    adminUpdateUserEmail,
   };
 
   return (
@@ -1482,6 +1531,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendPasswordRecoveryEmail,
         adminSetUserPassword,
         adminConfirmUserEmail,
+        adminUpdateUserEmail,
       }}
     >
       {children}
