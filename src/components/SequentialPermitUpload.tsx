@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
   Upload, FileText, AlertTriangle, CheckCircle2, X, Eye, EyeOff, 
   ChevronRight, MapPin, Building2, SkipForward, ArrowLeft
@@ -16,6 +17,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { sudanStates, SudanState } from '@/data/sudanStates';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import type { PermitRequirementOption, WorkWithoutPermitOption } from './PermitVerificationQuestions';
 
 interface LocalityPermitStatus {
   localityId: string;
@@ -33,7 +35,7 @@ interface SequentialPermitUploadProps {
   onCancel?: () => void;
 }
 
-type UploadStep = 'state' | 'ask_locality' | 'locality_list' | 'locality_upload' | 'complete';
+type UploadStep = 'state' | 'ask_locality' | 'locality_requirement' | 'locality_follow_up' | 'locality_list' | 'locality_upload' | 'complete';
 
 export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
   state,
@@ -57,6 +59,10 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
   const [currentLocalityIndex, setCurrentLocalityIndex] = useState(0);
   const [statePermitUploaded, setStatePermitUploaded] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+
+  // Locality permit requirement state
+  const [localityPermitRequirement, setLocalityPermitRequirement] = useState<PermitRequirementOption | null>(null);
+  const [localityCanWorkWithout, setLocalityCanWorkWithout] = useState<WorkWithoutPermitOption | null>(null);
 
   // Check if state permit already exists and set initial step accordingly
   useEffect(() => {
@@ -433,7 +439,39 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
   };
 
   const handleYesLocalityPermits = () => {
-    setCurrentStep('locality_list');
+    // Instead of going directly to locality_list, first ask about requirements
+    setCurrentStep('locality_requirement');
+  };
+
+  const handleLocalityRequirementNext = () => {
+    if (!localityPermitRequirement) return;
+    
+    if (localityPermitRequirement === 'required_have_it') {
+      // They have locality permits, proceed to upload
+      setCurrentStep('locality_list');
+    } else if (localityPermitRequirement === 'required_dont_have_it') {
+      // Required but don't have, ask if can work without
+      setCurrentStep('locality_follow_up');
+    } else {
+      // Not required, skip to complete
+      setCurrentStep('complete');
+    }
+  };
+
+  const handleLocalityFollowUpNext = () => {
+    if (!localityCanWorkWithout) return;
+    
+    if (localityCanWorkWithout === 'yes') {
+      // Can work without, skip to complete
+      setCurrentStep('complete');
+    } else {
+      // Cannot work without permit - show toast and stay on step
+      toast({
+        title: "Locality Permit Required",
+        description: "Please contact your FOM to obtain the required locality permits before proceeding.",
+        variant: "destructive",
+      });
+    }
   };
 
   const startLocalityUpload = (index: number) => {
@@ -638,6 +676,157 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
             </div>
             <p lang="ar" dir="rtl" className="text-xs text-muted-foreground text-right">نعم، رفع تصاريح المحليات | لا، تخطي تصاريح المحليات</p>
           </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (currentStep === 'locality_requirement') {
+    return (
+      <Card className="border-purple-200 bg-gradient-to-br from-purple-50/50 to-white dark:from-purple-950/50 dark:to-background dark:border-purple-800 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
+            <MapPin className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+            <div className="flex flex-col">
+              <span lang="en">Locality Permit Verification</span>
+              <p lang="ar" dir="rtl" className="text-sm font-normal text-purple-600 dark:text-purple-400 text-right">التحقق من تصريح المحلية</p>
+            </div>
+          </CardTitle>
+          <CardDescription>
+            <span lang="en">Verify locality permit requirements for localities in <strong>{state}</strong></span>
+            <p lang="ar" dir="rtl" className="text-muted-foreground mt-1 text-right">تحقق من متطلبات تصريح المحلية للمحليات في <strong>{state}</strong></p>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="text-base font-medium text-gray-800 dark:text-gray-200">
+            <p lang="en">Do you require Locality permits for this state?</p>
+            <p lang="ar" dir="rtl" className="text-sm text-muted-foreground mt-1 text-right">هل تحتاج إلى تصاريح محلية لهذه الولاية؟</p>
+          </div>
+          
+          <RadioGroup
+            value={localityPermitRequirement || ''}
+            onValueChange={(value) => setLocalityPermitRequirement(value as PermitRequirementOption)}
+            className="space-y-3"
+          >
+            <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-purple-50/50 dark:hover:bg-purple-950/50 transition-colors">
+              <RadioGroupItem value="required_have_it" id="locality-required-have" data-testid="radio-locality-required-have" />
+              <Label htmlFor="locality-required-have" className="flex-1 cursor-pointer">
+                <p lang="en" className="font-medium text-gray-900 dark:text-gray-100">Yes, it's required and I will upload them</p>
+                <p lang="en" className="text-sm text-gray-600 dark:text-gray-400">I have the locality permits and will upload them now</p>
+                <p lang="ar" dir="rtl" className="text-sm text-muted-foreground mt-1 border-t pt-1 text-right">نعم، مطلوب وسأقوم برفعها - لدي تصاريح المحلية وسأرفعها الآن</p>
+              </Label>
+            </div>
+            
+            <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-purple-50/50 dark:hover:bg-purple-950/50 transition-colors">
+              <RadioGroupItem value="required_dont_have_it" id="locality-required-dont-have" data-testid="radio-locality-required-dont-have" />
+              <Label htmlFor="locality-required-dont-have" className="flex-1 cursor-pointer">
+                <p lang="en" className="font-medium text-gray-900 dark:text-gray-100">Yes, it's required but I don't have them</p>
+                <p lang="en" className="text-sm text-gray-600 dark:text-gray-400">Locality permits are required but not available</p>
+                <p lang="ar" dir="rtl" className="text-sm text-muted-foreground mt-1 border-t pt-1 text-right">نعم، مطلوب لكن ليس لدي - تصاريح المحلية مطلوبة لكنها غير متوفرة</p>
+              </Label>
+            </div>
+            
+            <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-purple-50/50 dark:hover:bg-purple-950/50 transition-colors">
+              <RadioGroupItem value="not_required" id="locality-not-required" data-testid="radio-locality-not-required" />
+              <Label htmlFor="locality-not-required" className="flex-1 cursor-pointer">
+                <p lang="en" className="font-medium text-gray-900 dark:text-gray-100">No, it's not a requirement</p>
+                <p lang="en" className="text-sm text-gray-600 dark:text-gray-400">Locality permits are not required in this state</p>
+                <p lang="ar" dir="rtl" className="text-sm text-muted-foreground mt-1 border-t pt-1 text-right">لا، ليس مطلوباً - تصاريح المحلية غير مطلوبة في هذه الولاية</p>
+              </Label>
+            </div>
+          </RadioGroup>
+
+          <div className="flex gap-3 pt-2">
+            <Button 
+              onClick={handleLocalityRequirementNext}
+              disabled={!localityPermitRequirement}
+              className="flex-1"
+              data-testid="button-locality-requirement-next"
+            >
+              <ChevronRight className="h-4 w-4 mr-2" />
+              <span lang="en">Continue</span>
+            </Button>
+            <Button variant="outline" onClick={() => setCurrentStep('ask_locality')} data-testid="button-locality-requirement-back">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              <span lang="en">Back</span>
+            </Button>
+          </div>
+          <p lang="ar" dir="rtl" className="text-xs text-muted-foreground text-right">متابعة | رجوع</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (currentStep === 'locality_follow_up') {
+    return (
+      <Card className="border-amber-200 bg-gradient-to-br from-amber-50/50 to-white dark:from-amber-950/50 dark:to-background dark:border-amber-800 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            <div className="flex flex-col">
+              <span lang="en">Locality Permit Required</span>
+              <p lang="ar" dir="rtl" className="text-sm font-normal text-amber-600 dark:text-amber-400 text-right">تصريح المحلية مطلوب</p>
+            </div>
+          </CardTitle>
+          <CardDescription>
+            <span lang="en">You indicated that locality permits are required but not available</span>
+            <p lang="ar" dir="rtl" className="text-muted-foreground mt-1 text-right">لقد أشرت إلى أن تصاريح المحلية مطلوبة لكنها غير متوفرة</p>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertDescription className="text-foreground">
+              <p lang="en">Locality permits are required for localities in <strong>{state}</strong> but you indicated they are not currently available.</p>
+              <p lang="ar" dir="rtl" className="text-sm mt-2 text-right">تصاريح المحلية مطلوبة للمحليات في <strong>{state}</strong> لكنك أشرت إلى أنها غير متوفرة حالياً.</p>
+            </AlertDescription>
+          </Alert>
+
+          <div className="text-base font-medium text-gray-800 dark:text-gray-200">
+            <p lang="en">Are you able to work without the locality permits?</p>
+            <p lang="ar" dir="rtl" className="text-sm text-muted-foreground mt-1 text-right">هل يمكنك العمل بدون تصاريح المحلية؟</p>
+          </div>
+          
+          <RadioGroup
+            value={localityCanWorkWithout || ''}
+            onValueChange={(value) => setLocalityCanWorkWithout(value as WorkWithoutPermitOption)}
+            className="space-y-3"
+          >
+            <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-amber-50/50 dark:hover:bg-amber-950/50 transition-colors">
+              <RadioGroupItem value="yes" id="locality-work-without-yes" data-testid="radio-locality-work-without-yes" />
+              <Label htmlFor="locality-work-without-yes" className="flex-1 cursor-pointer">
+                <p lang="en" className="font-medium text-gray-900 dark:text-gray-100">Yes, I can proceed without them</p>
+                <p lang="en" className="text-sm text-gray-600 dark:text-gray-400">Work can continue without locality permits</p>
+                <p lang="ar" dir="rtl" className="text-sm text-muted-foreground mt-1 border-t pt-1 text-right">نعم، يمكنني المتابعة بدونها - يمكن متابعة العمل بدون تصاريح المحلية</p>
+              </Label>
+            </div>
+            
+            <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-amber-50/50 dark:hover:bg-amber-950/50 transition-colors">
+              <RadioGroupItem value="no" id="locality-work-without-no" data-testid="radio-locality-work-without-no" />
+              <Label htmlFor="locality-work-without-no" className="flex-1 cursor-pointer">
+                <p lang="en" className="font-medium text-gray-900 dark:text-gray-100">No, I cannot proceed without them</p>
+                <p lang="en" className="text-sm text-gray-600 dark:text-gray-400">Locality permits must be obtained first</p>
+                <p lang="ar" dir="rtl" className="text-sm text-muted-foreground mt-1 border-t pt-1 text-right">لا، لا يمكنني المتابعة بدونها - يجب الحصول على تصاريح المحلية أولاً</p>
+              </Label>
+            </div>
+          </RadioGroup>
+
+          <div className="flex gap-3 pt-2">
+            <Button 
+              onClick={handleLocalityFollowUpNext}
+              disabled={!localityCanWorkWithout}
+              className="flex-1"
+              data-testid="button-locality-follow-up-next"
+            >
+              <ChevronRight className="h-4 w-4 mr-2" />
+              <span lang="en">Continue</span>
+            </Button>
+            <Button variant="outline" onClick={() => setCurrentStep('locality_requirement')} data-testid="button-locality-follow-up-back">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              <span lang="en">Back</span>
+            </Button>
+          </div>
+          <p lang="ar" dir="rtl" className="text-xs text-muted-foreground text-right">متابعة | رجوع</p>
         </CardContent>
       </Card>
     );
