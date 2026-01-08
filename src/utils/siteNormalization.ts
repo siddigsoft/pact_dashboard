@@ -33,6 +33,28 @@ export interface NormalizedSiteData {
   normalizedSiteCode: string;
 }
 
+const statePrefixToId: Record<string, string> = {
+  'kh': 'khartoum',
+  'gz': 'gezira',
+  'rs': 'red-sea',
+  'ks': 'kassala',
+  'gd': 'gedaref',
+  'sn': 'sennar',
+  'bn': 'blue-nile',
+  'wn': 'white-nile',
+  'rn': 'river-nile',
+  'no': 'northern',
+  'nd': 'north-darfur',
+  'sd': 'south-darfur',
+  'wd': 'west-darfur',
+  'ed': 'east-darfur',
+  'cd': 'central-darfur',
+  'nk': 'north-kordofan',
+  'sk': 'south-kordofan',
+  'wk': 'west-kordofan',
+  'ab': 'abyei',
+};
+
 const stateAliases: Record<string, string> = {
   'river nile': 'river-nile',
   'river nile state': 'river-nile',
@@ -106,20 +128,159 @@ export function normalizeText(text: string | null | undefined): string {
 export function normalizeStateId(stateName: string | null | undefined): string | null {
   if (!stateName) return null;
   
-  const normalized = normalizeText(stateName);
+  const trimmed = stateName.trim();
   
+  // First: direct ID match (already normalized IDs like "khartoum", "red-sea")
+  const directIdMatch = sudanStates.find(s => s.id === trimmed);
+  if (directIdMatch) return directIdMatch.id;
+  
+  const normalized = normalizeText(trimmed);
+  
+  // Second: check aliases
   if (stateAliases[normalized]) {
     return stateAliases[normalized];
   }
   
+  // Third: try kebab-case conversion
   const kebabCase = normalized.replace(/\s+/g, '-');
   const found = sudanStates.find(s => 
     s.id === kebabCase || 
     normalizeText(s.name) === normalized ||
     s.id === normalized
   );
+  if (found) return found.id;
   
-  return found?.id || null;
+  // Fourth: try extracting state from locality-style ID prefix (e.g., "kh-omdurman" -> "khartoum")
+  const prefixMatch = trimmed.match(/^([a-z]{2})-/i);
+  if (prefixMatch) {
+    const prefix = prefixMatch[1].toLowerCase();
+    if (statePrefixToId[prefix]) {
+      return statePrefixToId[prefix];
+    }
+  }
+  
+  // Fifth: try state code lookup from sudanStates (2-letter codes)
+  const upperTrimmed = trimmed.toUpperCase();
+  const byCode = sudanStates.find(s => s.code === upperTrimmed);
+  if (byCode) return byCode.id;
+  
+  // Sixth: check if input is actually a locality ID and derive state from it
+  for (const state of sudanStates) {
+    const locMatch = state.localities.find(l => l.id === trimmed || l.id === normalized);
+    if (locMatch) {
+      console.warn(`normalizeStateId: Input "${trimmed}" appears to be a locality ID, derived state: ${state.id}`);
+      return state.id;
+    }
+  }
+  
+  return null;
+}
+
+export function getStateName(stateIdOrName: string | null | undefined): string {
+  if (!stateIdOrName) return '';
+  
+  const trimmed = stateIdOrName.trim();
+  
+  // First: direct ID match
+  const byId = sudanStates.find(s => s.id === trimmed);
+  if (byId) return byId.name;
+  
+  const normalized = normalizeText(trimmed);
+  
+  // Second: check aliases and resolve to name
+  if (stateAliases[normalized]) {
+    const stateId = stateAliases[normalized];
+    const state = sudanStates.find(s => s.id === stateId);
+    if (state) return state.name;
+  }
+  
+  // Third: check kebab-case ID
+  const kebabCase = normalized.replace(/\s+/g, '-');
+  const byKebab = sudanStates.find(s => s.id === kebabCase);
+  if (byKebab) return byKebab.name;
+  
+  // Fourth: match by name
+  const byName = sudanStates.find(s => normalizeText(s.name) === normalized);
+  if (byName) return byName.name;
+  
+  // Fifth: try extracting state from locality-style ID prefix (e.g., "kh-omdurman" -> "Khartoum")
+  const prefixMatch = trimmed.match(/^([a-z]{2})-/i);
+  if (prefixMatch) {
+    const prefix = prefixMatch[1].toLowerCase();
+    if (statePrefixToId[prefix]) {
+      const stateId = statePrefixToId[prefix];
+      const state = sudanStates.find(s => s.id === stateId);
+      if (state) return state.name;
+    }
+  }
+  
+  // Sixth: try state code lookup from sudanStates (2-letter codes like "KH", "GZ")
+  const upperTrimmed = trimmed.toUpperCase();
+  const byCode = sudanStates.find(s => s.code === upperTrimmed);
+  if (byCode) return byCode.name;
+  
+  // Seventh: partial match - state name contains or is contained by input
+  const partialMatch = sudanStates.find(s => {
+    const sName = normalizeText(s.name);
+    return sName.includes(normalized) || normalized.includes(sName);
+  });
+  if (partialMatch) return partialMatch.name;
+  
+  // Eighth: check if input is actually a locality ID and derive state from it
+  for (const state of sudanStates) {
+    const locMatch = state.localities.find(l => l.id === trimmed || l.id === normalized);
+    if (locMatch) {
+      console.warn(`getStateName: Input "${trimmed}" appears to be a locality ID, derived state: ${state.name}`);
+      return state.name;
+    }
+  }
+  
+  // Return trimmed original as fallback (still usable as display)
+  return trimmed;
+}
+
+export function getLocalityName(
+  localityIdOrName: string | null | undefined,
+  stateIdOrName: string | null | undefined
+): string {
+  if (!localityIdOrName) return '';
+  
+  const trimmed = localityIdOrName.trim();
+  const normalizedLocality = normalizeText(trimmed);
+  
+  // First: search ALL states for locality by ID match (handles cases like "kh-omdurman")
+  for (const state of sudanStates) {
+    const byId = state.localities.find(l => l.id === trimmed || l.id === normalizedLocality);
+    if (byId) return byId.name;
+  }
+  
+  // Second: if we have state context, search by name within that state
+  const stateId = normalizeStateId(stateIdOrName);
+  if (stateId) {
+    const state = sudanStates.find(s => s.id === stateId);
+    if (state) {
+      const byName = state.localities.find(l => normalizeText(l.name) === normalizedLocality);
+      if (byName) return byName.name;
+      
+      // Fuzzy match within state
+      const fuzzyMatch = state.localities.find(l => {
+        const locNorm = normalizeText(l.name);
+        return locNorm.includes(normalizedLocality) || 
+               normalizedLocality.includes(locNorm) ||
+               levenshteinDistance(locNorm, normalizedLocality) <= 2;
+      });
+      if (fuzzyMatch) return fuzzyMatch.name;
+    }
+  }
+  
+  // Third: fallback search all states by name
+  for (const state of sudanStates) {
+    const byName = state.localities.find(l => normalizeText(l.name) === normalizedLocality);
+    if (byName) return byName.name;
+  }
+  
+  // Return trimmed original as fallback
+  return trimmed;
 }
 
 export function normalizeLocalityId(
