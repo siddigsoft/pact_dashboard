@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { testConnection } from '@/lib/session-health';
 
 /**
  * Safe file upload utility with validation, progress tracking, and error handling
@@ -75,6 +76,7 @@ export function generateSafeFileName(originalName: string, prefix = ''): string 
 
 /**
  * Safely uploads a file to Supabase Storage with validation and progress tracking
+ * Uses connection test to prevent hanging on frozen Supabase client
  */
 export async function safeUploadFile(
   file: File,
@@ -96,17 +98,39 @@ export async function safeUploadFile(
       };
     }
 
+    // 🔐 CRITICAL: Test connection first to detect frozen Supabase client
+    // This prevents the upload from hanging forever
+    console.log('[SafeUpload] Testing connection before upload...');
+    const connectionOk = await testConnection(3000);
+    if (!connectionOk) {
+      return {
+        success: false,
+        error: 'Connection test failed. The Supabase client may be frozen. Please refresh the page and try again.'
+      };
+    }
+    console.log('[SafeUpload] Connection test passed, proceeding with upload...');
+
     // Generate safe filename
     const safeFileName = generateSafeFileName(file.name);
     const filePath = path ? `${path}/${safeFileName}` : safeFileName;
 
-    // Upload file
-    const { data, error } = await supabase.storage
+    // Upload file with timeout protection
+    // Wrap in Promise.race to add an extra safety layer
+    const uploadPromise = supabase.storage
       .from(bucket)
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false
       });
+
+    // Add timeout as backup (though testConnection should catch frozen client)
+    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Upload timed out after 60 seconds'));
+      }, 60000); // 60 second timeout for large files
+    });
+
+    const { data, error } = await Promise.race([uploadPromise, timeoutPromise]);
 
     if (error) {
       console.error('Upload error:', error);

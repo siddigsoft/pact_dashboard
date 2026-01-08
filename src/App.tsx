@@ -107,6 +107,8 @@ import { debugDatabase } from './utils/debug-db';
 import { useFCM } from './hooks/useFCM';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
+import SessionManager from './components/layout/SessionManager';
+
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
@@ -360,11 +362,13 @@ function App() {
                     <Suspense fallback={<PageLoader />}>
                       <LiveDashboardProvider>
                         <FCMInitializer />
-                        <AuthGuard>
-                          <MobilePermissionGuard>
-                            <AppRoutes />
-                          </MobilePermissionGuard>
-                        </AuthGuard>
+                        <SessionManager>
+                          <AuthGuard>
+                            <MobilePermissionGuard>
+                              <AppRoutes />
+                            </MobilePermissionGuard>
+                          </AuthGuard>
+                        </SessionManager>
                       </LiveDashboardProvider>
                     </Suspense>
                     <AppNotifications />
