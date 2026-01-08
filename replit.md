@@ -36,11 +36,26 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, featurin
 *   **MoDa Webhook Integration:** Supabase Edge Function (`moda-webhook`) receives real-time form submissions from MoDa/ODK. Uses same GPS parsing patterns as bulk upload (A05 for residence, A06 for site GPS). Automatically registers sites with coordinates, supporting combined geopoint strings or separate lat/lng fields. Optional webhook secret for security (`MODA_WEBHOOK_SECRET`).
 *   **Site Normalization System:** Centralized utility (`src/utils/siteNormalization.ts`) provides consistent state/locality/site matching across the application. Features include:
     - **State/locality aliasing:** Maps common variations (e.g., "River Nile State" → "river-nile", "Al Jazirah" → "gezira") to normalized IDs
+    - **State prefix mapping:** Extracts state from locality-style ID prefixes (e.g., "kh-omdurman" → "Khartoum" state)
+    - **State code lookup:** Resolves 2-letter state codes (e.g., "KH" → "Khartoum")
+    - **Locality-derived state:** When input appears to be a locality ID, derives parent state from sudanStates data
     - **Fuzzy matching:** Uses Levenshtein distance (threshold ≤2) to match locality names with minor spelling differences
     - **Multi-level site matching:** Falls back through registry_site_id → site_code → normalized key → alternate keys (name+state, name+locality)
     - **MMP history aggregation:** Tracks multiple visits per site with proper mmp_count and latest entry extraction
     - **Boolean parsing:** Standardizes "YES"/"Yes"/"true"/"1" handling via `parseBoolean()` utility
     - **No silent drops:** Sites with unmatched states/localities are included with warnings instead of being skipped
+*   **Smart Dispatch System:** Three-tier collector recommendation system (`src/services/collectorRecommendation.service.ts`) for optimal site assignment:
+    - **In-Locality tier:** Highest priority, collectors in the exact same locality as the site (100 points base)
+    - **Neighboring tier:** Collectors within 100km GPS radius of the site location
+    - **State-Wide tier:** All collectors in the same state within 80km proximity
+    - **Priority scoring:** Combines locality match, online status (+20), workload penalty (-2 per active site), and distance penalty (-km/10)
+    - **UI Component:** `CollectorRecommendationsPanel.tsx` with tiered display, coverage alerts, search, and "Assign Best" button
+*   **Coverage Gap Notification System:** Detects and notifies admins when dispatching to localities with insufficient collector coverage (`src/services/coverageGapNotification.service.ts`):
+    - **Critical gaps (0 collectors):** Trigger both in-app notifications and email alerts to admins
+    - **Warning gaps (1-2 collectors):** Trigger in-app notifications only
+    - **Integration:** Called during dispatch before site assignment, using normalized state/locality names
+    - **GPS proximity:** Detects neighboring localities using GPS coordinates from sites registry
+    - **Limitations:** Effectiveness depends on data quality; malformed state/locality IDs may result in fallback values that don't match collector assignments
 
 ### System Design Choices
 The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.

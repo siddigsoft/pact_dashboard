@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, MapPin, TrendingUp, Sparkles, Wand2, Info } from 'lucide-react';
 import { sudanStates } from '@/data/sudanStates';
 import { fetchAllRegistrySites, matchSiteToRegistry, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
+import { getStateName, getLocalityName } from '@/utils/siteNormalization';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { CostPredictionService, type CostPrediction, type VarianceAlert } from '@/services/costPrediction.service';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -22,6 +23,9 @@ import { VarianceAlertBanner } from './VarianceAlertBanner';
 import { CostSparkline } from './CostSparkline';
 import { ExchangeRatePanel } from './ExchangeRatePanel';
 import { ExchangeRateService } from '@/services/exchangeRate.service';
+import { CollectorRecommendationsPanel } from '@/components/dispatch/CollectorRecommendationsPanel';
+import { RecommendedCollector } from '@/services/collectorRecommendation.service';
+import { CoverageGapNotificationService } from '@/services/coverageGapNotification.service';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -518,10 +522,109 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       } = await supabase.auth.getUser();
       const assignedBy = authUser?.id;
 
-      // Step 0: Fetch Sites Registry to get GPS coordinates
+      // Step 0: Fetch Sites Registry to get GPS coordinates FIRST (needed for coverage gap check)
       console.log("📍 Fetching Sites Registry for GPS coordinates...");
       const registrySites = await fetchAllRegistrySites();
       console.log(`📍 Found ${registrySites.length} sites in registry`);
+
+      // Step 0.5: Check coverage gaps and notify admins (with GPS from registry)
+      console.log("📍 Checking coverage gaps for selected sites...");
+      const uniqueLocalitiesForGapCheck = new Map<string, { state: string; locality: string; coords?: { latitude: number; longitude: number }; siteCount: number }>();
+      
+      for (const site of selectedSiteObjects) {
+        // Get state/locality - normalize IDs to names
+        const rawState = site.state || site.state_name || '';
+        const rawLocality = site.locality || site.locality_name || '';
+        
+        // Skip sites with no raw state/locality data at all
+        if (!rawState && !rawLocality) {
+          console.warn(`⚠️ Site ${site.id} has no state/locality data - skipping coverage check`);
+          continue;
+        }
+        
+        // Use helper functions to convert IDs to proper names (returns fallback if unrecognized)
+        const siteState = getStateName(rawState) || rawState;
+        const siteLocality = getLocalityName(rawLocality, rawState) || rawLocality;
+        
+        // Log normalization for debugging
+        if (siteState !== rawState || siteLocality !== rawLocality) {
+          console.log(`📍 Normalized: "${rawState}|${rawLocality}" → "${siteState}|${siteLocality}"`);
+        }
+        
+        // Proceed with coverage check even if normalization returned fallback values
+        // The coverage service will handle unrecognized localities gracefully
+        
+        const key = `${siteState}|${siteLocality}`;
+        
+        // Try to get GPS coordinates from registry match or existing data
+        let coords: { latitude: number; longitude: number } | undefined;
+        
+        // First try existing coordinates
+        if (site.coordinates?.latitude && site.coordinates?.longitude) {
+          coords = { latitude: site.coordinates.latitude, longitude: site.coordinates.longitude };
+        }
+        // Then try existing registry GPS
+        else if (site.additional_data?.registry_gps?.latitude && site.additional_data?.registry_gps?.longitude) {
+          coords = { 
+            latitude: site.additional_data.registry_gps.latitude, 
+            longitude: site.additional_data.registry_gps.longitude 
+          };
+        }
+        // Finally try matching to registry for GPS
+        else {
+          const registryMatch = matchSiteToRegistry(
+            {
+              id: site.id,
+              siteCode: site.site_code,
+              siteName: site.site_name || site.siteName,
+              state: siteState,
+              locality: siteLocality,
+            },
+            registrySites,
+            { userId: assignedBy || "system", sourceWorkflow: "coverage_check" }
+          );
+          
+          if (registryMatch.gpsCoordinates?.latitude && registryMatch.gpsCoordinates?.longitude) {
+            coords = { 
+              latitude: registryMatch.gpsCoordinates.latitude, 
+              longitude: registryMatch.gpsCoordinates.longitude 
+            };
+          }
+        }
+        
+        if (uniqueLocalitiesForGapCheck.has(key)) {
+          // Increment site count for this locality
+          const existing = uniqueLocalitiesForGapCheck.get(key)!;
+          existing.siteCount++;
+          // Use coords if we found some and existing doesn't have them
+          if (coords && !existing.coords) {
+            existing.coords = coords;
+          }
+        } else {
+          uniqueLocalitiesForGapCheck.set(key, { state: siteState, locality: siteLocality, coords, siteCount: 1 });
+        }
+      }
+      
+      // Check coverage gaps for each unique locality (batched, no redundant calls)
+      for (const [_, locInfo] of uniqueLocalitiesForGapCheck) {
+        try {
+          const gaps = await CoverageGapNotificationService.checkAndNotifyDispatchCoverage(
+            locInfo.state,
+            locInfo.locality,
+            locInfo.coords,
+            {
+              siteCount: locInfo.siteCount,
+              dispatchedBy: assignedBy
+            }
+          );
+          
+          if (gaps.some(g => g.severity === 'critical')) {
+            console.log(`⚠️ Coverage gap detected in ${locInfo.locality}, ${locInfo.state} - admins notified`);
+          }
+        } catch (gapError) {
+          console.error(`Failed to check coverage for ${locInfo.locality}:`, gapError);
+        }
+      }
 
       // Step 1: Store TRANSPORT costs only in mmp_site_entries
       // IMPORTANT: Enumerator fee is NOT set at dispatch - it's calculated at claim time
@@ -1149,52 +1252,98 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             )}
 
             {dispatchType === "individual" && (
-              <div className="space-y-2">
-                <Label>Search Data Collector or Coordinator</Label>
-                <Input
-                  placeholder="Search by name, username, or email..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  data-testid="input-search-collector"
-                />
-                <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
-                  {filteredCollectors.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No data collectors found
-                    </p>
-                  ) : (
-                    filteredCollectors.map((collector) => (
-                      <div
-                        key={collector.id}
-                        className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover-elevate ${
-                          selectedCollector === collector.id ? "bg-muted" : ""
-                        }`}
-                        onClick={() => setSelectedCollector(collector.id)}
-                        data-testid={`collector-${collector.id}`}
-                      >
-                        <Checkbox
-                          checked={selectedCollector === collector.id}
-                          onCheckedChange={() =>
-                            setSelectedCollector(collector.id)
-                          }
-                        />
-                        <div className="flex-1">
-                          <p className="font-medium">
-                            {collector.full_name ||
-                              collector.username ||
-                              collector.email}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {collector.state_id &&
-                              `State: ${collector.state_id}`}
-                            {collector.locality_id &&
-                              ` | Locality: ${collector.locality_id}`}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+              <div className="space-y-4">
+                {/* Smart Recommendations Panel - shows when a site is selected */}
+                {selectedSites.size === 1 && (() => {
+                  const selectedSiteId = Array.from(selectedSites)[0];
+                  const selectedSite = filteredSiteEntries.find(s => s.id === selectedSiteId);
+                  if (!selectedSite) return null;
+                  
+                  const siteState = selectedSite.state || selectedSite.state_name || '';
+                  const siteLocality = selectedSite.locality || selectedSite.locality_name || '';
+                  const siteCoords = selectedSite.coordinates?.latitude && selectedSite.coordinates?.longitude
+                    ? { latitude: selectedSite.coordinates.latitude, longitude: selectedSite.coordinates.longitude }
+                    : selectedSite.additional_data?.registry_gps?.latitude && selectedSite.additional_data?.registry_gps?.longitude
+                      ? { latitude: selectedSite.additional_data.registry_gps.latitude, longitude: selectedSite.additional_data.registry_gps.longitude }
+                      : null;
+                  
+                  return (
+                    <CollectorRecommendationsPanel
+                      siteState={siteState}
+                      siteLocality={siteLocality}
+                      siteCoordinates={siteCoords}
+                      selectedCollectorId={selectedCollector}
+                      onSelectCollector={(collector: RecommendedCollector) => {
+                        setSelectedCollector(collector.id);
+                      }}
+                    />
+                  );
+                })()}
+                
+                {/* Fallback: Manual search when no site selected or multiple sites */}
+                {(selectedSites.size === 0 || selectedSites.size > 1) && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      <Label>Search Data Collector or Coordinator</Label>
+                    </div>
+                    {selectedSites.size > 1 && (
+                      <p className="text-sm text-muted-foreground">
+                        Select a single site to see smart recommendations based on location.
+                      </p>
+                    )}
+                    <Input
+                      placeholder="Search by name, username, or email..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      data-testid="input-search-collector"
+                    />
+                    <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
+                      {filteredCollectors.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No data collectors found
+                        </p>
+                      ) : (
+                        filteredCollectors.map((collector) => (
+                          <div
+                            key={collector.id}
+                            className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover-elevate ${
+                              selectedCollector === collector.id ? "bg-muted" : ""
+                            }`}
+                            onClick={() => setSelectedCollector(collector.id)}
+                            data-testid={`collector-${collector.id}`}
+                          >
+                            <Checkbox
+                              checked={selectedCollector === collector.id}
+                              onCheckedChange={() =>
+                                setSelectedCollector(collector.id)
+                              }
+                            />
+                            <div className="flex-1">
+                              <p className="font-medium">
+                                {collector.full_name ||
+                                  collector.username ||
+                                  collector.email}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {collector.state_id &&
+                                  `State: ${sudanStates.find(s => s.id === collector.state_id)?.name || collector.state_id}`}
+                                {collector.locality_id &&
+                                  ` | Locality: ${(() => {
+                                    for (const state of sudanStates) {
+                                      const locality = state.localities.find(l => l.id === collector.locality_id);
+                                      if (locality) return locality.name;
+                                    }
+                                    return collector.locality_id;
+                                  })()}`}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
