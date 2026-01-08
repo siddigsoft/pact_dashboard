@@ -24,10 +24,23 @@ export async function testConnection(timeoutMs: number = 3000): Promise<boolean>
         if (storedSession) {
           const parsed = JSON.parse(storedSession);
           accessToken = parsed?.access_token || null;
+          
+          // Log token info for debugging
+          console.log('[SessionHealth] 📋 Token Info:', {
+            hasToken: !!accessToken,
+            tokenPreview: accessToken ? `${accessToken.substring(0, 20)}...` : null,
+            expiresAt: parsed?.expires_at ? new Date(parsed.expires_at * 1000).toISOString() : null,
+            expiresIn: parsed?.expires_at ? `${parsed.expires_at - Math.floor(Date.now() / 1000)}s` : null,
+            hasRefreshToken: !!parsed?.refresh_token,
+            userId: parsed?.user?.id || null,
+            storageKey: supabaseKey,
+          });
         }
       } catch (e) {
         console.warn('[SessionHealth] Failed to parse stored session:', e);
       }
+    } else {
+      console.warn('[SessionHealth] No Supabase auth token key found in localStorage');
     }
 
     // Test connection with native fetch + AbortController (browser MUST respect this)
@@ -111,11 +124,20 @@ export async function recoverFromFrozenClient(): Promise<boolean> {
 
     const storedSession = localStorage.getItem(supabaseKey);
     if (!storedSession) {
+      console.warn('[SessionHealth] No stored session found for recovery');
       return false;
     }
 
     const parsed = JSON.parse(storedSession);
     const refreshToken = parsed?.refresh_token;
+    
+    console.log('[SessionHealth] 🔄 Recovery attempt - Token info:', {
+      hasRefreshToken: !!refreshToken,
+      refreshTokenPreview: refreshToken ? `${refreshToken.substring(0, 20)}...` : null,
+      currentAccessToken: parsed?.access_token ? `${parsed.access_token.substring(0, 20)}...` : null,
+      expiresAt: parsed?.expires_at ? new Date(parsed.expires_at * 1000).toISOString() : null,
+      expiresIn: parsed?.expires_at ? `${parsed.expires_at - Math.floor(Date.now() / 1000)}s` : null,
+    });
 
     if (!refreshToken) {
       return false;
@@ -149,7 +171,14 @@ export async function recoverFromFrozenClient(): Promise<boolean> {
         user: parsed.user,
       };
       localStorage.setItem(supabaseKey, JSON.stringify(newSession));
-      console.log('[SessionHealth] Session refreshed successfully');
+      
+      console.log('[SessionHealth] ✅ Session refreshed successfully:', {
+        newAccessToken: `${data.access_token.substring(0, 20)}...`,
+        newExpiresAt: data.expires_at ? new Date(data.expires_at * 1000).toISOString() : null,
+        newExpiresIn: data.expires_at ? `${data.expires_at - Math.floor(Date.now() / 1000)}s` : null,
+        hasRefreshToken: !!data.refresh_token,
+        tokenType: data.token_type,
+      });
       return true;
     }
 
