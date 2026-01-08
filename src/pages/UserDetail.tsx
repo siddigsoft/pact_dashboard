@@ -292,19 +292,35 @@ const UserDetail: React.FC = () => {
       let newEmail = editForm.email;
       
       if (emailChanged && isAdmin && adminUpdateUserEmail) {
-        const emailSuccess = await adminUpdateUserEmail(user.id, editForm.email!);
-        if (!emailSuccess) {
+        // Add timeout for edge function call
+        const emailPromise = adminUpdateUserEmail(user.id, editForm.email!);
+        const timeoutPromise = new Promise<boolean>((_, reject) => 
+          setTimeout(() => reject(new Error('Email update timed out')), 15000)
+        );
+        
+        try {
+          const emailSuccess = await Promise.race([emailPromise, timeoutPromise]);
+          if (!emailSuccess) {
+            toast({
+              title: "Email update failed",
+              description: "The profile was not updated. Please try again.",
+              variant: "destructive"
+            });
+            setIsSaving(false);
+            return;
+          }
+          // Email was successfully updated via edge function (both Auth and profile)
+          newEmail = editForm.email!.toLowerCase();
+        } catch (timeoutError) {
+          console.error("Email update timeout:", timeoutError);
           toast({
-            title: "Email update failed",
-            description: "The profile was not updated. Please try again.",
+            title: "Request timed out",
+            description: "The email update took too long. Please try again.",
             variant: "destructive"
           });
           setIsSaving(false);
           return;
         }
-        // Email was successfully updated via edge function (both Auth and profile)
-        // Update editForm to reflect the new email for local state
-        newEmail = editForm.email!.toLowerCase();
       }
       
       // Build updatedUser - if email was changed via edge function, it's already in profile
@@ -315,7 +331,25 @@ const UserDetail: React.FC = () => {
         email: emailChanged ? newEmail : (editForm.email || user.email)
       };
       
-      const success = await updateUser(updatedUser);
+      // Add timeout for profile update
+      const updatePromise = updateUser(updatedUser);
+      const updateTimeoutPromise = new Promise<boolean>((_, reject) => 
+        setTimeout(() => reject(new Error('Profile update timed out')), 15000)
+      );
+      
+      let success: boolean;
+      try {
+        success = await Promise.race([updatePromise, updateTimeoutPromise]);
+      } catch (timeoutError) {
+        console.error("Profile update timeout:", timeoutError);
+        toast({
+          title: "Request timed out",
+          description: "The profile update took too long. Please try again.",
+          variant: "destructive"
+        });
+        setIsSaving(false);
+        return;
+      }
 
       if (success) {
         // Fetch the latest user data from the database
