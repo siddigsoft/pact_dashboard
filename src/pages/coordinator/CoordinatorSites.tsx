@@ -72,6 +72,8 @@ function formatDateLocal(date: Date | undefined | null): string | null {
   return `${year}-${month}-${day}`;
 }
 
+// ...existing code...
+
 const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hubs, states, localities, hubStates = [] }) => {
   const { toast } = useToast();
   const [formData, setFormData] = React.useState<SiteVisit>({
@@ -411,6 +413,7 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
 // SiteVisit type is imported from useCoordinatorSites hook
 
 const CoordinatorSites: React.FC = () => {
+  // Use global mmpFiles from useMMP (real-time and background refreshed)
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
@@ -677,7 +680,6 @@ const CoordinatorSites: React.FC = () => {
     const rejectedCount = coordinatorSites.filter((e: any) => 
       e.status?.toLowerCase() === 'rejected'
     ).length;
-
     return {
       new: newCount,
       permitsAttached: permitsAttachedCount,
@@ -696,6 +698,7 @@ const CoordinatorSites: React.FC = () => {
     setApprovedSitesCount(badgeCounts.approved);
     setCompletedSitesCount(badgeCounts.completed);
     setRejectedSitesCount(badgeCounts.rejected);
+    // If you want to show mmpFileCount as a badge, add a setState here
   }, [badgeCounts]);
 
   // Reset search and pagination when tab changes
