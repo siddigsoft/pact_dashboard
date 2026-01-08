@@ -1,9 +1,10 @@
-
 export interface MMPDocument {
   type: string;
   fileName: string;
   uploadedAt: string;
   fileUrl: string;
+  issueDate?: string;   // Added for FOM-set permit issue date
+  expiryDate?: string;  // Added for FOM-set permit expiry date
 }
 
 export interface MMPStatePermitDocument {

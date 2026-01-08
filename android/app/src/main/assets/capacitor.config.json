@@ -3,8 +3,10 @@
 	"appName": "PACT Command Center",
 	"webDir": "dist",
 	"server": {
+		"url": "https://app.pactorg.com",
+		"cleartext": false,
 		"allowNavigation": [
-			"https://pact-dashboard-831y.vercel.app",
+			"https://app.pactorg.com",
 			"https://*.vercel.app",
 			"https://*.supabase.co",
 			"https://*.supabase.in",

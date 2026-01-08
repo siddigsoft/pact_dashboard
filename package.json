@@ -16,6 +16,7 @@
     "cap:update": "npx cap update",
     "cap:open:android": "npx cap open android",
     "cap:build:apk": "npm run build:mobile && npx cap sync && npx cap open android",
+    "cap:build:remote": "npx cap sync && npx cap open android",
     "cap:dev": "CAPACITOR_LIVE_RELOAD=true npm run dev"
   },
   "dependencies": {

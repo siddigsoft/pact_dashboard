@@ -95,7 +95,7 @@ export async function recordSiteVisitPayment(
       .insert({
         wallet_id: walletId,
         user_id: userId,
-        type: 'site_visit_fee',
+        type: 'earning', // Changed from 'site_visit_fee' to 'earning' to match database enum
         amount: amountInCents,
         currency: 'SDG',
         site_visit_id: siteVisitId,

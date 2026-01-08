@@ -1,5 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
+// Production URL - hardcoded for worldwide deployment
+const PRODUCTION_URL = 'https://app.pactorg.com';
+
 const config: CapacitorConfig = {
   appId: 'com.pact.commandcenter',
   appName: 'PACT Command Center',
@@ -7,10 +10,11 @@ const config: CapacitorConfig = {
  
   server: process.env.CAPACITOR_REMOTE_URL
     ? {
+        // Override via environment variable if needed (for testing)
         url: process.env.CAPACITOR_REMOTE_URL,
-        cleartext: false,
+        cleartext: process.env.CAPACITOR_REMOTE_URL?.startsWith('http://'),
         allowNavigation: [
-          'https://pact-dashboard-831y.vercel.app',
+          'https://app.pactorg.com',
           'https://*.vercel.app',
           'https://*.supabase.co',
           'https://*.supabase.in',
@@ -20,10 +24,11 @@ const config: CapacitorConfig = {
       }
     : process.env.NODE_ENV === 'development' && process.env.CAPACITOR_LIVE_RELOAD === 'true'
     ? {
+        // Development: Live reload from localhost
         url: 'http://localhost:5000',
         cleartext: true,
         allowNavigation: [
-          'https://pact-dashboard-831y.vercel.app',
+          'https://app.pactorg.com',
           'https://*.vercel.app',
           'https://*.supabase.co',
           'https://*.supabase.in',
@@ -32,9 +37,13 @@ const config: CapacitorConfig = {
         ]
       }
     : {
-        // Production: bundled app, but allow navigation to external services
+        // Production: Thin shell - load from remote URL for instant updates
+        // Users install APK once, app loads from https://app.pactorg.com
+        // Any updates deployed → users get them instantly without rebuilding APK
+        url: PRODUCTION_URL,
+        cleartext: false, // HTTPS only for production
         allowNavigation: [
-          'https://pact-dashboard-831y.vercel.app',
+          'https://app.pactorg.com',
           'https://*.vercel.app',
           'https://*.supabase.co',
           'https://*.supabase.in',
