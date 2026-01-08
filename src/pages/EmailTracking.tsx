@@ -145,6 +145,7 @@ export default function EmailTracking() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'otp' | 'welcome' | 'mmp' | 'site' | 'password-reset' | 'notification'>('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [stats, setStats] = useState<EmailStats>({
     total: 0,
     successful: 0,
@@ -170,7 +171,7 @@ export default function EmailTracking() {
   const fetchEmailLogs = async () => {
     setLoading(true);
     try {
-      // Fetch all email-related logs from database
+      // Fetch all email-related logs from database (increased limit to show all historical emails)
       // Query 1: Standard email logs (module=notification, entity_type=email/otp)
       const { data: notificationData, error: notificationError } = await supabase
         .from('audit_logs')
@@ -178,7 +179,7 @@ export default function EmailTracking() {
         .eq('module', 'notification')
         .in('entity_type', ['email', 'otp'])
         .order('timestamp', { ascending: false })
-        .limit(500);
+        .limit(2000);
 
       // Query 2: Any logs with entity_type='email' regardless of module
       const { data: emailTypeData, error: emailTypeError } = await supabase
@@ -186,7 +187,7 @@ export default function EmailTracking() {
         .select('*')
         .eq('entity_type', 'email')
         .order('timestamp', { ascending: false })
-        .limit(500);
+        .limit(2000);
 
       // Query 3: Logs with action='send' that might be emails
       const { data: sendActionData, error: sendActionError } = await supabase
@@ -194,7 +195,7 @@ export default function EmailTracking() {
         .select('*')
         .eq('action', 'send')
         .order('timestamp', { ascending: false })
-        .limit(500);
+        .limit(2000);
 
       // Combine and deduplicate results
       const allData = [
@@ -213,7 +214,7 @@ export default function EmailTracking() {
       
       const data = Array.from(uniqueMap.values())
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 500);
+        .slice(0, 2000);
       
       const error = notificationError && emailTypeError && sendActionError 
         ? notificationError 
@@ -480,7 +481,30 @@ export default function EmailTracking() {
       (typeFilter === 'notification' && isNotification) ||
       (typeFilter === 'email' && log.entity_type === 'email' && !isWelcome && !isMmp && !isSite && !isPasswordOtp && !isNotification);
 
-    return matchesSearch && matchesStatus && matchesType;
+    // Date range filter
+    let matchesDateRange = true;
+    if (dateRangeFilter !== 'all') {
+      try {
+        const logDate = new Date(log.timestamp);
+        const now = new Date();
+        
+        if (dateRangeFilter === 'today') {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          matchesDateRange = logDate >= today;
+        } else if (dateRangeFilter === 'week') {
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          matchesDateRange = logDate >= weekAgo;
+        } else if (dateRangeFilter === 'month') {
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          matchesDateRange = logDate >= monthAgo;
+        }
+      } catch {
+        matchesDateRange = true;
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesType && matchesDateRange;
   });
 
   // Log email send to audit_logs database
@@ -1105,6 +1129,18 @@ export default function EmailTracking() {
                   <SelectItem value="notification">Notification</SelectItem>
                   <SelectItem value="password-reset">Password/OTP</SelectItem>
                   <SelectItem value="email">Other Emails</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={dateRangeFilter} onValueChange={(v: any) => setDateRangeFilter(v)}>
+                <SelectTrigger className="w-[130px]" data-testid="select-date-range">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Date Range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">Last 7 Days</SelectItem>
+                  <SelectItem value="month">Last 30 Days</SelectItem>
                 </SelectContent>
               </Select>
             </div>
