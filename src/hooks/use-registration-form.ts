@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { useNotificationManager } from "@/hooks/use-notification-manager";
 import { supabase } from "@/integrations/supabase/client";
+import { safeUploadFile } from '@/lib/safeUpload';
 
 interface RegistrationFormData {
   name: string;
@@ -114,28 +115,19 @@ export const useRegistrationForm = () => {
 
   const uploadAvatar = async (userId: string): Promise<string | null> => {
     if (!avatarFile) return null;
-    
     try {
-      const fileExt = avatarFile.name.split('.').pop();
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      
-      // Upload to Supabase Storage if available
-      const { error, data } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, avatarFile);
-        
-      if (error) {
-        console.error("Error uploading avatar:", error);
+      const filePath = '';
+      const uploadResult = await safeUploadFile(avatarFile, {
+        bucket: 'avatars',
+        path: filePath,
+        allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+        maxSizeBytes: 2 * 1024 * 1024
+      });
+      if (!uploadResult.success || !uploadResult.url) {
+        console.error("Error uploading avatar:", uploadResult.error);
         return null;
       }
-      
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(data?.path || fileName);
-      
-      return publicUrl;
-      
+      return uploadResult.url;
     } catch (error) {
       console.error("Avatar upload error:", error);
       return null;
