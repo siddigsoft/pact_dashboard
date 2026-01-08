@@ -507,6 +507,76 @@ export default function EmailTracking() {
     return matchesSearch && matchesStatus && matchesType && matchesDateRange;
   });
 
+  // Compute monthly summary of all emails by type
+  interface MonthlyEmailSummary {
+    month: string;
+    monthLabel: string;
+    total: number;
+    successful: number;
+    failed: number;
+    byType: {
+      welcome: number;
+      mmp: number;
+      site: number;
+      notification: number;
+      passwordOtp: number;
+      other: number;
+    };
+  }
+
+  const monthlySummary: MonthlyEmailSummary[] = (() => {
+    const monthMap = new Map<string, MonthlyEmailSummary>();
+    
+    emailLogs.forEach(log => {
+      try {
+        const logDate = new Date(log.timestamp);
+        const monthKey = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}`;
+        const monthLabel = format(logDate, 'MMMM yyyy');
+        
+        if (!monthMap.has(monthKey)) {
+          monthMap.set(monthKey, {
+            month: monthKey,
+            monthLabel,
+            total: 0,
+            successful: 0,
+            failed: 0,
+            byType: { welcome: 0, mmp: 0, site: 0, notification: 0, passwordOtp: 0, other: 0 }
+          });
+        }
+        
+        const entry = monthMap.get(monthKey)!;
+        entry.total++;
+        if (log.success) entry.successful++;
+        else entry.failed++;
+        
+        // Categorize by type
+        const emailType = (log.metadata?.emailType || '').toLowerCase();
+        const subject = (log.metadata?.subject || log.entity_name || '').toLowerCase();
+        const description = (log.description || '').toLowerCase();
+        
+        if (emailType === 'welcome' || subject.includes('welcome') || description.includes('welcome')) {
+          entry.byType.welcome++;
+        } else if (emailType === 'mmp' || subject.includes('mmp') || description.includes('mmp')) {
+          entry.byType.mmp++;
+        } else if (emailType === 'site' || subject.includes('site') || description.includes('site visit')) {
+          entry.byType.site++;
+        } else if (emailType === 'password-reset' || emailType === 'otp' || log.entity_type === 'otp' || 
+                   subject.includes('password') || subject.includes('otp') || subject.includes('reset')) {
+          entry.byType.passwordOtp++;
+        } else if (emailType === 'notification') {
+          entry.byType.notification++;
+        } else {
+          entry.byType.other++;
+        }
+      } catch {
+        // Skip invalid dates
+      }
+    });
+    
+    // Sort by month descending (newest first)
+    return Array.from(monthMap.values()).sort((a, b) => b.month.localeCompare(a.month));
+  })();
+
   // Log email send to audit_logs database
   const logTestEmailSend = async (recipient: string, subject: string, success: boolean, messageId?: string, error?: string) => {
     await logEmailSend(recipient, subject, 'test', success, messageId, error);
@@ -1090,6 +1160,98 @@ export default function EmailTracking() {
           )}
         </CardContent>
       </Card>
+
+      {/* Monthly Email Summary */}
+      {monthlySummary.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Monthly Email Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Month</TableHead>
+                    <TableHead className="text-center">Total</TableHead>
+                    <TableHead className="text-center text-green-600">Successful</TableHead>
+                    <TableHead className="text-center text-red-600">Failed</TableHead>
+                    <TableHead className="text-center">Welcome</TableHead>
+                    <TableHead className="text-center">MMP</TableHead>
+                    <TableHead className="text-center">Site Visit</TableHead>
+                    <TableHead className="text-center">Notification</TableHead>
+                    <TableHead className="text-center">Password/OTP</TableHead>
+                    <TableHead className="text-center">Other</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthlySummary.map((summary) => (
+                    <TableRow key={summary.month} data-testid={`row-month-${summary.month}`}>
+                      <TableCell className="font-medium">{summary.monthLabel}</TableCell>
+                      <TableCell className="text-center font-bold">{summary.total}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                          {summary.successful}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">
+                          {summary.failed}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {summary.byType.welcome > 0 && (
+                          <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
+                            {summary.byType.welcome}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {summary.byType.mmp > 0 && (
+                          <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+                            {summary.byType.mmp}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {summary.byType.site > 0 && (
+                          <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+                            {summary.byType.site}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {summary.byType.notification > 0 && (
+                          <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">
+                            {summary.byType.notification}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {summary.byType.passwordOtp > 0 && (
+                          <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
+                            {summary.byType.passwordOtp}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {summary.byType.other > 0 && (
+                          <Badge variant="outline" className="bg-gray-500/10 text-gray-600 border-gray-500/30">
+                            {summary.byType.other}
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters and Table */}
       <Card>
