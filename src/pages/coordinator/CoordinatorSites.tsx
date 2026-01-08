@@ -2503,7 +2503,7 @@ const CoordinatorSites: React.FC = () => {
                   className="flex-1 min-h-[44px]"
                 >
                   <FileCheck className="h-4 w-4 mr-2" />
-                  Upload Permit
+                  Permit Status
                 </Button>
                 <Button
                   variant="outline"
@@ -3823,7 +3823,7 @@ const CoordinatorSites: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Proceed Without Local Permit</DialogTitle>
             <DialogDescription>
-              Can you continue to complete <strong>{selectedSiteForWithoutPermit?.site_name}</strong> without a local permit?
+              Can you work on <strong>{selectedSiteForWithoutPermit?.site_name}</strong> without a local permit?
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
