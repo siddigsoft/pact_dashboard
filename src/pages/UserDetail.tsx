@@ -485,7 +485,7 @@ const UserDetail: React.FC = () => {
   }
 
   return (
-    <div className="container max-w-5xl mx-auto p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 md:space-y-8">
+    <div className="container max-w-5xl mx-auto p-3 pt-36 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 md:space-y-8 pb-24 sm:pb-8">
       <div className="flex items-center justify-between mb-2">
         {isAdmin && !editMode && (
           <Button onClick={handleEdit} variant="outline" className="min-h-[44px] px-4">
@@ -495,7 +495,7 @@ const UserDetail: React.FC = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8 mt-20 sm:mt-20 md:mt-24">
         {/* Profile Card */}
         <Card className="lg:col-span-1 shadow-lg border-0 bg-gradient-to-b from-primary/5 to-background">
           <CardContent className="pt-4 sm:pt-6 md:pt-8 pb-3 sm:pb-4 md:pb-6 px-3 sm:px-4 md:px-6 flex flex-col items-center">

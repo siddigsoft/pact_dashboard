@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { safeUploadFile } from '@/lib/safeUpload';
 import {
   getPendingSyncActions,
   updateSyncActionStatus,
@@ -14,6 +15,8 @@ import {
   cleanExpiredCache,
   type PendingSyncAction,
 } from './offline-db';
+import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
+import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 
 export interface SyncProgress {
   total: number;
@@ -758,7 +761,7 @@ class SyncManager {
   }
 
   private async syncSiteVisitComplete(action: PendingSyncAction): Promise<void> {
-    const { siteEntryId, completedAt, location, notes, userId } = action.payload;
+    const { siteEntryId, completedAt, location, notes, userId, gpsForRegistry } = action.payload;
 
     const { data: existing, error: fetchError } = await supabase
       .from('mmp_site_entries')
@@ -796,132 +799,55 @@ class SyncManager {
       }
     }
 
-    // Process wallet transaction for completed visit - with duplicate prevention
-    // Determine user to pay: check accepted_by, claimed_by, visit_completed_by (in priority order)
-    // Use database values first, then fallback to userId from payload
-    const userToPay = existing?.accepted_by || 
-                     existing?.claimed_by || 
-                     existing?.visit_completed_by ||
-                     userId;
-    
-    // Calculate fee: use cost if available, otherwise sum enumerator_fee + transport_fee
-    const directCost = Number(existing?.cost || 0);
-    const enumeratorFee = Number(existing?.enumerator_fee || 0);
-    const transportFee = Number(existing?.transport_fee || 0);
-    const fee = directCost > 0 ? directCost : (enumeratorFee + transportFee);
-    
-    if (fee > 0 && userToPay) {
-      // VALIDATION: Check if fee was already recorded for this site visit
-      // Check both site_visit_id (from online completion) and reference_id (from offline sync)
-      const { data: existingFees, error: feeCheckError } = await supabase
-        .from('wallet_transactions')
-        .select('id, amount')
-        .or(`site_visit_id.eq.${siteEntryId},reference_id.eq.${siteEntryId}`)
-        .eq('type', 'earning');  // Only check 'earning' type (valid enum value)
+    // Save GPS coordinates to Sites Registry if provided in payload (from offline completion)
+    if (gpsForRegistry && gpsForRegistry.latitude && gpsForRegistry.longitude) {
+      try {
+        console.log(`[SyncManager] 📍 Saving GPS coordinates to Sites Registry for site ${siteEntryId}`);
+        const gpsResult = await saveGPSToRegistryFromSiteEntry(
+          siteEntryId,
+          {
+            latitude: gpsForRegistry.latitude,
+            longitude: gpsForRegistry.longitude,
+            accuracy: gpsForRegistry.accuracy,
+          },
+          {
+            userId: gpsForRegistry.userId || userId || 'system',
+            sourceType: gpsForRegistry.sourceType || 'site_visit',
+            overwriteExisting: gpsForRegistry.overwriteExisting ?? false,
+          }
+        );
 
-      // CRITICAL: Abort if we cannot verify whether fee exists (fail-safe)
-      if (feeCheckError) {
-        console.error(`[SyncManager] Failed to check for existing fees: ${feeCheckError.message}`);
-        // Don't add fee if we can't verify - fail-safe approach
-        return;
-      }
-
-      // Skip if any fee already exists for this site visit
-      if (existingFees && existingFees.length > 0) {
-        const totalExisting = existingFees.reduce((sum, f) => sum + Number(f.amount || 0), 0);
-        console.log(`[SyncManager] Fee already recorded for site visit ${siteEntryId}: ${totalExisting} SDG (${existingFees.length} transaction(s)) - skipping`);
-        return;
-      }
-
-      // Convert userToPay to uuid - handle type mismatch between accepted_by (text) and claimed_by/visit_completed_by (uuid)
-      // Priority: use uuid fields if available, otherwise try to use accepted_by as uuid string, fallback to userId
-      let userToPayUuid: string;
-      if (existing?.claimed_by) {
-        userToPayUuid = existing.claimed_by;
-      } else if (existing?.visit_completed_by) {
-        userToPayUuid = existing.visit_completed_by;
-      } else if (existing?.accepted_by) {
-        // accepted_by is text, but should be a valid UUID string - use it directly
-        userToPayUuid = existing.accepted_by;
-      } else {
-        userToPayUuid = userId;
-      }
-      
-      const { data: wallet, error: walletFetchError } = await supabase
-        .from('wallets')
-        .select('id, total_earned, balances')
-        .eq('user_id', userToPayUuid)
-        .single();
-      
-      // If wallet doesn't exist, create it
-      if (walletFetchError && walletFetchError.code === 'PGRST116') {
-        const { data: newWallet, error: createError } = await supabase
-          .from('wallets')
-          .insert({
-            user_id: userToPayUuid,
-            balances: { SDG: fee },
-            total_earned: fee,
-          })
-          .select()
-          .single();
-        
-        if (createError) {
-          console.error(`[SyncManager] Failed to create wallet for user ${userToPayUuid}:`, createError);
-          return;
+        if (gpsResult.success) {
+          console.log(`[SyncManager] ✅ GPS coordinates saved to Sites Registry for site ${siteEntryId}`);
+        } else {
+          // Log but don't throw - GPS save failure shouldn't block sync
+          console.warn(`[SyncManager] ⚠️ Failed to save GPS to registry for site ${siteEntryId}: ${gpsResult.error}`);
         }
-        
-        // Create transaction for new wallet
-        await supabase.from('wallet_transactions').insert({
-          wallet_id: newWallet.id,
-          user_id: userToPayUuid,
-          type: 'earning',
-          amount: fee,
-          amount_cents: Math.round(fee * 100),
-          description: `Site visit completion (offline sync)`,
-          site_visit_id: siteEntryId,
-          reference_id: siteEntryId,
-          reference_type: 'site_visit',
-          balance_before: 0,
-          balance_after: fee,
-        });
-        
-        console.log(`[SyncManager] Created wallet and added fee ${fee} SDG for site visit ${siteEntryId} (offline sync)`);
-        return;
+      } catch (gpsError: any) {
+        // Log but don't throw - GPS save failure shouldn't block sync
+        console.error(`[SyncManager] Error saving GPS to registry for site ${siteEntryId}:`, gpsError);
       }
-      
-      if (walletFetchError) {
-        console.error(`[SyncManager] Failed to fetch wallet for user ${userToPayUuid}:`, walletFetchError);
-        return;
+    }
+
+    // Process wallet transaction for completed visit using centralized function
+    // This ensures consistency across all completion flows (online, offline, sync)
+    try {
+      const result = await createSiteVisitWalletTransaction({
+        siteVisitId: siteEntryId,
+        userId: userId, // Will be overridden by site entry values if available
+        description: `Site visit completion (offline sync): ${existing?.site_name || 'Unknown Site'}`,
+        showNotifications: false, // Don't show toasts during background sync
+      });
+
+      if (result.success) {
+        console.log(`[SyncManager] ✅ Wallet transaction created for site visit ${siteEntryId}: ${result.message}`);
+      } else {
+        // Log but don't throw - sync should continue even if wallet transaction fails
+        console.warn(`[SyncManager] ⚠️ Wallet transaction creation failed for site visit ${siteEntryId}: ${result.message}`);
       }
-
-      if (wallet) {
-        const currentBalance = Number((wallet.balances as any)?.SDG ?? 0) || 0;
-        const newBalance = Number((currentBalance + fee).toFixed(2));
-
-        await supabase.from('wallet_transactions').insert({
-          wallet_id: wallet.id,
-          user_id: userToPayUuid,
-          type: 'earning',
-          amount: fee,
-          amount_cents: Math.round(fee * 100),
-          description: `Site visit completion (offline sync): ${existing?.site_name || 'Unknown Site'}`,
-          site_visit_id: siteEntryId, // Use site_visit_id for consistency with online flow
-          reference_id: siteEntryId,
-          reference_type: 'site_visit',
-          balance_before: currentBalance,
-          balance_after: newBalance,
-        });
-
-        await supabase
-          .from('wallets')
-          .update({ 
-            total_earned: (wallet.total_earned || 0) + fee,
-            balances: { ...(wallet.balances as any), SDG: newBalance },
-          })
-          .eq('id', wallet.id);
-        
-        console.log(`[SyncManager] Added fee ${fee} SDG for site visit ${siteEntryId} (offline sync)`);
-      }
+    } catch (error: any) {
+      // Log but don't throw - sync should continue even if wallet transaction fails
+      console.error(`[SyncManager] Error creating wallet transaction for site visit ${siteEntryId}:`, error);
     }
   }
 
@@ -961,14 +887,17 @@ class SyncManager {
     const blob = new Blob([byteArray], { type: 'image/jpeg' });
 
     const filePath = `site-visits/${siteEntryId}/${fileName}`;
-    const { error: uploadError } = await supabase.storage
-      .from('site-photos')
-      .upload(filePath, blob, { 
-        contentType: 'image/jpeg',
-        upsert: true
-      });
 
-    if (uploadError) throw uploadError;
+    // Use safeUploadFile for secure upload
+    const uploadResult = await safeUploadFile(new File([blob], fileName, { type: 'image/jpeg' }), {
+      bucket: 'site-visit-photos',
+      path: `site-visits/${siteEntryId}`,
+      allowedTypes: ['image/jpeg'],
+      maxSizeBytes: 10 * 1024 * 1024
+    });
+    if (!uploadResult.success || !uploadResult.url) {
+      throw new Error(uploadResult.error || 'Failed to upload photo');
+    }
 
     const { data: existing } = await supabase
       .from('mmp_site_entries')

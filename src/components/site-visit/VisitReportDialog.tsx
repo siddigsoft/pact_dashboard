@@ -500,21 +500,35 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     try {
       // Convert draft photo URLs to File objects for submission
       const allPhotoFiles: File[] = [...photos]; // Start with new File uploads
+      const isOnline = navigator.onLine;
       
-      // Convert draft URLs to Files
+      // Convert draft URLs to Files (only when online - offline URLs are already stored)
       if (draftPhotoUrls.length > 0) {
-        for (const photoUrl of draftPhotoUrls) {
-          try {
-            const response = await fetch(photoUrl);
-            const blob = await response.blob();
-            const urlParts = photoUrl.split('/');
-            const fileName = urlParts[urlParts.length - 1] || `draft-photo-${Date.now()}.jpg`;
-            const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
-            allPhotoFiles.push(file);
-          } catch (fetchError) {
-            console.warn('Failed to convert draft photo URL to File:', photoUrl, fetchError);
-            // Continue with other photos
+        if (isOnline) {
+          // Online: Fetch and convert URLs to File objects
+          for (const photoUrl of draftPhotoUrls) {
+            try {
+              const response = await fetch(photoUrl);
+              if (!response.ok) {
+                console.warn('Failed to fetch draft photo URL:', photoUrl, 'Status:', response.status);
+                continue;
+              }
+              const blob = await response.blob();
+              const urlParts = photoUrl.split('/');
+              const fileName = urlParts[urlParts.length - 1] || `draft-photo-${Date.now()}.jpg`;
+              const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+              allPhotoFiles.push(file);
+            } catch (fetchError) {
+              console.warn('Failed to convert draft photo URL to File:', photoUrl, fetchError);
+              // Continue with other photos
+            }
           }
+        } else {
+          // Offline: Cannot fetch remote URLs, but draft URLs are already stored in the database
+          // The parent handler will use the URLs directly from the site's additional_data
+          console.log('📴 Offline mode - skipping draft photo URL conversion, URLs will be used directly');
+          // Note: The parent handler (handleSubmitVisitReport) should handle draft URLs when offline
+          // by including them in the sync payload or using them directly
         }
       }
 

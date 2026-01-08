@@ -349,7 +349,7 @@ export const sudanStates: SudanState[] = [
     ]
   },
 
-  // 18. Northern State - 7 localities
+  // 18. Northern State - 8 localities
   { 
     id: 'northern', 
     name: 'Northern', 
@@ -359,6 +359,7 @@ export const sudanStates: SudanState[] = [
       { id: 'no-halfa', name: 'Halfa', nameAr: 'حلفا' },
       { id: 'no-ad-dabbah', name: 'Ad Dabbah', nameAr: 'الدبة' },
       { id: 'no-al-burgaig', name: 'Al Burgaig', nameAr: 'البرقيق' },
+      { id: 'no-al-borgag', name: 'Al Borgag', nameAr: 'البرقيق' },
       { id: 'no-al-golid', name: 'Al Golid', nameAr: 'القولد' },
       { id: 'no-delgo', name: 'Delgo', nameAr: 'دلقو' },
       { id: 'no-merwoe', name: 'Merwoe', nameAr: 'مروي' },

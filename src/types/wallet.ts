@@ -15,7 +15,8 @@ export type WalletTransactionType =
   | 'withdrawal'       // Money withdrawn from wallet (negative)
   | 'adjustment'       // Manual admin adjustments (can be +/-)
   | 'bonus'            // Performance rewards (positive)
-  | 'penalty';         // Deductions for violations (negative)
+  | 'penalty'          // Deductions for violations (negative)
+  | 'down_payment';    // Down payment for transportation budget
 
 export interface WalletTransaction {
   id: string;
