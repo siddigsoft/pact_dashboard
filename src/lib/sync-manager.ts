@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { safeUploadFile } from '@/lib/safeUpload';
 import {
   getPendingSyncActions,
   updateSyncActionStatus,
@@ -886,14 +887,17 @@ class SyncManager {
     const blob = new Blob([byteArray], { type: 'image/jpeg' });
 
     const filePath = `site-visits/${siteEntryId}/${fileName}`;
-    const { error: uploadError } = await supabase.storage
-      .from('site-visit-photos')
-      .upload(filePath, blob, { 
-        contentType: 'image/jpeg',
-        upsert: true
-      });
 
-    if (uploadError) throw uploadError;
+    // Use safeUploadFile for secure upload
+    const uploadResult = await safeUploadFile(new File([blob], fileName, { type: 'image/jpeg' }), {
+      bucket: 'site-visit-photos',
+      path: `site-visits/${siteEntryId}`,
+      allowedTypes: ['image/jpeg'],
+      maxSizeBytes: 10 * 1024 * 1024
+    });
+    if (!uploadResult.success || !uploadResult.url) {
+      throw new Error(uploadResult.error || 'Failed to upload photo');
+    }
 
     const { data: existing } = await supabase
       .from('mmp_site_entries')
