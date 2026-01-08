@@ -3,13 +3,17 @@
 	"appName": "PACT Command Center",
 	"webDir": "dist",
 	"server": {
+		"url": "http://app.pactorg.com",
+		"cleartext": true,
 		"allowNavigation": [
 			"https://pact-dashboard-831y.vercel.app",
 			"https://*.vercel.app",
 			"https://*.supabase.co",
 			"https://*.supabase.in",
 			"https://fonts.googleapis.com",
-			"https://fonts.gstatic.com"
+			"https://fonts.gstatic.com",
+			"http://app.pactorg.com",
+			"https://app.pactorg.com"
 		]
 	},
 	"android": {

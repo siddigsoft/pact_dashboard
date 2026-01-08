@@ -8,14 +8,16 @@ const config: CapacitorConfig = {
   server: process.env.CAPACITOR_REMOTE_URL
     ? {
         url: process.env.CAPACITOR_REMOTE_URL,
-        cleartext: false,
+        cleartext: process.env.CAPACITOR_REMOTE_URL?.startsWith('http://'),
         allowNavigation: [
           'https://pact-dashboard-831y.vercel.app',
           'https://*.vercel.app',
           'https://*.supabase.co',
           'https://*.supabase.in',
           'https://fonts.googleapis.com',
-          'https://fonts.gstatic.com'
+          'https://fonts.gstatic.com',
+          'http://app.pactorg.com',
+          'https://app.pactorg.com'
         ]
       }
     : process.env.NODE_ENV === 'development' && process.env.CAPACITOR_LIVE_RELOAD === 'true'
@@ -28,18 +30,24 @@ const config: CapacitorConfig = {
           'https://*.supabase.co',
           'https://*.supabase.in',
           'https://fonts.googleapis.com',
-          'https://fonts.gstatic.com'
+          'https://fonts.gstatic.com',
+          'http://app.pactorg.com',
+          'https://app.pactorg.com'
         ]
       }
     : {
-        // Production: bundled app, but allow navigation to external services
+        // Production: Always load from remote domain to get latest changes
+        url: 'http://app.pactorg.com',
+        cleartext: true,
         allowNavigation: [
           'https://pact-dashboard-831y.vercel.app',
           'https://*.vercel.app',
           'https://*.supabase.co',
           'https://*.supabase.in',
           'https://fonts.googleapis.com',
-          'https://fonts.gstatic.com'
+          'https://fonts.gstatic.com',
+          'http://app.pactorg.com',
+          'https://app.pactorg.com'
         ]
       },
   android: {
