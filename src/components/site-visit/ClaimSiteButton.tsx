@@ -14,6 +14,12 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAuditLog } from '@/hooks/use-audit-log';
 import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { 
+  checkSiteProximity, 
+  parseGpsCoordinates, 
+  getProximityConfig,
+  formatDistance
+} from '@/utils/geoDistance';
 
 interface ClaimSiteButtonProps {
   siteId: string;
@@ -21,6 +27,7 @@ interface ClaimSiteButtonProps {
   userId: string;
   state?: string;
   locality?: string;
+  siteCoordinates?: unknown;
   scheduledDate?: string;
   onClaimed?: () => void;
   disabled?: boolean;
@@ -35,6 +42,7 @@ export function ClaimSiteButton({
   userId,
   state,
   locality,
+  siteCoordinates,
   scheduledDate,
   onClaimed,
   disabled = false,
@@ -67,79 +75,72 @@ export function ClaimSiteButton({
   
   const hasClassification = !!userClassification;
   
-  // PERMISSION CHECK 2: Site must be in user's assigned locality
-  const localityCheck = useMemo(() => {
+  // Get proximity configuration
+  const proximityConfig = useMemo(() => getProximityConfig(), []);
+  
+  // PERMISSION CHECK 2: Site must be in user's state + within GPS proximity (configurable, default 80km)
+  // NEW LOGIC:
+  // - Users without location sharing enabled cannot claim sites
+  // - Sites without GPS coordinates are claimable by anyone in the state
+  // - Sites with GPS coordinates are only claimable if user is within proximity radius
+  const proximityCheck = useMemo(() => {
     if (!currentUser || !isFieldWorker || isSuperAdmin) {
-      // Non-field workers (admin, FOM, etc) and SuperAdmins can claim any site
-      return { canClaim: true, reason: null };
+      return { canClaim: true, reason: null, distanceKm: null };
     }
     
     const userStateId = currentUser.stateId;
-    const userLocalityId = currentUser.localityId;
     
-    // User must have geographic assignment
     if (!userStateId) {
       return { 
         canClaim: false, 
-        reason: 'Your profile has no state assigned. Contact your supervisor.' 
+        reason: 'Your profile has no state assigned. Contact your supervisor.',
+        distanceKm: null
       };
     }
     
-    const userStateName = getStateName(userStateId)?.toLowerCase().trim() || '';
-    const userLocalityName = userLocalityId ? getLocalityName(userStateId, userLocalityId)?.toLowerCase().trim() : '';
+    const userLocation = parseGpsCoordinates(currentUser.location);
+    const siteLocation = parseGpsCoordinates(siteCoordinates);
     
-    const siteState = (state || '').toLowerCase().trim();
-    const siteLocality = (locality || '').toLowerCase().trim();
+    // Convert user's state ID to state name for comparison with site.state (which is a name)
+    const userStateName = getStateName(userStateId);
     
-    // Check state match
-    const stateMatches = siteState === userStateName || 
-                         siteState.includes(userStateName) || 
-                         userStateName.includes(siteState);
+    const result = checkSiteProximity(
+      userStateName || undefined, // User state NAME (not ID)
+      userLocation,
+      undefined,
+      state, // Site state NAME
+      siteLocation,
+      proximityConfig
+    );
     
-    if (!stateMatches) {
-      return { 
-        canClaim: false, 
-        reason: `This site is in ${state || 'unknown state'}, but you are assigned to ${getStateName(userStateId) || 'unknown'}.` 
-      };
-    }
-    
-    // If user has locality assigned, check locality match
-    if (userLocalityId && userLocalityName) {
-      const localityMatches = siteLocality === userLocalityName || 
-                              siteLocality.includes(userLocalityName) || 
-                              userLocalityName.includes(siteLocality);
-      
-      if (!localityMatches) {
-        return { 
-          canClaim: false, 
-          reason: `This site is in ${locality || 'unknown locality'}, but you are assigned to ${getLocalityName(userStateId, userLocalityId) || 'unknown'}.` 
-        };
-      }
-    }
-    
-    return { canClaim: true, reason: null };
-  }, [currentUser, isFieldWorker, isSuperAdmin, state, locality]);
+    return { 
+      canClaim: result.canAccess, 
+      reason: result.reason,
+      distanceKm: result.distanceKm
+    };
+  }, [currentUser, isFieldWorker, isSuperAdmin, state, siteCoordinates, proximityConfig]);
 
   // Combined permission check for field workers
   const canClaimSite = useMemo(() => {
     // Non-field workers and SuperAdmins can claim (they are typically assigning, not claiming)
-    if (!isFieldWorker || isSuperAdmin) return { allowed: true, reason: null };
+    if (!isFieldWorker || isSuperAdmin) return { allowed: true, reason: null, distanceKm: null };
     
     // Field workers need classification
     if (!hasClassification) {
       return { 
         allowed: false, 
-        reason: 'You must have an active classification to claim sites. Contact your supervisor to get classified.' 
+        reason: 'You must have an active classification to claim sites. Contact your supervisor to get classified.',
+        distanceKm: null
       };
     }
     
-    // Field workers need matching locality
-    if (!localityCheck.canClaim) {
-      return { allowed: false, reason: localityCheck.reason };
+    // Field workers need to be within state + GPS proximity
+    if (!proximityCheck.canClaim) {
+      return { allowed: false, reason: proximityCheck.reason, distanceKm: proximityCheck.distanceKm };
     }
     
-    return { allowed: true, reason: null };
-  }, [isFieldWorker, isSuperAdmin, hasClassification, localityCheck]);
+    return { allowed: true, reason: null, distanceKm: proximityCheck.distanceKm };
+  }, [isFieldWorker, isSuperAdmin, hasClassification, proximityCheck]);
 
   const handleInitiateClaim = async () => {
     if (claiming || claimed || disabled) return;
@@ -332,7 +333,7 @@ export function ClaimSiteButton({
   // Show blocked button if user cannot claim due to permission restrictions
   if (!canClaimSite.allowed && isFieldWorker) {
     const isClassificationIssue = !hasClassification;
-    const isLocalityIssue = !localityCheck.canClaim;
+    const isProximityIssue = !proximityCheck.canClaim;
     
     return (
       <Button
@@ -355,10 +356,12 @@ export function ClaimSiteButton({
             <ShieldX className="h-4 w-4 mr-2" />
             No Classification
           </>
-        ) : isLocalityIssue ? (
+        ) : isProximityIssue ? (
           <>
             <MapPinOff className="h-4 w-4 mr-2" />
-            Wrong Location
+            {proximityCheck.distanceKm !== null 
+              ? `Too Far (${formatDistance(proximityCheck.distanceKm)})` 
+              : 'Out of Range'}
           </>
         ) : (
           <>

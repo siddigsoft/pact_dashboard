@@ -36,6 +36,12 @@ import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { 
+  checkSiteProximity, 
+  parseGpsCoordinates, 
+  getProximityConfig,
+  type GeoCoordinates 
+} from '@/utils/geoDistance';
 
 const SiteVisits = () => {
   const { currentUser, hasRole } = useAppContext();
@@ -212,8 +218,11 @@ const SiteVisits = () => {
     return hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'Field Operation Manager (FOM)', 'Field Operations Manager']);
   }, [hasAnyRole, isAdminOrSuperUser]);
 
-  // Get user's geographic assignment from profile (state and locality)
-  // Works for both data collectors and coordinators who can claim sites within their locality
+  // Get proximity configuration
+  const proximityConfig = useMemo(() => getProximityConfig(), []);
+
+  // Get user's geographic assignment from profile (state and GPS location)
+  // Works for both data collectors and coordinators who can claim sites within their state + GPS proximity
   const userGeographicInfo = useMemo(() => {
     if (!currentUser || !isFieldWorker) return null;
     
@@ -223,7 +232,7 @@ const SiteVisits = () => {
     if (!userStateId) {
       const roleType = isCoordinator ? 'Coordinator' : 'Data collector';
       console.warn(`${roleType} has no state assigned in profile`);
-      return { hasGeo: false, stateName: null, localityName: null, stateId: null, localityId: null };
+      return { hasGeo: false, stateName: null, localityName: null, stateId: null, localityId: null, userLocation: null, hasLocation: false };
     }
     
     // Get state name from ID
@@ -232,13 +241,19 @@ const SiteVisits = () => {
     // Get locality name from IDs (if locality is assigned)
     const localityName = userLocalityId ? getLocalityName(userStateId, userLocalityId) : null;
     
+    // Get user's current GPS location
+    const userLocation = parseGpsCoordinates(currentUser.location);
+    const hasLocation = !!userLocation;
+    
     const roleType = isCoordinator ? 'Coordinator' : 'Data Collector';
     console.log(`📍 ${roleType} Geographic Info:`, {
       userId: currentUser.id,
       stateId: userStateId,
       stateName,
       localityId: userLocalityId,
-      localityName
+      localityName,
+      hasLocation,
+      userLocation
     });
     
     return { 
@@ -246,36 +261,42 @@ const SiteVisits = () => {
       stateName, 
       localityName, 
       stateId: userStateId, 
-      localityId: userLocalityId 
+      localityId: userLocalityId,
+      userLocation,
+      hasLocation
     };
   }, [currentUser, isFieldWorker, isCoordinator]);
 
   // Helper function to check if a site matches the user's geographic location
+  // NEW LOGIC: Same state + within GPS proximity (configurable, default 80km)
+  // - Users without location sharing enabled cannot see sites
+  // - Sites without GPS coordinates are visible to everyone in the state
+  // - Sites with GPS coordinates are only visible if user is within proximity radius
   const siteMatchesUserGeography = (visit: SiteVisit): boolean => {
     if (!userGeographicInfo?.hasGeo) return false;
     
-    const visitState = (visit.state || '').toLowerCase().trim();
-    const visitLocality = (visit.locality || '').toLowerCase().trim();
-    const userState = (userGeographicInfo.stateName || '').toLowerCase().trim();
-    const userLocality = (userGeographicInfo.localityName || '').toLowerCase().trim();
-    
-    // Must match state
-    const stateMatches = visitState === userState || 
-                         visitState.includes(userState) || 
-                         userState.includes(visitState);
-    
-    if (!stateMatches) return false;
-    
-    // If user has locality assigned, must also match locality
-    if (userGeographicInfo.localityId && userLocality) {
-      const localityMatches = visitLocality === userLocality || 
-                              visitLocality.includes(userLocality) || 
-                              userLocality.includes(visitLocality);
-      return localityMatches;
+    // If location sharing is required but user doesn't have it, they cannot see sites
+    if (proximityConfig.requireLocationSharing && !userGeographicInfo.hasLocation) {
+      return false;
     }
     
-    // If no locality assigned, only check state
-    return true;
+    // Parse site GPS coordinates if available
+    const siteLocation = parseGpsCoordinates(visit.coordinates);
+    
+    // Convert user's state ID to state name for comparison with site.state (which is a name)
+    const userStateName = userGeographicInfo.stateName || getStateName(userGeographicInfo.stateId || '');
+    
+    // Use the proximity check utility - pass state NAMES for both user and site
+    const proximityResult = checkSiteProximity(
+      userStateName || undefined, // User state NAME (not ID)
+      userGeographicInfo.userLocation,
+      undefined, // siteStateId - we'll use name matching
+      visit.state, // Site state NAME
+      siteLocation,
+      proximityConfig
+    );
+    
+    return proximityResult.canAccess;
   };
 
   // Filter for approved MMPs (only for non-FOM users)
