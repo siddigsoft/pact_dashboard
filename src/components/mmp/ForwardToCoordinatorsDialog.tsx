@@ -71,14 +71,35 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
       setLoading(true);
       try {
         const data = await fetchCoordinatorUsers();
-        if (!cancelled) setCoordinators(data as CoordinatorUser[]);
+        let coordList = data as CoordinatorUser[];
+        
+        // If current user is admin/super_admin, add them to the list so they can forward to themselves
+        if (currentUser && ['admin', 'super_admin', 'ict'].includes(currentUser.role || '')) {
+          const selfExists = coordList.some(c => c.id === currentUser.id);
+          if (!selfExists) {
+            coordList = [
+              {
+                id: currentUser.id,
+                full_name: `${currentUser.fullName || currentUser.name || currentUser.username} (Self - Admin)`,
+                username: currentUser.username,
+                email: currentUser.email,
+                hub_id: currentUser.hubId || null,
+                state_id: currentUser.stateId || null,
+                locality_id: currentUser.localityId || null,
+              },
+              ...coordList
+            ];
+          }
+        }
+        
+        if (!cancelled) setCoordinators(coordList);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [open]);
+  }, [open, currentUser]);
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();

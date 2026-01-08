@@ -375,12 +375,12 @@ const MMPDetailView = () => {
           
          
 
-          {/* Review & Assign Coordinators button for FOM users */}
-          {isFOM && mmpFile?.permits?.federal && (
+          {/* Review & Assign Coordinators button for FOM users or Admins */}
+          {(isFOM || isAdmin) && isForwarded && (
             <div>
               <Button 
                 onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-green-600 hover:bg-green-700"
               >
                 <Send className="mr-2 h-4 w-4" />
                 Review & Assign Coordinators
@@ -388,12 +388,12 @@ const MMPDetailView = () => {
             </div>
           )}
 
-          {/* Mark as Verified button for Coordinator users */}
-          {isCoordinator && (mmpFile as any)?.workflow?.forwardedToCoordinators && (
+          {/* Mark as Verified button for Coordinator users or Admins */}
+          {(isCoordinator || isAdmin) && (mmpFile as any)?.workflow?.forwardedToCoordinators && (
             <div>
               <Button 
                 onClick={handleMarkAsVerified}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-purple-600 hover:bg-purple-700"
               >
                 <CheckCircle className="mr-2 h-4 w-4" />
                 Mark as Verified

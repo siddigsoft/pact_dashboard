@@ -45,14 +45,35 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({
       setLoading(true);
       try {
         const data = await fetchFomUsers();
-        if (!cancelled) setFoms(data as FOMUser[]);
+        let fomList = data as FOMUser[];
+        
+        // If current user is admin/super_admin, add them to the list so they can forward to themselves
+        if (currentUser && ['admin', 'super_admin', 'ict'].includes(currentUser.role || '')) {
+          const selfExists = fomList.some(f => f.id === currentUser.id);
+          if (!selfExists) {
+            fomList = [
+              {
+                id: currentUser.id,
+                full_name: `${currentUser.fullName || currentUser.name || currentUser.username} (Self - Admin)`,
+                username: currentUser.username,
+                email: currentUser.email,
+                hub_id: currentUser.hubId || null,
+                state_id: currentUser.stateId || null,
+                locality_id: currentUser.localityId || null,
+              },
+              ...fomList
+            ];
+          }
+        }
+        
+        if (!cancelled) setFoms(fomList);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [open]);
+  }, [open, currentUser]);
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
