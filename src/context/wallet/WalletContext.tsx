@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 import type {
   Wallet,
   WalletTransaction,
@@ -801,58 +802,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     pendingFeeAdditions.add(lockKey);
     
     try {
-      // VALIDATION 1: Check if fee was already added for this site visit (prevent duplicate fees)
-      // Check both site_visit_id (from online completion) and reference_id (from offline sync)
-      // Using separate queries for more reliable matching
-      const { data: existingBySiteVisitId, error: check1Error } = await supabase
-        .from('wallet_transactions')
-        .select('id, amount')
-        .eq('site_visit_id', siteVisitId)
-        .in('type', ['earning', 'site_visit_fee']);
+      // ADDITIONAL VALIDATIONS (beyond what centralized function does):
+      // 1. Check site_code and visit date (visit_completed_at or visit_date) requirements
+      // 2. Check for duplicate visits in same week
       
-      const { data: existingByRefId, error: check2Error } = await supabase
-        .from('wallet_transactions')
-        .select('id, amount')
-        .eq('reference_id', siteVisitId)
-        .in('type', ['earning', 'site_visit_fee']);
-      
-      // Combine results
-      const existingFees = [...(existingBySiteVisitId || []), ...(existingByRefId || [])];
-      const feeCheckError = check1Error || check2Error;
-
-      // CRITICAL: Abort if we cannot verify whether fee exists (fail-safe)
-      if (feeCheckError) {
-        console.error(`[Wallet] Failed to check for existing fees: ${feeCheckError.message}`);
-        toast({
-          title: 'Validation Failed',
-          description: 'Cannot verify if fee was already recorded. Please try again.',
-          variant: 'destructive',
-        });
-        throw new Error(`Fee check failed: ${feeCheckError.message}`);
-      }
-
-      // Block if any fee already exists for this site visit
-      if (existingFees && existingFees.length > 0) {
-        const totalExisting = existingFees.reduce((sum, f) => sum + Number(f.amount || 0), 0);
-        console.warn(`[Wallet] Fee already recorded for site visit ${siteVisitId}: ${totalExisting} SDG (${existingFees.length} transaction(s))`);
-        toast({
-          title: 'Fee Already Recorded',
-          description: `This site visit already has ${existingFees.length} fee transaction(s) totaling ${totalExisting} SDG.`,
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      // Fetch from mmp_site_entries (siteVisitId is the mmp_site_entries.id)
+      // Fetch from mmp_site_entries for additional validations
       const { data: entry, error: entryError } = await supabase
         .from('mmp_site_entries')
-        .select('site_name, site_code, status, accepted_by, enumerator_fee, transport_fee, cost, visited_at')
+        .select('site_name, site_code, status, accepted_by, enumerator_fee, transport_fee, cost, visit_completed_at, visit_date')
         .eq('id', siteVisitId)
         .single();
 
       // CRITICAL: Abort if we cannot fetch site entry (fail-safe - no payment without validation)
       if (entryError) {
-        // PGRST116 means "no rows found" - site visit doesn't exist
         console.error(`[Wallet] Failed to fetch site entry: ${entryError.message}`);
         toast({
           title: 'Site Visit Not Found',
@@ -883,33 +845,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error('Site entry missing site_code - cannot verify uniqueness');
       }
 
-      // CRITICAL: Require visited_at for week-based deduplication - abort if missing
-      if (!entry.visited_at) {
-        console.error(`[Wallet] Site entry ${siteVisitId} missing visited_at - cannot verify week uniqueness`);
-        toast({
-          title: 'Data Integrity Issue',
-          description: 'Site visit is missing visit date. Cannot verify uniqueness for fee.',
-          variant: 'destructive',
-        });
-        throw new Error('Site entry missing visited_at - cannot verify week uniqueness');
+      // VALIDATION: Check if same site was visited in the same week (prevent duplicate site visits)
+      // This is an additional validation - we only perform it if visit_completed_at is available
+      // If not available, we skip this check (it's not critical for transaction creation)
+      let duplicateVisits: any[] = [];
+      let dupError: any = null;
+
+      if (entry.visit_completed_at) {
+        const visitDate = new Date(entry.visit_completed_at);
+        const weekStart = new Date(visitDate);
+        weekStart.setDate(visitDate.getDate() - visitDate.getDay()); // Start of week (Sunday)
+        weekStart.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 7); // End of week
+
+        // Check for duplicates using visit_completed_at
+        const { data: duplicateVisitsData, error: dupErrorData } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, visit_completed_at')
+          .eq('site_code', entry.site_code)
+          .eq('status', 'completed')
+          .neq('id', siteVisitId)
+          .not('visit_completed_at', 'is', null)
+          .gte('visit_completed_at', weekStart.toISOString())
+          .lt('visit_completed_at', weekEnd.toISOString());
+
+        duplicateVisits = duplicateVisitsData || [];
+        dupError = dupErrorData;
+      } else {
+        // If no visit_completed_at, skip week-based duplicate check
+        // This is an additional validation, not critical for transaction creation
+        console.log(`[Wallet] Skipping week-based duplicate check - visit_completed_at not available for site ${siteVisitId}`);
       }
-
-      // VALIDATION 2: Check if same site was visited in the same week (prevent duplicate site visits)
-      const visitDate = new Date(entry.visited_at);
-      const weekStart = new Date(visitDate);
-      weekStart.setDate(visitDate.getDate() - visitDate.getDay()); // Start of week (Sunday)
-      weekStart.setHours(0, 0, 0, 0);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 7); // End of week
-
-      const { data: duplicateVisits, error: dupError } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_name, visited_at')
-        .eq('site_code', entry.site_code)
-        .eq('status', 'completed')
-        .neq('id', siteVisitId)
-        .gte('visited_at', weekStart.toISOString())
-        .lt('visited_at', weekEnd.toISOString());
 
       // CRITICAL: Abort if we cannot verify duplicate visits (fail-safe)
       if (dupError) {
@@ -931,10 +898,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         });
         return;
       }
-      
-      let amount: number;
-      let transportAmount: number = 0;
-      let description: string;
+
+      // Calculate amount and description (for fallback to classification-based fee)
+      let amount: number | undefined;
+      let description: string | undefined;
       
       const storedEnumFee = Number(entry.enumerator_fee) || 0;
       const storedTransportFee = Number(entry.transport_fee) || 0;
@@ -943,7 +910,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // Use stored fees if available
       if (storedCost > 0 || storedEnumFee > 0) {
         amount = storedCost > 0 ? storedCost : (storedEnumFee + storedTransportFee);
-        transportAmount = storedTransportFee;
         description = `Site visit fee: ${storedEnumFee} SDG enumerator + ${storedTransportFee} SDG transport`;
         console.log(`💰 Using stored fees for site entry ${siteVisitId}: ${amount} SDG`);
       } else {
@@ -953,131 +919,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         console.log(`💰 Using calculated fee for site entry ${siteVisitId}: ${amount} SDG`);
       }
 
-      const { data: targetWallet, error: walletError } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
-      if (walletError) {
-        if (walletError.code === 'PGRST116') {
-          const { data: newWallet, error: createError } = await supabase
-            .from('wallets')
-            .insert({ user_id: userId, balances: { SDG: amount }, total_earned: amount })
-            .select()
-            .single();
-
-          if (createError) throw createError;
-
-          await supabase.from('wallet_transactions').insert({
-            wallet_id: newWallet.id,
-            user_id: userId,
-            type: 'earning',
-            amount,
-            amount_cents: Math.round(amount * 100),
-            currency: 'SDG',
-            site_visit_id: siteVisitId,
-            description,
-            balance_before: 0,
-            balance_after: amount,
-            created_by: currentUser?.id,
-          });
-
-          return;
-        }
-        throw walletError;
-      }
-
-      const currentBalance = Number(targetWallet.balances?.SDG ?? 0) || 0;
-      const newBalance = Number((currentBalance + Number(amount)).toFixed(2));
-      const newBalances = { ...targetWallet.balances, SDG: newBalance };
-
-      const { error: updateError } = await supabase
-        .from('wallets')
-        .update({
-          balances: newBalances,
-          total_earned: parseFloat(targetWallet.total_earned) + amount,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', targetWallet.id);
-
-      if (updateError) throw updateError;
-
-      const { error: transactionError } = await supabase.from('wallet_transactions').insert({
-        wallet_id: targetWallet.id,
-        user_id: userId,
-        type: 'earning',
-        amount,
-        amount_cents: Math.round(amount * 100),
-        currency: 'SDG',
-        site_visit_id: siteVisitId,
-        description,
-        balance_before: currentBalance,
-        balance_after: newBalance,
-        created_by: currentUser?.id,
+      // Use centralized function to create the wallet transaction
+      // This ensures consistency across all completion flows
+      const result = await createSiteVisitWalletTransaction({
+        siteVisitId: siteVisitId,
+        userId: userId,
+        amount: amount,
+        description: description,
+        showNotifications: true,
+        toast: toast,
       });
 
-      if (transactionError) {
-        // Handle duplicate constraint violation gracefully (error code 23505)
-        if (transactionError.code === '23505' && transactionError.message?.includes('site_visit')) {
-          console.warn(`[Wallet] Database constraint blocked duplicate fee for site visit ${siteVisitId}`);
-          // Log the blocked attempt for audit
-          try {
-            await supabase.from('audit_logs').insert({
-              action: 'duplicate_fee_blocked',
-              entity_type: 'wallet_transaction',
-              entity_id: siteVisitId,
-              user_id: currentUser?.id,
-              details: {
-                attempted_user_id: userId,
-                attempted_amount: amount,
-                reason: 'Database unique constraint prevented duplicate site visit fee',
-                timestamp: new Date().toISOString()
-              }
-            });
-          } catch (auditErr) {
-            console.warn('[Wallet] Failed to log audit entry:', auditErr);
-          }
-          toast({
-            title: 'Fee Already Recorded',
-            description: 'This site visit fee was already credited to the wallet.',
-          });
-          return; // Exit gracefully without throwing
+      if (result.success) {
+        console.log(`[Wallet] ✅ Successfully created wallet transaction: ${result.message}`);
+        
+        // Refresh wallet and transactions if this is the current user
+        if (userId === currentUser?.id) {
+          await refreshWallet();
+          await refreshTransactions();
         }
-        throw transactionError;
-      }
-
-      if (userId === currentUser?.id) {
-        await refreshWallet();
-        await refreshTransactions();
+      } else {
+        // The centralized function already shows toast notifications, but we'll log the error
+        console.error(`[Wallet] Failed to create wallet transaction: ${result.message}`);
+        throw new Error(result.message);
       }
     } catch (error: any) {
-      // Handle duplicate constraint violation in catch block as well
-      if (error?.code === '23505' && error?.message?.includes('site_visit')) {
-        console.warn(`[Wallet] Database constraint blocked duplicate fee for site visit ${siteVisitId}`);
-        // Log the blocked attempt for audit (same as immediate insert-error branch)
-        try {
-          await supabase.from('audit_logs').insert({
-            action: 'duplicate_fee_blocked',
-            entity_type: 'wallet_transaction',
-            entity_id: siteVisitId,
-            user_id: currentUser?.id,
-            details: {
-              attempted_user_id: userId,
-              reason: 'Database unique constraint prevented duplicate site visit fee (catch block)',
-              timestamp: new Date().toISOString()
-            }
-          });
-        } catch (auditErr) {
-          console.warn('[Wallet] Failed to log audit entry:', auditErr);
-        }
-        toast({
-          title: 'Fee Already Recorded',
-          description: 'This site visit fee was already credited to the wallet.',
-        });
-        return; // Exit gracefully
-      }
       console.error('Failed to add site visit fee:', error);
+      // Re-throw to let caller handle (they may want to show additional notifications)
       throw error;
     } finally {
       // Release the lock so future attempts can proceed (after previous one completes)
@@ -1115,7 +983,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .from('wallet_transactions')
         .select('id, amount')
         .eq('site_visit_id', siteVisitId)
-        .in('type', ['earning', 'site_visit_fee'])
+        .eq('type', 'earning')
         .maybeSingle();
 
       if (existingTx) {

@@ -194,10 +194,19 @@ const MobileAppHeader = ({
       try {
         const workflowGroups = getWorkflowMenuGroups(roles || [], appUser?.role || currentUser?.role || 'dataCollector', perms, isSuperAdmin, menuPrefs);
       
+      // Check if user is a datacollector
+      const isDataCollector = roles?.includes('DataCollector' as any) || 
+                              roles?.includes('dataCollector' as any) || 
+                              appUser?.role?.toLowerCase() === 'datacollector' ||
+                              appUser?.role?.toLowerCase() === 'data collector' ||
+                              currentUser?.role?.toLowerCase() === 'datacollector' ||
+                              currentUser?.role?.toLowerCase() === 'data collector';
+      
       // Add additional menu items from the "More" section
       // Note: These will be filtered to remove duplicates that already exist in workflowGroups
       const additionalMenuGroups: MenuGroup[] = [
-        {
+        // Exclude Quick Access for datacollectors
+        ...(isDataCollector ? [] : [{
           id: 'quick-access',
           label: 'Quick Access',
           order: 1.25,
@@ -207,7 +216,7 @@ const MobileAppHeader = ({
             { id: 'search', icon: Search, title: 'Global Search', url: '/search', priority: 3 },
             { id: 'field-team', icon: Map, title: 'Field Team Map', url: '/field-team', priority: 4 },
           ]
-        },
+        }]),
         {
           id: 'finance',
           label: 'Finance & Wallet',
@@ -279,7 +288,7 @@ const MobileAppHeader = ({
             ] : []),
           ]
         }] : []),
-        {
+        ...(!isDataCollector ? [{
           id: 'tools',
           label: 'Tools',
           order: 6.5,
@@ -289,7 +298,7 @@ const MobileAppHeader = ({
             { id: 'calls', icon: Phone, title: 'Calls', url: '/calls', priority: 3 },
             { id: 'advanced-map', icon: Globe, title: 'Advanced Map', url: '/advanced-map', priority: 4 },
           ]
-        },
+        }] : []),
         ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT']) ? [{
           id: 'admin',
           label: 'Administration',

@@ -41,6 +41,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 import { useOffline } from '@/hooks/use-offline';
+import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -1040,118 +1041,27 @@ const MMP = () => {
       }
 
       // Process wallet payment for the user who completed the site entry
+      // Using centralized wallet transaction function (single point of truth)
       try {
-        // Fetch fresh site data from database to ensure we have the latest values
-        const { data: freshSite, error: fetchError } = await supabase
-          .from('mmp_site_entries')
-          .select('enumerator_fee, transport_fee, cost, accepted_by, claimed_by, visit_completed_by')
-          .eq('id', site.id)
-          .single();
-        
-        if (fetchError) {
-          console.error('Failed to fetch fresh site data for wallet payment:', fetchError);
-        }
-        
-        // Check multiple fields to determine who should be paid:
-        // 1. accepted_by (primary field)
-        // 2. claimed_by (fallback if accepted_by is missing)
-        // 3. visit_completed_by (fallback if both above are missing)
-        // Use fresh database values first, then fallback to site object, then current user
-        const acceptedBy = freshSite?.accepted_by || 
-                          freshSite?.claimed_by || 
-                          freshSite?.visit_completed_by ||
-                          site.accepted_by || site.additional_data?.accepted_by || 
-                          site.claimed_by || site.additional_data?.claimed_by ||
-                          site.visit_completed_by || currentUser?.id;
-        
-        if (acceptedBy) {
+        const result = await createSiteVisitWalletTransaction({
+          siteVisitId: site.id,
+          description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
+          showNotifications: true,
+          toast: toast,
+        });
 
-          // Get the cost amount from fresh database values (prefer) or fallback to site object
-          // Check both snake_case (from DB) and camelCase (from normalized object)
-          const enumeratorFee = freshSite?.enumerator_fee || site.enumerator_fee || site.enumeratorFee || 0;
-          const transportFee = freshSite?.transport_fee || site.transport_fee || site.transportFee || 0;
-          const directCost = freshSite?.cost || site.cost || 0;
-          
-          console.log('💰 Wallet payment calculation:', { enumeratorFee, transportFee, directCost, siteId: site.id });
-          
-          // Calculate total cost: use direct cost if available, otherwise sum fees
-          const totalCost = directCost > 0 
-            ? directCost 
-            : (Number(enumeratorFee) + Number(transportFee));
-          
-          if (totalCost > 0) {
-            console.log(`💵 Processing wallet payment of ${totalCost} SDG for user ${acceptedBy}`);
-            
-            // Get or create wallet for the user
-            const { data: walletData, error: walletError } = await supabase
-              .from('wallets')
-              .select('*')
-              .eq('user_id', acceptedBy)
-              .single();
-
-            let walletId: string;
-            let currentBalance = 0;
-
-            if (walletError && walletError.code === 'PGRST116') {
-              // Wallet doesn't exist, create it
-              const { data: newWallet, error: createError } = await supabase
-                .from('wallets')
-                .insert({
-                  user_id: acceptedBy,
-                  balances: { SDG: totalCost },
-                  total_earned: totalCost,
-                })
-                .select()
-                .single();
-
-              if (createError) throw createError;
-              walletId = newWallet.id;
-            } else if (walletError) {
-              throw walletError;
-            } else {
-              walletId = walletData.id;
-              currentBalance = parseFloat(walletData.balances?.SDG || 0);
-              const newBalance = currentBalance + totalCost;
-
-              // Update wallet balance
-              await supabase
-                .from('wallets')
-                .update({
-                  balances: { ...walletData.balances, SDG: newBalance },
-                  total_earned: parseFloat(walletData.total_earned || 0) + totalCost,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', walletId);
-            }
-
-            // Create wallet transaction
-            await supabase.from('wallet_transactions').insert({
-              wallet_id: walletId,
-              user_id: acceptedBy,
-              type: 'earning',
-              amount: totalCost,
-              amount_cents: Math.round(totalCost * 100),
-              currency: 'SDG',
-              site_visit_id: site.id,
-              description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
-              balance_before: currentBalance,
-              balance_after: currentBalance + totalCost,
-              created_by: currentUser?.id,
-            });
-
-            console.log(`Payment of ${totalCost} SDG added to wallet for user ${acceptedBy} for site entry ${site.id}`);
-          } else {
-            console.warn(`⚠️ Total cost is 0 for site ${site.id}. Fee might not have been set during claim/accept.`);
-            toast({
-              title: 'Fee Not Set',
-              description: 'The site visit fee was not calculated at claim time. Please contact admin to adjust.',
-              variant: 'default',
-            });
-          }
+        if (result.success) {
+          console.log(`✅ Wallet transaction created successfully: ${result.message}`);
         } else {
-          console.warn(`No user found for site entry ${site.id} (checked accepted_by, claimed_by, visit_completed_by), skipping wallet payment`);
+          console.warn(`⚠️ Wallet transaction creation failed: ${result.message}`);
+          // Don't fail the entire operation if wallet payment fails
+          toast({
+            title: 'Payment Warning',
+            description: result.message || 'Site visit completed but wallet payment failed. Please contact support.',
+            variant: 'destructive',
+          });
         }
-      } catch (walletErr) {
+      } catch (walletErr: any) {
         console.error('Failed to process wallet payment for completed site entry:', walletErr);
         // Don't fail the entire operation if wallet payment fails
         toast({
@@ -1298,6 +1208,16 @@ const MMP = () => {
         accuracy: reportData.coordinates.accuracy
       } : {};
 
+      // Prepare GPS coordinates for Sites Registry (used in both online and offline flows)
+      const siteEntryId = site.id || site.siteId || site.entry_id;
+      const gpsCoordinates = siteEntryId && reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude
+        ? {
+            latitude: reportData.coordinates.latitude,
+            longitude: reportData.coordinates.longitude,
+            accuracy: reportData.coordinates.accuracy,
+          }
+        : undefined;
+
       let report: any = null;
 
       if (isOnline) {
@@ -1353,7 +1273,17 @@ const MMP = () => {
         console.log('💾 Offline mode - queuing report submission...');
         const { addPendingSync, saveSiteVisitOffline, getOfflineSiteVisit, updateSiteVisitOffline } = await import('@/lib/offline-db');
         
-        // Queue sync action
+        // Prepare GPS coordinates for registry save during sync (if available)
+        const gpsForRegistry = gpsCoordinates ? {
+          latitude: gpsCoordinates.latitude,
+          longitude: gpsCoordinates.longitude,
+          accuracy: gpsCoordinates.accuracy,
+          userId: currentUser?.id || 'system',
+          sourceType: 'site_visit' as const,
+          overwriteExisting: false
+        } : undefined;
+        
+        // Queue sync action - include GPS coordinates for registry save during sync
         await addPendingSync({
           type: 'site_visit_complete',
           payload: {
@@ -1372,7 +1302,9 @@ const MMP = () => {
               durationMinutes: reportData.visitDuration,
               coordinates: coordinatesJsonb,
               submittedAt: now
-            }
+            },
+            // Include GPS coordinates for Sites Registry save during sync
+            gpsForRegistry
           }
         });
 
@@ -1410,49 +1342,51 @@ const MMP = () => {
       }
 
       // Save GPS coordinates to Sites Registry (if coordinates were captured and site has valid ID)
-      const siteEntryId = site.id || site.siteId || site.entry_id;
-      if (siteEntryId && reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude) {
-        console.log('📍 Saving GPS to Sites Registry for site entry:', siteEntryId);
-        try {
-          const gpsResult = await saveGPSToRegistryFromSiteEntry(
-            siteEntryId,
-            {
-              latitude: reportData.coordinates.latitude,
-              longitude: reportData.coordinates.longitude,
-              accuracy: reportData.coordinates.accuracy,
-            },
-            {
-              userId: currentUser?.id || 'system',
-              sourceType: 'site_visit',
-              overwriteExisting: false, // Don't overwrite if GPS already exists
+      // IMPORTANT: Only attempt GPS save when online. When offline, GPS data is included in sync payload
+      if (siteEntryId && gpsCoordinates) {
+        if (isOnline) {
+          // Online: Save GPS immediately
+          console.log('📍 Saving GPS to Sites Registry for site entry:', siteEntryId);
+          try {
+            const gpsResult = await saveGPSToRegistryFromSiteEntry(
+              siteEntryId,
+              gpsCoordinates,
+              {
+                userId: currentUser?.id || 'system',
+                sourceType: 'site_visit',
+                overwriteExisting: false, // Don't overwrite if GPS already exists
+              }
+            );
+            if (gpsResult.success) {
+              console.log('✅ GPS saved to Sites Registry');
+              toast({
+                title: 'GPS Coordinates Saved',
+                description: 'Site GPS coordinates have been saved to the Sites Registry.',
+                variant: 'default'
+              });
+            } else {
+              console.warn('⚠️ Failed to save GPS to registry:', gpsResult.error);
+              // Show warning toast but don't fail the visit completion
+              toast({
+                title: 'GPS Save Warning',
+                description: gpsResult.error || 'GPS coordinates could not be saved to the Sites Registry.',
+                variant: 'destructive'
+              });
             }
-          );
-          if (gpsResult.success) {
-            console.log('✅ GPS saved to Sites Registry');
+          } catch (gpsError) {
+            console.error('❌ Error saving GPS to registry:', gpsError);
+            // Non-blocking - don't fail the visit completion for GPS errors
             toast({
-              title: 'GPS Coordinates Saved',
-              description: 'Site GPS coordinates have been saved to the Sites Registry.',
-              variant: 'default'
-            });
-          } else {
-            console.warn('⚠️ Failed to save GPS to registry:', gpsResult.error);
-            // Show warning toast but don't fail the visit completion
-            toast({
-              title: 'GPS Save Warning',
-              description: gpsResult.error || 'GPS coordinates could not be saved to the Sites Registry.',
+              title: 'GPS Save Error',
+              description: 'An error occurred while saving GPS coordinates. Please contact support if this persists.',
               variant: 'destructive'
             });
           }
-        } catch (gpsError) {
-          console.error('❌ Error saving GPS to registry:', gpsError);
-          // Non-blocking - don't fail the visit completion for GPS errors
-          toast({
-            title: 'GPS Save Error',
-            description: 'An error occurred while saving GPS coordinates. Please contact support if this persists.',
-            variant: 'destructive'
-          });
+        } else {
+          // Offline: GPS data will be saved during sync (included in payload below)
+          console.log('📍 Offline mode - GPS coordinates will be saved to registry during sync');
         }
-      } else if (reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude) {
+      } else if (gpsCoordinates) {
         console.warn('⚠️ Cannot save GPS: No valid site entry ID available');
         toast({
           title: 'GPS Not Saved',
@@ -1462,19 +1396,45 @@ const MMP = () => {
       }
 
       // Update site status to 'Completed' and save report info
+      // CRITICAL: Ensure visit_completed_at and visit_completed_by are set if not already set
       if (isOnline) {
         console.log('🔄 Updating site status to Completed...');
+        
+        // First, check if visit_completed_at is already set
+        const { data: currentSite, error: fetchError } = await supabase
+          .from('mmp_site_entries')
+          .select('visit_completed_at, visit_completed_by')
+          .eq('id', site.id)
+          .single();
+
+        if (fetchError) {
+          console.error('❌ Error fetching current site data:', fetchError);
+        }
+
+        // Prepare update data - ensure visit_completed_at and visit_completed_by are set
+        const updatePayload: any = {
+          status: 'Completed',
+          additional_data: {
+            ...(site.additional_data || {}),
+            visit_report_submitted: true,
+            visit_report_id: report?.id || null,
+            visit_report_submitted_at: now
+          }
+        };
+
+        // Only set visit_completed_at and visit_completed_by if they're not already set
+        if (!currentSite?.visit_completed_at) {
+          updatePayload.visit_completed_at = now;
+          console.log('📝 Setting visit_completed_at (was null)');
+        }
+        if (!currentSite?.visit_completed_by) {
+          updatePayload.visit_completed_by = currentUser?.id;
+          console.log('📝 Setting visit_completed_by (was null)');
+        }
+
         const { data: updateData, error: updateError } = await supabase
           .from('mmp_site_entries')
-          .update({
-            status: 'Completed',
-            additional_data: {
-              ...(site.additional_data || {}),
-              visit_report_submitted: true,
-              visit_report_id: report?.id || null,
-              visit_report_submitted_at: now
-            }
-          })
+          .update(updatePayload)
           .eq('id', site.id)
           .select();
 
@@ -1488,26 +1448,50 @@ const MMP = () => {
         console.log('🔄 Offline mode - site status update included in completion sync');
       }
 
-      // Wallet reconciliation (only when online)
+      // CRITICAL: Create wallet transaction if it doesn't exist
+      // This ensures wallet transactions are created even if handleCompleteVisit wasn't called
       if (isOnline) {
         try {
-          console.log('💰 Reconciling wallet for completed site:', site.id);
-          const result = await reconcileSiteVisitFee(site.id);
-          if (result.success) {
+          console.log('💰 Creating wallet transaction for completed site:', site.id);
+          const walletResult = await createSiteVisitWalletTransaction({
+            siteVisitId: site.id,
+            description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
+            showNotifications: true,
+            toast: toast,
+          });
+
+          if (walletResult.success) {
+            console.log('✅ Wallet transaction created:', walletResult.message);
             toast({
-              title: 'Payment Added',
-              description: result.message,
+              title: 'Payment Processed',
+              description: walletResult.message,
               variant: 'default'
             });
           } else {
-            console.warn('[Wallet] ' + result.message);
+            // If transaction already exists, that's okay - just log it
+            if (walletResult.message.includes('already exists')) {
+              console.log('ℹ️ Wallet transaction already exists (skipped duplicate)');
+            } else {
+              console.warn('⚠️ Wallet transaction creation failed:', walletResult.message);
+              toast({
+                title: 'Payment Warning',
+                description: walletResult.message || 'Wallet payment could not be processed. Please contact support.',
+                variant: 'destructive'
+              });
+            }
           }
-        } catch (walletErr) {
-          console.error('Wallet reconciliation error:', walletErr);
+        } catch (walletErr: any) {
+          console.error('❌ Wallet transaction error:', walletErr);
+          // Don't fail the entire operation if wallet transaction fails
+          toast({
+            title: 'Payment Warning',
+            description: 'Site visit completed but wallet payment failed. Please contact support.',
+            variant: 'destructive'
+          });
         }
       } else {
-        // Wallet reconciliation will be handled when syncing site_visit_complete
-        console.log('💰 Wallet reconciliation will be processed when syncing completion');
+        // Wallet transaction will be handled when syncing site_visit_complete
+        console.log('💰 Wallet transaction will be processed when syncing completion');
       }
 
       toast({
@@ -1554,32 +1538,36 @@ const MMP = () => {
             setUnsyncedCompletedVisits(completedUnsynced);
           }
 
-          // Load updated my sites data
-          const { data: mySitesData, error: mySitesError } = await supabase
-            .from('mmp_site_entries')
-            .select('*')
-            .eq('accepted_by', currentUser.id)
-            .order('created_at', { ascending: false })
-            .limit(1000);
+          // Load updated my sites data (only when online)
+          if (isOnline) {
+            const { data: mySitesData, error: mySitesError } = await supabase
+              .from('mmp_site_entries')
+              .select('*')
+              .eq('accepted_by', currentUser.id)
+              .order('created_at', { ascending: false })
+              .limit(1000);
 
-          if (!mySitesError && mySitesData) {
-            const formatEntries = (entries: any[]) => entries.map(entry => {
-              const enumeratorFee = entry.enumerator_fee;
-              const transportFee = entry.transport_fee;
-              return {
-                ...entry,
-                siteName: entry.site_name,
-                siteCode: entry.site_code,
-                enumerator_fee: enumeratorFee,
-                enumeratorFee: enumeratorFee,
-                transport_fee: transportFee,
-                transportFee: transportFee,
-              };
-            });
+            if (!mySitesError && mySitesData) {
+              const formatEntries = (entries: any[]) => entries.map(entry => {
+                const enumeratorFee = entry.enumerator_fee;
+                const transportFee = entry.transport_fee;
+                return {
+                  ...entry,
+                  siteName: entry.site_name,
+                  siteCode: entry.site_code,
+                  enumerator_fee: enumeratorFee,
+                  enumeratorFee: enumeratorFee,
+                  transport_fee: transportFee,
+                  transportFee: transportFee,
+                };
+              });
 
-            const formattedMySites = formatEntries(mySitesData);
-            setEnumeratorMySites(formattedMySites);
-            console.log('✅ Enumerator My Sites updated:', formattedMySites.length, 'sites');
+              const formattedMySites = formatEntries(mySitesData);
+              setEnumeratorMySites(formattedMySites);
+              console.log('✅ Enumerator My Sites updated:', formattedMySites.length, 'sites');
+            }
+          } else {
+            console.log('📴 Offline mode - skipping data reload, will sync when online');
           }
         } catch (error) {
           console.error('❌ Failed to reload enumerator data:', error);
@@ -1803,11 +1791,12 @@ const MMP = () => {
   const isAdmin = hasRole(['Admin', 'admin', 'Super Admin', 'superadmin', 'super admin']);
   const isICT = hasRole(['ICT', 'ict']);
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
+  const isSupervisor = hasRole(['Supervisor', 'supervisor']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'enumerator', 'Enumerator']);
   // Coordinators have full data collector capabilities (can claim sites, view transport fees, etc.)
   const canClaimSites = isDataCollector || isCoordinator;
-  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isICT || isDataCollector;
+  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
   // that may have broad permissions from seeing the upload control.
@@ -1851,7 +1840,7 @@ const MMP = () => {
   
   // Derive coordinators and supervisors from context users
   useEffect(() => {
-    if (!isFOM && !isAdmin && !isICT) return;
+    if (!isFOM && !isSupervisor && !isAdmin && !isICT) return;
     
     // Filter coordinators from context users
     const coords = contextUsers.filter(u => u.role === 'coordinator');
@@ -1887,7 +1876,7 @@ const MMP = () => {
       }
     };
     loadHubStates();
-  }, [isFOM, isAdmin, isICT, contextUsers]);
+  }, [isFOM, isSupervisor, isAdmin, isICT, contextUsers]);
 
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
@@ -1895,25 +1884,25 @@ const MMP = () => {
 
     // PROJECT TEAM MEMBERSHIP FILTER
     // Only show MMPs from projects the user belongs to (unless admin/superuser).
-    // For FOMs, still honor project membership but also allow MMPs explicitly forwarded to them.
+    // For FOMs and Supervisors, still honor project membership but also allow MMPs explicitly forwarded to them.
     if (!isAdminOrSuperUser) {
       if (userProjectIds.length > 0) {
         filteredMMPs = mmpFiles.filter(mmp => {
           const inProject = mmp.projectId ? userProjectIds.includes(mmp.projectId) : false;
-          if (isFOM) {
+          if (isFOM || isSupervisor) {
             const workflow = mmp.workflow as any;
             const forwardedToFomIds = workflow?.forwardedToFomIds || [];
             const isForwarded = forwardedToFomIds.includes(currentUser?.id || '');
             return inProject || isForwarded;
           }
-          // Non-FOM path
+          // Non-FOM/Supervisor path
           return inProject;
         });
       } else if (userProjectIds.length === 0) {
         // User is not admin and has no project assignments - show no MMPs
         // But allow Data Collectors to see Available Sites (handled separately)
-        // For FOMs with no project membership, we still allow forwarded MMPs
-        if (isFOM) {
+        // For FOMs and Supervisors with no project membership, we still allow forwarded MMPs
+        if (isFOM || isSupervisor) {
           filteredMMPs = mmpFiles.filter(mmp => {
             const workflow = mmp.workflow as any;
             const forwardedToFomIds = workflow?.forwardedToFomIds || [];
@@ -1925,15 +1914,15 @@ const MMP = () => {
       }
     }
 
-    // For FOM users, only show MMPs forwarded to them or their verified MMPs
-    if (isFOM && currentUser) {
+    // For FOM and Supervisor users, only show MMPs forwarded to them or their verified MMPs
+    if ((isFOM || isSupervisor) && currentUser) {
       filteredMMPs = filteredMMPs.filter(mmp => {
         const workflow = mmp.workflow as any;
         const forwardedToFomIds = workflow?.forwardedToFomIds || [];
-        const isForwardedToThisFOM = forwardedToFomIds.includes(currentUser.id);
+        const isForwardedToThisUser = forwardedToFomIds.includes(currentUser.id);
         
-        // Include MMPs forwarded to this FOM or verified MMPs under this FOM
-        return isForwardedToThisFOM || mmp.type === 'verified-template';
+        // Include MMPs forwarded to this FOM/Supervisor or verified MMPs
+        return isForwardedToThisUser || mmp.type === 'verified-template';
       });
     }
 
@@ -1947,8 +1936,8 @@ const MMP = () => {
     }
 
     const newMMPs = filteredMMPs.filter(mmp => {
-      if (isFOM) {
-        // For FOM: New MMPs are all items forwarded to them (regardless of coordinator forwarding)
+      if (isFOM || isSupervisor) {
+        // For FOM/Supervisor: New MMPs are all items forwarded to them (regardless of coordinator forwarding)
         const workflow = mmp.workflow as any;
         const forwardedToFomIds = workflow?.forwardedToFomIds || [];
         return forwardedToFomIds.includes(currentUser?.id || '');
@@ -1964,8 +1953,8 @@ const MMP = () => {
     });
     
     const forwardedMMPs = filteredMMPs.filter(mmp => {
-      if (isFOM) {
-        // For FOM: Forwarded means MMPs they've processed and sent to coordinators
+      if (isFOM || isSupervisor) {
+        // For FOM/Supervisor: Forwarded means MMPs they've processed and sent to coordinators
         const workflow = mmp.workflow as any;
         return workflow?.forwardedToCoordinators === true ||
                workflow?.currentStage === 'coordinatorReview';
@@ -1983,8 +1972,8 @@ const MMP = () => {
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
         return (mmp.workflow as any)?.forwardedToCoordinators === true;
-      } else if (isFOM) {
-        // For FOM: Verified means MMPs with sites available for verification
+      } else if (isFOM || isSupervisor) {
+        // For FOM/Supervisor: Verified means MMPs with sites available for verification
         return mmp.type === 'verified-template' || 
                mmp.status === 'approved' ||
                ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
@@ -2001,7 +1990,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites]);
+  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
@@ -2013,9 +2002,9 @@ const MMP = () => {
     return { pending, verified };
   }, [categorizedMMPs.forwarded]);
 
-  // New MMP subcategories for FOM and Admin (Removed Rejected)
+  // New MMP subcategories for FOM, Supervisor and Admin (Removed Rejected)
   const newFomSubcategories = useMemo(() => {
-    if (!isFOM && !isAdmin && !isICT) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
+    if (!isFOM && !isSupervisor && !isAdmin && !isICT) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
     const base = categorizedMMPs.new || [];
     const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
     const verified = base.filter(mmp => mmp.status === 'approved');
@@ -2024,7 +2013,7 @@ const MMP = () => {
       mmp.siteEntries?.some(site => site.status === 'returned_to_fom')
     );
     return { pending, verified, returned };
-  }, [isFOM, isAdmin, isICT, categorizedMMPs.new, mmpFiles]);
+  }, [isFOM, isSupervisor, isAdmin, isICT, categorizedMMPs.new, mmpFiles]);
 
   // Returned sites grouped by state for FOM view
   const returnedSitesByState = useMemo(() => {
@@ -2698,10 +2687,10 @@ const MMP = () => {
       return allVerifiedMMPs.filter(mmp => mmpIdsWithVerifiedSites.has(mmp.id));
     }
     
-    return (isAdmin || isICT || isFOM || isCoordinator)
+    return (isAdmin || isICT || isFOM || isSupervisor || isCoordinator)
       ? (verifiedSubcategories[verifiedSubTab] || [])
       : (categorizedMMPs.verified || []);
-  }, [isAdmin, isICT, isFOM, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, verifiedCategorySiteRows]);
+  }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, verifiedCategorySiteRows]);
 
   const verifiedGroupedRows = useMemo(() => {
     // For "newSites" subcategory, filter to only show verified sites
@@ -2723,9 +2712,9 @@ const MMP = () => {
     }));
   }, [verifiedVisibleMMPs, verifiedSubTab, siteVisitRows]);
 
-  // Forwarded site rows per subcategory (FOM only for site data)
+  // Forwarded site rows per subcategory (FOM/Supervisor only for site data)
   const forwardedCategorySiteRows = useMemo(() => {
-    if (!isFOM) return [] as SiteVisitRow[];
+    if (!isFOM && !isSupervisor) return [] as SiteVisitRow[];
     const mmps = forwardedSubcategories[forwardedSubTab] || [];
     if (mmps.length === 0) return [];
     return buildSiteRowsFromMMPs(mmps, (row) => {
@@ -2737,7 +2726,7 @@ const MMP = () => {
 
   // Aggregated site entries (raw MMP.siteEntries) for Forwarded section
   const forwardedEntries = useMemo(() => {
-    const mmps = (isAdmin || isICT || isFOM) ? (forwardedSubcategories[forwardedSubTab] || []) : (categorizedMMPs.forwarded || []);
+    const mmps = (isAdmin || isICT || isFOM || isSupervisor) ? (forwardedSubcategories[forwardedSubTab] || []) : (categorizedMMPs.forwarded || []);
     const entries: any[] = [];
     for (const m of mmps) {
       const list = (m as any).siteEntries || [];
@@ -2753,16 +2742,16 @@ const MMP = () => {
       }
     }
     return entries;
-  }, [isAdmin, isICT, isFOM, forwardedSubTab, forwardedSubcategories, categorizedMMPs.forwarded]);
+  }, [isAdmin, isICT, isFOM, isSupervisor, forwardedSubTab, forwardedSubcategories, categorizedMMPs.forwarded]);
 
-  // Derive site visit stats from context (Admin/ICT/FOM/Coordinator)
+  // Derive site visit stats from context (Admin/ICT/FOM/Supervisor/Coordinator)
   const { siteVisitStats: derivedStats, siteVisitRows: derivedRows } = useMemo(() => {
-    if (!(isAdmin || isICT || isFOM || isCoordinator)) {
+    if (!(isAdmin || isICT || isFOM || isSupervisor || isCoordinator)) {
       return { siteVisitStats: {}, siteVisitRows: [] };
     }
     
     let list: any[] = [];
-    if (isFOM) {
+    if (isFOM || isSupervisor) {
       list = [ ...(categorizedMMPs.verified || []), ...(categorizedMMPs.forwarded || []) ];
     } else if (isAdmin || isICT || isCoordinator) {
       list = [ ...(categorizedMMPs.verified || []) ];
@@ -2846,7 +2835,7 @@ const MMP = () => {
     }
     
     return { siteVisitStats: map, siteVisitRows: rows };
-  }, [isAdmin, isICT, isFOM, isCoordinator, categorizedMMPs.verified, categorizedMMPs.forwarded, mmpFiles]);
+  }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, categorizedMMPs.verified, categorizedMMPs.forwarded, mmpFiles]);
 
   // Update state from derived values
   useEffect(() => {
@@ -2937,9 +2926,9 @@ const MMP = () => {
                     <Badge variant="secondary">{categorizedMMPs.new.length}</Badge>
                   </TabsTrigger>
                 )}
-                {!canClaimSites && (
+                  {!canClaimSites && (
                   <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
-                    {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
+                    {(isFOM || isSupervisor) ? 'Forwarded Sites' : 'Forwarded MMPs'}
                     <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
                   </TabsTrigger>
                 )}
@@ -2954,11 +2943,11 @@ const MMP = () => {
 
             {!canClaimSites && (
               <TabsContent value="new">
-                {(isFOM || isAdmin || isICT) && (
+                {(isFOM || isSupervisor || isAdmin || isICT) && (
                   <div className="mb-4 overflow-x-auto pb-2">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="flex gap-2 min-w-max">
-                        {isFOM && (
+                      <div className="flex gap-2 min-w-max">
+                        {(isFOM || isSupervisor) && (
                           <>
                             <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
                               MMPs Pending Verification
@@ -2979,7 +2968,7 @@ const MMP = () => {
                       </div>
                   </div>
                 )}
-                {(isFOM || isAdmin || isICT) && newFomSubTab === 'returned' ? (
+                {(isFOM || isSupervisor || isAdmin || isICT) && newFomSubTab === 'returned' ? (
                   <Card>
                     <CardHeader>
                       <CardTitle>Returned Sites by State</CardTitle>
@@ -3109,30 +3098,30 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <MMPList mmpFiles={(isFOM || isAdmin || isICT) ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
+                  <MMPList mmpFiles={(isFOM || isSupervisor || isAdmin || isICT) ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
                 )}
               </TabsContent>
             )}
 
             {!canClaimSites && (
               <TabsContent value="forwarded">
-                {(isAdmin || isICT || isFOM) && (
+                {(isAdmin || isICT || isFOM || isSupervisor) && (
                   <div className="mb-4 overflow-x-auto pb-2">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
                     <div className="flex gap-2 min-w-max">
                         <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={`${forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
-                          {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
+                          {(isFOM || isSupervisor) ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
                           <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
                         </Button>
                         <Button variant={forwardedSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('verified')} className={`${forwardedSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
-                          {isFOM ? 'Verified Sites' : 'Verified MMPs'}
+                          {(isFOM || isSupervisor) ? 'Verified Sites' : 'Verified MMPs'}
                           <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
                         </Button>
                       </div>
                   </div>
                 )}
-                <MMPList mmpFiles={(isAdmin || isICT || isFOM) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
-                {isFOM && (
+                <MMPList mmpFiles={(isAdmin || isICT || isFOM || isSupervisor) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
+                {(isFOM || isSupervisor) && (
                   <SitesDisplayTable 
                     siteRows={forwardedCategorySiteRows}
                     editable={true}
@@ -3143,7 +3132,7 @@ const MMP = () => {
             )}
 
             <TabsContent value="verified">
-              {(isAdmin || isICT || isFOM || isCoordinator) && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && (
                 <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
                   <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
                     <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={`${verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
@@ -3160,7 +3149,7 @@ const MMP = () => {
                       Dispatched
                       <Badge variant="secondary" className="ml-1 text-xs">{dispatchedCount}</Badge>
                     </Button>
-                    {(isAdmin || isICT || isFOM) && (
+                    {(isAdmin || isICT || isFOM || isSupervisor) && (
                       <>
                         <Button variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('smartAssigned')} className={`${verifiedSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                           Smart Assigned
@@ -3187,7 +3176,7 @@ const MMP = () => {
                 </div>
               )}
               {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'newSites' && (
                 <>
                   {(isAdmin || isICT) && verifiedCategorySiteRows.length > 0 && (
                     <div className="mb-4">
@@ -3285,7 +3274,7 @@ const MMP = () => {
                   <VerifiedSitesDisplay verifiedSites={verifiedCategorySiteRows} />
                 </>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'approvedCosted' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'approvedCosted' && (
                 <div className="mt-6">
                   {loadingApprovedCosted ? (
                     <Card>
@@ -3464,7 +3453,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'dispatched' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'dispatched' && (
                 <div className="mt-6">
                   {loadingDispatched ? (
                     <Card>
@@ -3492,7 +3481,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM) && verifiedSubTab === 'smartAssigned' && (
+              {(isAdmin || isICT || isFOM || isSupervisor) && verifiedSubTab === 'smartAssigned' && (
                 <div className="mt-6">
                   {loadingSmartAssigned ? (
                     <Card>
@@ -3520,7 +3509,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'accepted' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'accepted' && (
                 <div className="mt-6">
                   {loadingAccepted ? (
                     <Card>
@@ -3548,7 +3537,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'ongoing' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'ongoing' && (
                 <div className="mt-6">
                   {loadingOngoing ? (
                     <Card>
@@ -3576,7 +3565,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'completed' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'completed' && (
                 <div className="mt-6">
                   {loadingCompleted ? (
                     <Card>
@@ -3604,7 +3593,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'rejected' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'rejected' && (
                 <div className="mt-6">
                   {loadingRejected ? (
                     <Card>
@@ -3632,7 +3621,7 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && (
+              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>

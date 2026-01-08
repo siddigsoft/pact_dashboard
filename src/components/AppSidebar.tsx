@@ -227,7 +227,8 @@
     if (!isHidden('/reports') && (isSuperAdmin || ((isAdmin || perms.reports) && !isICT))) {
       dataItems.push({ id: 'reports', title: "Reports", url: "/reports", icon: BarChart3, priority: 2, isPinned: isPinned('/reports') });
     }
-    if (!isHidden('/calendar')) {
+    // Hide Calendar for Data Collectors on web
+    if (!isDataCollector && !isHidden('/calendar')) {
       dataItems.push({ id: 'calendar', title: "Calendar", url: "/calendar", icon: Calendar, priority: 3, isPinned: isPinned('/calendar') });
     }
     if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT)) {
