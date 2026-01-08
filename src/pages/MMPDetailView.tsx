@@ -112,10 +112,24 @@ const MMPDetailView = () => {
   }
 
   const isForwarded = useMemo(() => {
+    // If we just forwarded in this session, mark as forwarded
     if (forwardedLocal) return true;
-    const ids = (mmpFile as any)?.workflow?.forwardedToFomIds;
-    return Array.isArray(ids) && ids.length > 0;
+    
+    const workflow = (mmpFile as any)?.workflow || {};
+    const ids = workflow.forwardedToFomIds;
+    
+    // Check if there are actual FOM IDs - if empty array or not array, not forwarded
+    const hasForwardedIds = Array.isArray(ids) && ids.length > 0;
+    
+    // If no forwarded IDs, it's not forwarded (could be recalled or never forwarded)
+    return hasForwardedIds;
   }, [forwardedLocal, mmpFile]);
+  
+  // Check if this MMP was previously recalled (to show appropriate UI hints)
+  const wasRecalled = useMemo(() => {
+    const workflow = (mmpFile as any)?.workflow || {};
+    return !!workflow.recalledAt;
+  }, [mmpFile]);
 
   // Prefer entries from context; if missing, fetch from mmp_site_entries
   const siteEntries = (mmpFile?.siteEntries && Array.isArray(mmpFile.siteEntries) && mmpFile.siteEntries.length > 0)
@@ -357,17 +371,23 @@ const MMPDetailView = () => {
             onEditClick={handleEditMMP}
           /> */}
           {canForward && (
-            <div>
+            <div className="flex items-center gap-3 flex-wrap">
               <Button 
                 onClick={() => setForwardOpen(true)} 
                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-80 disabled:cursor-not-allowed"
                 disabled={isForwarded}
+                data-testid="button-forward-to-foms"
               >
                 <Send className="mr-2 h-4 w-4" />
-                {isForwarded ? 'Forwarded' : 'Forward to FOMs'}
+                {isForwarded ? 'Forwarded' : (wasRecalled ? 'Re-Forward to FOMs' : 'Forward to FOMs')}
               </Button>
               {isForwarded && forwardedCount !== null && (
-                <span className="ml-3 text-sm text-muted-foreground">to {forwardedCount} FOM(s)</span>
+                <span className="text-sm text-muted-foreground">to {forwardedCount} FOM(s)</span>
+              )}
+              {!isForwarded && wasRecalled && (
+                <Badge variant="outline" className="text-amber-600 border-amber-600">
+                  Previously Recalled
+                </Badge>
               )}
             </div>
           )}
