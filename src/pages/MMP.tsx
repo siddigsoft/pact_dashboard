@@ -3665,7 +3665,7 @@ const MMP = () => {
                       aria-label="View available sites"
                     >
                       <span className="whitespace-nowrap">Claimable</span>
-                      <Badge variant="secondary" className="text-xs">{Object.values(enumeratorGroupedByStates).flat().length}</Badge>
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5 min-w-[1.25rem] h-5 flex items-center justify-center">{Object.values(enumeratorGroupedByStates).flat().length}</Badge>
                     </Button>
                     <Button 
                       variant={enumeratorSubTab === 'smartAssigned' ? 'default' : 'outline'} 
@@ -3676,7 +3676,7 @@ const MMP = () => {
                       aria-label="View smart assigned sites"
                     >
                       <span className="whitespace-nowrap">Assigned</span>
-                      <Badge variant="secondary" className="text-xs">{enumeratorSmartAssigned.length}</Badge>
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5 min-w-[1.25rem] h-5 flex items-center justify-center">{enumeratorSmartAssigned.length}</Badge>
                     </Button>
                     <Button 
                       variant={enumeratorSubTab === 'mySites' ? 'default' : 'outline'} 
@@ -3687,14 +3687,14 @@ const MMP = () => {
                       aria-label="View my sites"
                     >
                       <span className="whitespace-nowrap">My Sites</span>
-                      <Badge variant="secondary" className="text-xs">{enumeratorMySites.length}</Badge>
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5 min-w-[1.25rem] h-5 flex items-center justify-center">{enumeratorMySites.length}</Badge>
                     </Button>
                   </div>
 
                   {enumeratorSubTab === 'mySites' && (
                     <div className="mt-3">
                       <div className="text-sm font-medium text-muted-foreground mb-2">Subcategories:</div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex gap-1">
                           <Button 
                             variant={mySitesSubTab === 'pending' ? 'default' : 'outline'} 
                             size="sm" 
@@ -3702,7 +3702,7 @@ const MMP = () => {
                             className={`${mySitesSubTab === 'pending' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''} flex-shrink-0 whitespace-nowrap`}
                           >
                             Inbox
-                            <Badge variant="secondary" className="ml-2">
+                            <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
                                 return status === 'accepted' || 
@@ -3719,13 +3719,27 @@ const MMP = () => {
                             </Badge>
                           </Button>
                           <Button 
+                            variant={mySitesSubTab === 'all' ? 'default' : 'outline'} 
+                            size="sm" 
+                            onClick={() => setMySitesSubTab('all')} 
+                            className={`${mySitesSubTab === 'all' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}
+                          >
+                            Drafts
+                            <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
+                              {enumeratorMySites.filter(site => {
+                                const status = (site.status || '').trim().toLowerCase();
+                                return status === 'in progress' || status === 'ongoing';
+                              }).length}
+                            </Badge>
+                          </Button>
+                          <Button 
                             variant={mySitesSubTab === 'ongoing' ? 'default' : 'outline'} 
                             size="sm" 
                             onClick={() => setMySitesSubTab('ongoing')} 
                             className={`${mySitesSubTab === 'ongoing' ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300' : ''} flex-shrink-0 whitespace-nowrap`}
                           >
                             Outbox
-                            <Badge variant="secondary" className="ml-2">
+                            <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {unsyncedCompletedVisits.length}
                             </Badge>
                           </Button>
@@ -3736,7 +3750,7 @@ const MMP = () => {
                             className={`${mySitesSubTab === 'completed' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''} flex-shrink-0 whitespace-nowrap`}
                           >
                             Sent
-                            <Badge variant="secondary" className="ml-2">
+                            <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase();
                                 // Only count completed sites that are NOT in unsynced list (synced completed)
@@ -3748,20 +3762,7 @@ const MMP = () => {
                               }).length}
                             </Badge>
                           </Button>
-                          <Button 
-                            variant={mySitesSubTab === 'all' ? 'default' : 'outline'} 
-                            size="sm" 
-                            onClick={() => setMySitesSubTab('all')} 
-                            className={`${mySitesSubTab === 'all' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}
-                          >
-                            Drafts
-                            <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').trim().toLowerCase();
-                                return status === 'in progress' || status === 'ongoing';
-                              }).length}
-                            </Badge>
-                          </Button>
+                          
                       </div>
                     </div>
                   )}
