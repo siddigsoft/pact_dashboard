@@ -215,7 +215,7 @@ export function MobileSettingsScreen({
 
   return (
     <div className={cn("flex flex-col min-h-0 flex-1 h-full bg-white dark:bg-black", className)} data-testid="mobile-settings">
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 pb-32 space-y-6">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-36 pb-32 space-y-6">
         <Card className="p-4">
           <button
             onClick={() => {
