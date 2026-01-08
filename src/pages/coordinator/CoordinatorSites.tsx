@@ -855,6 +855,9 @@ const CoordinatorSites: React.FC = () => {
   }, [coordinatorSites, contextMmpFiles, hubStates, localities, permits]);
 
   const handleVerifySite = async (siteId: string, notes?: string) => {
+    // Detect if running in Capacitor
+    const isCapacitor = typeof (window as any).Capacitor !== 'undefined';
+    
     try {
       const updateData: any = {
         status: 'verified',
@@ -867,22 +870,36 @@ const CoordinatorSites: React.FC = () => {
         updateData.verification_notes = notes;
       }
 
-      const { error } = await supabase
+      console.log(`[VERIFY] Starting verification for site ${siteId}${isCapacitor ? ' (Capacitor)' : ' (Web)'}`);
+      
+      const { error, data } = await supabase
         .from('mmp_site_entries')
         .update(updateData)
-        .eq('id', siteId);
+        .eq('id', siteId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error(`[VERIFY] Primary update failed:`, error);
+        throw error;
+      }
+      
+      console.log(`[VERIFY] Primary update successful, rows updated:`, data?.length || 0);
+      
       try {
         const site = coordinatorSites.find(s => s.id === siteId);
         if (site?.mmp_file_id && site?.site_code) {
           // Get current site entry to check if cost exists
-          const { data: currentEntry } = await supabase
+          const { data: currentEntry, error: selectError } = await supabase
             .from('mmp_site_entries')
             .select('cost, enumerator_fee, transport_fee, additional_data')
             .eq('mmp_file_id', site.mmp_file_id)
             .eq('site_code', site.site_code)
             .single();
+
+          if (selectError) {
+            console.error(`[VERIFY] Failed to fetch current entry:`, selectError);
+            throw selectError;
+          }
 
           const verifiedAt = new Date().toISOString();
           const verifiedBy = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
@@ -904,11 +921,20 @@ const CoordinatorSites: React.FC = () => {
           additionalData.verified_by = verifiedBy;
           mmpUpdateData.additional_data = additionalData;
           
-          await supabase
+          // Check for errors in the second update
+          const { error: secondUpdateError, data: secondUpdateData } = await supabase
             .from('mmp_site_entries')
             .update(mmpUpdateData)
             .eq('mmp_file_id', site.mmp_file_id)
-            .eq('site_code', site.site_code);
+            .eq('site_code', site.site_code)
+            .select();
+
+          if (secondUpdateError) {
+            console.error(`[VERIFY] Second update failed:`, secondUpdateError);
+            throw secondUpdateError;
+          }
+          
+          console.log(`[VERIFY] Second update successful, rows updated:`, secondUpdateData?.length || 0);
 
           // Mark MMP as coordinator-verified when first site is verified
           // Get current MMP workflow
@@ -918,7 +944,12 @@ const CoordinatorSites: React.FC = () => {
             .eq('id', site.mmp_file_id)
             .single();
 
-          if (!mmpError && mmpData) {
+          if (mmpError) {
+            console.error(`[VERIFY] Failed to fetch MMP data:`, mmpError);
+            throw mmpError;
+          }
+
+          if (mmpData) {
             const workflow = (mmpData.workflow as any) || {};
             const isAlreadyVerified = workflow.coordinatorVerified === true;
             
@@ -934,15 +965,24 @@ const CoordinatorSites: React.FC = () => {
               };
 
               // Update MMP workflow - keep status as 'pending' so it shows in "New Sites Verified by Coordinators"
-              await updateMMP(site.mmp_file_id, {
+              const updateSuccess = await updateMMP(site.mmp_file_id, {
                 workflow: updatedWorkflow,
                 status: mmpData.status === 'pending' ? 'pending' : 'pending' // Ensure it's pending
               });
+              
+              if (!updateSuccess) {
+                console.error(`[VERIFY] updateMMP returned false for MMP ${site.mmp_file_id}`);
+                // Don't throw here - the site verification itself succeeded, this is just workflow tracking
+              } else {
+                console.log(`[VERIFY] MMP workflow updated successfully`);
+              }
             }
           }
         }
       } catch (syncErr) {
-        console.warn('Failed to sync mmp_site_entries on verify:', syncErr);
+        console.error(`[VERIFY] Failed to sync mmp_site_entries on verify:`, syncErr);
+        // Re-throw to be caught by outer catch block
+        throw syncErr;
       }
 
       toast({
@@ -984,11 +1024,39 @@ const CoordinatorSites: React.FC = () => {
       setVerifyDialogOpen(false);
       setVerificationNotes('');
       setSelectedSiteId(null);
-    } catch (error) {
-      console.error('Error verifying site:', error);
+    } catch (error: any) {
+      console.error(`[VERIFY] Error verifying site ${siteId}:`, error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to verify site. Please try again.';
+      
+      if (error?.message) {
+        if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
+        } else if (error.message.includes('permission') || error.message.includes('policy')) {
+          errorMessage = 'Permission denied. Please ensure you have the correct permissions.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Request timed out. Please try again.';
+        } else {
+          errorMessage = `Error: ${error.message}`;
+        }
+      }
+      
+      // Log additional context for debugging
+      if (typeof (window as any).Capacitor !== 'undefined') {
+        console.error(`[VERIFY] Capacitor environment detected. Error details:`, {
+          error: error?.message || error,
+          code: error?.code,
+          details: error?.details,
+          hint: error?.hint,
+          siteId,
+          userId: currentUser?.id
+        });
+      }
+      
       toast({
         title: 'Error',
-        description: 'Failed to verify site. Please try again.',
+        description: errorMessage,
         variant: 'destructive'
       });
     }
