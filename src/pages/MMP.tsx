@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { 
@@ -53,6 +54,7 @@ const SitesDisplayTable: React.FC<{
   editable?: boolean;
   title?: string;
 }> = ({ siteRows, mmpId, editable = true, title }) => {
+  const { t } = useTranslation();
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
   
   // Get site entries from MMP context
@@ -107,7 +109,7 @@ const SitesDisplayTable: React.FC<{
       <div className="mt-6">
         <Card>
           <CardContent className="py-8">
-            <div className="text-center text-muted-foreground">Loading sites...</div>
+            <div className="text-center text-muted-foreground">{t('mmpPage.loadingSites')}</div>
           </CardContent>
         </Card>
       </div>
@@ -119,7 +121,7 @@ const SitesDisplayTable: React.FC<{
       <div className="mt-6">
         <Card>
           <CardContent className="py-8">
-            <div className="text-center text-muted-foreground">No sites found.</div>
+            <div className="text-center text-muted-foreground">{t('mmpPage.noSitesFound')}</div>
           </CardContent>
         </Card>
       </div>
@@ -353,6 +355,7 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
 
 const MMP = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { mmpFiles, loading, updateMMP, refreshMMPFiles } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
@@ -2863,14 +2866,14 @@ const MMP = () => {
       <div className="flex items-center justify-center min-h-[60vh]">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle className="text-destructive">Access Denied</CardTitle>
+            <CardTitle className="text-destructive">{t('mmpPage.accessDenied')}</CardTitle>
             <CardDescription>
-              You don't have permission to access this page.
+              {t('mmpPage.noPermission')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="outline" onClick={() => navigate('/dashboard')} className="w-full">
-              Return to Dashboard
+              {t('mmpPage.returnToDashboard')}
             </Button>
           </CardContent>
         </Card>
@@ -2888,9 +2891,9 @@ const MMP = () => {
               <FileText className="h-8 w-8" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">MMP Management</h1>
+              <h1 className="text-2xl font-bold tracking-tight">{t('mmpPage.title')}</h1>
               <p className="text-blue-100 mt-1">
-                Monthly Monitoring Plans - Track, verify and manage site visits
+                {t('mmpPage.description')}
               </p>
             </div>
           </div>
@@ -2901,22 +2904,22 @@ const MMP = () => {
               data-testid="button-upload-mmp"
             >
               <Upload className="h-4 w-4" />
-              Upload MMP
+              {t('mmpPage.uploadMMP')}
             </Button>
           )}
         </div>
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
           <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
             <ListChecks className="h-4 w-4" />
-            <span>Site Tracking</span>
+            <span>{t('mmpPage.siteTracking')}</span>
           </div>
           <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
             <CheckCircle className="h-4 w-4" />
-            <span>Verification Workflow</span>
+            <span>{t('mmpPage.verificationWorkflow')}</span>
           </div>
           <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
             <BarChart3 className="h-4 w-4" />
-            <span>Progress Analytics</span>
+            <span>{t('mmpPage.progressAnalytics')}</span>
           </div>
           <DataFreshnessBadge className="bg-white/10 rounded-full px-3 py-1" />
         </div>
@@ -2932,35 +2935,35 @@ const MMP = () => {
                 {canClaimSites && (
                   <TabsTrigger value="enumerator" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
                     <UserCheck className="h-4 w-4" />
-                    My Assignments
+                    {t('mmpPage.tabs.myAssignments')}
                     <Badge className="bg-blue-400/30 text-white border-0">{enumeratorMySites.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
                   <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
                     <ClipboardList className="h-4 w-4" />
-                    New MMPs
+                    {t('mmpPage.tabs.newMMPs')}
                     <Badge className="bg-emerald-400/30 text-white border-0">{categorizedMMPs.new.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
                   <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
                     <Send className="h-4 w-4" />
-                    {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
+                    {isFOM ? t('mmpPage.tabs.forwardedSites') : t('mmpPage.tabs.forwardedMMPs')}
                     <Badge className="bg-amber-400/30 text-white border-0">{categorizedMMPs.forwarded.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
                   <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
                     <ShieldCheck className="h-4 w-4" />
-                    Verified Sites
+                    {t('mmpPage.tabs.verifiedSites')}
                     <Badge className="bg-violet-400/30 text-white border-0">{totalVerifiedSitesCount}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
                   <TabsTrigger value="tracker" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
                     <LayoutDashboard className="h-4 w-4" />
-                    MMP Tracker
+                    {t('mmpPage.tabs.mmpTracker')}
                   </TabsTrigger>
                 )}
               </TabsList>
@@ -2970,7 +2973,7 @@ const MMP = () => {
               <TabsContent value="new">
                 {(isFOM || isAdmin || isICT) && (
                   <div className="mb-6">
-                    <div className="text-sm font-medium text-muted-foreground mb-3">Subcategory:</div>
+                    <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
                     <div className="flex gap-2 flex-wrap">
                         {isFOM && (
                           <>
@@ -2981,7 +2984,7 @@ const MMP = () => {
                               className={`${newFomSubTab === 'pending' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border-0 shadow-md' : 'hover:bg-emerald-50 dark:hover:bg-emerald-950'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
                             >
                               <Clock className="h-3.5 w-3.5 mr-1.5" />
-                              MMPs Pending Verification
+                              {t('mmpPage.subcategories.mmpsPendingVerification')}
                               <Badge className={`ml-1.5 text-xs ${newFomSubTab === 'pending' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'}`}>{newFomSubcategories.pending.length}</Badge>
                             </Button>
                             <Button 
@@ -2991,7 +2994,7 @@ const MMP = () => {
                               className={`${newFomSubTab === 'verified' ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 shadow-md' : 'hover:bg-green-50 dark:hover:bg-green-950'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
                             >
                               <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-                              Verified MMPs
+                              {t('mmpPage.subcategories.verifiedMMPs')}
                               <Badge className={`ml-1.5 text-xs ${newFomSubTab === 'verified' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{newFomSubcategories.verified.length}</Badge>
                             </Button>
                           </>
@@ -3003,7 +3006,7 @@ const MMP = () => {
                           className={`${newFomSubTab === 'returned' ? 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white border-0 shadow-md' : 'hover:bg-orange-50 dark:hover:bg-orange-950 border-orange-200 dark:border-orange-800'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
                         >
                           <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-                          Returned Sites
+                          {t('mmpPage.subcategories.returnedSites')}
                           <Badge className={`ml-1.5 text-xs ${newFomSubTab === 'returned' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'}`}>{returnedSitesByState.reduce((sum, g) => sum + g.totalSites, 0)}</Badge>
                         </Button>
                       </div>
@@ -3148,7 +3151,7 @@ const MMP = () => {
               <TabsContent value="forwarded">
                 {(isAdmin || isICT || isFOM) && (
                   <div className="mb-6">
-                    <div className="text-sm font-medium text-muted-foreground mb-3">Subcategory:</div>
+                    <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
                     <div className="flex gap-2 flex-wrap">
                         <Button 
                           variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} 
@@ -3157,7 +3160,7 @@ const MMP = () => {
                           className={`${forwardedSubTab === 'pending' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md' : 'hover:bg-amber-50 dark:hover:bg-amber-950'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
                         >
                           <Clock className="h-3.5 w-3.5 mr-1.5" />
-                          {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
+                          {isFOM ? t('mmpPage.subcategories.sitesPendingVerification') : t('mmpPage.subcategories.mmpsPendingVerification')}
                           <Badge className={`ml-1.5 text-xs ${forwardedSubTab === 'pending' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{forwardedSubcategories.pending.length}</Badge>
                         </Button>
                         <Button 
@@ -3167,7 +3170,7 @@ const MMP = () => {
                           className={`${forwardedSubTab === 'verified' ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 shadow-md' : 'hover:bg-green-50 dark:hover:bg-green-950'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
                         >
                           <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-                          {isFOM ? 'Verified Sites' : 'Verified MMPs'}
+                          {isFOM ? t('mmpPage.subcategories.verifiedSites') : t('mmpPage.subcategories.verifiedMMPs')}
                           <Badge className={`ml-1.5 text-xs ${forwardedSubTab === 'verified' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{forwardedSubcategories.verified.length}</Badge>
                         </Button>
                       </div>
@@ -3178,7 +3181,7 @@ const MMP = () => {
                   <SitesDisplayTable 
                     siteRows={forwardedCategorySiteRows}
                     editable={true}
-                    title={`Site Entries (${forwardedCategorySiteRows.length}) - Forwarded subcategory: ${forwardedSubTab}`}
+                    title={`${t('mmpPage.siteEntries')} (${forwardedCategorySiteRows.length}) - ${t('mmpPage.forwardedSubcategory')}: ${t(`mmpPage.subcategories.${forwardedSubTab === 'pending' ? 'sitesPendingVerification' : 'verifiedSites'}`)}`}
                   />
                 )}
               </TabsContent>
@@ -3187,7 +3190,7 @@ const MMP = () => {
             <TabsContent value="verified">
               {(isAdmin || isICT || isFOM || isCoordinator) && (
                 <div className="mb-6">
-                  <div className="text-sm font-medium text-muted-foreground mb-3">Subcategory:</div>
+                  <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
                   <div className="flex gap-2 overflow-x-auto pb-2 flex-wrap">
                     <Button 
                       variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} 
@@ -3196,7 +3199,7 @@ const MMP = () => {
                       className={`${verifiedSubTab === 'newSites' ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 shadow-md' : 'hover:bg-blue-50 dark:hover:bg-blue-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
                     >
                       <FilePlus className="h-3.5 w-3.5 mr-1.5" />
-                      New Sites
+                      {t('mmpPage.subcategories.newSites')}
                       <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'newSites' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'}`}>
                         {newSitesVerifiedCount}
                       </Badge>
@@ -3208,7 +3211,7 @@ const MMP = () => {
                       className={`${verifiedSubTab === 'approvedCosted' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border-0 shadow-md' : 'hover:bg-emerald-50 dark:hover:bg-emerald-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
                     >
                       <CheckSquare className="h-3.5 w-3.5 mr-1.5" />
-                      Approved
+                      {t('mmpPage.subcategories.approved')}
                       <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'approvedCosted' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'}`}>{approvedCostedCount}</Badge>
                     </Button>
                     <Button 
@@ -3218,7 +3221,7 @@ const MMP = () => {
                       className={`${verifiedSubTab === 'dispatched' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md' : 'hover:bg-amber-50 dark:hover:bg-amber-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
                     >
                       <Truck className="h-3.5 w-3.5 mr-1.5" />
-                      Dispatched
+                      {t('mmpPage.subcategories.dispatched')}
                       <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'dispatched' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{dispatchedCount}</Badge>
                     </Button>
                     {(isAdmin || isICT || isFOM) && (
@@ -3230,7 +3233,7 @@ const MMP = () => {
                           className={`${verifiedSubTab === 'smartAssigned' ? 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0 shadow-md' : 'hover:bg-violet-50 dark:hover:bg-violet-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
                         >
                           <Wand2 className="h-3.5 w-3.5 mr-1.5" />
-                          Smart Assigned
+                          {t('mmpPage.subcategories.smartAssigned')}
                           <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'smartAssigned' ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'}`}>{smartAssignedCount}</Badge>
                         </Button>
                         <Button 
@@ -3240,7 +3243,7 @@ const MMP = () => {
                           className={`${verifiedSubTab === 'accepted' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white border-0 shadow-md' : 'hover:bg-teal-50 dark:hover:bg-teal-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
                         >
                           <Handshake className="h-3.5 w-3.5 mr-1.5" />
-                          Accepted
+                          {t('mmpPage.subcategories.accepted')}
                           <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'accepted' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200'}`}>{acceptedCount}</Badge>
                         </Button>
                         <Button 
@@ -3250,7 +3253,7 @@ const MMP = () => {
                           className={`${verifiedSubTab === 'ongoing' ? 'bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600 text-white border-0 shadow-md' : 'hover:bg-sky-50 dark:hover:bg-sky-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
                         >
                           <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
-                          Ongoing
+                          {t('mmpPage.subcategories.ongoing')}
                           <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'ongoing' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200'}`}>{ongoingCount}</Badge>
                         </Button>
                       </>
@@ -3262,7 +3265,7 @@ const MMP = () => {
                       className={`${verifiedSubTab === 'completed' ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 shadow-md' : 'hover:bg-green-50 dark:hover:bg-green-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
                     >
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                      Completed
+                      {t('mmpPage.subcategories.completed')}
                       <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'completed' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{completedCount}</Badge>
                     </Button>
                     <Button 
@@ -3272,7 +3275,7 @@ const MMP = () => {
                       className={`${verifiedSubTab === 'rejected' ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white border-0 shadow-md' : 'hover:bg-red-50 dark:hover:bg-red-950 border-red-200 dark:border-red-800'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
                     >
                       <XCircle className="h-3.5 w-3.5 mr-1.5" />
-                      Rejected
+                      {t('mmpPage.subcategories.rejected')}
                       <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'rejected' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{rejectedCount}</Badge>
                     </Button>
                   </div>
