@@ -32,13 +32,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-<<<<<<< HEAD
 import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
 import { RotateCcw, AlertTriangle } from 'lucide-react';
 import { RecallDialog } from './RecallDialog';
-=======
-import MMPProgressDialog from './MMPProgressDialog'; // Add import for new dialog
->>>>>>> master_backup
+import MMPProgressDialog from './MMPProgressDialog';
 
 interface MMPListProps {
   mmpFiles: MMPFile[];
@@ -58,13 +55,10 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const { refreshMMPFiles } = useMMP();
   const { toast } = useToast();
   const [recallingId, setRecallingId] = useState<string | null>(null);
-<<<<<<< HEAD
   const [recallDialogOpen, setRecallDialogOpen] = useState(false);
   const [selectedMMPForRecall, setSelectedMMPForRecall] = useState<MMPFile | null>(null);
-=======
-  const [showProgressDialog, setShowProgressDialog] = useState(false); // Add state for progress dialog
-  const [selectedMMPForProgress, setSelectedMMPForProgress] = useState<MMPFile | null>(null); // Add state for selected MMP
->>>>>>> master_backup
+  const [showProgressDialog, setShowProgressDialog] = useState(false);
+  const [selectedMMPForProgress, setSelectedMMPForProgress] = useState<MMPFile | null>(null);
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -330,7 +324,6 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
         />
       )}
 
-<<<<<<< HEAD
       {/* Recall Dialog */}
       {selectedMMPForRecall && (
         <RecallDialog
@@ -343,14 +336,13 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
           onRecallComplete={handleRecallComplete}
         />
       )}
-=======
+
       {/* MMP Progress Dialog */}
       <MMPProgressDialog
         open={showProgressDialog}
         onOpenChange={setShowProgressDialog}
         mmpFile={selectedMMPForProgress}
       />
->>>>>>> master_backup
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={confirmId !== null} onOpenChange={open => { if (!open) setConfirmId(null); }}>
