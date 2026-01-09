@@ -53,6 +53,9 @@ import { validateCSV, CSVValidationError } from "@/utils/csvValidator";
 import { validateSiteCode } from "@/utils/mmpIdGenerator";
 import { format, parse, isValid } from "date-fns";
 
+const currentMonth = new Date().getMonth() + 1;
+const currentYear = new Date().getFullYear();
+
 const uploadSchema = z.object({
   name: z.string({
     required_error: "MMP name is required",
@@ -64,6 +67,11 @@ const uploadSchema = z.object({
   }),
   month: z.string({
     required_error: "Month selection is required",
+  }).refine((val) => {
+    const monthNum = parseInt(val, 10);
+    return monthNum >= currentMonth;
+  }, {
+    message: `Cannot upload MMP for previous months. Please select ${new Date(currentYear, currentMonth - 1, 1).toLocaleString('default', { month: 'long' })} or later.`,
   }),
   hub: z.string().optional(),
   file: z.instanceof(File, {
@@ -443,9 +451,6 @@ const MMPUpload = () => {
       includeComments: true,
     },
   });
-  const today = new Date();
-  const currentMonthNumber = today.getMonth() + 1; // 1-12
-  
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -978,22 +983,23 @@ const MMPUpload = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="1" disabled={1 < currentMonthNumber} className={1 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>January</SelectItem>
-                            <SelectItem value="2" disabled={2 < currentMonthNumber} className={2 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>February</SelectItem>
-                            <SelectItem value="3" disabled={3 < currentMonthNumber} className={3 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>March</SelectItem>
-                            <SelectItem value="4" disabled={4 < currentMonthNumber} className={4 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>April</SelectItem>
-                            <SelectItem value="5" disabled={5 < currentMonthNumber} className={5 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>May</SelectItem>
-                            <SelectItem value="6" disabled={6 < currentMonthNumber} className={6 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>June</SelectItem>
-                            <SelectItem value="7" disabled={7 < currentMonthNumber} className={7 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>July</SelectItem>
-                            <SelectItem value="8" disabled={8 < currentMonthNumber} className={8 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>August</SelectItem>
-                            <SelectItem value="9" disabled={9 < currentMonthNumber} className={9 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>September</SelectItem>
-                            <SelectItem value="10" disabled={10 < currentMonthNumber} className={10 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>October</SelectItem>
-                            <SelectItem value="11" disabled={11 < currentMonthNumber} className={11 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>November</SelectItem>
-                            <SelectItem value="12" disabled={12 < currentMonthNumber} className={12 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>December</SelectItem>
+                            <SelectItem value="1" disabled={1 < currentMonth} className={1 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>January {1 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="2" disabled={2 < currentMonth} className={2 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>February {2 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="3" disabled={3 < currentMonth} className={3 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>March {3 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="4" disabled={4 < currentMonth} className={4 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>April {4 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="5" disabled={5 < currentMonth} className={5 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>May {5 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="6" disabled={6 < currentMonth} className={6 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>June {6 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="7" disabled={7 < currentMonth} className={7 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>July {7 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="8" disabled={8 < currentMonth} className={8 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>August {8 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="9" disabled={9 < currentMonth} className={9 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>September {9 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="10" disabled={10 < currentMonth} className={10 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>October {10 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="11" disabled={11 < currentMonth} className={11 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>November {11 < currentMonth && '(Past)'}</SelectItem>
+                            <SelectItem value="12" disabled={12 < currentMonth} className={12 < currentMonth ? 'opacity-50 cursor-not-allowed line-through' : ''}>December {12 < currentMonth && '(Past)'}</SelectItem>
                           </SelectContent>
                         </Select>
-                        <FormDescription>
-                          Select the month for this MMP
+                        <FormDescription className="flex items-center gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                          <span>Only current and future months are available for upload</span>
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
