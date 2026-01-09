@@ -290,16 +290,28 @@ export const FOMZone: React.FC = () => {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  // Calculate metrics
+  // Helper to check permit status - supports both legacy and new document structures
+  const checkHasPermit = (mmp: MMPFile) => {
+    if (!mmp.permits) return false;
+    const permits = mmp.permits as any;
+    // Check legacy structure
+    if (permits.federal) return true;
+    // Check new documents structure for federal permit
+    if (Array.isArray(permits.documents) && permits.documents.length > 0) {
+      return permits.documents.some((doc: any) => 
+        doc.type === 'federal' || doc.permitType === 'federal'
+      );
+    }
+    return false;
+  };
+
+  // Calculate metrics using dual-structure permit check
   const awaitingPermitsCount = forwardedMMPs.filter(mmp => {
     const workflow = mmp.workflow as any;
-    return workflow?.currentStage === 'awaitingPermits' || 
-           (!mmp.permits || !(mmp.permits as any).federal);
+    return workflow?.currentStage === 'awaitingPermits' || !checkHasPermit(mmp);
   }).length;
 
-  const permitsAttachedCount = forwardedMMPs.filter(mmp => {
-    return mmp.permits && (mmp.permits as any).federal;
-  }).length;
+  const permitsAttachedCount = forwardedMMPs.filter(mmp => checkHasPermit(mmp)).length;
 
   const pendingApprovalCount = allMMPs.filter(mmp => 
     mmp.status === 'pending' || mmp.status === 'submitted'
@@ -361,10 +373,8 @@ export const FOMZone: React.FC = () => {
 
   const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
 
-  // Check if permit is attached
-  const hasPermit = (mmp: MMPFile) => {
-    return mmp.permits && (mmp.permits as any).federal;
-  };
+  // Reuse the checkHasPermit helper for consistency
+  const hasPermit = checkHasPermit;
 
   // Get days since forwarded
   const getDaysSinceForwarded = (mmp: MMPFile) => {
