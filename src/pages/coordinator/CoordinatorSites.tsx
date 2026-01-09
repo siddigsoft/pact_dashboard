@@ -421,7 +421,7 @@ const CoordinatorSites: React.FC = () => {
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const { hubs, states, localities, hubStates, loading: loadingLocations } = useLocation();
-  const { coordinatorSites, loading: contextLoading } = useCoordinatorSites();
+  const { coordinatorSites, loading: contextLoading, refetch: refreshSites } = useCoordinatorSites();
   const [localitiesData, setLocalitiesData] = useState<any[]>([]);
   const isPermitsSectionLoading =
     (contextLoading || permitsLoading || loadingLocations) &&
@@ -1023,8 +1023,9 @@ const CoordinatorSites: React.FC = () => {
         console.warn('Failed to send site verified notification:', notifError);
       }
 
-      // Context will automatically update via real-time subscriptions
+      // Refresh both MMP files and coordinator sites to reflect the changes
       await refreshMMPFiles();
+      await refreshSites();
       // Badge counts will update automatically from coordinatorSites
       setActiveTab('verified');
       setVerifyDialogOpen(false);
@@ -1136,30 +1137,10 @@ const CoordinatorSites: React.FC = () => {
         console.warn('Failed to notify hub supervisor:', supervisorErr);
       }
 
-      // Context will automatically update via real-time subscriptions
+      // Refresh both MMP files and coordinator sites to reflect the changes
       await refreshMMPFiles();
-      // Reload badge counts
-      if (currentUser?.id) {
-        const userId = currentUser.id;
-        // Load entries forwarded to current user
-        const { data: allEntries } = await supabase
-          .from('mmp_site_entries')
-          .select('id, status, forwarded_to_user_id');
-        
-        const userEntries = (allEntries || []).filter((entry: any) => {
-          return entry.forwarded_to_user_id === userId;
-        });
-        
-        const newCount = { count: userEntries.filter((e: any) => 
-          e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
-        ).length };
-        const rejectedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'rejected'
-        ).length };
-        
-        setNewSitesCount(newCount.count || 0);
-        setRejectedSitesCount(rejectedCount.count || 0);
-      }
+      await refreshSites();
+      // Badge counts will update automatically from coordinatorSites
       setRejectDialogOpen(false);
       setVerificationNotes('');
       setSelectedSiteId(null);
@@ -1283,6 +1264,7 @@ const CoordinatorSites: React.FC = () => {
         setPermitVerificationDialogOpen(false);
         setStateForPermitVerification(null);
         await refreshMMPFiles();
+        await refreshSites();
         return;
       } catch (error) {
         console.error('Error sending sites back to FOM:', error);
@@ -1544,6 +1526,7 @@ const CoordinatorSites: React.FC = () => {
       setPermitVerificationDialogOpen(false);
       setStateForPermitVerification(null);
       await refreshMMPFiles();
+      await refreshSites();
       
       // Switch to appropriate tab
       if (statePermitJustUploaded || statePermitNotRequired) {
@@ -1721,6 +1704,7 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVerifyDialogOpen(false);
       await refreshMMPFiles();
+      await refreshSites();
     } catch (error) {
       console.error('Error completing verification:', error);
       toast({
@@ -1798,7 +1782,8 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVisitDate('');
       setBulkAssignDateDialogOpen(false);
-                  await refreshMMPFiles();
+      await refreshMMPFiles();
+      await refreshSites();
     } catch (error) {
       console.error('Error bulk assigning visit dates:', error);
       toast({
@@ -1952,30 +1937,9 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVerificationNotes('');
       setBulkVerifyDialogOpen(false);
-                  await refreshMMPFiles();
-      
-      // Reload badge counts
-      if (currentUser?.id) {
-        const userId = currentUser.id;
-        const { data: allEntries } = await supabase
-          .from('mmp_site_entries')
-          .select('id, status, additional_data');
-        
-        const userEntries = (allEntries || []).filter((entry: any) => {
-          const ad = entry.additional_data || {};
-          return ad.assigned_to === userId;
-        });
-        
-        const verifiedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'verified'
-        ).length };
-        const approvedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'approved'
-        ).length };
-        
-        setVerifiedSitesCount(verifiedCount.count || 0);
-        setApprovedSitesCount(approvedCount.count || 0);
-      }
+      await refreshMMPFiles();
+      await refreshSites();
+      // Badge counts will update automatically from coordinatorSites
       setActiveTab('approved');
     } catch (error) {
       console.error('Error bulk approving sites:', error);
@@ -2115,6 +2079,7 @@ const CoordinatorSites: React.FC = () => {
       setBulkLocalityVerifyDialogOpen(false);
       setSelectedLocalityForBulkVerify(null);
       await refreshMMPFiles();
+      await refreshSites();
     } catch (error) {
       console.error('Error verifying locality sites:', error);
       toast({
@@ -2157,7 +2122,8 @@ const CoordinatorSites: React.FC = () => {
       });
 
       // Refresh data and move to Permits Attached tab
-                  await refreshMMPFiles();
+      await refreshMMPFiles();
+      await refreshSites();
       setActiveTab('permits_attached');
     } catch (e) {
       console.warn('Error proceeding without local permit:', e);
@@ -2226,6 +2192,7 @@ const CoordinatorSites: React.FC = () => {
 
         // Reload sites and badge counts
         await refreshMMPFiles();
+        await refreshSites();
         // Badge counts will update automatically from coordinatorSites
 
         // Navigate to "Permits Attached" tab
@@ -3620,32 +3587,8 @@ const CoordinatorSites: React.FC = () => {
 
                   // Reload sites and badge counts
                   await refreshMMPFiles();
-                  // Reload badge counts
-                  if (currentUser?.id) {
-                    const userId = currentUser.id;
-                    const { data: allEntries } = await supabase
-                      .from('mmp_site_entries')
-                      .select('id, status, additional_data');
-                    
-                    const userEntries = (allEntries || []).filter((entry: any) => {
-                      const ad = entry.additional_data || {};
-                      return ad.assigned_to === userId;
-                    });
-                    
-                    const newCount = { count: userEntries.filter((e: any) => 
-                      e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
-                    ).length };
-                    const verifiedCount = { count: userEntries.filter((e: any) => 
-                      e.status?.toLowerCase() === 'verified'
-                    ).length };
-                    const approvedCount = { count: userEntries.filter((e: any) => 
-                      e.status?.toLowerCase() === 'approved'
-                    ).length };
-                    
-                    setNewSitesCount(newCount.count || 0);
-                    setVerifiedSitesCount(verifiedCount.count || 0);
-                    setApprovedSitesCount(approvedCount.count || 0);
-                  }
+                  await refreshSites();
+                  // Badge counts will update automatically from coordinatorSites
 
                   setEditDialogOpen(false);
                   setSelectedSiteForEdit(null);
@@ -3936,6 +3879,7 @@ const CoordinatorSites: React.FC = () => {
                   setSequentialPermitDialogOpen(false);
                   setSelectedStateForSequentialUpload(null);
                   await refreshMMPFiles();
+                  await refreshSites();
                   toast({
                     title: "Permits uploaded",
                     description: `Permits for ${selectedStateForSequentialUpload.state} have been processed.`,
