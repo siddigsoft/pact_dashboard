@@ -539,51 +539,89 @@ const CoordinatorSites: React.FC = () => {
   // Helper function to check if all sites in an MMP are verified and update MMP status
   // Returns true if MMP status was updated, false otherwise
   const checkAndUpdateMMPStatus = async (mmpFileId: string): Promise<boolean> => {
-    if (!mmpFileId) return false;
+    if (!mmpFileId) {
+      console.log('[MMP STATUS] No mmpFileId provided');
+      return false;
+    }
     
     try {
       // Get all sites for this MMP
       const { data: allSites, error: fetchError } = await supabase
         .from('mmp_site_entries')
-        .select('id, status')
+        .select('id, status, site_name')
         .eq('mmp_file_id', mmpFileId);
       
       if (fetchError) {
-        console.error('Error fetching sites for MMP status check:', fetchError);
+        console.error('[MMP STATUS] Error fetching sites for MMP status check:', fetchError);
         return false;
       }
       
-      if (!allSites || allSites.length === 0) return false;
+      if (!allSites || allSites.length === 0) {
+        console.log('[MMP STATUS] No sites found for MMP', mmpFileId);
+        return false;
+      }
+      
+      console.log(`[MMP STATUS] Checking ${allSites.length} sites for MMP ${mmpFileId}:`, 
+        allSites.map(s => ({ id: s.id, site: s.site_name, status: s.status }))
+      );
       
       // Check if all sites are verified or approved (case-insensitive)
+      // Also accept 'permits_verified' and 'cp_verified' as completed states
       const allVerified = allSites.every(site => {
         const status = (site.status || '').toLowerCase();
-        return status === 'verified' || status === 'approved' || status === 'completed';
+        const isVerified = status === 'verified' || status === 'approved' || status === 'completed' ||
+                          status === 'permits_verified' || status === 'cp_verified';
+        if (!isVerified) {
+          console.log(`[MMP STATUS] Site ${site.site_name || site.id} NOT verified. Status: '${site.status}'`);
+        }
+        return isVerified;
       });
       
       if (allVerified) {
         console.log(`[MMP STATUS] All ${allSites.length} sites verified for MMP ${mmpFileId}, updating MMP status to approved`);
         
-        // Update MMP status to 'approved'
-        const { error: updateError } = await supabase
+        // Update MMP status to 'approved' and update workflow stage
+        const { data: currentMmp, error: getMmpError } = await supabase
+          .from('mmp_files')
+          .select('workflow')
+          .eq('id', mmpFileId)
+          .single();
+        
+        if (getMmpError) {
+          console.error('[MMP STATUS] Error fetching MMP workflow:', getMmpError);
+        }
+        
+        const currentWorkflow = (currentMmp?.workflow as any) || {};
+        const updatedWorkflow = {
+          ...currentWorkflow,
+          currentStage: 'allSitesVerified',
+          allSitesVerifiedAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString()
+        };
+        
+        const { error: updateError, data: updateResult } = await supabase
           .from('mmp_files')
           .update({
             status: 'approved',
+            workflow: updatedWorkflow,
             updated_at: new Date().toISOString()
           })
-          .eq('id', mmpFileId);
+          .eq('id', mmpFileId)
+          .select();
         
         if (updateError) {
-          console.error('Error updating MMP status:', updateError);
+          console.error('[MMP STATUS] Error updating MMP status:', updateError);
           return false;
         } else {
-          console.log(`[MMP STATUS] MMP ${mmpFileId} status updated to approved`);
+          console.log(`[MMP STATUS] MMP ${mmpFileId} status updated to approved`, updateResult);
           return true;
         }
+      } else {
+        console.log(`[MMP STATUS] Not all sites verified for MMP ${mmpFileId}. No status change.`);
       }
       return false;
     } catch (error) {
-      console.error('Error in checkAndUpdateMMPStatus:', error);
+      console.error('[MMP STATUS] Error in checkAndUpdateMMPStatus:', error);
       return false;
     }
   };
@@ -1484,10 +1522,13 @@ const CoordinatorSites: React.FC = () => {
         decision.statePermit.uploaded === true;
       
       // Determine if sites should be verified now
-      // Sites are only verified if:
-      // 1. They already have permits_attached status (both state and locality permits are done)
-      // 2. OR state permit is not required (can skip to locality permits)
-      const shouldVerifyNow = !statePermitJustUploaded && !statePermitNotRequired;
+      // Sites are verified if:
+      // 1. They already have permits_attached status (both state and locality permits are done) - verify them
+      // 2. State permit was just uploaded - don't verify yet, need locality permits first
+      // 3. State permit not required - don't verify yet, still need to handle locality permits
+      // IMPORTANT: Sites with 'permits_attached' status have BOTH permits and should be verified now
+      const hasPermitsAttached = sitesInState.some(s => s.status?.toLowerCase() === 'permits_attached');
+      const shouldVerifyNow = hasPermitsAttached || (!statePermitJustUploaded && !statePermitNotRequired);
       
       // Update all sites in the state
       for (const site of sitesInState) {
@@ -1584,6 +1625,15 @@ const CoordinatorSites: React.FC = () => {
 
       setPermitVerificationDialogOpen(false);
       setStateForPermitVerification(null);
+      
+      // Check if all sites in affected MMPs are verified and update MMP status
+      if (shouldVerifyNow) {
+        const mmpIds = new Set(sitesInState.map(s => s.mmp_file_id).filter(Boolean));
+        for (const mmpId of mmpIds) {
+          await checkAndUpdateMMPStatus(mmpId);
+        }
+      }
+      
       await refreshMMPFiles();
       await refreshSites();
       
@@ -1621,11 +1671,13 @@ const CoordinatorSites: React.FC = () => {
         decision.statePermit?.uploaded === true;
       
       // Determine if sites should be verified now
-      // Sites are only verified if:
-      // 1. They already have permits_attached status (both state and locality permits are done)
-      // 2. OR state permit is not required (can skip to locality permits)
-      // IMPORTANT: When state permit is just uploaded, sites should NOT be verified - they need locality permits first
-      const shouldVerifyNow = !statePermitJustUploaded && !statePermitNotRequired;
+      // Sites are verified if:
+      // 1. They already have permits_attached status (both state and locality permits are done) - verify them
+      // 2. State permit was just uploaded - don't verify yet, need locality permits first
+      // 3. State permit not required - don't verify yet, still need to handle locality permits
+      // IMPORTANT: Sites with 'permits_attached' status have BOTH permits and should be verified now
+      const hasPermitsAttached = sitesToVerify.some(s => s.status?.toLowerCase() === 'permits_attached');
+      const shouldVerifyNow = hasPermitsAttached || (!statePermitJustUploaded && !statePermitNotRequired);
       
       // Update all sites with permit decision
       for (const site of sitesToVerify) {
