@@ -3076,7 +3076,7 @@ const CoordinatorSites: React.FC = () => {
                       return (
                         <div className="text-center py-8">
                           <MapPin className="h-12 w-12 mx-auto mb-4 text-purple-400" />
-                          <p className="font-medium text-lg mb-2">Set Locality Permit Requirements</p>
+                          <p className="font-medium text-lg mb-2">Locality Permit States</p>
                           <p className="text-muted-foreground mb-4">
                             You have {allLocalitiesFromStatePermits.length} {allLocalitiesFromStatePermits.length === 1 ? 'locality' : 'localities'} ready for permit processing.
                             <br />
@@ -3088,7 +3088,7 @@ const CoordinatorSites: React.FC = () => {
                             data-testid="button-start-triage"
                           >
                             <MapPin className="h-4 w-4 mr-2" />
-                            Set Locality Permit Requirements
+                            Locality Permit States
                           </Button>
                         </div>
                       );
