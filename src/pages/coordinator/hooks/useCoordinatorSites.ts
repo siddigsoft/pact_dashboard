@@ -3,6 +3,15 @@ import { useAppContext } from '@/context/AppContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { supabase } from '@/integrations/supabase/client';
 
+export interface SiteEntryCounts {
+  new: number;
+  permitsAttached: number;
+  verified: number;
+  approved: number;
+  completed: number;
+  rejected: number;
+}
+
 export interface SiteVisit {
   id: string;
   site_name: string;
@@ -40,6 +49,46 @@ export const useCoordinatorSites = () => {
   const [loading, setLoading] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [siteCounts, setSiteCounts] = useState<SiteEntryCounts>({
+    new: 0,
+    permitsAttached: 0,
+    verified: 0,
+    approved: 0,
+    completed: 0,
+    rejected: 0
+  });
+
+  // Compute counts from sites data (runs after sites are loaded)
+  const computeCountsFromSites = useCallback((sites: SiteVisit[]) => {
+    const counts: SiteEntryCounts = {
+      new: 0,
+      permitsAttached: 0,
+      verified: 0,
+      approved: 0,
+      completed: 0,
+      rejected: 0
+    };
+
+    sites.forEach((entry) => {
+      const status = (entry.status || '').toLowerCase();
+      if (status === 'pending' || status === 'dispatched' || status === 'assigned' || 
+          status === 'inprogress' || status === 'in_progress') {
+        counts.new++;
+      } else if (status === 'permits_attached') {
+        counts.permitsAttached++;
+      } else if (status === 'verified') {
+        counts.verified++;
+      } else if (status === 'approved') {
+        counts.approved++;
+      } else if (status === 'completed') {
+        counts.completed++;
+      } else if (status === 'rejected') {
+        counts.rejected++;
+      }
+    });
+
+    setSiteCounts(counts);
+  }, []);
 
   const fetchCoordinatorSites = useCallback(async (isBackgroundRefresh = false) => {
     if (!currentUser?.id) {
@@ -136,6 +185,8 @@ export const useCoordinatorSites = () => {
 
       console.log('[useCoordinatorSites] Fetched', sites.length, 'sites for coordinator', currentUser.id);
       setCoordinatorSites(sites);
+      // Compute counts from the fetched sites data
+      computeCountsFromSites(sites);
     } catch (err) {
       console.error('Error in useCoordinatorSites:', err);
       setError('Failed to fetch coordinator sites');
@@ -144,7 +195,7 @@ export const useCoordinatorSites = () => {
       setLoading(false);
       setInitialLoadComplete(true);
     }
-  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser, initialLoadComplete]);
+  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser, initialLoadComplete, computeCountsFromSites]);
 
   // Initial fetch
   useEffect(() => {
@@ -174,6 +225,7 @@ export const useCoordinatorSites = () => {
             clearTimeout(debounceTimerRef.current);
           }
           debounceTimerRef.current = setTimeout(() => {
+            // Background refresh - counts are computed automatically after sites load
             fetchCoordinatorSites(true);
           }, 500);
         }
@@ -192,6 +244,7 @@ export const useCoordinatorSites = () => {
     coordinatorSites,
     loading,
     error,
+    siteCounts,
     refetch: fetchCoordinatorSites,
   };
 };
