@@ -296,9 +296,12 @@ const WalletPage = () => {
   }
 
   return (
-    <div className="relative min-h-screen overflow-y-auto max-h-screen">
-      {/* Black App Bar */}
-      <div className="fixed top-0 left-0 right-0 bg-black text-white flex items-center justify-between px-4 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}>
+    <div className="relative min-h-full">
+      {/* Black App Bar - scoped to the content area, not the full viewport */}
+      <div
+        className="sticky top-0 bg-black text-white flex items-center justify-between px-4 z-50"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/dashboard')}
@@ -337,14 +340,14 @@ const WalletPage = () => {
         </div>
       </div>
 
-      {/* Cyber Background with Animated Grid */}
-      <div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
+      {/* Cyber Background with Animated Grid - scoped to wallet content */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]"></div>
         <div className="absolute top-20 left-20 w-96 h-96 bg-blue-500/20 rounded-full blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
       </div>
 
-      <div className="relative space-y-6 p-3 sm:p-4 md:p-6 lg:p-8" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 80px)' }}>
+      <div className="relative space-y-6 p-3 sm:p-4 md:p-6 lg:p-8">
         {/* Cyber Header */}
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 rounded-2xl blur-xl"></div>
@@ -533,7 +536,7 @@ const WalletPage = () => {
             <WalletIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(currentBalance)}
             </div>
             <p className="text-xs text-blue-300/70 mt-1">
@@ -550,7 +553,7 @@ const WalletPage = () => {
             <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.totalEarned || 0)}
             </div>
             <p className="text-xs text-purple-300/70 mt-1 flex items-center gap-1">
@@ -568,7 +571,7 @@ const WalletPage = () => {
             <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 animate-pulse" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.pendingWithdrawals || 0)}
             </div>
             <p className="text-xs text-orange-300/70 mt-1">
@@ -585,7 +588,7 @@ const WalletPage = () => {
             <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.totalWithdrawn || 0)}
             </div>
             <p className="text-xs text-cyan-300/70 mt-1">
@@ -605,7 +608,7 @@ const WalletPage = () => {
             <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-teal-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold tabular-nums bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.weeklyEarnings || 0)}
             </div>
             <p className="text-xs text-teal-300/70 mt-1">
@@ -622,7 +625,7 @@ const WalletPage = () => {
             <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-xl sm:text-2xl font-bold tabular-nums bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent break-words leading-tight max-w-full">
               {formatCurrency(stats?.monthlyEarnings || 0)}
             </div>
             <p className="text-xs text-rose-300/70 mt-1">
@@ -659,7 +662,7 @@ const WalletPage = () => {
             <CardTitle className="text-sm font-medium uppercase tracking-wide text-indigo-300">Average Transaction</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            <div className="text-lg sm:text-xl lg:text-2xl font-bold tabular-nums bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
               {transactions.length > 0
                 ? formatCurrency(transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length)
                 : formatCurrency(0)}

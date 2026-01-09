@@ -532,7 +532,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       const { data: transactions, error: txnFetchError } = await supabase
         .from('wallet_transactions')
         .select('*')
-        .or(`site_visit_id.eq.${siteVisitId},reference_id.eq.${siteVisitId}`);
+        .or(`site_visit_id.eq.${siteVisitId},related_site_visit_id.eq.${siteVisitId}`);
 
       if (txnFetchError) {
         throw new Error(`Failed to fetch related transactions: ${txnFetchError.message}`);

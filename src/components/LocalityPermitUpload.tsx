@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileText, AlertTriangle, CheckCircle2, X, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { safeUploadFile } from '@/lib/safeUpload';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,188 +36,122 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // Sanitize folder segment for storage path safety
   const sanitizeSegment = (s: string) =>
-    (s || '')
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gi, '-')
-      .replace(/^-+|-+$/g, '');
+    (s || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '');
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      // Validate file type
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-      if (!allowedTypes.includes(file.type)) {
-        toast({
-          title: "Invalid file type",
-          description: "Please select a PDF or image file (JPG, PNG).",
-          variant: "destructive",
-        });
-        return;
-      }
+    if (!file) return;
 
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        toast({
-          title: "File too large",
-          description: "Please select a file smaller than 10MB.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setSelectedFile(file);
-      // Create preview URL for the selected file
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-      setShowPreview(true);
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({ title: "Invalid file type", description: "Please select a PDF or image file (JPG, PNG).", variant: "destructive" });
+      return;
     }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please select a file smaller than 10MB.", variant: "destructive" });
+      return;
+    }
+
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    setShowPreview(true);
   };
 
   const handleUpload = async () => {
     if (!selectedFile) return;
-
-    // Validate mandatory fields
-    if (!issueDate) {
-      toast({
-        title: "Issue date required",
-        description: "Please select the permit issue date.",
-        variant: "destructive",
-      });
+    if (!issueDate || !expiryDate) {
+      toast({ title: "Dates required", description: "Please select issue and expiry dates.", variant: "destructive" });
       return;
     }
-
-    if (!expiryDate) {
-      toast({
-        title: "Expiry date required",
-        description: "Please select the permit expiry date.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate that expiry date is after issue date
     if (expiryDate <= issueDate) {
-      toast({
-        title: "Invalid dates",
-        description: "Expiry date must be after the issue date.",
-        variant: "destructive",
-      });
+      toast({ title: "Invalid dates", description: "Expiry date must be after the issue date.", variant: "destructive" });
       return;
     }
 
     setUploading(true);
+
     try {
-      // Upload file to Supabase storage
+      // 🔐 FORCE SESSION REFRESH BEFORE UPLOAD
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) throw new Error("Session expired. Please log in again.");
+
       const stateSegment = sanitizeSegment(state);
       const localitySegment = sanitizeSegment(locality);
-      const fileName = `locality-permit-${stateSegment}-${localitySegment}-${Date.now()}-${selectedFile.name}`;
-      const filePath = `permits/${mmpFileId}/local/${localitySegment}/${fileName}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('mmp-files')
-        .upload(filePath, selectedFile, { upsert: true, contentType: selectedFile.type || undefined });
 
-      if (uploadError) {
-        throw uploadError;
+      // Use safeUploadFile for secure upload
+      const filePath = `permits/${mmpFileId}/local/${localitySegment}`;
+      const uploadResult = await safeUploadFile(selectedFile, {
+        bucket: 'mmp-files',
+        path: filePath,
+        allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+        maxSizeBytes: 10 * 1024 * 1024
+      });
+
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.error || 'Failed to upload file');
       }
+      const publicUrl = uploadResult.url;
 
-      // Get the public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('mmp-files')
-        .getPublicUrl(filePath);
-
-      // Update MMP file's permits_data to mark locality permit as uploaded
-      const { data: mmpData, error: fetchError } = await supabase
-        .from('mmp_files')
-        .select('permits')
-        .eq('id', mmpFileId)
-        .single();
-
-      if (fetchError) {
-        throw fetchError;
-      }
+      // Fetch current permits data
+      const { data: mmpData, error: fetchError } = await supabase.from('mmp_files').select('permits').eq('id', mmpFileId).single();
+      if (fetchError) throw fetchError;
 
       const currentPermitsData = mmpData?.permits || {};
       const updatedPermitsData = {
         ...currentPermitsData,
-        locality: true, // Mark locality permit as uploaded
+        locality: true,
         localityPermits: [
           ...(currentPermitsData.localityPermits || []),
           {
-            state: state,
-            locality: locality,
+            state,
+            locality,
             fileName: selectedFile.name,
             fileUrl: publicUrl,
             uploadedAt: new Date().toISOString(),
             uploadedBy: 'coordinator',
             verified: false,
-            issueDate: issueDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
-            expiryDate: expiryDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+            issueDate: issueDate.toISOString().split('T')[0],
+            expiryDate: expiryDate.toISOString().split('T')[0],
             comments: comments || null
           }
         ]
       };
 
-      const { error: updateError } = await supabase
-        .from('mmp_files')
-        .update({ permits: updatedPermitsData })
-        .eq('id', mmpFileId);
+      const { error: updateError } = await supabase.from('mmp_files').update({ permits: updatedPermitsData }).eq('id', mmpFileId);
+      if (updateError) throw updateError;
 
-      if (updateError) {
-        throw updateError;
-      }
-
-      // Update all sites in this locality to 'permits_attached' status
-      // This moves sites to the permits_attached tab
-      // First, fetch current sites to merge additional_data properly
+      // Update all sites in this locality to 'permits_attached'
       const { data: sitesData, error: sitesFetchError } = await supabase
         .from('mmp_site_entries')
         .select('id, additional_data, status')
         .eq('mmp_file_id', mmpFileId)
         .eq('state', state)
         .eq('locality', locality)
-        // Only update sites that are in pending/new status
         .in('status', ['Pending', 'Dispatched', 'assigned', 'inProgress', 'in_progress']);
 
-      if (!sitesFetchError && sitesData && sitesData.length > 0) {
-        // Update each site to permits_attached status
+      if (!sitesFetchError && sitesData?.length) {
         for (const site of sitesData) {
-          const currentAdditionalData = site.additional_data || {};
-          const updatedAdditionalData = {
-            ...currentAdditionalData,
-            locality_permit_attached: true
-          };
-
+          const updatedAdditionalData = { ...(site.additional_data || {}), locality_permit_attached: true };
           const { error: siteUpdateError } = await supabase
             .from('mmp_site_entries')
-            .update({ 
-              status: 'permits_attached',
-              additional_data: updatedAdditionalData
-            })
+            .update({ status: 'permits_attached', additional_data: updatedAdditionalData })
             .eq('id', site.id);
-
-          if (siteUpdateError) {
-            console.warn(`Failed to update site ${site.id} to permits_attached:`, siteUpdateError);
-          }
+          if (siteUpdateError) console.warn(`Failed to update site ${site.id}:`, siteUpdateError);
         }
       }
 
       toast({
         title: "Local permit uploaded successfully",
-        description: `Local permit for ${locality}, ${state} has been uploaded. Sites in this locality are now ready for verification.`,
+        description: `Local permit for ${locality}, ${state} has been uploaded.`,
       });
+
       onPermitUploaded();
-    } catch (error) {
-      const errMsg = (error as any)?.message || JSON.stringify(error);
+    } catch (error: any) {
       console.error('Upload error:', error);
-      toast({
-        title: "Upload failed",
-        description: errMsg || "An error occurred while uploading the local permit.",
-        variant: "destructive",
-      });
+      toast({ title: "Upload failed", description: error.message || "An error occurred during upload.", variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -232,14 +167,10 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl('');
     }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const togglePreview = () => {
-    setShowPreview(!showPreview);
-  };
+  const togglePreview = () => setShowPreview(!showPreview);
 
   return (
     <Card className="border-border shadow-sm">
@@ -253,176 +184,64 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
         <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <AlertDescription className="text-foreground">
-            Upload the local permit for <strong>{locality}, {state}</strong> to verify all sites in this locality at once.
+            Upload the local permit for <strong>{locality}, {state}</strong>.
           </AlertDescription>
         </Alert>
 
-        <div className="space-y-3">
-          <div className="text-sm text-muted-foreground">
-            <strong className="text-foreground">Requirements:</strong>
-            <ul className="list-disc list-inside mt-1 space-y-1">
-              <li>Valid local environmental permit for {locality}, {state}</li>
-              <li>PDF or image format (JPG, PNG)</li>
-              <li>Maximum file size: 10MB</li>
-            </ul>
-          </div>
-
-          {/* Preview Section */}
-          {selectedFile && previewUrl && (
-            <div className="border border-border rounded-lg p-4 bg-card">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-medium text-foreground">Preview</h4>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={togglePreview}
-                >
-                  {showPreview ? (
-                    <>
-                      <EyeOff className="h-4 w-4 mr-1" />
-                      Hide Preview
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-4 w-4 mr-1" />
-                      Show Preview
-                    </>
-                  )}
-                </Button>
-              </div>
-
-              {showPreview && (
-                <div className="border border-border rounded-lg overflow-hidden bg-muted">
-                  {selectedFile.type === 'application/pdf' ? (
-                    <iframe
-                      src={previewUrl}
-                      className="w-full h-96 border-0"
-                      title="PDF Preview"
-                    />
-                  ) : (
-                    <img
-                      src={previewUrl}
-                      alt="Permit Preview"
-                      className="w-full h-auto max-h-96 object-contain"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {!selectedFile ? (
-            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center bg-muted/30">
-              <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground mb-3">
-                Click to select your local permit file
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={handleFileSelect}
-                className="hidden"
-                id="locality-permit-file-input"
-              />
-              <Button
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Select File
+        {/* File Selection */}
+        {selectedFile && previewUrl ? (
+          <div className="border border-border rounded-lg p-4 bg-card">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium text-foreground">Preview</h4>
+              <Button variant="ghost" size="sm" onClick={togglePreview}>
+                {showPreview ? <><EyeOff className="h-4 w-4 mr-1" />Hide Preview</> :
+                  <><Eye className="h-4 w-4 mr-1" />Show Preview</>}
               </Button>
             </div>
-          ) : (
-            <div className="border border-border bg-muted/50 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-foreground" />
-                  <div>
-                    <p className="font-medium text-foreground">{selectedFile.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFile}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+            {showPreview && (
+              <div className="border border-border rounded-lg overflow-hidden bg-muted">
+                {selectedFile.type === 'application/pdf' ? (
+                  <iframe src={previewUrl} className="w-full h-96 border-0" title="PDF Preview" />
+                ) : (
+                  <img src={previewUrl} alt="Permit Preview" className="w-full h-auto max-h-96 object-contain" />
+                )}
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <div className="border-2 border-dashed border-border rounded-lg p-6 text-center bg-muted/30">
+            <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground mb-3">Click to select your local permit file</p>
+            <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileSelect} className="hidden" />
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()}><FileText className="h-4 w-4 mr-2" />Select File</Button>
+          </div>
+        )}
 
-        {/* Permit Details Form */}
+        {/* Permit Details */}
         <div className="space-y-4 mt-6">
           <h4 className="text-sm font-medium text-foreground">Permit Details</h4>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-sm font-medium">
-                Issue Date <span className="text-red-500">*</span>
-              </Label>
-              <DatePicker
-                date={issueDate}
-                onSelect={setIssueDate}
-                className="w-full"
-              />
+              <Label className="text-sm font-medium">Issue Date <span className="text-red-500">*</span></Label>
+              <DatePicker date={issueDate} onSelect={setIssueDate} className="w-full" />
             </div>
-            
             <div className="space-y-2">
-              <Label className="text-sm font-medium">
-                Expiry Date <span className="text-red-500">*</span>
-              </Label>
-              <DatePicker
-                date={expiryDate}
-                onSelect={setExpiryDate}
-                className="w-full"
-              />
+              <Label className="text-sm font-medium">Expiry Date <span className="text-red-500">*</span></Label>
+              <DatePicker date={expiryDate} onSelect={setExpiryDate} className="w-full" />
             </div>
           </div>
-          
           <div className="space-y-2">
-            <Label htmlFor="permit-comments" className="text-sm font-medium">
-              Comments (Optional)
-            </Label>
-            <Textarea
-              id="permit-comments"
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              placeholder="Add any additional comments about this permit..."
-              className="w-full min-h-[80px]"
-            />
+            <Label htmlFor="permit-comments" className="text-sm font-medium">Comments (Optional)</Label>
+            <Textarea id="permit-comments" value={comments} onChange={e => setComments(e.target.value)} placeholder="Add comments..." className="w-full min-h-[80px]" />
           </div>
         </div>
 
         <div className="flex gap-3 pt-2">
-          <Button
-            onClick={handleUpload}
-            disabled={!selectedFile || uploading || !issueDate || !expiryDate}
-            className="flex-1"
-          >
-            {uploading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                Uploading...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Upload Local Permit
-              </>
-            )}
+          <Button onClick={handleUpload} disabled={!selectedFile || uploading || !issueDate || !expiryDate} className="flex-1">
+            {uploading ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+            {uploading ? 'Uploading...' : 'Upload Local Permit'}
           </Button>
-
-          {onCancel && (
-            <Button variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-          )}
+          {onCancel && <Button variant="outline" onClick={onCancel}>Cancel</Button>}
         </div>
       </CardContent>
     </Card>
