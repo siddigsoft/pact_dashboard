@@ -1,0 +1,47 @@
+16:18:20.215 Running build in Washington, D.C., USA (East) – iad1
+16:18:20.215 Build machine configuration: 2 cores, 8 GB
+16:18:20.405 Cloning github.com/siddigsoft/pact_dashboard (Branch: master, Commit: 6e13074)
+16:18:33.419 Cloning completed: 13.014s
+16:18:33.748 Restored build cache from previous deployment (BpKArb7jG2Uw3HmrMap1MtoRZH1K)
+16:18:34.703 Running "vercel build"
+16:18:35.164 Vercel CLI 50.1.6
+16:18:36.642 Installing dependencies...
+16:18:38.602 
+16:18:38.603 up to date in 2s
+16:18:38.603 
+16:18:38.604 99 packages are looking for funding
+16:18:38.604   run `npm fund` for details
+16:18:38.637 Running "npm run build"
+16:18:38.741 
+16:18:38.741 > vite_react_shadcn_ts@0.0.0 build
+16:18:38.742 > vite build
+16:18:38.742 
+16:18:39.216 [dotenv@17.2.3] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+16:18:39.357 [36mvite v5.4.20 [32mbuilding for production...[36m[39m
+16:18:39.422 transforming...
+16:18:40.582 [32m✓[39m 49 modules transformed.
+16:18:40.584 [31mx[39m Build failed in 1.20s
+16:18:40.584 [31merror during build:
+16:18:40.584 [31m[vite:esbuild] Transform failed with 1 error:
+16:18:40.584 /vercel/path0/src/pages/MMP.tsx:2942:1: ERROR: Expected identifier but found "<"[31m
+16:18:40.584 file: [36m/vercel/path0/src/pages/MMP.tsx:2942:1[31m
+16:18:40.585 [33m
+16:18:40.585 [33mExpected identifier but found "<"[33m
+16:18:40.585 2940|                    </TabsTrigger>
+16:18:40.585 2941|                  )}
+16:18:40.585 2942|  <<<<<<< HEAD
+16:18:40.585    |   ^
+16:18:40.585 2943|                  {!canClaimSites && (
+16:18:40.585 2944|                    <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+16:18:40.585 [31m
+16:18:40.586     at failureErrorWithLog (/vercel/path0/node_modules/vite/node_modules/esbuild/lib/main.js:1472:15)
+16:18:40.586     at /vercel/path0/node_modules/vite/node_modules/esbuild/lib/main.js:755:50
+16:18:40.586     at responseCallbacks.<computed> (/vercel/path0/node_modules/vite/node_modules/esbuild/lib/main.js:622:9)
+16:18:40.586     at handleIncomingPacket (/vercel/path0/node_modules/vite/node_modules/esbuild/lib/main.js:677:12)
+16:18:40.586     at Socket.readFromStdout (/vercel/path0/node_modules/vite/node_modules/esbuild/lib/main.js:600:7)
+16:18:40.586     at Socket.emit (node:events:508:28)
+16:18:40.586     at addChunk (node:internal/streams/readable:559:12)
+16:18:40.586     at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+16:18:40.587     at Readable.push (node:internal/streams/readable:390:5)
+16:18:40.587     at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)[39m
+16:18:40.616 Error: Command "npm run build" exited with 1

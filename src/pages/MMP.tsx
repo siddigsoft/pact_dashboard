@@ -39,6 +39,7 @@ import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 import { useWallet } from '@/context/wallet/WalletContext';
+import { createSiteVisitWalletTransaction } from '@/utils/wallet-transactions';
 import { StatePermitUpload } from '@/components/StatePermitUpload';
 import { DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -2939,18 +2940,11 @@ const MMP = () => {
                     <Badge className="bg-emerald-400/30 text-white border-0">{categorizedMMPs.new.length}</Badge>
                   </TabsTrigger>
                 )}
-<<<<<<< HEAD
                 {!canClaimSites && (
                   <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
                     <Send className="h-4 w-4" />
-                    {isFOM ? t('mmpPage.tabs.forwardedSites') : t('mmpPage.tabs.forwardedMMPs')}
+                    {(isFOM || isSupervisor) ? t('mmpPage.tabs.forwardedSites') : t('mmpPage.tabs.forwardedMMPs')}
                     <Badge className="bg-amber-400/30 text-white border-0">{categorizedMMPs.forwarded.length}</Badge>
-=======
-                  {!canClaimSites && (
-                  <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
-                    {(isFOM || isSupervisor) ? 'Forwarded Sites' : 'Forwarded MMPs'}
-                    <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
->>>>>>> 8cd9fcd1586bcfc29480dd6aac5a083fdded34d2
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
@@ -2971,19 +2965,11 @@ const MMP = () => {
 
             {!canClaimSites && (
               <TabsContent value="new">
-<<<<<<< HEAD
-                {(isFOM || isAdmin || isICT) && (
+                {(isFOM || isSupervisor || isAdmin || isICT) && (
                   <div className="mb-6">
                     <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
                     <div className="flex gap-2 flex-wrap">
-                        {isFOM && (
-=======
-                {(isFOM || isSupervisor || isAdmin || isICT) && (
-                  <div className="mb-4 overflow-x-auto pb-2">
-                    <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                      <div className="flex gap-2 min-w-max">
                         {(isFOM || isSupervisor) && (
->>>>>>> 8cd9fcd1586bcfc29480dd6aac5a083fdded34d2
                           <>
                             <Button 
                               variant={newFomSubTab === 'pending' ? 'default' : 'outline'} 
