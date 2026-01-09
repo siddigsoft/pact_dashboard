@@ -3,7 +3,10 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle, Activity } from 'lucide-react';
+import { 
+  Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle, Activity,
+  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck
+} from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
 import { useMMP } from '@/context/mmp/MMPContext';
@@ -2925,34 +2928,38 @@ const MMP = () => {
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="overflow-x-auto mb-6">
-              <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1 min-h-[44px]">
+              <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/90 to-blue-900/90 border border-blue-500/40 backdrop-blur-xl p-1.5 min-h-[48px] rounded-xl shadow-lg">
                 {canClaimSites && (
-                  <TabsTrigger value="enumerator" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                  <TabsTrigger value="enumerator" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+                    <UserCheck className="h-4 w-4" />
                     My Assignments
-                    <Badge variant="secondary">{enumeratorMySites.length}</Badge>
+                    <Badge className="bg-blue-400/30 text-white border-0">{enumeratorMySites.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                  <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+                    <ClipboardList className="h-4 w-4" />
                     New MMPs
-                    <Badge variant="secondary">{categorizedMMPs.new.length}</Badge>
+                    <Badge className="bg-emerald-400/30 text-white border-0">{categorizedMMPs.new.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                  <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+                    <Send className="h-4 w-4" />
                     {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
-                    <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
+                    <Badge className="bg-amber-400/30 text-white border-0">{categorizedMMPs.forwarded.length}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                  <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+                    <ShieldCheck className="h-4 w-4" />
                     Verified Sites
-                    <Badge variant="secondary">{totalVerifiedSitesCount}</Badge>
+                    <Badge className="bg-violet-400/30 text-white border-0">{totalVerifiedSitesCount}</Badge>
                   </TabsTrigger>
                 )}
                 {!canClaimSites && (
-                  <TabsTrigger value="tracker" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
-                    <Activity className="h-4 w-4" />
+                  <TabsTrigger value="tracker" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+                    <LayoutDashboard className="h-4 w-4" />
                     MMP Tracker
                   </TabsTrigger>
                 )}
@@ -2962,27 +2969,43 @@ const MMP = () => {
             {!canClaimSites && (
               <TabsContent value="new">
                 {(isFOM || isAdmin || isICT) && (
-                  <div className="mb-4 overflow-x-auto pb-2">
-                    <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="flex gap-2 min-w-max">
+                  <div className="mb-6">
+                    <div className="text-sm font-medium text-muted-foreground mb-3">Subcategory:</div>
+                    <div className="flex gap-2 flex-wrap">
                         {isFOM && (
                           <>
-                            <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                            <Button 
+                              variant={newFomSubTab === 'pending' ? 'default' : 'outline'} 
+                              size="sm" 
+                              onClick={() => setNewFomSubTab('pending')} 
+                              className={`${newFomSubTab === 'pending' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border-0 shadow-md' : 'hover:bg-emerald-50 dark:hover:bg-emerald-950'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
+                            >
+                              <Clock className="h-3.5 w-3.5 mr-1.5" />
                               MMPs Pending Verification
-                              <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
+                              <Badge className={`ml-1.5 text-xs ${newFomSubTab === 'pending' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'}`}>{newFomSubcategories.pending.length}</Badge>
                             </Button>
-                            <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={`${newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                            <Button 
+                              variant={newFomSubTab === 'verified' ? 'default' : 'outline'} 
+                              size="sm" 
+                              onClick={() => setNewFomSubTab('verified')} 
+                              className={`${newFomSubTab === 'verified' ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 shadow-md' : 'hover:bg-green-50 dark:hover:bg-green-950'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
                               Verified MMPs
-                              <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
+                              <Badge className={`ml-1.5 text-xs ${newFomSubTab === 'verified' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{newFomSubcategories.verified.length}</Badge>
                             </Button>
                           </>
                         )}
-                        <Button variant={newFomSubTab === 'returned' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('returned')} className={`${newFomSubTab === 'returned' ? 'bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                        <Button 
+                          variant={newFomSubTab === 'returned' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setNewFomSubTab('returned')} 
+                          className={`${newFomSubTab === 'returned' ? 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white border-0 shadow-md' : 'hover:bg-orange-50 dark:hover:bg-orange-950 border-orange-200 dark:border-orange-800'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
                           Returned Sites
-                          <Badge variant="secondary" className="ml-2">{returnedSitesByState.reduce((sum, g) => sum + g.totalSites, 0)}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${newFomSubTab === 'returned' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'}`}>{returnedSitesByState.reduce((sum, g) => sum + g.totalSites, 0)}</Badge>
                         </Button>
-
-                      
                       </div>
                   </div>
                 )}
@@ -3124,16 +3147,28 @@ const MMP = () => {
             {!canClaimSites && (
               <TabsContent value="forwarded">
                 {(isAdmin || isICT || isFOM) && (
-                  <div className="mb-4 overflow-x-auto pb-2">
-                    <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="flex gap-2 min-w-max">
-                        <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={`${forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                  <div className="mb-6">
+                    <div className="text-sm font-medium text-muted-foreground mb-3">Subcategory:</div>
+                    <div className="flex gap-2 flex-wrap">
+                        <Button 
+                          variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setForwardedSubTab('pending')} 
+                          className={`${forwardedSubTab === 'pending' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md' : 'hover:bg-amber-50 dark:hover:bg-amber-950'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
+                        >
+                          <Clock className="h-3.5 w-3.5 mr-1.5" />
                           {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
-                          <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${forwardedSubTab === 'pending' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{forwardedSubcategories.pending.length}</Badge>
                         </Button>
-                        <Button variant={forwardedSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('verified')} className={`${forwardedSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                        <Button 
+                          variant={forwardedSubTab === 'verified' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setForwardedSubTab('verified')} 
+                          className={`${forwardedSubTab === 'verified' ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 shadow-md' : 'hover:bg-green-50 dark:hover:bg-green-950'} flex-shrink-0 whitespace-nowrap rounded-lg transition-all text-xs`}
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
                           {isFOM ? 'Verified Sites' : 'Verified MMPs'}
-                          <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${forwardedSubTab === 'verified' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{forwardedSubcategories.verified.length}</Badge>
                         </Button>
                       </div>
                   </div>
@@ -3151,46 +3186,96 @@ const MMP = () => {
 
             <TabsContent value="verified">
               {(isAdmin || isICT || isFOM || isCoordinator) && (
-                <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
-                  <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={`${verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                <div className="mb-6">
+                  <div className="text-sm font-medium text-muted-foreground mb-3">Subcategory:</div>
+                  <div className="flex gap-2 overflow-x-auto pb-2 flex-wrap">
+                    <Button 
+                      variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('newSites')} 
+                      className={`${verifiedSubTab === 'newSites' ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 shadow-md' : 'hover:bg-blue-50 dark:hover:bg-blue-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <FilePlus className="h-3.5 w-3.5 mr-1.5" />
                       New Sites
-                      <Badge variant="secondary" className="ml-1 text-xs">
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'newSites' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'}`}>
                         {newSitesVerifiedCount}
                       </Badge>
                     </Button>
-                    <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={`${verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                    <Button 
+                      variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('approvedCosted')} 
+                      className={`${verifiedSubTab === 'approvedCosted' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border-0 shadow-md' : 'hover:bg-emerald-50 dark:hover:bg-emerald-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <CheckSquare className="h-3.5 w-3.5 mr-1.5" />
                       Approved
-                      <Badge variant="secondary" className="ml-1 text-xs">{approvedCostedCount}</Badge>
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'approvedCosted' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'}`}>{approvedCostedCount}</Badge>
                     </Button>
-                    <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={`${verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                    <Button 
+                      variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('dispatched')} 
+                      className={`${verifiedSubTab === 'dispatched' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md' : 'hover:bg-amber-50 dark:hover:bg-amber-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <Truck className="h-3.5 w-3.5 mr-1.5" />
                       Dispatched
-                      <Badge variant="secondary" className="ml-1 text-xs">{dispatchedCount}</Badge>
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'dispatched' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{dispatchedCount}</Badge>
                     </Button>
                     {(isAdmin || isICT || isFOM) && (
                       <>
-                        <Button variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('smartAssigned')} className={`${verifiedSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                        <Button 
+                          variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setVerifiedSubTab('smartAssigned')} 
+                          className={`${verifiedSubTab === 'smartAssigned' ? 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0 shadow-md' : 'hover:bg-violet-50 dark:hover:bg-violet-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                        >
+                          <Wand2 className="h-3.5 w-3.5 mr-1.5" />
                           Smart Assigned
-                          <Badge variant="secondary" className="ml-1 text-xs">{smartAssignedCount}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'smartAssigned' ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'}`}>{smartAssignedCount}</Badge>
                         </Button>
-                        <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={`${verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                        <Button 
+                          variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setVerifiedSubTab('accepted')} 
+                          className={`${verifiedSubTab === 'accepted' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white border-0 shadow-md' : 'hover:bg-teal-50 dark:hover:bg-teal-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                        >
+                          <Handshake className="h-3.5 w-3.5 mr-1.5" />
                           Accepted
-                          <Badge variant="secondary" className="ml-1 text-xs">{acceptedCount}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'accepted' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200'}`}>{acceptedCount}</Badge>
                         </Button>
-                        <Button variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('ongoing')} className={`${verifiedSubTab === 'ongoing' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                        <Button 
+                          variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setVerifiedSubTab('ongoing')} 
+                          className={`${verifiedSubTab === 'ongoing' ? 'bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600 text-white border-0 shadow-md' : 'hover:bg-sky-50 dark:hover:bg-sky-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                        >
+                          <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
                           Ongoing
-                          <Badge variant="secondary" className="ml-1 text-xs">{ongoingCount}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'ongoing' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200'}`}>{ongoingCount}</Badge>
                         </Button>
                       </>
                     )}
-                    <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={`${verifiedSubTab === 'completed' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                    <Button 
+                      variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('completed')} 
+                      className={`${verifiedSubTab === 'completed' ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 shadow-md' : 'hover:bg-green-50 dark:hover:bg-green-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                       Completed
-                      <Badge variant="secondary" className="ml-1 text-xs">{completedCount}</Badge>
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'completed' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{completedCount}</Badge>
                     </Button>
-                    <Button variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('rejected')} className={`${verifiedSubTab === 'rejected' ? `${rejectedCount > 0 ? 'bg-red-200 hover:bg-red-300 text-red-800 border border-red-300' : 'bg-red-100 hover:bg-red-200 text-red-800 border border-red-300'}` : `${rejectedCount > 0 ? 'bg-red-200 hover:bg-red-300' : 'bg-red-100 hover:bg-red-200'}`} text-xs whitespace-nowrap flex-shrink-0`}>
+                    <Button 
+                      variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('rejected')} 
+                      className={`${verifiedSubTab === 'rejected' ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white border-0 shadow-md' : 'hover:bg-red-50 dark:hover:bg-red-950 border-red-200 dark:border-red-800'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <XCircle className="h-3.5 w-3.5 mr-1.5" />
                       Rejected
-                      <Badge variant="secondary" className="ml-1 text-xs">{rejectedCount}</Badge>
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'rejected' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{rejectedCount}</Badge>
                     </Button>
+                  </div>
                 </div>
               )}
               {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
