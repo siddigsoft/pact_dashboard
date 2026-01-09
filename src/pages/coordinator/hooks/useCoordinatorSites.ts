@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { supabase } from '@/integrations/supabase/client';
@@ -151,7 +151,10 @@ export const useCoordinatorSites = () => {
     fetchCoordinatorSites();
   }, [fetchCoordinatorSites]);
 
-  // Set up realtime subscription for updates
+  // Debounce timer for realtime updates
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Set up realtime subscription for updates with debouncing
   useEffect(() => {
     if (!currentUser?.id) return;
 
@@ -166,14 +169,21 @@ export const useCoordinatorSites = () => {
           filter: `forwarded_to_user_id=eq.${currentUser.id}`,
         },
         () => {
-          // Refetch when changes occur - pass true for background refresh
-          // This prevents the loading spinner from showing during realtime updates
-          fetchCoordinatorSites(true);
+          // Debounce realtime updates to prevent rapid refetches
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+          }
+          debounceTimerRef.current = setTimeout(() => {
+            fetchCoordinatorSites(true);
+          }, 500);
         }
       )
       .subscribe();
 
     return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id, fetchCoordinatorSites]);
