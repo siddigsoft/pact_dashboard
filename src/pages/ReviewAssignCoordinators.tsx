@@ -26,7 +26,7 @@ const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { getMmpById, refreshMMPFiles } = useMMP();
+  const { getMmpById, refreshMMPFiles, fetchSiteEntriesForMMP } = useMMP();
   const { users, currentUser } = useAppContext();
 
   const [mmpFile, setMmpFile] = useState<any>(null);
@@ -83,7 +83,25 @@ const ReviewAssignCoordinators: React.FC = () => {
           return;
         }
 
-        setMmpFile(mmp);
+        // Step 1.5: Fetch site entries on demand (they're not loaded with initial MMP list for performance)
+        let mmpWithEntries = mmp;
+        if (!mmp.siteEntries || mmp.siteEntries.length === 0) {
+          console.log('[ReviewAssignCoordinators] Site entries not loaded, fetching on demand...');
+          try {
+            const entries = await fetchSiteEntriesForMMP(id);
+            mmpWithEntries = { ...mmp, siteEntries: entries };
+            console.log(`[ReviewAssignCoordinators] Loaded ${entries.length} site entries`);
+          } catch (err) {
+            console.error('Failed to fetch site entries:', err);
+            toast({
+              title: "Warning",
+              description: "Could not load site entries. Please refresh the page.",
+              variant: "destructive"
+            });
+          }
+        }
+
+        setMmpFile(mmpWithEntries);
         
         // Step 2: Load forwarded sites from database BEFORE rendering
         // This prevents errors and ensures correct state from the start
