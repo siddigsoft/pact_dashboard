@@ -596,68 +596,13 @@ export const useMMPProvider = () => {
     };
   }, [refreshMMPFiles]);
 
+  // Realtime subscription disabled to prevent unnecessary refreshes
+  // Data refreshes happen only when user performs actions (button clicks, saves, etc.)
+  // This improves performance and reduces UI flashing
   useEffect(() => {
-    let channel: any = null;
-    let debounceTimer: NodeJS.Timeout | null = null;
-    
-    // Debounced refresh to prevent multiple rapid refreshes from realtime events
-    const debouncedRefresh = () => {
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
-      }
-      debounceTimer = setTimeout(() => {
-        refreshMMPFiles();
-      }, 500); // Wait 500ms before refreshing to batch multiple events
-    };
-
-    const setupSubscription = async () => {
-      // Only set up realtime subscription if user is authenticated
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        return; // Don't set up subscription for unauthenticated users
-      }
-
-      channel = supabase
-        .channel('mmp_context_changes')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'mmp_files' },
-          () => {
-            debouncedRefresh();
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'mmp_site_entries' },
-          () => {
-            debouncedRefresh();
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log('✅ MMP context real-time subscription active');
-          } else if (status === 'CHANNEL_ERROR') {
-            // Non-blocking warning - real-time is optional, data still loads normally
-            console.warn('[MMP] Real-time subscription unavailable - data will load but won\'t auto-refresh');
-          } else if (status === 'TIMED_OUT') {
-            console.warn('[MMP] Real-time subscription timed out - using manual refresh');
-          } else {
-            console.log('[MMP] Subscription status:', status);
-          }
-        });
-    };
-
-    setupSubscription();
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
-      }
-    };
-  }, [refreshMMPFiles]);
+    // Log that we're using manual refresh mode
+    console.log('[MMP] Using manual refresh mode - data updates on user actions only');
+  }, []);
 
   const updateMMP = async (id: string, updatedMMP: Partial<MMPFile>): Promise<boolean> => {
     setMMPFiles((prev: MMPFile[]) =>
