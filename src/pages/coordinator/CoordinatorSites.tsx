@@ -4379,118 +4379,140 @@ const CoordinatorSites: React.FC = () => {
 
       {/* Initial Yes/No Prompt for Locality Permits */}
       <Dialog open={localityPermitPromptOpen} onOpenChange={setLocalityPermitPromptOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5 text-purple-600" />
-              Local Permit Requirements
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <p className="text-muted-foreground">
-              Before proceeding to CP Verification, we need to know if any localities require local permits.
+        <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
+          {/* Header with icon */}
+          <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <MapPin className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Local Permit Check</h2>
+                <p className="text-purple-100 text-sm">Before proceeding to CP Verification</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Body content */}
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-muted-foreground text-center">
+              We need to know if any localities in this MMP require local permits for field operations.
             </p>
-            <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
-              <p className="font-medium text-purple-900 dark:text-purple-100 text-center text-lg">
+            
+            {/* Question card */}
+            <div className="bg-muted/50 rounded-lg p-5 text-center">
+              <p className="text-lg font-medium">
                 Do any localities require local permits?
               </p>
             </div>
-            <p className="text-sm text-muted-foreground text-center">
-              If no localities require local permits, all sites will move directly to CP Verification.
-            </p>
+
+            {/* Decision buttons - two clear options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <Button 
+                variant="outline"
+                size="lg"
+                onClick={async () => {
+                  setLocalityPermitPromptOpen(false);
+                  // Mark ALL localities as NOT requiring permits and advance to CP Verification
+                  const allLocalities = localitiesData
+                    .filter((state: any) => state.hasStatePermit)
+                    .flatMap((state: any) => 
+                      state.localities.map((locality: any) => ({
+                        key: `${state.state}|${locality.locality}`,
+                        sites: locality.sites || []
+                      }))
+                    );
+                  
+                  // Set all to not required
+                  const requirements: Record<string, boolean> = {};
+                  allLocalities.forEach(loc => {
+                    requirements[loc.key] = false;
+                  });
+                  setLocalityPermitRequirements(requirements);
+                  setTriageCompleted(true);
+                  
+                  // Advance all sites to permits_attached status
+                  const sitesToAdvance = allLocalities.flatMap(loc => 
+                    loc.sites.filter((site: SiteVisit) => 
+                      site.status === 'Pending' || site.status === 'Dispatched' || 
+                      site.status === 'assigned' || site.status === 'inProgress' || 
+                      site.status === 'in_progress' || site.status === 'New'
+                    )
+                  );
+                  
+                  if (sitesToAdvance.length > 0) {
+                    try {
+                      const updatePromises = sitesToAdvance.map(async (site: SiteVisit) => {
+                        const existingData = (site as any).additional_data || {};
+                        return supabase
+                          .from('mmp_site_entries')
+                          .update({ 
+                            status: 'permits_attached',
+                            additional_data: {
+                              ...existingData,
+                              locality_permit_not_required: true,
+                              locality_permit_triage_date: new Date().toISOString()
+                            }
+                          })
+                          .eq('id', site.id);
+                      });
+                      await Promise.all(updatePromises);
+                      toast({
+                        title: 'Sites Advanced',
+                        description: `${sitesToAdvance.length} sites moved to CP Verification.`,
+                      });
+                      refreshSites();
+                    } catch (err) {
+                      console.error('Error advancing sites:', err);
+                      toast({
+                        title: 'Error',
+                        description: 'Failed to advance sites to CP Verification.',
+                        variant: 'destructive',
+                      });
+                    }
+                  } else {
+                    toast({
+                      title: 'No Sites to Advance',
+                      description: 'No pending sites found to advance to CP Verification.',
+                    });
+                  }
+                }}
+                className="h-auto py-4 flex-col gap-2 border-green-200 hover:border-green-300 hover:bg-green-50 dark:hover:bg-green-900/20"
+                data-testid="button-no-permits-needed"
+              >
+                <CheckCircle className="h-6 w-6 text-green-600" />
+                <span className="font-semibold">No Permits Needed</span>
+                <span className="text-xs text-muted-foreground font-normal">Skip to CP Verification</span>
+              </Button>
+              
+              <Button 
+                size="lg"
+                onClick={() => {
+                  setLocalityPermitPromptOpen(false);
+                  setLocalityTriageDialogOpen(true);
+                }}
+                className="h-auto py-4 flex-col gap-2 bg-purple-600 hover:bg-purple-700"
+                data-testid="button-yes-select-localities"
+              >
+                <MapPin className="h-6 w-6" />
+                <span className="font-semibold">Yes, Some Need Permits</span>
+                <span className="text-xs text-purple-200 font-normal">Select which localities</span>
+              </Button>
+            </div>
           </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+
+          {/* Footer with cancel */}
+          <div className="border-t px-6 py-3 bg-muted/30">
             <Button 
-              variant="outline" 
+              variant="ghost" 
+              size="sm"
               onClick={() => setLocalityPermitPromptOpen(false)}
-              className="w-full sm:w-auto"
+              className="w-full text-muted-foreground"
+              data-testid="button-cancel-permit-prompt"
             >
               Cancel
             </Button>
-            <Button 
-              variant="outline"
-              onClick={async () => {
-                setLocalityPermitPromptOpen(false);
-                // Mark ALL localities as NOT requiring permits and advance to CP Verification
-                const allLocalities = localitiesData
-                  .filter((state: any) => state.hasStatePermit)
-                  .flatMap((state: any) => 
-                    state.localities.map((locality: any) => ({
-                      key: `${state.state}|${locality.locality}`,
-                      sites: locality.sites || []
-                    }))
-                  );
-                
-                // Set all to not required
-                const requirements: Record<string, boolean> = {};
-                allLocalities.forEach(loc => {
-                  requirements[loc.key] = false;
-                });
-                setLocalityPermitRequirements(requirements);
-                setTriageCompleted(true);
-                
-                // Advance all sites to permits_attached status
-                const sitesToAdvance = allLocalities.flatMap(loc => 
-                  loc.sites.filter((site: SiteVisit) => 
-                    site.status === 'Pending' || site.status === 'Dispatched' || 
-                    site.status === 'assigned' || site.status === 'inProgress' || 
-                    site.status === 'in_progress' || site.status === 'New'
-                  )
-                );
-                
-                if (sitesToAdvance.length > 0) {
-                  try {
-                    const updatePromises = sitesToAdvance.map(async (site: SiteVisit) => {
-                      const existingData = (site as any).additional_data || {};
-                      return supabase
-                        .from('mmp_site_entries')
-                        .update({ 
-                          status: 'permits_attached',
-                          additional_data: {
-                            ...existingData,
-                            locality_permit_not_required: true,
-                            locality_permit_triage_date: new Date().toISOString()
-                          }
-                        })
-                        .eq('id', site.id);
-                    });
-                    await Promise.all(updatePromises);
-                    toast({
-                      title: 'Sites Advanced',
-                      description: `${sitesToAdvance.length} sites moved to CP Verification.`,
-                    });
-                    refreshSites();
-                  } catch (err) {
-                    console.error('Error advancing sites:', err);
-                    toast({
-                      title: 'Error',
-                      description: 'Failed to advance sites to CP Verification.',
-                      variant: 'destructive',
-                    });
-                  }
-                } else {
-                  toast({
-                    title: 'No Sites to Advance',
-                    description: 'No pending sites found to advance to CP Verification.',
-                  });
-                }
-              }}
-              className="w-full sm:w-auto bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              No, skip to CP Verification
-            </Button>
-            <Button 
-              onClick={() => {
-                setLocalityPermitPromptOpen(false);
-                setLocalityTriageDialogOpen(true);
-              }}
-              className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700"
-            >
-              <MapPin className="h-4 w-4 mr-2" />
-              Yes, select localities
-            </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
