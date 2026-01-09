@@ -15,6 +15,8 @@ import { PostponementHistoryEntry } from '@/types/mmp/site';
 import { useToast } from '@/hooks/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 
+const SUPERVISOR_ROLES = ['supervisor', 'hub_supervisor', 'fom', 'admin', 'super_admin', 'ict'];
+
 interface PostponementDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -27,13 +29,16 @@ interface PostponementDialogProps {
     visitDateTo?: string;
     mainActivity?: string;
     postponementHistory?: PostponementHistoryEntry[];
+    verificationStarted?: boolean;
   };
   currentUser: {
     id: string;
     full_name?: string;
     name?: string;
+    role?: string;
   };
   onSubmit: (siteEntryId: string, postponement: PostponementHistoryEntry) => Promise<void>;
+  onDirectChange?: (siteEntryId: string, newDate: string, newDateTo?: string, reason?: string) => Promise<void>;
 }
 
 export function PostponementDialog({
@@ -41,7 +46,8 @@ export function PostponementDialog({
   onOpenChange,
   siteEntry,
   currentUser,
-  onSubmit
+  onSubmit,
+  onDirectChange
 }: PostponementDialogProps) {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -54,6 +60,10 @@ export function PostponementDialog({
   const originalDate = siteEntry.visitDate || siteEntry.visitDateFrom;
   const isDateRange = !!(siteEntry.visitDateFrom && siteEntry.visitDateTo);
   const history = siteEntry.postponementHistory || [];
+  
+  const userRole = currentUser.role || '';
+  const canDirectChange = SUPERVISOR_ROLES.includes(userRole);
+  const requiresApproval = !canDirectChange || (siteEntry.verificationStarted && !SUPERVISOR_ROLES.includes(userRole));
 
   const handleSubmit = async () => {
     if (!selectedDate || !reason) {
@@ -76,28 +86,43 @@ export function PostponementDialog({
 
     setIsSubmitting(true);
     try {
-      const postponement: PostponementHistoryEntry = {
-        id: uuidv4(),
-        originalDate: originalDate || new Date().toISOString(),
-        originalDateTo: isDateRange ? siteEntry.visitDateTo : undefined,
-        newDate: selectedDate.toISOString(),
-        newDateTo: isDateRange && selectedEndDate ? selectedEndDate.toISOString() : undefined,
-        isDateRange: isDateRange,
-        reason,
-        reasonDetails: reasonDetails || undefined,
-        requestedBy: currentUser.id,
-        requestedByName: currentUser.full_name || currentUser.name || 'Unknown',
-        requestedAt: new Date().toISOString(),
-        status: 'pending'
-      };
+      if (canDirectChange && onDirectChange) {
+        await onDirectChange(
+          siteEntry.id, 
+          selectedDate.toISOString(),
+          isDateRange && selectedEndDate ? selectedEndDate.toISOString() : undefined,
+          reason
+        );
+        
+        toast({
+          title: 'Visit Date Updated',
+          description: 'The visit date has been changed successfully.',
+          variant: 'default'
+        });
+      } else {
+        const postponement: PostponementHistoryEntry = {
+          id: uuidv4(),
+          originalDate: originalDate || new Date().toISOString(),
+          originalDateTo: isDateRange ? siteEntry.visitDateTo : undefined,
+          newDate: selectedDate.toISOString(),
+          newDateTo: isDateRange && selectedEndDate ? selectedEndDate.toISOString() : undefined,
+          isDateRange: isDateRange,
+          reason,
+          reasonDetails: reasonDetails || undefined,
+          requestedBy: currentUser.id,
+          requestedByName: currentUser.full_name || currentUser.name || 'Unknown',
+          requestedAt: new Date().toISOString(),
+          status: 'pending'
+        };
 
-      await onSubmit(siteEntry.id, postponement);
-      
-      toast({
-        title: 'Postponement Requested',
-        description: 'Your postponement request has been submitted for approval.',
-        variant: 'default'
-      });
+        await onSubmit(siteEntry.id, postponement);
+        
+        toast({
+          title: 'Postponement Requested',
+          description: 'Your postponement request has been submitted for approval.',
+          variant: 'default'
+        });
+      }
       
       onOpenChange(false);
       resetForm();
@@ -141,11 +166,19 @@ export function PostponementDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-primary" />
-            Request Visit Postponement
+            {canDirectChange ? 'Change Visit Date' : 'Request Visit Postponement'}
           </DialogTitle>
           <DialogDescription>
-            Request to change the scheduled visit date for {siteEntry.siteName || siteEntry.siteCode || 'this site'}
+            {canDirectChange 
+              ? `Directly update the visit date for ${siteEntry.siteName || siteEntry.siteCode || 'this site'}`
+              : `Request to change the scheduled visit date for ${siteEntry.siteName || siteEntry.siteCode || 'this site'}. Requires approval.`
+            }
           </DialogDescription>
+          {canDirectChange && (
+            <Badge className="mt-2 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+              Supervisor Access - No Approval Required
+            </Badge>
+          )}
         </DialogHeader>
 
         <div className="space-y-4 py-4">
