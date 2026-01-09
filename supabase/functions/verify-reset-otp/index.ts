@@ -193,21 +193,25 @@ serve(async (req) => {
           const info = await transporter.sendMail(mailOptions)
           console.log(`Password reset email sent successfully to ${email}, messageId: ${info.messageId}`)
           
-          // Log successful email to audit_logs
+          // Log successful email to audit_logs for Email Tracking page
           try {
             await supabase.from('audit_logs').insert({
-              action: 'email_sent',
-              entity_type: 'email',
-              entity_name: 'Password Reset OTP',
-              description: `Password reset code sent to ${email}`,
+              module: 'notification',
+              action: 'send',
+              entity_type: 'otp',
+              entity_id: info.messageId || `otp-${Date.now()}`,
+              entity_name: 'PACT Password Reset Code | رمز إعادة تعيين كلمة المرور',
+              description: `Password reset OTP sent to ${email}`,
               success: true,
               actor_id: String(userData.id),
               actor_name: recipientName,
               metadata: {
                 recipient: email,
-                subject: 'PACT Password Reset Code',
+                subject: 'PACT Password Reset Code | رمز إعادة تعيين كلمة المرور',
                 emailType: 'password_reset',
-                provider: 'IONOS SMTP'
+                messageId: info.messageId,
+                deliveredAt: new Date().toISOString(),
+                source: 'verify-reset-otp-edge-function'
               }
             })
           } catch (logError) {
@@ -217,23 +221,25 @@ serve(async (req) => {
           const errMsg = (emailError as Error)?.message || 'Unknown SMTP error'
           console.error('Email sending error:', errMsg)
           
-          // Log failed email to audit_logs
+          // Log failed email to audit_logs for Email Tracking page
           try {
             await supabase.from('audit_logs').insert({
-              action: 'email_failed',
-              entity_type: 'email',
-              entity_name: 'Password Reset OTP',
-              description: `Failed to send password reset code to ${email}`,
+              module: 'notification',
+              action: 'send',
+              entity_type: 'otp',
+              entity_id: `otp-failed-${Date.now()}`,
+              entity_name: 'PACT Password Reset Code | رمز إعادة تعيين كلمة المرور',
+              description: `Failed to send password reset OTP to ${email}`,
               success: false,
               error_message: errMsg,
               actor_id: String(userData.id),
               actor_name: userData.full_name || 'User',
               metadata: {
                 recipient: email,
-                subject: 'PACT Password Reset Code',
+                subject: 'PACT Password Reset Code | رمز إعادة تعيين كلمة المرور',
                 emailType: 'password_reset',
-                provider: 'IONOS SMTP',
-                error: errMsg
+                errorMessage: errMsg,
+                source: 'verify-reset-otp-edge-function'
               }
             })
           } catch (logError) {
@@ -243,22 +249,25 @@ serve(async (req) => {
       } else {
         console.log(`[DEV MODE] Password reset OTP for ${email}: ${generatedOtp}`)
         
-        // Log missing SMTP config
+        // Log skipped email to audit_logs for Email Tracking page
         try {
           await supabase.from('audit_logs').insert({
-            action: 'email_skipped',
-            entity_type: 'email',
-            entity_name: 'Password Reset OTP',
-            description: `SMTP not configured - password reset code for ${email} not sent`,
+            module: 'notification',
+            action: 'send',
+            entity_type: 'otp',
+            entity_id: `otp-skipped-${Date.now()}`,
+            entity_name: 'PACT Password Reset Code | رمز إعادة تعيين كلمة المرور',
+            description: `SMTP not configured - password reset OTP for ${email} not sent`,
             success: false,
             error_message: 'SMTP credentials not configured in Edge Function secrets',
             actor_id: String(userData.id),
             actor_name: userData.full_name || 'User',
             metadata: {
               recipient: email,
-              subject: 'PACT Password Reset Code',
+              subject: 'PACT Password Reset Code | رمز إعادة تعيين كلمة المرور',
               emailType: 'password_reset',
-              reason: 'missing_smtp_config'
+              reason: 'missing_smtp_config',
+              source: 'verify-reset-otp-edge-function'
             }
           })
         } catch (logError) {
