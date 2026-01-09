@@ -28,7 +28,9 @@ import { LocalityRequirementTriageDialog } from '@/components/mmp/LocalityRequir
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { useGestures } from '@/hooks/use-gestures'; // Assuming this hook exists for swipe gestures
 import { useLocation } from '@/context/location/LocationContext';
-import { useCoordinatorSites, type SiteVisit } from './hooks/useCoordinatorSites';
+import { useCoordinatorSites, type SiteVisit, type SiteEntryCounts } from './hooks/useCoordinatorSites';
+import { DataFreshnessBadge } from '@/components/realtime/DataFreshnessBadge';
+import { FileCheck as FileCheck2, ListChecks, BarChart3, Shield } from 'lucide-react';
 
 // Predefined options for dropdowns
 const HUB_OFFICE_OPTIONS = [
@@ -421,7 +423,7 @@ const CoordinatorSites: React.FC = () => {
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const { hubs, states, localities, hubStates, loading: loadingLocations } = useLocation();
-  const { coordinatorSites, loading: contextLoading, refetch: refreshSites } = useCoordinatorSites();
+  const { coordinatorSites, loading: contextLoading, refetch: refreshSites, siteCounts } = useCoordinatorSites();
   
   // Parallel refresh helper for speed optimization
   const refreshAll = useCallback(async () => {
@@ -793,15 +795,15 @@ const CoordinatorSites: React.FC = () => {
     };
   }, [coordinatorSites]);
 
-  // Sync badge counts to state (for backward compatibility with existing code)
+  // Sync badge counts to state from fast counts (loaded separately for speed)
   useEffect(() => {
-    setNewSitesCount(badgeCounts.new);
-    setPermitsAttachedCount(badgeCounts.permitsAttached);
-    setVerifiedSitesCount(badgeCounts.verified);
-    setApprovedSitesCount(badgeCounts.approved);
-    setCompletedSitesCount(badgeCounts.completed);
-    setRejectedSitesCount(badgeCounts.rejected);
-  }, [badgeCounts]);
+    setNewSitesCount(siteCounts.new);
+    setPermitsAttachedCount(siteCounts.permitsAttached);
+    setVerifiedSitesCount(siteCounts.verified);
+    setApprovedSitesCount(siteCounts.approved);
+    setCompletedSitesCount(siteCounts.completed);
+    setRejectedSitesCount(siteCounts.rejected);
+  }, [siteCounts]);
 
   // Reset search and pagination when tab changes
   useEffect(() => {
@@ -2853,82 +2855,110 @@ const CoordinatorSites: React.FC = () => {
 
   if (contextLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading sites...</p>
+      <div className="space-y-6 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-6 px-2 sm:px-4 md:px-8">
+        {/* Skeleton Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 rounded-lg p-6 text-white shadow-lg animate-pulse">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-white/20 rounded-full h-14 w-14"></div>
+            <div className="space-y-2">
+              <div className="h-6 bg-white/20 rounded w-48"></div>
+              <div className="h-4 bg-white/20 rounded w-64"></div>
+            </div>
+          </div>
+        </div>
+        {/* Skeleton Tabs */}
+        <div className="flex gap-2 overflow-x-auto">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-10 w-24 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse"></div>
+          ))}
+        </div>
+        {/* Skeleton Content */}
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 bg-white dark:bg-slate-800 rounded-lg shadow animate-pulse"></div>
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8"> {/* Adjusted padding */}
-      <div className="mb-4 sm:mb-6 flex items-center justify-between bg-blue-600 text-white p-4 sm:p-5 rounded-2xl shadow"> {/* Responsive padding */}
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Site Verification</h1>
-          <p className="mt-1 text-blue-100/90 text-sm sm:text-base">Review and verify sites assigned to you</p>
+    <div className="space-y-6 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-6 px-2 sm:px-4 md:px-8">
+      {/* Blue Gradient Header Section - matching MMP Management */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 rounded-lg p-6 text-white shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-white/20 rounded-full">
+              <Shield className="h-8 w-8" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Site Verification</h1>
+              <p className="text-blue-100 mt-1">
+                Review and verify sites assigned to you
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => navigate(-1)}
+            className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-2"
+            data-testid="button-back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
         </div>
-        <Button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 bg-white text-blue-600 hover:bg-white/90 min-h-[44px] px-3 sm:px-4" // Touch-friendly
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
+        <div className="mt-4 flex flex-wrap gap-3 text-sm">
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <ListChecks className="h-4 w-4" />
+            <span>Permit Verification</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <FileCheck2 className="h-4 w-4" />
+            <span>CP Confirmation</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <BarChart3 className="h-4 w-4" />
+            <span>Status Tracking</span>
+          </div>
+          <DataFreshnessBadge className="bg-white/10 rounded-full px-3 py-1" />
+        </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 gap-1 h-auto p-1">
-          <TabsTrigger value="new" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <div className="flex items-center gap-1">
-              <span>New</span>
-              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
-                {newSitesCount}
-              </Badge>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="permits_attached" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <div className="flex items-center gap-1">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="overflow-x-auto mb-6">
+          <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/90 to-blue-900/90 border border-blue-500/40 backdrop-blur-xl p-1.5 min-h-[48px] rounded-xl shadow-lg">
+            <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+              <Clock className="h-4 w-4" />
+              <span>New Sites</span>
+              <Badge className="bg-emerald-400/30 text-white border-0">{newSitesCount}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="permits_attached" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+              <FileCheck className="h-4 w-4" />
               <span>CP Verification</span>
-              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
-                {permitsAttachedCount}
-              </Badge>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="verified" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <div className="flex items-center gap-1">
+              <Badge className="bg-amber-400/30 text-white border-0">{permitsAttachedCount}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+              <CheckCircle className="h-4 w-4" />
               <span>Verified</span>
-              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
-                {verifiedSitesCount}
-              </Badge>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="approved" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <div className="flex items-center gap-1">
+              <Badge className="bg-violet-400/30 text-white border-0">{verifiedSitesCount}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="approved" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-green-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+              <CheckSquare className="h-4 w-4" />
               <span>Approved</span>
-              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
-                {approvedSitesCount}
-              </Badge>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="completed" className="flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <div className="flex items-center gap-1">
+              <Badge className="bg-green-400/30 text-white border-0">{approvedSitesCount}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+              <Play className="h-4 w-4" />
               <span>Completed</span>
-              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
-                {completedSitesCount}
-              </Badge>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="rejected" className={`flex flex-col sm:flex-col items-center justify-center gap-0.5 sm:gap-1 rounded-md py-1.5 sm:py-2 px-1 sm:px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'} text-xs sm:text-sm`}>
-            <div className="flex items-center gap-1">
+              <Badge className="bg-cyan-400/30 text-white border-0">{completedSitesCount}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="rejected" className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-md min-h-[40px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap rounded-lg px-4 text-blue-100 hover:text-white transition-all">
+              <XCircle className="h-4 w-4" />
               <span>Rejected</span>
-              <Badge variant="secondary" className="text-xs px-1 py-0.5 h-4 min-w-[16px] flex items-center justify-center">
-                {rejectedSitesCount}
-              </Badge>
-            </div>
-          </TabsTrigger>
-        </TabsList>
+              <Badge className={`${rejectedSitesCount > 0 ? 'bg-red-400/50' : 'bg-red-400/30'} text-white border-0`}>{rejectedSitesCount}</Badge>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="new" className="space-y-3 sm:space-y-4"> {/* Adjusted spacing */}
           <Tabs value={newSitesSubTab} onValueChange={setNewSitesSubTab} className="space-y-4">
