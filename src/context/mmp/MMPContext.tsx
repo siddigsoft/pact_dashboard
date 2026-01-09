@@ -503,95 +503,45 @@ export const useMMPProvider = () => {
     refreshMMPFiles();
   }, []);
 
-  // Automatic background refresh for mobile and when app becomes visible
+  // Automatic background refresh DISABLED to prevent excessive re-renders and UI blinking
+  // Data now refreshes only on user actions (button clicks, page loads, saves, etc.)
+  // This improves performance significantly by avoiding the "Loading MMP file..." flash
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-    let visibilityTimeout: NodeJS.Timeout | null = null;
     let appStateListener: any = null;
 
-    const handleVisibilityChange = () => {
-      // When app becomes visible, refresh after a short delay
-      if (document.visibilityState === 'visible') {
-        // Clear any pending timeout
-        if (visibilityTimeout) {
-          clearTimeout(visibilityTimeout);
-        }
-        // Refresh after 500ms to avoid rapid refreshes when switching tabs quickly
-        visibilityTimeout = setTimeout(() => {
-          if (navigator.onLine) {
-            refreshMMPFiles();
-          }
-        }, 500);
-      }
-    };
-
     const handleOnline = () => {
-      // When coming back online, refresh immediately
+      // When coming back online after being offline, refresh once
       refreshMMPFiles();
     };
 
-    // Set up periodic background refresh (every 30 seconds when app is visible)
-    const startPeriodicRefresh = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-      
-      intervalId = setInterval(() => {
-        // Only refresh if:
-        // 1. App is visible
-        // 2. Online
-        // 3. User is authenticated (checked inside refreshMMPFiles)
-        if (document.visibilityState === 'visible' && navigator.onLine) {
-          refreshMMPFiles();
-        }
-      }, 30000); // 30 seconds
-    };
-
-    // Listen for visibility changes (app becoming visible/hidden)
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Listen for online/offline status
+    // Listen for online status to refresh after reconnecting
     window.addEventListener('online', handleOnline);
 
-    // For native mobile apps (Capacitor), also listen to app state changes
+    // For native mobile apps (Capacitor), listen to app becoming active after being backgrounded
     const setupAppStateListener = async () => {
       try {
-        // Check if we're in a Capacitor app
         if (typeof (window as any).Capacitor !== 'undefined') {
           const { App } = await import('@capacitor/app');
           
           appStateListener = await App.addListener('appStateChange', ({ isActive }) => {
             if (isActive && navigator.onLine) {
-              // App became active, refresh data
-              setTimeout(() => {
-                refreshMMPFiles();
-              }, 500);
+              // Only refresh when app returns from background (mobile)
+              refreshMMPFiles();
             }
           });
         }
       } catch (error) {
-        // Capacitor not available or App plugin not installed, that's okay
-        console.debug('Capacitor App plugin not available, using web visibility API only');
+        console.debug('Capacitor App plugin not available');
       }
     };
 
     setupAppStateListener();
 
-    // Start periodic refresh
-    startPeriodicRefresh();
-
     // Cleanup
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-      if (visibilityTimeout) {
-        clearTimeout(visibilityTimeout);
-      }
       if (appStateListener) {
         appStateListener.remove();
       }
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
     };
   }, [refreshMMPFiles]);
