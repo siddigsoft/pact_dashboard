@@ -2087,11 +2087,6 @@ const CoordinatorSites: React.FC = () => {
   };
 
   const handleBulkLocalityVerify = async () => {
-    console.log('[BulkLocalityVerify] Starting verification...');
-    console.log('[BulkLocalityVerify] selectedLocalityForBulkVerify:', selectedLocalityForBulkVerify);
-    console.log('[BulkLocalityVerify] bulkLocalityVisitDateObj:', bulkLocalityVisitDateObj);
-    console.log('[BulkLocalityVerify] hasBulkDMActivities:', hasBulkDMActivities);
-    
     if (!selectedLocalityForBulkVerify) {
       toast({ title: 'Validation Error', description: 'No locality selected.', variant: 'destructive' });
       return;
@@ -2100,9 +2095,6 @@ const CoordinatorSites: React.FC = () => {
     // Parse state and locality from localityKey
     const [stateName, localityName] = selectedLocalityForBulkVerify.localityKey.split('|');
     const hubOffice = selectedLocalityForBulkVerify.sites[0]?.hub_office;
-    
-    console.log('[BulkLocalityVerify] stateName:', stateName, 'localityName:', localityName);
-    console.log('[BulkLocalityVerify] sites count:', selectedLocalityForBulkVerify.sites.length);
 
     // Validate inputs based on DM presence
     if (hasBulkDMActivities) {
@@ -2134,29 +2126,32 @@ const CoordinatorSites: React.FC = () => {
       const visitDateString = formatDateLocal(bulkLocalityVisitDateObj);
       const startStr = formatDateLocal(bulkExpectedStartDate);
       const endStr = formatDateLocal(bulkExpectedEndDate);
+      const verifiedAt = new Date().toISOString();
+      const verifiedBy = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
 
-      // Update each site individually to persist expected_visit in additional_data
-      for (const site of localitySites) {
+      // Batch update all sites in parallel for speed
+      const updatePromises = localitySites.map(async (site) => {
         const a = `${(site as any)?.main_activity || ''} ${(site as any)?.activity || ''}`.toUpperCase();
         const isDM = a.includes('GFA') || a.includes('CBT') || a.includes('EBSFP');
         const expected_visit = isDM
           ? { type: 'range', start_date: startStr, end_date: endStr, expected_date: visitDateString }
           : { type: 'single', expected_date: visitDateString };
 
-        const updateData: any = {
-          status: 'verified',
-          verified_at: new Date().toISOString(),
-          verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
-          visit_date: visitDateString,
-          additional_data: { ...((site as any)?.additional_data || {}), expected_visit }
-        };
-
-        const { error } = await supabase
+        return supabase
           .from('mmp_site_entries')
-          .update(updateData)
+          .update({
+            status: 'verified',
+            verified_at: verifiedAt,
+            verified_by: verifiedBy,
+            visit_date: visitDateString,
+            additional_data: { ...((site as any)?.additional_data || {}), expected_visit }
+          })
           .eq('id', site.id);
-        if (error) throw error;
-      }
+      });
+
+      const results = await Promise.all(updatePromises);
+      const firstError = results.find(r => r.error)?.error;
+      if (firstError) throw firstError;
 
       // Mark MMP as coordinator-verified when first site is verified
       // Get current MMP workflow
@@ -2232,10 +2227,10 @@ const CoordinatorSites: React.FC = () => {
       await refreshMMPFiles();
       await refreshSites();
     } catch (error) {
-      console.error('[BulkLocalityVerify] Error verifying locality sites:', error);
+      console.error('Error verifying locality sites:', error);
       toast({
         title: 'Error',
-        description: `Failed to verify sites: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        description: 'Failed to verify sites. Please try again.',
         variant: 'destructive'
       });
     }
