@@ -11,10 +11,10 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
       try {
         const timestamp = new Date().toISOString();
         
-        // First, fetch the current MMP to get existing comprehensive_verification
+        // First, fetch the current MMP to get existing workflow (which contains comprehensiveVerification)
         const { data: currentMmp, error: fetchError } = await supabase
           .from('mmp_files')
-          .select('comprehensive_verification')
+          .select('workflow')
           .eq('id', id)
           .single();
 
@@ -22,7 +22,8 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
           console.error('Error fetching current MMP:', fetchError);
         }
 
-        const existingVerification = (currentMmp?.comprehensive_verification as any) || {};
+        const existingWorkflow = (currentMmp?.workflow as any) || {};
+        const existingVerification = existingWorkflow.comprehensiveVerification || {};
         const existingSystem = existingVerification.systemValidation || {};
         const existingContent = existingVerification.contentVerification || {};
         const existingCp = existingVerification.cpVerification || {};
@@ -73,15 +74,22 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
           }
         };
 
+        // Merge comprehensiveVerification into workflow JSONB
+        const updatedWorkflow = {
+          ...existingWorkflow,
+          comprehensiveVerification,
+          verifiedBy,
+          verifiedByName: verifiedByName || 'Unknown',
+          verifiedAt: timestamp
+        };
+
         // Update the MMP file status to verified
-        // Use snake_case column names to match existing schema
+        // Store verification data inside workflow JSONB since there's no separate column
         const { error: mmpError } = await supabase
           .from('mmp_files')
           .update({
             status: 'verified',
-            verified_by: verifiedBy,
-            verified_at: timestamp,
-            comprehensive_verification: comprehensiveVerification,
+            workflow: updatedWorkflow,
             updated_at: timestamp,
           })
           .eq('id', id);
