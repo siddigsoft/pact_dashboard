@@ -136,6 +136,12 @@ const MMPDetailView = () => {
     ? mmpFile.siteEntries
     : siteEntriesDB;
 
+  // Create merged mmpFile with siteEntries for child components
+  const mmpFileWithEntries = useMemo(() => {
+    if (!mmpFile) return null;
+    return { ...mmpFile, siteEntries };
+  }, [mmpFile, siteEntries]);
+
   useEffect(() => {
     const loadSiteEntries = async () => {
       if (!id) return;
@@ -355,7 +361,7 @@ const MMPDetailView = () => {
         {/* Left Column - Main Overview */}
         <div className="xl:col-span-5 space-y-6">
           <MMPOverviewCard 
-            mmpFile={mmpFile} 
+            mmpFile={mmpFileWithEntries} 
             siteEntries={siteEntries}
             onProceedToVerification={handleProceedToVerification}
             onEditMMP={handleEditMMP}
@@ -438,7 +444,7 @@ const MMPDetailView = () => {
           />
           
           <MMPSiteInformation 
-            mmpFile={mmpFile} 
+            mmpFile={mmpFileWithEntries} 
             showVerificationButton={false} 
           />
         </div>
