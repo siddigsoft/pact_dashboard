@@ -113,11 +113,33 @@ export const useCoordinatorSites = () => {
       }
       setError(null);
 
-      // Fetch site entries directly from database where forwarded_to_user_id matches current user
+      // OPTIMIZATION: Fetch only essential columns for faster initial load
+      // Select specific fields instead of * for better performance
       let query = supabase
         .from('mmp_site_entries')
         .select(`
-          *,
+          id,
+          site_name,
+          site_code,
+          status,
+          state,
+          locality,
+          main_activity,
+          activity_at_site,
+          visit_date,
+          comments,
+          mmp_file_id,
+          hub_office,
+          cp_name,
+          monitoring_by,
+          survey_tool,
+          use_market_diversion,
+          use_warehouse_monitoring,
+          verified_at,
+          verified_by,
+          verification_notes,
+          forwarded_at,
+          additional_data,
           mmp_files!inner (
             id,
             name,
