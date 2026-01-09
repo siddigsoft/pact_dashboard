@@ -62,6 +62,15 @@ const MMPDetailView = () => {
   const mmpFile = id ? getMmpById(id) : undefined;
   
   useEffect(() => {
+    // If mmpFile is found, immediately stop loading
+    if (mmpFile) {
+      setLoading(false);
+      setNotFound(false);
+      return;
+    }
+    
+    // Only wait for context to load if no mmpFile yet
+    // Give the context 3 seconds to load before showing not found
     const timer = setTimeout(() => {
       if (!mmpFile && id) {
         setNotFound(true);
@@ -77,7 +86,7 @@ const MMPDetailView = () => {
         });
       }
       setLoading(false);
-    }, 1000);
+    }, 3000);
     
     return () => clearTimeout(timer);
   }, [id, mmpFile, toast]);
