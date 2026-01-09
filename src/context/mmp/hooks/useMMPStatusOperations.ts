@@ -5,6 +5,162 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStateAction<MMPFile[]>>) => {
+  // Verify MMP - marks the MMP as verified after FOM/Admin review
+  const verifyMMP = useCallback(
+    async (id: string, verifiedBy: string, verifiedByName?: string) => {
+      try {
+        const timestamp = new Date().toISOString();
+        
+        // First, fetch the current MMP to get existing comprehensive_verification
+        const { data: currentMmp, error: fetchError } = await supabase
+          .from('mmp_files')
+          .select('comprehensive_verification')
+          .eq('id', id)
+          .single();
+
+        if (fetchError) {
+          console.error('Error fetching current MMP:', fetchError);
+        }
+
+        const existingVerification = (currentMmp?.comprehensive_verification as any) || {};
+        const existingSystem = existingVerification.systemValidation || {};
+        const existingContent = existingVerification.contentVerification || {};
+        const existingCp = existingVerification.cpVerification || {};
+        const existingPermit = existingVerification.permitVerification || {};
+        
+        // Build comprehensive verification by deeply merging with existing data
+        // Preserve all existing nested properties while marking verification as complete
+        const comprehensiveVerification = {
+          ...existingVerification,
+          overallStatus: 'complete',
+          canProceedToApproval: true,
+          verified_by: verifiedBy,
+          verified_by_name: verifiedByName || 'Unknown',
+          verified_at: timestamp,
+          lastUpdated: timestamp,
+          updatedBy: verifiedByName || 'Unknown',
+          systemValidation: { 
+            ...existingSystem,
+            status: 'complete',
+            fileIntegrity: existingSystem.fileIntegrity ?? true,
+            noDuplicates: existingSystem.noDuplicates ?? true,
+            compliantWithRequirements: existingSystem.compliantWithRequirements ?? true,
+            entryProcessingComplete: existingSystem.entryProcessingComplete ?? true
+          },
+          contentVerification: { 
+            ...existingContent,
+            status: 'complete',
+            fileReviewed: existingContent.fileReviewed ?? true,
+            contentValidated: existingContent.contentValidated ?? true,
+            verifiedBy: existingContent.verifiedBy || verifiedBy,
+            verifiedAt: existingContent.verifiedAt || timestamp,
+            notes: existingContent.notes || 'Verified during MMP verification'
+          },
+          cpVerification: { 
+            ...existingCp,
+            verificationStatus: 'complete',
+            verifiedBy: existingCp.verifiedBy || verifiedBy,
+            verifiedAt: existingCp.verifiedAt || timestamp
+          },
+          permitVerification: { 
+            ...existingPermit,
+            status: 'complete',
+            verifiedBy: existingPermit.verifiedBy || verifiedBy,
+            verifiedAt: existingPermit.verifiedAt || timestamp,
+            completionPercentage: 100,
+            // Preserve the permits array - this is critical
+            permits: existingPermit.permits || []
+          }
+        };
+
+        // Update the MMP file status to verified
+        // Use snake_case column names to match existing schema
+        const { error: mmpError } = await supabase
+          .from('mmp_files')
+          .update({
+            status: 'verified',
+            verified_by: verifiedBy,
+            verified_at: timestamp,
+            comprehensive_verification: comprehensiveVerification,
+            updated_at: timestamp,
+          })
+          .eq('id', id);
+
+        if (mmpError) {
+          console.error('Supabase verify MMP error:', mmpError);
+          toast.error('Database update failed');
+          throw mmpError;
+        }
+
+        // Update all forwarded site entries to 'verified' status
+        const { error: sitesError } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            status: 'verified',
+            verified_by: verifiedBy,
+            verified_at: timestamp,
+            updated_at: timestamp,
+          })
+          .eq('mmp_file_id', id)
+          .in('status', ['pending', 'dispatched', 'assigned', 'in_progress', 'forwarded', 'permits_attached']);
+
+        if (sitesError) {
+          console.error('Error updating site entries to verified:', sitesError);
+          // Don't throw - MMP is already verified, just log
+        }
+
+        // Update local state with full verification metadata
+        // Use type assertion since we're setting complete status which satisfies the verification requirements
+        setMMPFiles((prev: MMPFile[]) =>
+          (prev || []).map((mmp) =>
+            mmp.id === id
+              ? { 
+                  ...mmp, 
+                  status: 'verified', 
+                  verifiedBy, 
+                  verifiedAt: timestamp,
+                  comprehensiveVerification: {
+                    ...mmp.comprehensiveVerification,
+                    overallStatus: 'complete',
+                    canProceedToApproval: true,
+                    verified_by: verifiedBy,
+                    verified_by_name: verifiedByName || 'Unknown',
+                    verified_at: timestamp,
+                    systemValidation: { 
+                      ...(mmp.comprehensiveVerification?.systemValidation || {}),
+                      status: 'complete'
+                    },
+                    contentVerification: { 
+                      ...(mmp.comprehensiveVerification?.contentVerification || {}),
+                      status: 'complete',
+                      fileReviewed: true,
+                      contentValidated: true
+                    },
+                    cpVerification: { 
+                      ...(mmp.comprehensiveVerification?.cpVerification || {}),
+                      verificationStatus: 'complete'
+                    },
+                    permitVerification: { 
+                      ...(mmp.comprehensiveVerification?.permitVerification || {}),
+                      status: 'complete',
+                      permits: mmp.comprehensiveVerification?.permitVerification?.permits || []
+                    }
+                  }
+                } as MMPFile
+              : mmp
+          )
+        );
+
+        toast.success('MMP verified successfully! It can now proceed to approval and costing.');
+      } catch (error) {
+        console.error('Error verifying MMP file:', error);
+        toast.error('Failed to verify MMP file');
+        throw error;
+      }
+    },
+    [setMMPFiles]
+  );
+
   const archiveMMP = useCallback(
     async (id: string, archivedBy: string) => {
       try {
@@ -128,6 +284,7 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
   );
 
   return {
+    verifyMMP,
     archiveMMP,
     approveMMP,
     rejectMMP,

@@ -285,6 +285,7 @@ const MMPContext = createContext<MMPContextType>({
   getMMPById: () => undefined,
   getMmpById: () => undefined,
   getPermitsByMmpId: async () => undefined,
+  verifyMMP: async () => {},
   archiveMMP: async () => {},
   approveMMP: async () => {},
   rejectMMP: async () => {},
@@ -316,7 +317,7 @@ export const useMMPProvider = () => {
     deleteMMPFile,
   } = useMMPOperations(mmpFiles, setMMPFiles);
 
-  const { archiveMMP, approveMMP, rejectMMP } = useMMPStatusOperations(setMMPFiles);
+  const { verifyMMP, archiveMMP, approveMMP, rejectMMP } = useMMPStatusOperations(setMMPFiles);
   const { updateMMPVersion } = useMMPVersioning(setMMPFiles);
   const { uploadMMP } = useMMPUpload(addMMPFile);
 
@@ -1055,6 +1056,7 @@ export const useMMPProvider = () => {
     getMmpById,
     getMMPById: getMmpById,
     getPermitsByMmpId,
+    verifyMMP,
     archiveMMP,
     approveMMP,
     rejectMMP,
