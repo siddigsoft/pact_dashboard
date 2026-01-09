@@ -38,12 +38,14 @@ export const useCoordinatorSites = () => {
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [coordinatorSites, setCoordinatorSites] = useState<SiteVisit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCoordinatorSites = useCallback(async () => {
+  const fetchCoordinatorSites = useCallback(async (isBackgroundRefresh = false) => {
     if (!currentUser?.id) {
       setCoordinatorSites([]);
       setLoading(false);
+      setInitialLoadComplete(true);
       return;
     }
 
@@ -51,11 +53,15 @@ export const useCoordinatorSites = () => {
     if (!isAdminOrSuperUser && userProjectIds.length === 0) {
       setCoordinatorSites([]);
       setLoading(false);
+      setInitialLoadComplete(true);
       return;
     }
 
     try {
-      setLoading(true);
+      // Only show loading spinner for initial load, not background refreshes
+      if (!isBackgroundRefresh && !initialLoadComplete) {
+        setLoading(true);
+      }
       setError(null);
 
       // Fetch site entries directly from database where forwarded_to_user_id matches current user
@@ -136,8 +142,9 @@ export const useCoordinatorSites = () => {
       setCoordinatorSites([]);
     } finally {
       setLoading(false);
+      setInitialLoadComplete(true);
     }
-  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser]);
+  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser, initialLoadComplete]);
 
   // Initial fetch
   useEffect(() => {
@@ -159,8 +166,9 @@ export const useCoordinatorSites = () => {
           filter: `forwarded_to_user_id=eq.${currentUser.id}`,
         },
         () => {
-          // Refetch when changes occur
-          fetchCoordinatorSites();
+          // Refetch when changes occur - pass true for background refresh
+          // This prevents the loading spinner from showing during realtime updates
+          fetchCoordinatorSites(true);
         }
       )
       .subscribe();
