@@ -64,6 +64,12 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, featurin
     - **Integration:** Called during dispatch before site assignment, using normalized state/locality names
     - **GPS proximity:** Detects neighboring localities using GPS coordinates from sites registry
     - **Limitations:** Effectiveness depends on data quality; malformed state/locality IDs may result in fallback values that don't match collector assignments
+*   **Flexible Locality Permit Requirement Workflow:** Streamlined locality permit verification process (`src/components/mmp/LocalityRequirementTriageDialog.tsx`, `src/pages/coordinator/CoordinatorSites.tsx`):
+    - **Upfront locality triage:** Before permit upload, coordinators specify which localities require local permits via a dialog listing all localities with site counts
+    - **Smart filtering:** Only localities marked as "required" appear in the Locality Permit tab after triage
+    - **Auto-advancement:** Sites in localities marked as "not required" are automatically moved to CP Verification status with preserved metadata
+    - **Metadata preservation:** Auto-advance logic merges new flags (locality_permit_not_required, locality_permit_triage_date) with existing additional_data
+    - **Re-assessment support:** Coordinators can update permit requirements at any time via "Update Requirements" button
 
 ### System Design Choices
 The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.
