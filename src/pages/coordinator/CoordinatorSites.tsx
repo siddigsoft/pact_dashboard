@@ -934,18 +934,18 @@ const CoordinatorSites: React.FC = () => {
       .flatMap((state: any) => state.localities)
       .filter((locality: any) => !locality.hasPermit)
       .filter((locality: any) => {
-        return locality.sites.some((site: SiteVisit) => 
-          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
-          site.status === 'assigned' || site.status === 'inProgress' || 
-          site.status === 'in_progress'
-        );
+        const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
+        return locality.sites.some((site: SiteVisit) => {
+          const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
+          return validStatuses.includes(status);
+        });
       })
       .reduce((total: number, locality: any) => {
-        const pendingSites = locality.sites.filter((site: SiteVisit) => 
-          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
-          site.status === 'assigned' || site.status === 'inProgress' || 
-          site.status === 'in_progress'
-        );
+        const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
+        const pendingSites = locality.sites.filter((site: SiteVisit) => {
+          const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
+          return validStatuses.includes(status);
+        });
         return total + pendingSites.length;
       }, 0);
 
@@ -3050,12 +3050,12 @@ const CoordinatorSites: React.FC = () => {
                       )
                       .filter((locality: any) => !locality.hasPermit) // Only show localities without local permits
                       .filter((locality: any) => {
-                        // Only show localities that have pending sites
-                        return locality.sites.some((site: SiteVisit) => 
-                          site.status === 'New' || site.status === 'Pending' || site.status === 'Dispatched' || 
-                          site.status === 'assigned' || site.status === 'inProgress' || 
-                          site.status === 'in_progress'
-                        );
+                        // Only show localities that have pending sites (case-insensitive)
+                        const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
+                        return locality.sites.some((site: SiteVisit) => {
+                          const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
+                          return validStatuses.includes(status);
+                        });
                       });
                     
                     // If triage completed, filter to only show localities marked as requiring permits
@@ -4432,13 +4432,21 @@ const CoordinatorSites: React.FC = () => {
                   setTriageCompleted(true);
                   
                   // Advance all sites to permits_attached status
+                  // Use case-insensitive matching for status
+                  const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
                   const sitesToAdvance = allLocalities.flatMap(loc => 
-                    loc.sites.filter((site: SiteVisit) => 
-                      site.status === 'Pending' || site.status === 'Dispatched' || 
-                      site.status === 'assigned' || site.status === 'inProgress' || 
-                      site.status === 'in_progress' || site.status === 'New'
-                    )
+                    loc.sites.filter((site: SiteVisit) => {
+                      const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
+                      return validStatuses.includes(status);
+                    })
                   );
+                  
+                  console.log('[LocalPermitCheck] All localities:', allLocalities.length);
+                  console.log('[LocalPermitCheck] Sites to advance:', sitesToAdvance.length);
+                  if (sitesToAdvance.length === 0 && allLocalities.length > 0) {
+                    const allSites = allLocalities.flatMap(loc => loc.sites);
+                    console.log('[LocalPermitCheck] All sites statuses:', allSites.map(s => s.status));
+                  }
                   
                   if (sitesToAdvance.length > 0) {
                     try {
