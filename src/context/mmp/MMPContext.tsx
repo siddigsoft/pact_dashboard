@@ -288,8 +288,8 @@ const MMPContext = createContext<MMPContextType>({
   uploadMMP: async () => ({ success: false }),
   updateMMP: async () => false,
   updateMMPVersion: async () => false,
-  deleteMMP: () => {},
-  restoreMMP: () => {},
+  deleteMMP: async () => false,
+  restoreMMP: async () => false,
   resetMMP: async () => false,
   attachPermitsToMMP: async () => {},
   refreshMMPFiles: async () => {},
@@ -598,6 +598,17 @@ export const useMMPProvider = () => {
 
   useEffect(() => {
     let channel: any = null;
+    let debounceTimer: NodeJS.Timeout | null = null;
+    
+    // Debounced refresh to prevent multiple rapid refreshes from realtime events
+    const debouncedRefresh = () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = setTimeout(() => {
+        refreshMMPFiles();
+      }, 500); // Wait 500ms before refreshing to batch multiple events
+    };
 
     const setupSubscription = async () => {
       // Only set up realtime subscription if user is authenticated
@@ -612,14 +623,14 @@ export const useMMPProvider = () => {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'mmp_files' },
           () => {
-            refreshMMPFiles();
+            debouncedRefresh();
           }
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'mmp_site_entries' },
           () => {
-            refreshMMPFiles();
+            debouncedRefresh();
           }
         )
         .subscribe((status) => {
@@ -641,6 +652,9 @@ export const useMMPProvider = () => {
     return () => {
       if (channel) {
         supabase.removeChannel(channel);
+      }
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
       }
     };
   }, [refreshMMPFiles]);
