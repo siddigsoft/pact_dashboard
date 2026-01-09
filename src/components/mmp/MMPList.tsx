@@ -161,20 +161,28 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
     }
   };
 
-  // Check if MMP can be verified (pending and forwarded to FOMs)
+  // Check if MMP can be verified (forwarded to FOMs/coordinators and not yet verified)
   // FOMs can verify MMPs they are assigned to, admins can verify any forwarded MMP
   const canVerifyMMP = (mmp: MMPFile) => {
     const workflow = mmp.workflow as any;
-    const isForwarded = workflow?.forwardedToFomIds?.length > 0;
-    const isMmpPending = mmp.status === 'pending';
+    const isForwarded = workflow?.forwardedToFomIds?.length > 0 || 
+                        workflow?.forwardedToCoordinatorIds?.length > 0;
+    
+    // MMP is verifiable if it's in a pre-verified state
+    // Accept pending, forwarded_to_fom, forwarded_to_coordinator, cp_verified statuses
+    const verifiableStatuses = ['pending', 'forwarded_to_fom', 'forwarded_to_coordinator', 'cp_verified'];
+    const isVerifiable = verifiableStatuses.includes(mmp.status);
+    
+    // Already verified or approved - can't verify again
+    const alreadyVerified = mmp.status === 'verified' || mmp.status === 'approved';
     
     // FOMs can verify if they are in the forwarded list
     const isFomAssigned = isFOM && workflow?.forwardedToFomIds?.includes(currentUser?.id);
     
-    // Admins/Super Admins/ICT can verify any forwarded pending MMP
+    // Admins/Super Admins/ICT can verify any forwarded MMP
     const isAdminRole = isSuperAdmin || isAdmin || isICT;
     
-    return isMmpPending && isForwarded && (isAdminRole || isFomAssigned);
+    return isVerifiable && !alreadyVerified && isForwarded && (isAdminRole || isFomAssigned);
   };
 
   if (!mmpFiles.length) {
