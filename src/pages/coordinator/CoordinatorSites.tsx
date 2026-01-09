@@ -1539,19 +1539,21 @@ const CoordinatorSites: React.FC = () => {
           ...(statePermitJustUploaded ? { state_permit_attached: true } : {}),
         };
 
-        // If state permit was just uploaded, don't verify yet - just update additional_data
-        // Sites will move to locality permit tab to upload locality permits
-        // If state permit not required, also don't verify - move to locality permit tab
-        // Only verify if sites already have permits_attached status (both permits done)
-        // IMPORTANT: When statePermitJustUploaded is true, we MUST NOT set status to 'verified'
-        const updateData: any = (statePermitJustUploaded || statePermitNotRequired) ? {
-          // Only update additional_data - do NOT change status
-          additional_data: additionalData,
-        } : {
+        // Determine if THIS specific site should be verified now
+        // A site should be verified if:
+        // 1. It already has 'permits_attached' status (both state and locality permits are done)
+        // 2. OR state permit is not being uploaded for the first time AND is not marked as not required
+        const siteHasPermitsAttached = site.status?.toLowerCase() === 'permits_attached';
+        const shouldVerifyThisSite = siteHasPermitsAttached || (!statePermitJustUploaded && !statePermitNotRequired);
+        
+        const updateData: any = shouldVerifyThisSite ? {
           // Sites are being verified (both state and locality permits are done)
           status: 'verified',
           verified_at: verifiedAt,
           verified_by: verifiedBy,
+          additional_data: additionalData,
+        } : {
+          // Only update additional_data - do NOT change status (still need locality permits)
           additional_data: additionalData,
         };
 
@@ -1689,20 +1691,22 @@ const CoordinatorSites: React.FC = () => {
           ...(statePermitJustUploaded ? { state_permit_attached: true } : {}),
         };
 
-        // If state permit was just uploaded, don't verify yet - just update additional_data
-        // Sites will move to locality permit tab to upload locality permits
-        // If state permit not required, also don't verify - move to locality permit tab
-        // Only verify if sites already have permits_attached status (both permits done)
-        // IMPORTANT: When statePermitJustUploaded is true, we MUST NOT set status to 'verified'
-        const updateData: any = (statePermitJustUploaded || statePermitNotRequired) ? {
-          // Only update additional_data - do NOT change status
-          additional_data: additionalData,
-        } : {
+        // Determine if THIS specific site should be verified now
+        // A site should be verified if:
+        // 1. It already has 'permits_attached' status (both state and locality permits are done)
+        // 2. OR state permit is not being uploaded for the first time AND is not marked as not required
+        const siteHasPermitsAttached = site.status?.toLowerCase() === 'permits_attached';
+        const shouldVerifyThisSite = siteHasPermitsAttached || (!statePermitJustUploaded && !statePermitNotRequired);
+        
+        const updateData: any = shouldVerifyThisSite ? {
           // Sites are being verified (both state and locality permits are done)
           ...(pendingVerificationData || {}),
           status: 'verified',
           verified_at: verifiedAt,
           verified_by: verifiedBy,
+          additional_data: additionalData,
+        } : {
+          // Only update additional_data - do NOT change status (still need locality permits)
           additional_data: additionalData,
         };
 
