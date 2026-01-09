@@ -1,5 +1,5 @@
 // Basic MMP types
-export type MMPStatus = 'pending' | 'approved' | 'rejected' | 'archived' | 'deleted';
+export type MMPStatus = 'pending' | 'verified' | 'approved' | 'rejected' | 'archived' | 'deleted';
 export type MMPStage = 'notStarted' | 'draft' | 'verified' | 'implementation' | 'completed';
 
 export interface MMPVersion {

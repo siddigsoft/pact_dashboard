@@ -11,6 +11,12 @@ interface MMPStatusBadgeProps {
 export const MMPStatusBadge: React.FC<MMPStatusBadgeProps> = ({ status }) => {
   const getStatusConfig = () => {
     switch (status) {
+      case 'verified':
+        return {
+          icon: <CheckCircle className="h-3 w-3 mr-1" />,
+          text: 'Verified',
+          variant: 'default' as const
+        };
       case 'approved':
         return {
           icon: <CheckCircle className="h-3 w-3 mr-1" />,

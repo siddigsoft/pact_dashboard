@@ -8,6 +8,7 @@ import { MMPStatusBadge } from './MMPStatusBadge';
 import { useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useAppContext } from '@/context/AppContext';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { BudgetStatusBadge } from '@/components/budget/BudgetStatusBadge';
 import ForwardToFOMDialog from './ForwardToFOMDialog';
@@ -33,7 +34,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { checkRecallAllowed, performRecall, canForceRecall, getRecallTierForRole } from '@/utils/recallUtils';
-import { RotateCcw, AlertTriangle } from 'lucide-react';
+import { RotateCcw, AlertTriangle, CheckCircle } from 'lucide-react';
 import { RecallDialog } from './RecallDialog';
 import MMPProgressDialog from './MMPProgressDialog';
 
@@ -44,21 +45,22 @@ interface MMPListProps {
 
 export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const navigate = useNavigate();
-  const { deleteMMPFile } = useMMP();
-  const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
+  const { deleteMMPFile, verifyMMP, refreshMMPFiles } = useMMP();
+  const { currentUser } = useAppContext();
+  const { checkPermission, hasAnyRole, currentUser: authUser } = useAuthorization();
   const { mmpBudgets } = useBudget();
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [confirmId, setConfirmId] = React.useState<string | null>(null);
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [selectedMMPForForward, setSelectedMMPForForward] = useState<MMPFile | null>(null);
   const [forwardedMMPs, setForwardedMMPs] = useState<Set<string>>(new Set());
-  const { refreshMMPFiles } = useMMP();
   const { toast } = useToast();
   const [recallingId, setRecallingId] = useState<string | null>(null);
   const [recallDialogOpen, setRecallDialogOpen] = useState(false);
   const [selectedMMPForRecall, setSelectedMMPForRecall] = useState<MMPFile | null>(null);
   const [showProgressDialog, setShowProgressDialog] = useState(false);
   const [selectedMMPForProgress, setSelectedMMPForProgress] = useState<MMPFile | null>(null);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -136,6 +138,43 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const handleViewProgress = (mmp: MMPFile) => {
     setSelectedMMPForProgress(mmp);
     setShowProgressDialog(true);
+  };
+
+  // Handle verify MMP action
+  const handleVerifyMMP = async (mmp: MMPFile) => {
+    if (verifyingId) return;
+    setVerifyingId(mmp.id);
+    try {
+      const userId = currentUser?.id || authUser?.id || '';
+      const userName = currentUser?.fullName || currentUser?.email || 'Unknown';
+      await verifyMMP(mmp.id, userId, userName);
+      await refreshMMPFiles();
+    } catch (error) {
+      console.error('Failed to verify MMP:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to verify MMP. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
+  // Check if MMP can be verified (pending and forwarded to FOMs)
+  // FOMs can verify MMPs they are assigned to, admins can verify any forwarded MMP
+  const canVerifyMMP = (mmp: MMPFile) => {
+    const workflow = mmp.workflow as any;
+    const isForwarded = workflow?.forwardedToFomIds?.length > 0;
+    const isMmpPending = mmp.status === 'pending';
+    
+    // FOMs can verify if they are in the forwarded list
+    const isFomAssigned = isFOM && workflow?.forwardedToFomIds?.includes(currentUser?.id);
+    
+    // Admins/Super Admins/ICT can verify any forwarded pending MMP
+    const isAdminRole = isSuperAdmin || isAdmin || isICT;
+    
+    return isMmpPending && isForwarded && (isAdminRole || isFomAssigned);
   };
 
   if (!mmpFiles.length) {
@@ -263,6 +302,22 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                             onClick={() => navigate(`/mmp/${mmp.id}/verification`)}
                           >
                             Upload Permits & Forward to Coordinators
+                          </DropdownMenuItem>
+                        </>
+                      )}
+
+                      {/* Verify MMP option - marks MMP as verified and ready for approval/costing */}
+                      {canVerifyMMP(mmp) && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleVerifyMMP(mmp)}
+                            disabled={verifyingId === mmp.id}
+                            className="text-green-600"
+                            data-testid={`button-verify-mmp-${mmp.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            {verifyingId === mmp.id ? 'Verifying...' : 'Verify MMP'}
                           </DropdownMenuItem>
                         </>
                       )}

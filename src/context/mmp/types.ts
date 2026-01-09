@@ -35,6 +35,7 @@ export interface MMPContextType {
   getMMPById: (id: string) => MMPFile | undefined;
   getMmpById: (id: string) => MMPFile | undefined;
   getPermitsByMmpId: (id: string) => Promise<any | undefined>;
+  verifyMMP: (id: string, verifiedBy: string, verifiedByName?: string) => Promise<void>;
   archiveMMP: (id: string, archivedBy: string) => Promise<void>;
   approveMMP: (id: string, approvedBy: string) => Promise<void>;
   rejectMMP: (id: string, rejectionReason: string) => Promise<void>;
