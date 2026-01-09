@@ -4556,6 +4556,9 @@ const CoordinatorSites: React.FC = () => {
             // Find sites in non-required localities and move them to permits_attached
             const sitesToAdvance: SiteVisit[] = [];
             
+            // Use case-insensitive status matching
+            const validStatuses = ['pending', 'dispatched', 'assigned', 'inprogress', 'in_progress', 'new', 'forwarded'];
+            
             localitiesData
               .filter((state: any) => state.hasStatePermit)
               .forEach((state: any) => {
@@ -4563,15 +4566,17 @@ const CoordinatorSites: React.FC = () => {
                   const key = `${state.state}|${locality.locality}`;
                   if (requirements[key] === false) {
                     locality.sites?.forEach((site: SiteVisit) => {
-                      if (site.status === 'Pending' || site.status === 'Dispatched' || 
-                          site.status === 'assigned' || site.status === 'inProgress' || 
-                          site.status === 'in_progress') {
+                      const status = (site.status || '').toLowerCase().replace(/\s+/g, '_');
+                      if (validStatuses.includes(status)) {
                         sitesToAdvance.push(site);
                       }
                     });
                   }
                 });
               });
+            
+            console.log('[Triage] Non-required localities:', nonRequiredLocalities);
+            console.log('[Triage] Sites to advance:', sitesToAdvance.length);
             
             if (sitesToAdvance.length > 0) {
               try {
