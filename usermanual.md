@@ -1,6 +1,6 @@
 # PACT Command Center - Complete Operations Manual
 
-**Version 4.0 | Last Updated: December 2025**
+**Version 4.1 | Last Updated: January 2026**
 
 ---
 
@@ -1651,8 +1651,47 @@ CALLER (User A)                                             RECEIVER (User B)
 
 | Attribute | Details |
 |-----------|---------|
-| **Purpose** | View and manage Monthly Monitoring Plans |
-| **Key Features** | Status filtering, search, pagination, bulk actions |
+| **Purpose** | Centralized MMP management console with role-based views |
+| **How It Works** | Displays MMPs organized by workflow status with subcategory filtering |
+| **Who Can Access** | All authenticated users (with role-specific views) |
+| **Database Tables** | `mmp_files`, `mmp_site_entries`, `site_visits`, `profiles` |
+| **Key Features** | Multi-tab interface, bilingual UI (English/Arabic), real-time updates |
+
+**Main Navigation Tabs:**
+
+| Tab | Icon | Description | Roles |
+|-----|------|-------------|-------|
+| My Assignments | ClipboardList | Personal assigned MMPs and sites | Data Collectors, Coordinators |
+| New MMPs | FilePlus | Newly created MMPs pending processing | Admin, ICT, FOM, Coordinators |
+| Forwarded MMPs/Sites | Send | MMPs forwarded for verification | Admin, ICT, FOM |
+| Verified Sites | CheckSquare | Sites that have been verified | Admin, ICT |
+| MMP Tracker | BarChart3 | Workflow progress tracking dashboard | Admin, ICT, FOM |
+
+**Subcategory Tabs (by main tab):**
+
+*New MMPs Tab:*
+- New Sites - Fresh site entries pending review
+- Approved - Sites approved and ready for dispatch
+- Dispatched - Sites sent to field for data collection
+- Smart Assigned - Automatically assigned sites
+- Accepted - Sites accepted by data collectors
+- Ongoing - Sites currently being visited
+- Completed - Finished site visits
+- Rejected - Sites rejected by data collectors
+
+*Forwarded Tab (FOM View):*
+- Sites Pending Verification - Awaiting FOM verification
+- Verified Sites - Sites verified by FOM
+
+*Verified Tab (Admin View):*
+- New Verified Sites - Recently verified sites
+- Approved & Costed - Sites with approved costs
+
+**Internationalization (i18n):**
+- Full bilingual support for English and Arabic
+- Language toggle available in header
+- All tabs, buttons, and messages translated
+- RTL layout support for Arabic
 
 #### MMP Upload (`/mmp/upload`)
 
