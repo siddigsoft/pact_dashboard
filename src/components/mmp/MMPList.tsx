@@ -165,8 +165,11 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   // FOMs can verify MMPs they are assigned to, admins can verify any forwarded MMP
   const canVerifyMMP = (mmp: MMPFile) => {
     const workflow = mmp.workflow as any;
-    const isForwarded = workflow?.forwardedToFomIds?.length > 0 || 
-                        workflow?.forwardedToCoordinatorIds?.length > 0;
+    const hasForwardedToFomIds = workflow?.forwardedToFomIds?.length > 0;
+    const hasForwardedToCoordinators = workflow?.forwardedToCoordinators === true || 
+                                       workflow?.forwardedToCoordinatorAt ||
+                                       workflow?.currentStage === 'forwarded_to_coordinator';
+    const isForwarded = hasForwardedToFomIds || hasForwardedToCoordinators;
     
     // MMP is verifiable if it's in a pre-verified state
     // Accept pending, forwarded_to_fom, forwarded_to_coordinator, cp_verified statuses

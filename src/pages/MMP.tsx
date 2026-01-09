@@ -1974,8 +1974,14 @@ const MMP = () => {
         // For Coordinator: They don't have a "forwarded" category
         return false;
       } else if (isAdmin || isICT) {
-        // For admin/ICT: Forwarded means MMPs that have been forwarded to FOMs
-        return (mmp.workflow as any)?.forwardedToFomIds && (mmp.workflow as any)?.forwardedToFomIds.length > 0;
+        // For admin/ICT: Forwarded means MMPs that have been forwarded to FOMs or coordinators
+        const workflow = mmp.workflow as any;
+        const hasForwardedToFomIds = workflow?.forwardedToFomIds && workflow?.forwardedToFomIds.length > 0;
+        const hasForwardedToCoordinators = workflow?.forwardedToCoordinators === true || 
+                                           workflow?.forwardedToCoordinatorAt ||
+                                           workflow?.currentStage === 'forwarded_to_coordinator';
+        // Include if forwarded to FOMs OR coordinators (workflow has progressed)
+        return hasForwardedToFomIds || hasForwardedToCoordinators;
       }
       return false;
     });
