@@ -48,12 +48,14 @@ import { useOffline } from '@/hooks/use-offline';
 import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
-const SitesDisplayTable: React.FC<{ 
+interface SitesDisplayTableProps {
   siteRows: SiteVisitRow[]; 
   mmpId?: string;
   editable?: boolean;
   title?: string;
-}> = ({ siteRows, mmpId, editable = true, title }) => {
+}
+
+const SitesDisplayTable = React.memo(function SitesDisplayTable({ siteRows, mmpId, editable = true, title }: SitesDisplayTableProps) {
   const { t } = useTranslation();
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
   
@@ -204,10 +206,14 @@ const SitesDisplayTable: React.FC<{
       />
     </div>
   );
-};
+});
 
 // Component to display verified sites using MMPSiteEntriesTable
-const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ verifiedSites }) => {
+interface VerifiedSitesDisplayProps {
+  verifiedSites: SiteVisitRow[];
+}
+
+const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites }: VerifiedSitesDisplayProps) {
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
 
   // Derive verified site entries from context
@@ -351,7 +357,7 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
       />
     </div>
   );
-};
+});
 
 const MMP = () => {
   const navigate = useNavigate();
@@ -446,7 +452,7 @@ const MMP = () => {
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
   // Handle accepting/claiming a site (works for both Smart Assigned and Available Sites)
-  const handleAcceptSite = async (site: any) => {
+  const handleAcceptSite = useCallback(async (site: any) => {
     try {
       const isDispatchedSite = site.status?.toLowerCase() === 'dispatched';
       
@@ -518,10 +524,10 @@ const MMP = () => {
         variant: 'destructive'
       });
     }
-  };
+  }, [currentUser?.id, toast, refreshMMPFiles]);
 
   // Handle sending back available site to coordinator
-  const handleSendBackToCoordinator = async (site: any, comments: string) => {
+  const handleSendBackToCoordinator = useCallback(async (site: any, comments: string) => {
     if (!comments.trim()) {
       toast({
         title: 'Comments Required',
@@ -608,13 +614,13 @@ const MMP = () => {
         variant: 'destructive'
       });
     }
-  };
+  }, [currentUser?.id, toast, refreshMMPFiles]);
 
   // Handle cost acknowledgment for Smart Assigned sites
-  const handleCostAcknowledgment = (site: any) => {
+  const handleCostAcknowledgment = useCallback((site: any) => {
     setSelectedSiteForAcknowledgment(site);
     setCostAcknowledgmentOpen(true);
-  };
+  }, []);
 
   // GPS location functions
   const getCurrentLocation = (): Promise<{latitude: number, longitude: number}> => {
