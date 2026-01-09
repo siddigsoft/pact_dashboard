@@ -38,6 +38,7 @@ import RecallHistory from "@/components/mmp/RecallHistory";
 import { useAuthorization } from "@/hooks/use-authorization";
 import ForwardToFOMDialog from "@/components/mmp/ForwardToFOMDialog";
 import ForwardToCoordinatorsDialog from "@/components/mmp/ForwardToCoordinatorsDialog";
+import CoordinatorSummaryCard from "@/components/mmp/CoordinatorSummaryCard";
 
 const MMPDetailView = () => {
   const { id } = useParams<{ id: string }>();
@@ -452,6 +453,9 @@ const MMPDetailView = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Coordinator Summary */}
+      <CoordinatorSummaryCard siteEntries={siteEntries} mmpId={mmpFile?.id} />
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center gap-3">
