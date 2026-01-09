@@ -171,13 +171,17 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                                        workflow?.currentStage === 'forwarded_to_coordinator';
     const isForwarded = hasForwardedToFomIds || hasForwardedToCoordinators;
     
+    // Normalize status to lowercase for case-insensitive comparison
+    // Production data may have mixed casing like "Pending", "pending", "PENDING"
+    const normalizedStatus = (mmp.status || '').toLowerCase();
+    
     // MMP is verifiable if it's in a pre-verified state
     // Accept pending, forwarded_to_fom, forwarded_to_coordinator, cp_verified statuses
     const verifiableStatuses = ['pending', 'forwarded_to_fom', 'forwarded_to_coordinator', 'cp_verified'];
-    const isVerifiable = verifiableStatuses.includes(mmp.status);
+    const isVerifiable = verifiableStatuses.includes(normalizedStatus);
     
     // Already verified or approved - can't verify again
-    const alreadyVerified = mmp.status === 'verified' || mmp.status === 'approved';
+    const alreadyVerified = normalizedStatus === 'verified' || normalizedStatus === 'approved';
     
     // FOMs can verify if they are in the forwarded list
     const isFomAssigned = isFOM && workflow?.forwardedToFomIds?.includes(currentUser?.id);

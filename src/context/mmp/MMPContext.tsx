@@ -362,35 +362,45 @@ export const useMMPProvider = () => {
     }).eq('id', id);
   };
 
-  // Fast count query - gets badge counts without loading all site entries
+  // Fast count query using parallel COUNT queries for each status
+  // This is much faster than fetching all records and counting in memory
+  // Uses .ilike for case-insensitive matching to handle mixed-case statuses in production data
   const refreshSiteEntryCounts = useCallback(async () => {
     try {
       if (!navigator.onLine) return;
       
-      // Use a single query with status counts for speed
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('status', { count: 'exact' });
+      // Run all count queries in parallel for maximum speed
+      // Use .ilike for case-insensitive matching (handles "Dispatched", "dispatched", etc.)
+      const [
+        dispatchedResult,
+        acceptedResult,
+        assignedResult,
+        ongoingResult,
+        completedResult,
+        rejectedResult,
+        approvedCostedResult,
+        totalResult
+      ] = await Promise.all([
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'dispatched'),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'accepted'),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'assigned'),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).or('status.ilike.inprogress,status.ilike.in_progress,status.ilike.ongoing'),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'completed'),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).or('status.ilike.rejected,status.ilike.declined'),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'approved and costed'),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true })
+      ]);
       
-      if (error) {
-        console.warn('Error fetching site entry counts:', error);
-        return;
-      }
-      
-      // Count statuses in memory (faster than multiple DB queries)
-      const counts = { dispatched: 0, accepted: 0, smartAssigned: 0, ongoing: 0, completed: 0, rejected: 0, approvedCosted: 0, total: data?.length || 0 };
-      (data || []).forEach((entry: any) => {
-        const status = String(entry.status || '').toLowerCase();
-        if (status === 'dispatched') counts.dispatched++;
-        else if (status === 'accepted') counts.accepted++;
-        else if (status === 'assigned') counts.smartAssigned++;
-        else if (/inprogress|in_progress|ongoing/.test(status)) counts.ongoing++;
-        else if (status === 'completed') counts.completed++;
-        else if (status === 'rejected' || status === 'declined') counts.rejected++;
-        else if (status === 'approved and costed') counts.approvedCosted++;
+      setSiteEntryCounts({
+        dispatched: dispatchedResult.count || 0,
+        accepted: acceptedResult.count || 0,
+        smartAssigned: assignedResult.count || 0,
+        ongoing: ongoingResult.count || 0,
+        completed: completedResult.count || 0,
+        rejected: rejectedResult.count || 0,
+        approvedCosted: approvedCostedResult.count || 0,
+        total: totalResult.count || 0
       });
-      
-      setSiteEntryCounts(counts);
     } catch (err) {
       console.warn('Failed to refresh site entry counts:', err);
     }
