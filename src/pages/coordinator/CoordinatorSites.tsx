@@ -537,8 +537,9 @@ const CoordinatorSites: React.FC = () => {
   // Location data is now provided by LocationContext (removed local state)
 
   // Helper function to check if all sites in an MMP are verified and update MMP status
-  const checkAndUpdateMMPStatus = async (mmpFileId: string) => {
-    if (!mmpFileId) return;
+  // Returns true if MMP status was updated, false otherwise
+  const checkAndUpdateMMPStatus = async (mmpFileId: string): Promise<boolean> => {
+    if (!mmpFileId) return false;
     
     try {
       // Get all sites for this MMP
@@ -549,10 +550,10 @@ const CoordinatorSites: React.FC = () => {
       
       if (fetchError) {
         console.error('Error fetching sites for MMP status check:', fetchError);
-        return;
+        return false;
       }
       
-      if (!allSites || allSites.length === 0) return;
+      if (!allSites || allSites.length === 0) return false;
       
       // Check if all sites are verified or approved (case-insensitive)
       const allVerified = allSites.every(site => {
@@ -574,14 +575,16 @@ const CoordinatorSites: React.FC = () => {
         
         if (updateError) {
           console.error('Error updating MMP status:', updateError);
+          return false;
         } else {
           console.log(`[MMP STATUS] MMP ${mmpFileId} status updated to approved`);
-          // Refresh MMP files to reflect the status change in the UI
-          await refreshMMPFiles();
+          return true;
         }
       }
+      return false;
     } catch (error) {
       console.error('Error in checkAndUpdateMMPStatus:', error);
+      return false;
     }
   };
 
@@ -1072,15 +1075,15 @@ const CoordinatorSites: React.FC = () => {
         console.warn('Failed to send site verified notification:', notifError);
       }
 
-      // Refresh both MMP files and coordinator sites to reflect the changes
-      await refreshMMPFiles();
-      await refreshSites();
-      
       // Check if all sites in the MMP are verified and update MMP status if so
       const site = coordinatorSites.find(s => s.id === siteId);
       if (site?.mmp_file_id) {
         await checkAndUpdateMMPStatus(site.mmp_file_id);
       }
+      
+      // Refresh both MMP files and coordinator sites to reflect the changes (single refresh after all updates)
+      await refreshMMPFiles();
+      await refreshSites();
       
       // Badge counts will update automatically from coordinatorSites
       setActiveTab('verified');
@@ -1759,14 +1762,16 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSiteForEdit(null);
       setSelectedSites(new Set());
       setBulkVerifyDialogOpen(false);
-      await refreshMMPFiles();
-      await refreshSites();
       
       // Check if all sites in affected MMPs are verified and update MMP status
       const mmpIds = new Set(sitesToVerify.map(s => s.mmp_file_id).filter(Boolean));
       for (const mmpId of mmpIds) {
         await checkAndUpdateMMPStatus(mmpId);
       }
+      
+      // Single refresh after all updates
+      await refreshMMPFiles();
+      await refreshSites();
     } catch (error) {
       console.error('Error completing verification:', error);
       toast({
@@ -1999,14 +2004,16 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVerificationNotes('');
       setBulkVerifyDialogOpen(false);
-      await refreshMMPFiles();
-      await refreshSites();
       
       // Check if all sites in affected MMPs are verified and update MMP status
       const mmpIds = new Set(selectedSitesData.map(s => s.mmp_file_id).filter(Boolean));
       for (const mmpId of mmpIds) {
         await checkAndUpdateMMPStatus(mmpId);
       }
+      
+      // Single refresh after all updates
+      await refreshMMPFiles();
+      await refreshSites();
       
       // Badge counts will update automatically from coordinatorSites
       setActiveTab('approved');
@@ -2147,14 +2154,16 @@ const CoordinatorSites: React.FC = () => {
       // Close dialog and refresh data
       setBulkLocalityVerifyDialogOpen(false);
       setSelectedLocalityForBulkVerify(null);
-      await refreshMMPFiles();
-      await refreshSites();
       
       // Check if all sites in the MMP are verified and update MMP status
       const mmpId = localitySites[0]?.mmp_file_id;
       if (mmpId) {
         await checkAndUpdateMMPStatus(mmpId);
       }
+      
+      // Single refresh after all updates
+      await refreshMMPFiles();
+      await refreshSites();
     } catch (error) {
       console.error('Error verifying locality sites:', error);
       toast({
@@ -3660,14 +3669,14 @@ const CoordinatorSites: React.FC = () => {
                     }
                   }
 
-                  // Reload sites and badge counts
-                  await refreshMMPFiles();
-                  await refreshSites();
-                  
                   // Check if all sites in the MMP are verified and update MMP status
                   if (shouldVerify && selectedSiteForEdit?.mmp_file_id) {
                     await checkAndUpdateMMPStatus(selectedSiteForEdit.mmp_file_id);
                   }
+                  
+                  // Single refresh after all updates
+                  await refreshMMPFiles();
+                  await refreshSites();
                   
                   // Badge counts will update automatically from coordinatorSites
 
