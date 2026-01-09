@@ -101,6 +101,62 @@ const MMPDetailView = () => {
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
   const canForward = hasAnyRole(['admin','ict']);
 
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
+  // Move useMemo hooks here to ensure consistent hook order
+  const isForwarded = useMemo(() => {
+    if (forwardedLocal) return true;
+    const workflow = (mmpFile as any)?.workflow || {};
+    const ids = workflow.forwardedToFomIds;
+    const hasForwardedIds = Array.isArray(ids) && ids.length > 0;
+    return hasForwardedIds;
+  }, [forwardedLocal, mmpFile]);
+  
+  const wasRecalled = useMemo(() => {
+    const workflow = (mmpFile as any)?.workflow || {};
+    return !!workflow.recalledAt;
+  }, [mmpFile]);
+
+  // Prefer entries from context; if missing, fetch from mmp_site_entries
+  const siteEntries = (mmpFile?.siteEntries && Array.isArray(mmpFile.siteEntries) && mmpFile.siteEntries.length > 0)
+    ? mmpFile.siteEntries
+    : siteEntriesDB;
+
+  const mmpFileWithEntries = useMemo(() => {
+    if (!mmpFile) return null;
+    return { ...mmpFile, siteEntries };
+  }, [mmpFile, siteEntries]);
+
+  // State distribution useMemo - must be before early returns
+  const stateDistribution = useMemo(() => {
+    const groups: Record<string, number> = {};
+    siteEntries.forEach(site => {
+      const state = site.state || site.state_name || 'Unknown';
+      groups[state] = (groups[state] || 0) + 1;
+    });
+    return Object.entries(groups).sort((a, b) => b[1] - a[1]);
+  }, [siteEntries]);
+
+  useEffect(() => {
+    const loadSiteEntries = async () => {
+      if (!id) return;
+      if (mmpFile?.siteEntries && mmpFile.siteEntries.length > 0) {
+        setSiteEntriesDB([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('mmp_site_entries')
+        .select('*')
+        .eq('mmp_file_id', id);
+      if (error) {
+        console.error('Failed to load mmp_site_entries:', error);
+        return;
+      }
+      setSiteEntriesDB(data || []);
+    };
+    loadSiteEntries();
+  }, [id, mmpFile?.siteEntries?.length]);
+
+  // EARLY RETURNS - After all hooks
   if (!canRead) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -120,58 +176,6 @@ const MMPDetailView = () => {
       </div>
     );
   }
-
-  const isForwarded = useMemo(() => {
-    // If we just forwarded in this session, mark as forwarded
-    if (forwardedLocal) return true;
-    
-    const workflow = (mmpFile as any)?.workflow || {};
-    const ids = workflow.forwardedToFomIds;
-    
-    // Check if there are actual FOM IDs - if empty array or not array, not forwarded
-    const hasForwardedIds = Array.isArray(ids) && ids.length > 0;
-    
-    // If no forwarded IDs, it's not forwarded (could be recalled or never forwarded)
-    return hasForwardedIds;
-  }, [forwardedLocal, mmpFile]);
-  
-  // Check if this MMP was previously recalled (to show appropriate UI hints)
-  const wasRecalled = useMemo(() => {
-    const workflow = (mmpFile as any)?.workflow || {};
-    return !!workflow.recalledAt;
-  }, [mmpFile]);
-
-  // Prefer entries from context; if missing, fetch from mmp_site_entries
-  const siteEntries = (mmpFile?.siteEntries && Array.isArray(mmpFile.siteEntries) && mmpFile.siteEntries.length > 0)
-    ? mmpFile.siteEntries
-    : siteEntriesDB;
-
-  // Create merged mmpFile with siteEntries for child components
-  const mmpFileWithEntries = useMemo(() => {
-    if (!mmpFile) return null;
-    return { ...mmpFile, siteEntries };
-  }, [mmpFile, siteEntries]);
-
-  useEffect(() => {
-    const loadSiteEntries = async () => {
-      if (!id) return;
-      // Only fetch if not already present in mmpFile
-      if (mmpFile?.siteEntries && mmpFile.siteEntries.length > 0) {
-        setSiteEntriesDB([]);
-        return;
-      }
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('*')
-        .eq('mmp_file_id', id);
-      if (error) {
-        console.error('Failed to load mmp_site_entries:', error);
-        return;
-      }
-      setSiteEntriesDB(data || []);
-    };
-    loadSiteEntries();
-  }, [id, mmpFile?.siteEntries?.length]);
 
   const handleArchive = async () => {
     if (id) {
@@ -354,15 +358,6 @@ const MMPDetailView = () => {
       </div>
     );
   }
-
-  const stateDistribution = useMemo(() => {
-    const groups: Record<string, number> = {};
-    siteEntries.forEach(site => {
-      const state = site.state || site.state_name || 'Unknown';
-      groups[state] = (groups[state] || 0) + 1;
-    });
-    return Object.entries(groups).sort((a, b) => b[1] - a[1]);
-  }, [siteEntries]);
 
   const displayDate = mmpFile?.approvedAt || mmpFile?.uploadedAt;
 
