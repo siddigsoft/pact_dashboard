@@ -11,10 +11,22 @@ export interface SupabaseResponse<T> {
   } | null;
 }
 
+export interface SiteEntryCounts {
+  dispatched: number;
+  accepted: number;
+  smartAssigned: number;
+  ongoing: number;
+  completed: number;
+  rejected: number;
+  approvedCosted: number;
+  total: number;
+}
+
 export interface MMPContextType {
   mmpFiles: MMPFile[];
   loading: boolean;
   error: string | null;
+  siteEntryCounts: SiteEntryCounts;
   currentMMP: MMPFile | null;
   setCurrentMMP: (mmp: MMPFile | null) => void;
   addMMPFile: (mmp: MMPFile) => void;
@@ -39,4 +51,5 @@ export interface MMPContextType {
   attachPermitsToMMP: (id: string, permits: { federal: File | null; state?: File | null; local?: File | null }) => Promise<void>;
   refreshMMPFiles: () => Promise<void>;
   fetchSiteEntriesForMMP: (mmpId: string) => Promise<any[]>;
+  refreshSiteEntryCounts: () => Promise<void>;
 }

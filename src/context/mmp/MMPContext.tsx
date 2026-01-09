@@ -270,10 +270,13 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
   } as MMPFile; // Type assertion to handle any remaining type issues
 };
 
+const defaultCounts = { dispatched: 0, accepted: 0, smartAssigned: 0, ongoing: 0, completed: 0, rejected: 0, approvedCosted: 0, total: 0 };
+
 const MMPContext = createContext<MMPContextType>({
   mmpFiles: [],
   loading: true,
   error: null,
+  siteEntryCounts: defaultCounts,
   currentMMP: null,
   setCurrentMMP: () => {},
   addMMPFile: () => {},
@@ -294,6 +297,7 @@ const MMPContext = createContext<MMPContextType>({
   attachPermitsToMMP: async () => {},
   refreshMMPFiles: async () => {},
   fetchSiteEntriesForMMP: async () => [],
+  refreshSiteEntryCounts: async () => {},
 });
 
 export const useMMPProvider = () => {
@@ -301,6 +305,7 @@ export const useMMPProvider = () => {
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [siteEntryCounts, setSiteEntryCounts] = useState(defaultCounts);
 
   const {
     currentMMP,
@@ -355,6 +360,40 @@ export const useMMPProvider = () => {
       }
     }).eq('id', id);
   };
+
+  // Fast count query - gets badge counts without loading all site entries
+  const refreshSiteEntryCounts = useCallback(async () => {
+    try {
+      if (!navigator.onLine) return;
+      
+      // Use a single query with status counts for speed
+      const { data, error } = await supabase
+        .from('mmp_site_entries')
+        .select('status', { count: 'exact' });
+      
+      if (error) {
+        console.warn('Error fetching site entry counts:', error);
+        return;
+      }
+      
+      // Count statuses in memory (faster than multiple DB queries)
+      const counts = { dispatched: 0, accepted: 0, smartAssigned: 0, ongoing: 0, completed: 0, rejected: 0, approvedCosted: 0, total: data?.length || 0 };
+      (data || []).forEach((entry: any) => {
+        const status = String(entry.status || '').toLowerCase();
+        if (status === 'dispatched') counts.dispatched++;
+        else if (status === 'accepted') counts.accepted++;
+        else if (status === 'assigned') counts.smartAssigned++;
+        else if (/inprogress|in_progress|ongoing/.test(status)) counts.ongoing++;
+        else if (status === 'completed') counts.completed++;
+        else if (status === 'rejected' || status === 'declined') counts.rejected++;
+        else if (status === 'approved and costed') counts.approvedCosted++;
+      });
+      
+      setSiteEntryCounts(counts);
+    } catch (err) {
+      console.warn('Failed to refresh site entry counts:', err);
+    }
+  }, []);
 
   const refreshMMPFiles = useCallback(async () => {
     try {
@@ -521,7 +560,8 @@ export const useMMPProvider = () => {
   }, []);
 
   useEffect(() => {
-    refreshMMPFiles();
+    // Load MMP files and counts in parallel for faster initial render
+    Promise.all([refreshMMPFiles(), refreshSiteEntryCounts()]);
   }, []);
 
   // Automatic background refresh DISABLED to prevent excessive re-renders and UI blinking
@@ -1006,6 +1046,7 @@ export const useMMPProvider = () => {
     mmpFiles,
     loading,
     error,
+    siteEntryCounts,
     currentMMP,
     setCurrentMMP,
     addMMPFile,
@@ -1026,6 +1067,7 @@ export const useMMPProvider = () => {
     attachPermitsToMMP,
     refreshMMPFiles,
     fetchSiteEntriesForMMP,
+    refreshSiteEntryCounts,
   };
 };
 

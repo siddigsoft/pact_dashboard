@@ -362,7 +362,7 @@ const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verified
 const MMP = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { mmpFiles, loading, updateMMP, refreshMMPFiles } = useMMP();
+  const { mmpFiles, loading, updateMMP, refreshMMPFiles, siteEntryCounts: contextCounts, refreshSiteEntryCounts } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
@@ -2093,16 +2093,16 @@ const MMP = () => {
     };
   }, [mmpFiles]);
 
-  // Update count state from calculated values
+  // Update count state from context (fast counts loaded separately from site entries)
   useEffect(() => {
-    setDispatchedCount(siteEntryCounts.dispatched);
-    setAcceptedCount(siteEntryCounts.accepted);
-    setSmartAssignedCount(siteEntryCounts.smartAssigned);
-    setOngoingCount(siteEntryCounts.ongoing);
-    setCompletedCount(siteEntryCounts.completed);
-    setRejectedCount(siteEntryCounts.rejected);
-    setApprovedCostedCount(siteEntryCounts.approvedCosted);
-  }, [siteEntryCounts]);
+    setDispatchedCount(contextCounts.dispatched);
+    setAcceptedCount(contextCounts.accepted);
+    setSmartAssignedCount(contextCounts.smartAssigned);
+    setOngoingCount(contextCounts.ongoing);
+    setCompletedCount(contextCounts.completed);
+    setRejectedCount(contextCounts.rejected);
+    setApprovedCostedCount(contextCounts.approvedCosted);
+  }, [contextCounts]);
 
   // Helper function to format site entries for display
   const formatSiteEntry = useCallback((entry: any) => {
