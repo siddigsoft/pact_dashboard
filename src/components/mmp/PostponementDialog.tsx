@@ -333,12 +333,23 @@ export function PostponementDialog({
             </div>
           )}
 
-          <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-md border border-amber-200 dark:border-amber-800">
-            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-amber-700 dark:text-amber-300">
-              This request will be sent to your supervisor for approval. The visit date will only change once approved.
-            </p>
-          </div>
+          {!canDirectChange && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-md border border-amber-200 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                This request will be sent to your supervisor for approval. The visit date will only change once approved.
+              </p>
+            </div>
+          )}
+          
+          {canDirectChange && (
+            <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-800">
+              <Clock className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-green-700 dark:text-green-300">
+                As a supervisor, the visit date will be updated immediately without requiring additional approval.
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
@@ -348,9 +359,13 @@ export function PostponementDialog({
           <Button 
             onClick={handleSubmit} 
             disabled={isSubmitting || !selectedDate || !reason}
+            className={canDirectChange ? 'bg-green-600 hover:bg-green-700' : undefined}
             data-testid="button-submit-postponement"
           >
-            {isSubmitting ? 'Submitting...' : 'Submit Request'}
+            {isSubmitting 
+              ? (canDirectChange ? 'Updating...' : 'Submitting...') 
+              : (canDirectChange ? 'Update Date' : 'Submit Request')
+            }
           </Button>
         </DialogFooter>
       </DialogContent>
