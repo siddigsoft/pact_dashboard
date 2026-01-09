@@ -1,0 +1,59 @@
+Testing Guide
+1. Visit Date Change Permissions
+For Supervisors (FOM, Admin, Super Admin, Hub Supervisor):
+
+Log in as a supervisor/admin user
+Go to any site visit with a scheduled date
+Open the postponement/date change dialog
+You'll see:
+Title: "Change Visit Date" (green badge: "Supervisor Access - No Approval Required")
+Green info box: "As a supervisor, the visit date will be updated immediately"
+Green "Update Date" button
+Select new date and reason → Date changes immediately
+For Data Collectors/Coordinators:
+
+Log in as a data collector or coordinator
+Open the same dialog
+You'll see:
+Title: "Request Visit Postponement"
+Amber warning: "This request will be sent to your supervisor for approval"
+Blue "Submit Request" button
+Submit → Request goes to pending approval queue
+2. Site Visit Confirmation (Data Collectors)
+Log in as a data collector who has an assigned site visit
+Go to Site Visits → Open your assigned visit
+You'll see the Confirmation Acknowledgment card showing:
+Time remaining until confirmation deadline
+"Confirm My Attendance" button (green)
+Click the button → Confirmation recorded
+Status changes to "Confirmed"
+3. Auto-Release System
+Default Settings:
+
+Confirmation deadline: 48 hours before visit
+Auto-release: 24 hours before visit (if not confirmed)
+Reminders: 48h, 24h, 12h before deadline
+To test:
+
+Assign a site to a data collector
+Wait for the deadline to pass (or adjust settings in Settings page)
+If not confirmed by the deadline, site is released automatically
+Former assignee is notified
+Configure Settings:
+
+Go to Settings → Auto-Release Settings
+Adjust confirmation hours, release hours, and reminder intervals
+4. Reminders
+Reminders are sent at:
+
+48 hours before confirmation deadline
+24 hours before confirmation deadline
+12 hours before confirmation deadline
+Data collectors see these in their notifications and as toast messages when visiting the dashboard.
+
+5. Where to Find Smart Assign
+The Smart Dispatch (collector recommendations) is in:
+
+MMP Site Dispatch Dialog → When dispatching sites to collectors
+Shows 3 tiers: In-Locality → Neighboring (100km) → State-Wide (80km)
+Use "Assign Best" to auto-select the top recommendation
