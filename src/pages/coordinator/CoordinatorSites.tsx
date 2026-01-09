@@ -24,6 +24,7 @@ import { StatePermitUpload } from '@/components/StatePermitUpload';
 import { SequentialPermitUpload } from '@/components/SequentialPermitUpload';
 import { LocalityPermitStatus } from '@/types/coordinator-permits';
 import { PermitVerificationQuestions, PermitDecision } from '@/components/PermitVerificationQuestions';
+import { LocalityRequirementTriageDialog } from '@/components/mmp/LocalityRequirementTriageDialog';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { useGestures } from '@/hooks/use-gestures'; // Assuming this hook exists for swipe gestures
 import { useLocation } from '@/context/location/LocationContext';
@@ -527,6 +528,11 @@ const CoordinatorSites: React.FC = () => {
 
   // Sub-tab state for new sites categorization
   const [newSitesSubTab, setNewSitesSubTab] = useState('state_required');
+
+  // Locality permit requirement triage state
+  const [localityTriageDialogOpen, setLocalityTriageDialogOpen] = useState(false);
+  const [localityPermitRequirements, setLocalityPermitRequirements] = useState<Record<string, boolean>>({});
+  const [triageCompleted, setTriageCompleted] = useState(false);
 
   // Location data is now provided by LocationContext (removed local state)
 
@@ -2884,21 +2890,36 @@ const CoordinatorSites: React.FC = () => {
             <TabsContent value="local_required" className="space-y-3 sm:space-y-4"> {/* Adjusted spacing */}
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <CardTitle>Localities Requiring Local Permits</CardTitle>
-                    <div className="relative w-full sm:w-auto max-w-sm">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="search"
-                        placeholder="Search localities..."
-                        className="pl-8 w-full sm:w-[300px]"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLocalityTriageDialogOpen(true)}
+                        className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                        data-testid="button-locality-triage"
+                      >
+                        <MapPin className="h-4 w-4 mr-2" />
+                        {triageCompleted ? 'Update Requirements' : 'Set Permit Requirements'}
+                      </Button>
+                      <div className="relative w-full sm:w-auto max-w-sm">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          type="search"
+                          placeholder="Search localities..."
+                          className="pl-8 w-full sm:w-[300px]"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          data-testid="input-search-localities"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    These localities have verified state permits. You can now upload local permits for these localities.
+                    {triageCompleted 
+                      ? 'Showing localities that require local permits. Use the button above to update requirements.' 
+                      : 'Click "Set Permit Requirements" to specify which localities require local permits. Localities that don\'t require permits will be moved directly to CP Verification.'}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -2909,7 +2930,7 @@ const CoordinatorSites: React.FC = () => {
                     </div>
                   ) : (() => {
                     // Get all localities from states that have state permits
-                    const localRequiredLocalities = localitiesData
+                    const allLocalitiesFromStatePermits = localitiesData
                       .filter((state: any) => state.hasStatePermit)
                       .flatMap((state: any) => 
                         state.localities.map((locality: any) => ({
@@ -2925,15 +2946,48 @@ const CoordinatorSites: React.FC = () => {
                           site.status === 'assigned' || site.status === 'inProgress' || 
                           site.status === 'in_progress'
                         );
-                      });                    const filteredLocalities = localRequiredLocalities.filter((locality: any) => 
+                      });
+                    
+                    // If triage completed, filter to only show localities marked as requiring permits
+                    const localRequiredLocalities = triageCompleted 
+                      ? allLocalitiesFromStatePermits.filter((locality: any) => {
+                          const key = `${locality.stateName}|${locality.locality}`;
+                          return localityPermitRequirements[key] === true;
+                        })
+                      : allLocalitiesFromStatePermits;
+                    
+                    const filteredLocalities = localRequiredLocalities.filter((locality: any) => 
                       locality.locality.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
                       locality.stateName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
                     );
                     
+                    // Show prompt to set requirements if not triaged yet
+                    if (!triageCompleted && allLocalitiesFromStatePermits.length > 0) {
+                      return (
+                        <div className="text-center py-8">
+                          <MapPin className="h-12 w-12 mx-auto mb-4 text-purple-400" />
+                          <p className="font-medium text-lg mb-2">Set Locality Permit Requirements</p>
+                          <p className="text-muted-foreground mb-4">
+                            You have {allLocalitiesFromStatePermits.length} {allLocalitiesFromStatePermits.length === 1 ? 'locality' : 'localities'} ready for permit processing.
+                            <br />
+                            Click the button above to specify which localities require local permits.
+                          </p>
+                          <Button 
+                            onClick={() => setLocalityTriageDialogOpen(true)}
+                            className="bg-purple-600 hover:bg-purple-700"
+                            data-testid="button-start-triage"
+                          >
+                            <MapPin className="h-4 w-4 mr-2" />
+                            Set Permit Requirements
+                          </Button>
+                        </div>
+                      );
+                    }
+                    
                     return filteredLocalities.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">
                         <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                        <p>{searchQuery ? 'No localities match your search.' : 'No localities available for local permit upload.'}</p>
+                        <p>{searchQuery ? 'No localities match your search.' : triageCompleted ? 'All localities have been processed or don\'t require permits.' : 'No localities available for local permit upload.'}</p>
                         <p className="text-sm mt-2">State permits must be uploaded first, and localities without local permits will appear here.</p>
                       </div>
                     ) : (
@@ -4229,6 +4283,106 @@ const CoordinatorSites: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Locality Permit Requirement Triage Dialog */}
+      <LocalityRequirementTriageDialog
+        open={localityTriageDialogOpen}
+        onOpenChange={setLocalityTriageDialogOpen}
+        localities={(() => {
+          // Get all localities from states that have state permits
+          return localitiesData
+            .filter((state: any) => state.hasStatePermit)
+            .flatMap((state: any) => 
+              state.localities.map((locality: any) => ({
+                state: state.state,
+                locality: locality.locality,
+                siteCount: locality.sites?.length || 0,
+                requiresPermit: localityPermitRequirements[`${state.state}|${locality.locality}`] ?? null
+              }))
+            )
+            .filter((loc) => loc.siteCount > 0);
+        })()}
+        onComplete={async (requirements) => {
+          setLocalityPermitRequirements(requirements);
+          setTriageCompleted(true);
+          setLocalityTriageDialogOpen(false);
+          
+          // Auto-advance localities that don't require permits to CP Verification
+          const nonRequiredLocalities = Object.entries(requirements)
+            .filter(([_, required]) => !required)
+            .map(([key]) => key);
+          
+          if (nonRequiredLocalities.length > 0) {
+            // Find sites in non-required localities and move them to permits_attached
+            const sitesToAdvance: SiteVisit[] = [];
+            
+            localitiesData
+              .filter((state: any) => state.hasStatePermit)
+              .forEach((state: any) => {
+                state.localities.forEach((locality: any) => {
+                  const key = `${state.state}|${locality.locality}`;
+                  if (requirements[key] === false) {
+                    locality.sites?.forEach((site: SiteVisit) => {
+                      if (site.status === 'Pending' || site.status === 'Dispatched' || 
+                          site.status === 'assigned' || site.status === 'inProgress' || 
+                          site.status === 'in_progress') {
+                        sitesToAdvance.push(site);
+                      }
+                    });
+                  }
+                });
+              });
+            
+            if (sitesToAdvance.length > 0) {
+              try {
+                // Update each site individually to preserve existing additional_data
+                const updatePromises = sitesToAdvance.map(async (site) => {
+                  const existingData = (site as any).additional_data || {};
+                  const mergedData = {
+                    ...existingData,
+                    locality_permit_not_required: true,
+                    locality_permit_triage_date: new Date().toISOString()
+                  };
+                  
+                  return supabase
+                    .from('mmp_site_entries')
+                    .update({ 
+                      status: 'permits_attached',
+                      additional_data: mergedData
+                    })
+                    .eq('id', site.id);
+                });
+                
+                const results = await Promise.all(updatePromises);
+                const error = results.find(r => r.error)?.error;
+                
+                if (error) throw error;
+                
+                toast({
+                  title: 'Sites Advanced',
+                  description: `${sitesToAdvance.length} site(s) from ${nonRequiredLocalities.length} locality/localities moved to CP Verification (no locality permit required).`,
+                });
+                
+                // Refresh data
+                refreshSites();
+              } catch (error) {
+                console.error('Error advancing sites:', error);
+                toast({
+                  title: 'Error',
+                  description: 'Failed to advance some sites. Please try again.',
+                  variant: 'destructive'
+                });
+              }
+            }
+          }
+          
+          toast({
+            title: 'Requirements Saved',
+            description: `${Object.values(requirements).filter(v => v).length} locality/localities marked as requiring permits.`,
+          });
+        }}
+        onCancel={() => setLocalityTriageDialogOpen(false)}
+      />
     </div>
   );
 };
