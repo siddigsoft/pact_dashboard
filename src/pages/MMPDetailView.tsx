@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { 
   Search, ArrowLeft, CheckCircle, XCircle, Download, 
   FileSpreadsheet as FileSpreadsheetIcon, Upload, Calendar, Wrench, AlertTriangle,
-  Archive, Trash2, History, Shield, Eye, RefreshCw, FileCheck, Edit, Send
+  Archive, Trash2, History, Shield, Eye, RefreshCw, FileCheck, Edit, Send,
+  MapPin, Users, Clock, BarChart3, FileText
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAppContext } from "@/context/AppContext";
@@ -30,7 +31,6 @@ import MMPSiteInformation from "@/components/MMPSiteInformation";
 import { MMPStatusBadge } from "@/components/mmp/MMPStatusBadge";
 
 // New components
-import MMPDetailHeader from "@/components/mmp/MMPDetailHeader";
 import MMPOverviewCard from "@/components/mmp/MMPOverviewCard";
 import MMPSiteEntriesTable from "@/components/mmp/MMPSiteEntriesTable";
 import MMPFileManagement from "@/components/mmp/MMPFileManagement";
@@ -345,20 +345,188 @@ const MMPDetailView = () => {
     );
   }
 
+  const stateDistribution = useMemo(() => {
+    const groups: Record<string, number> = {};
+    siteEntries.forEach(site => {
+      const state = site.state || site.state_name || 'Unknown';
+      groups[state] = (groups[state] || 0) + 1;
+    });
+    return Object.entries(groups).sort((a, b) => b[1] - a[1]);
+  }, [siteEntries]);
+
+  const displayDate = mmpFile?.approvedAt || mmpFile?.uploadedAt;
+
   return (
-    <div className="space-y-6 animate-fade-in" key={refreshKey}>
-      <MMPDetailHeader 
-        mmpFile={mmpFile}
-        canEdit={canEdit}
-        onProceedToVerification={handleProceedToVerification}
-        onEditMMP={handleEditMMP}
-        onDownload={handleDownload}
-        onShowAuditTrail={() => setShowAuditTrail(true)}
+    <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fade-in" key={refreshKey}>
+      {/* Professional Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/mmp')} className="shrink-0" data-testid="button-back-to-mmp">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0">
+            <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">{mmpFile?.name || mmpFile?.projectName || 'MMP Details'}</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              MMP ID: {mmpFile?.mmpId || mmpFile?.id?.substring(0, 8)}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge 
+            variant={mmpFile?.status === 'approved' ? 'default' : mmpFile?.status === 'pending' ? 'secondary' : 'outline'}
+            className={mmpFile?.status === 'approved' ? 'bg-green-600' : ''}
+          >
+            {mmpFile?.status || 'Unknown'}
+          </Badge>
+          <Button variant="outline" size="sm" onClick={handleDownload} data-testid="button-export-mmp">
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowAuditTrail(true)} data-testid="button-audit-trail">
+            <History className="h-4 w-4 mr-2" />
+            Audit
+          </Button>
+        </div>
+      </div>
+
+      {/* Quick Stats Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 border-blue-200 dark:border-blue-800">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-muted-foreground">Total Sites</p>
+                <p className="text-2xl sm:text-3xl font-bold text-blue-700 dark:text-blue-400">{siteEntries.length}</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-blue-200/50 dark:bg-blue-800/50 flex items-center justify-center">
+                <MapPin className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/20 border-green-200 dark:border-green-800">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-muted-foreground">States</p>
+                <p className="text-2xl sm:text-3xl font-bold text-green-700 dark:text-green-400">{stateDistribution.length}</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-green-200/50 dark:bg-green-800/50 flex items-center justify-center">
+                <BarChart3 className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/20 border-purple-200 dark:border-purple-800">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-muted-foreground">Status</p>
+                <p className="text-lg sm:text-xl font-bold text-purple-700 dark:text-purple-400 capitalize">{mmpFile?.status || 'N/A'}</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-purple-200/50 dark:bg-purple-800/50 flex items-center justify-center">
+                <CheckCircle className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/30 dark:to-orange-800/20 border-orange-200 dark:border-orange-800">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm text-muted-foreground">Last Updated</p>
+                <p className="text-sm sm:text-base font-bold text-orange-700 dark:text-orange-400">
+                  {displayDate ? format(new Date(displayDate), 'MMM d, yyyy') : 'N/A'}
+                </p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-orange-200/50 dark:bg-orange-800/50 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center gap-3">
+        {canForward && (
+          <>
+            <Button 
+              onClick={() => setForwardOpen(true)} 
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-80 disabled:cursor-not-allowed"
+              disabled={isForwarded}
+              data-testid="button-forward-to-foms"
+            >
+              <Send className="mr-2 h-4 w-4" />
+              {isForwarded ? 'Forwarded' : (wasRecalled ? 'Re-Forward to FOMs' : 'Forward to FOMs')}
+            </Button>
+            {isForwarded && forwardedCount !== null && (
+              <span className="text-sm text-muted-foreground">to {forwardedCount} FOM(s)</span>
+            )}
+            {!isForwarded && wasRecalled && (
+              <Badge variant="outline" className="text-amber-600 border-amber-600">
+                Previously Recalled
+              </Badge>
+            )}
+          </>
+        )}
+        
+        {(isFOM || isAdmin) && isForwarded && (
+          <Button 
+            onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}
+            className="bg-green-600 hover:bg-green-700"
+            data-testid="button-review-assign-coordinators"
+          >
+            <Users className="mr-2 h-4 w-4" />
+            Review & Assign Coordinators
+          </Button>
+        )}
+
+        {(isCoordinator || isAdmin) && (mmpFile as any)?.workflow?.forwardedToCoordinators && (
+          <Button 
+            onClick={handleMarkAsVerified}
+            className="bg-purple-600 hover:bg-purple-700"
+            data-testid="button-mark-verified"
+          >
+            <CheckCircle className="mr-2 h-4 w-4" />
+            Mark as Verified
+          </Button>
+        )}
+        
+        {canEdit && (
+          <Button variant="outline" onClick={handleEditMMP} data-testid="button-edit-mmp">
+            <Edit className="mr-2 h-4 w-4" />
+            Edit MMP
+          </Button>
+        )}
+      </div>
+
+      {/* Dialogs */}
+      <ForwardToFOMDialog 
+        open={forwardOpen} 
+        onOpenChange={setForwardOpen} 
+        mmpId={mmpFile.id} 
+        mmpName={mmpFile.name}
+        onForwarded={(ids) => { setForwardedLocal(true); setForwardedCount(ids.length); }}
+      />
+      
+      <ForwardToCoordinatorsDialog 
+        open={forwardToCoordinatorsOpen} 
+        onOpenChange={setForwardToCoordinatorsOpen} 
+        mmpId={mmpFile.id} 
+        mmpName={mmpFile.name}
+        onForwarded={(ids) => { setForwardedLocal(true); setForwardedCount(ids.length); }}
       />
 
-      {/* Main Overview Section */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 overflow-x-auto">
-        {/* Left Column - Main Overview */}
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* Left Column - Site Distribution */}
         <div className="xl:col-span-5 space-y-6">
           <MMPOverviewCard 
             mmpFile={mmpFileWithEntries} 
@@ -368,81 +536,8 @@ const MMPDetailView = () => {
           />
         </div>
         
-        {/* Right Column - Details & Info */}
+        {/* Right Column - Site Information */}
         <div className="xl:col-span-7 space-y-6">
-          {/* <MMPInfoCard 
-            mmpData={mmpFile} 
-            showActions={true}
-            onVerificationClick={handleProceedToVerification}
-            onEditClick={handleEditMMP}
-          /> */}
-          {canForward && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <Button 
-                onClick={() => setForwardOpen(true)} 
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-80 disabled:cursor-not-allowed"
-                disabled={isForwarded}
-                data-testid="button-forward-to-foms"
-              >
-                <Send className="mr-2 h-4 w-4" />
-                {isForwarded ? 'Forwarded' : (wasRecalled ? 'Re-Forward to FOMs' : 'Forward to FOMs')}
-              </Button>
-              {isForwarded && forwardedCount !== null && (
-                <span className="text-sm text-muted-foreground">to {forwardedCount} FOM(s)</span>
-              )}
-              {!isForwarded && wasRecalled && (
-                <Badge variant="outline" className="text-amber-600 border-amber-600">
-                  Previously Recalled
-                </Badge>
-              )}
-            </div>
-          )}
-          
-          
-         
-
-          {/* Review & Assign Coordinators button for FOM users or Admins */}
-          {(isFOM || isAdmin) && isForwarded && (
-            <div>
-              <Button 
-                onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Send className="mr-2 h-4 w-4" />
-                Review & Assign Coordinators
-              </Button>
-            </div>
-          )}
-
-          {/* Mark as Verified button for Coordinator users or Admins */}
-          {(isCoordinator || isAdmin) && (mmpFile as any)?.workflow?.forwardedToCoordinators && (
-            <div>
-              <Button 
-                onClick={handleMarkAsVerified}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Mark as Verified
-              </Button>
-            </div>
-          )}
-          
-          <ForwardToFOMDialog 
-            open={forwardOpen} 
-            onOpenChange={setForwardOpen} 
-            mmpId={mmpFile.id} 
-            mmpName={mmpFile.name}
-            onForwarded={(ids) => { setForwardedLocal(true); setForwardedCount(ids.length); }}
-          />
-          
-          <ForwardToCoordinatorsDialog 
-            open={forwardToCoordinatorsOpen} 
-            onOpenChange={setForwardToCoordinatorsOpen} 
-            mmpId={mmpFile.id} 
-            mmpName={mmpFile.name}
-            onForwarded={(ids) => { setForwardedLocal(true); setForwardedCount(ids.length); }}
-          />
-          
           <MMPSiteInformation 
             mmpFile={mmpFileWithEntries} 
             showVerificationButton={false} 
