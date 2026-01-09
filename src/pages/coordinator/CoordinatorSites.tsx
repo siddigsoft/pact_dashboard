@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -422,6 +422,12 @@ const CoordinatorSites: React.FC = () => {
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const { hubs, states, localities, hubStates, loading: loadingLocations } = useLocation();
   const { coordinatorSites, loading: contextLoading, refetch: refreshSites } = useCoordinatorSites();
+  
+  // Parallel refresh helper for speed optimization
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refreshMMPFiles(), refreshSites()]);
+  }, [refreshMMPFiles, refreshSites]);
+  
   const [localitiesData, setLocalitiesData] = useState<any[]>([]);
   const isPermitsSectionLoading =
     (contextLoading || permitsLoading || loadingLocations) &&
@@ -1123,8 +1129,7 @@ const CoordinatorSites: React.FC = () => {
       }
       
       // Refresh both MMP files and coordinator sites to reflect the changes (single refresh after all updates)
-      await refreshMMPFiles();
-      await refreshSites();
+      await refreshAll();
       
       // Badge counts will update automatically from coordinatorSites
       setActiveTab('verified');
@@ -1238,8 +1243,7 @@ const CoordinatorSites: React.FC = () => {
       }
 
       // Refresh both MMP files and coordinator sites to reflect the changes
-      await refreshMMPFiles();
-      await refreshSites();
+      await refreshAll();
       // Badge counts will update automatically from coordinatorSites
       setRejectDialogOpen(false);
       setVerificationNotes('');
@@ -1363,8 +1367,7 @@ const CoordinatorSites: React.FC = () => {
         // Close dialogs and reload
         setPermitVerificationDialogOpen(false);
         setStateForPermitVerification(null);
-        await refreshMMPFiles();
-        await refreshSites();
+        await refreshAll();
         return;
       } catch (error) {
         console.error('Error sending sites back to FOM:', error);
@@ -1639,8 +1642,7 @@ const CoordinatorSites: React.FC = () => {
         }
       }
       
-      await refreshMMPFiles();
-      await refreshSites();
+      await refreshAll();
       
       // Switch to appropriate tab
       if (statePermitJustUploaded || statePermitNotRequired) {
@@ -1829,8 +1831,7 @@ const CoordinatorSites: React.FC = () => {
       }
       
       // Single refresh after all updates
-      await refreshMMPFiles();
-      await refreshSites();
+      await refreshAll();
     } catch (error) {
       console.error('Error completing verification:', error);
       toast({
@@ -1908,8 +1909,7 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVisitDate('');
       setBulkAssignDateDialogOpen(false);
-      await refreshMMPFiles();
-      await refreshSites();
+      await refreshAll();
     } catch (error) {
       console.error('Error bulk assigning visit dates:', error);
       toast({
@@ -2071,8 +2071,7 @@ const CoordinatorSites: React.FC = () => {
       }
       
       // Single refresh after all updates
-      await refreshMMPFiles();
-      await refreshSites();
+      await refreshAll();
       
       // Badge counts will update automatically from coordinatorSites
       setActiveTab('approved');
@@ -2224,8 +2223,7 @@ const CoordinatorSites: React.FC = () => {
       }
       
       // Single refresh after all updates
-      await refreshMMPFiles();
-      await refreshSites();
+      await refreshAll();
     } catch (error) {
       console.error('Error verifying locality sites:', error);
       toast({
@@ -2268,8 +2266,7 @@ const CoordinatorSites: React.FC = () => {
       });
 
       // Refresh data and move to Permits Attached tab
-      await refreshMMPFiles();
-      await refreshSites();
+      await refreshAll();
       setActiveTab('permits_attached');
     } catch (e) {
       console.warn('Error proceeding without local permit:', e);
@@ -2337,8 +2334,7 @@ const CoordinatorSites: React.FC = () => {
         });
 
         // Reload sites and badge counts
-        await refreshMMPFiles();
-        await refreshSites();
+        await refreshAll();
         // Badge counts will update automatically from coordinatorSites
 
         // Navigate to "Permits Attached" tab
@@ -3737,8 +3733,7 @@ const CoordinatorSites: React.FC = () => {
                   }
                   
                   // Single refresh after all updates
-                  await refreshMMPFiles();
-                  await refreshSites();
+                  await refreshAll();
                   
                   // Badge counts will update automatically from coordinatorSites
 
@@ -4030,8 +4025,7 @@ const CoordinatorSites: React.FC = () => {
                 onComplete={async () => {
                   setSequentialPermitDialogOpen(false);
                   setSelectedStateForSequentialUpload(null);
-                  await refreshMMPFiles();
-                  await refreshSites();
+                  await refreshAll();
                   toast({
                     title: "Permits uploaded",
                     description: `Permits for ${selectedStateForSequentialUpload.state} have been processed.`,
