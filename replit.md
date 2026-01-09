@@ -70,6 +70,12 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, featurin
     - **Auto-advancement:** Sites in localities marked as "not required" are automatically moved to CP Verification status with preserved metadata
     - **Metadata preservation:** Auto-advance logic merges new flags (locality_permit_not_required, locality_permit_triage_date) with existing additional_data
     - **Re-assessment support:** Coordinators can update permit requirements at any time via "Update Requirements" button
+*   **MMP Verification Workflow:** Final verification step enabling MMP progression to approval/costing/dispatch (`src/context/mmp/hooks/useMMPStatusOperations.ts`):
+    - **Role-based access:** Super Admins, Admins, ICT can verify any forwarded pending MMP; FOMs can verify MMPs assigned to them via workflow.forwardedToFomIds
+    - **Deep merge preservation:** Fetches existing comprehensive_verification and deeply merges to preserve all nested structures including permits array
+    - **Metadata integrity:** Preserves systemValidation, contentVerification, cpVerification, and permitVerification with all nested fields
+    - **Status progression:** Changes MMP status to 'verified', enabling approval and dispatch workflows
+    - **Column naming:** Uses snake_case (verified_by, verified_at) for database columns with transformer handling camelCase conversion
 
 ### System Design Choices
 The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.
