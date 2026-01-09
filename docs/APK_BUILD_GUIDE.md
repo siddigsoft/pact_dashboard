@@ -54,21 +54,20 @@ cd android && ./gradlew assembleDebug
 
 Output: `android/app/build/outputs/apk/debug/app-debug.apk`
 
-### Production APK (Release)
+### Production APK (Release - Remote URL)
 ```bash
 # Set Supabase environment variables (required!)
 export VITE_SUPABASE_URL=https://your-project.supabase.co
 export VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-# Build optimized web assets
-npm run build
-
-# Sync with Android
+# Sync with Android (no need to build web assets - app loads from remote URL)
 npx cap sync android
 
 # Build signed release APK
 cd android && ./gradlew assembleRelease
 ```
+
+**Note:** Since the app loads from http://app.pactorg.com/, you don't need to build web assets. The APK will fetch the latest content from your domain at runtime.
 
 Output: `android/app/build/outputs/apk/release/app-release.apk`
 
@@ -360,6 +359,15 @@ Before each release:
 ---
 
 ## App Configuration
+
+### Remote URL Configuration
+
+**The APK is configured to always load from http://app.pactorg.com/** to ensure users always get the latest changes without needing app updates. The app acts as a webview wrapper that fetches content from your domain.
+
+This is configured in `capacitor.config.ts`:
+- Production builds default to `url: 'http://app.pactorg.com'`
+- Cleartext traffic is enabled for pactorg.com domain
+- Network security allows HTTP for pactorg.com
 
 ### Package Name
 `com.pact.workflow`
