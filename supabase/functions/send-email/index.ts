@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,6 +7,45 @@ const corsHeaders = {
 }
 
 const APP_URL = 'https://app.pactorg.com'
+
+async function logEmailToAudit(
+  supabase: any,
+  success: boolean,
+  recipient: string,
+  subject: string,
+  emailType: string,
+  messageId?: string,
+  errorMessage?: string,
+  metadata?: Record<string, any>
+): Promise<void> {
+  try {
+    await supabase.from('audit_logs').insert({
+      module: 'notification',
+      action: 'send',
+      entity_type: emailType === 'otp' || emailType === 'password-reset' ? 'otp' : 'email',
+      entity_id: messageId || `email-${Date.now()}`,
+      entity_name: subject.substring(0, 200),
+      description: success
+        ? `Email sent to ${recipient}: ${subject.substring(0, 100)}`
+        : `Failed to send email to ${recipient}: ${subject.substring(0, 100)}`,
+      success,
+      error_message: errorMessage || null,
+      actor_id: 'system',
+      actor_name: 'Email Service',
+      metadata: {
+        recipient,
+        subject: subject.substring(0, 200),
+        emailType,
+        messageId,
+        deliveredAt: success ? new Date().toISOString() : undefined,
+        source: 'send-email-edge-function',
+        ...metadata
+      }
+    })
+  } catch (logErr) {
+    console.warn('Failed to log email to audit_logs:', logErr)
+  }
+}
 
 interface EmailRequest {
   to: string
@@ -122,6 +162,23 @@ serve(async (req) => {
   const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(7)}`
   console.log(`[${requestId}] Email function invoked`)
 
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.warn(`[${requestId}] WARN: Supabase service role secrets not configured - email audit logging disabled`)
+  }
+  
+  const supabase = supabaseUrl && serviceRoleKey
+    ? createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      })
+    : null
+
+  let emailTo = ''
+  let emailSubject = ''
+  let emailType = 'general'
+
   try {
     const smtpHost = Deno.env.get('SMTP_HOST')
     const smtpPort = Deno.env.get('SMTP_PORT')
@@ -151,6 +208,10 @@ serve(async (req) => {
 
     const body: EmailRequest = await req.json()
     const { to, subject, html, text, type, otp, recipientName, actionUrl, priority, cc, title_en, title_ar, message_en, message_ar, details } = body
+    
+    emailTo = to || ''
+    emailSubject = subject || ''
+    emailType = type || 'general'
 
     console.log(`[${requestId}] Email request: to=${to}, subject=${subject?.substring(0, 40)}..., type=${type}`)
 
@@ -220,6 +281,20 @@ serve(async (req) => {
       console.log(`[${requestId}] SMTP connection verified`)
     } catch (verifyError: any) {
       console.error(`[${requestId}] SMTP verify failed:`, verifyError.message, verifyError.code)
+      
+      if (supabase) {
+        await logEmailToAudit(
+          supabase,
+          false,
+          to,
+          subject,
+          type || 'general',
+          undefined,
+          `SMTP connection failed: ${verifyError.message}`,
+          { errorCode: verifyError.code, requestId }
+        )
+      }
+      
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -262,6 +337,19 @@ serve(async (req) => {
 
     transporter.close()
 
+    if (supabase) {
+      await logEmailToAudit(
+        supabase,
+        true,
+        to,
+        subject,
+        type || 'general',
+        info.messageId,
+        undefined,
+        { priority, ccCount: cc?.length || 0, requestId }
+      )
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
@@ -273,6 +361,20 @@ serve(async (req) => {
     )
   } catch (error: any) {
     console.error(`[${requestId}] Email error:`, error.message, error.stack)
+    
+    if (supabase && emailTo && emailSubject) {
+      await logEmailToAudit(
+        supabase,
+        false,
+        emailTo,
+        emailSubject,
+        emailType,
+        undefined,
+        error.message || 'Failed to send email',
+        { errorType: error.name, requestId }
+      )
+    }
+
     return new Response(
       JSON.stringify({ 
         success: false, 

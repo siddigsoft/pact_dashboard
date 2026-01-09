@@ -26,6 +26,14 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, featurin
 *   **Task-Level Budget Tracking:** Granular budget management at the individual task/activity level with variance analysis (CPI, SPI, EAC), status classification, trend detection, spending restrictions, and utilization alerts.
 *   **Password Management System:** Custom password reset with 6-digit OTP via email, password change with MFA, and admin password reset capabilities, all with bilingual support.
 *   **Email Verification & Notification System:** Features email verification, admin manual email confirmation, IONOS SMTP integration for transactional emails, and bilingual email templates for various notifications.
+*   **Comprehensive Email Tracking System:** Real-time tracking of all emails sent from the platform via the EmailTracking page (`src/pages/EmailTracking.tsx`). Features include:
+    - **Real-time updates:** Uses Supabase Realtime subscriptions for live email status monitoring
+    - **Centralized logging:** All Edge Functions (`send-email`, `dispatch-notification`, `verify-reset-otp`) log emails to `audit_logs` table with `module='notification'` and `entity_type='email'/'otp'`
+    - **Delivery status tracking:** Tracks successful deliveries, failures, and skipped emails with error messages
+    - **Filtering and search:** Filter by status (delivered/failed), type (notification/OTP), and date range
+    - **Statistics dashboard:** Monthly summaries, error breakdowns, and delivery rate metrics
+    - **Test email functionality:** Send test emails directly from the tracking page
+    - **Source tracking:** Each email log includes source Edge Function name in metadata for debugging
 *   **Realtime Status Indicators:** Components like `RealtimeBanner`, `DataFreshnessBadge`, `RealtimeActivityIndicator`, and `RealtimeStatusDot` provide visual feedback on connection and data freshness.
 *   **Hub Management Notification System:** Centralized service for sending notifications to relevant management users (Hub Supervisors, Hub FOMs, Admins, Super Admins) for MMP forwarding, site operations, financial transactions, and activity milestones, with deduplication.
 *   **Targeted Email Notification System:** Optimized to reduce email volume, sending notifications to specific recipients (e.g., selected FOMs, coordinators) with Super Admin CC, and including a 2-second delay for multiple recipients.
