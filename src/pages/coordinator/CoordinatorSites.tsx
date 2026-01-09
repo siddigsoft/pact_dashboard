@@ -2087,6 +2087,11 @@ const CoordinatorSites: React.FC = () => {
   };
 
   const handleBulkLocalityVerify = async () => {
+    console.log('[BulkLocalityVerify] Starting verification...');
+    console.log('[BulkLocalityVerify] selectedLocalityForBulkVerify:', selectedLocalityForBulkVerify);
+    console.log('[BulkLocalityVerify] bulkLocalityVisitDateObj:', bulkLocalityVisitDateObj);
+    console.log('[BulkLocalityVerify] hasBulkDMActivities:', hasBulkDMActivities);
+    
     if (!selectedLocalityForBulkVerify) {
       toast({ title: 'Validation Error', description: 'No locality selected.', variant: 'destructive' });
       return;
@@ -2095,6 +2100,9 @@ const CoordinatorSites: React.FC = () => {
     // Parse state and locality from localityKey
     const [stateName, localityName] = selectedLocalityForBulkVerify.localityKey.split('|');
     const hubOffice = selectedLocalityForBulkVerify.sites[0]?.hub_office;
+    
+    console.log('[BulkLocalityVerify] stateName:', stateName, 'localityName:', localityName);
+    console.log('[BulkLocalityVerify] sites count:', selectedLocalityForBulkVerify.sites.length);
 
     // Validate inputs based on DM presence
     if (hasBulkDMActivities) {
@@ -2224,10 +2232,10 @@ const CoordinatorSites: React.FC = () => {
       await refreshMMPFiles();
       await refreshSites();
     } catch (error) {
-      console.error('Error verifying locality sites:', error);
+      console.error('[BulkLocalityVerify] Error verifying locality sites:', error);
       toast({
         title: 'Error',
-        description: 'Failed to verify sites. Please try again.',
+        description: `Failed to verify sites: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: 'destructive'
       });
     }
