@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { MMPFile } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { MMPContextType } from './types';
@@ -574,6 +574,25 @@ export const useMMPProvider = () => {
     // Load MMP files and counts in parallel for faster initial render
     Promise.all([refreshMMPFiles(), refreshSiteEntryCounts()]);
   }, []);
+
+  // Track if we've started loading site entries to prevent duplicate calls
+  const siteEntriesLoadingStarted = useRef(false);
+
+  // Load site entries in background after MMP files are loaded
+  useEffect(() => {
+    if (mmpFiles.length > 0 && hasLoadedOnce && !siteEntriesLoadingStarted.current) {
+      // Only load entries for MMPs that don't have siteEntries yet
+      const mmpIdsWithoutEntries = mmpFiles
+        .filter(mmp => !mmp.siteEntries || mmp.siteEntries.length === 0)
+        .map(mmp => mmp.id);
+      
+      if (mmpIdsWithoutEntries.length > 0) {
+        siteEntriesLoadingStarted.current = true;
+        console.log('[MMP Context] Loading site entries for', mmpIdsWithoutEntries.length, 'MMPs');
+        loadSiteEntriesInBackground(mmpIdsWithoutEntries);
+      }
+    }
+  }, [mmpFiles.length, hasLoadedOnce, loadSiteEntriesInBackground]);
 
   // Automatic background refresh DISABLED to prevent excessive re-renders and UI blinking
   // Data now refreshes only on user actions (button clicks, page loads, saves, etc.)
