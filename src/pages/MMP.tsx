@@ -215,23 +215,25 @@ interface VerifiedSitesDisplayProps {
 const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites }: VerifiedSitesDisplayProps) {
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
 
-  // Derive verified site entries from context
+  // Derive site entries from context using the passed verifiedSites (already filtered by caller)
   const verifiedSiteEntries = useMemo(() => {
     if (verifiedSites.length === 0) return [];
 
     // Get unique mmp_ids from verified sites
     const mmpIds = [...new Set(verifiedSites.map(s => s.mmpId).filter(Boolean))];
     if (mmpIds.length === 0) return [];
+    
+    // Get the site IDs from the passed verifiedSites for matching
+    const passedSiteIds = new Set(verifiedSites.map(s => s.id));
 
-    // Get all site entries from context for these MMPs
+    // Get all site entries from context for these MMPs that match the passed sites
     const entries: any[] = [];
     mmpFiles.forEach((mmp: any) => {
       if (mmpIds.includes(mmp.id) && Array.isArray(mmp.siteEntries)) {
         mmp.siteEntries
           .filter((entry: any) => {
-            // Filter for verified sites (case-insensitive)
-            const status = String(entry.status || '').toLowerCase();
-            return status === 'verified';
+            // Include entries that match the passed verifiedSites IDs (already pre-filtered by caller)
+            return passedSiteIds.has(entry.id);
           })
           .forEach((entry: any) => {
             entries.push({
@@ -257,6 +259,24 @@ const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verified
           });
       }
     });
+
+    // If no entries found from mmpFiles, use the passed verifiedSites directly (fallback)
+    if (entries.length === 0 && verifiedSites.length > 0) {
+      return verifiedSites.map(s => ({
+        id: s.id,
+        mmpId: s.mmpId,
+        siteName: s.siteName,
+        siteCode: s.siteCode,
+        state: s.state,
+        locality: s.locality,
+        status: s.status,
+        cost: (s as any).cost,
+        verified_by: (s as any).verified_by,
+        verified_at: (s as any).verified_at,
+        verification_notes: (s as any).verification_notes,
+        additionalData: {}
+      }));
+    }
 
     return entries;
   }, [verifiedSites, mmpFiles]);
