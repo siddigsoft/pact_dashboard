@@ -26,7 +26,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { MMPTabsSkeleton } from '@/components/ui/skeletons';
 
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
