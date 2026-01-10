@@ -3468,9 +3468,9 @@ const MMP = () => {
                   <MMPList mmpFiles={verifiedVisibleMMPs} />
                 )
               )}
-              {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'newSites' && (
+              {(isAdminOrSuperUser || isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'newSites' && (
                 <>
-                  {(isAdmin || isICT) && verifiedCategorySiteRows.length > 0 && (
+                  {(isAdminOrSuperUser || isAdmin || isICT) && verifiedCategorySiteRows.length > 0 && (
                     <div className="mb-4">
                       <Button
                         variant="default"
