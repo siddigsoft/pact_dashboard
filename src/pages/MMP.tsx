@@ -2204,41 +2204,72 @@ const MMP = () => {
 
   // Calculate counts specifically for Verified Sites tab (only from verified MMPs)
   // Uses verifiedSiteEntries for consistency with table data sources
+  // "New Sites" includes: verified, pending, approved (without costed), and any unrecognized status
   const verifiedTabSiteEntryCounts = useMemo(() => {
+    // First count all specific statuses
+    const dispatched = verifiedSiteEntries.filter(e => {
+      const status = String(e.status || '').toLowerCase();
+      const acceptedBy = (e as any).accepted_by;
+      return status === 'dispatched' && !acceptedBy;
+    }).length;
+    
+    const accepted = verifiedSiteEntries.filter(e => {
+      const status = String(e.status || '').toLowerCase();
+      return status === 'accepted';
+    }).length;
+    
+    const smartAssigned = verifiedSiteEntries.filter(e => {
+      const status = String(e.status || '').toLowerCase();
+      return status === 'assigned';
+    }).length;
+    
+    const ongoing = verifiedSiteEntries.filter(e => {
+      const status = String(e.status || '').toLowerCase();
+      return /inprogress|in_progress|ongoing/.test(status);
+    }).length;
+    
+    const completed = verifiedSiteEntries.filter(e => {
+      const status = String(e.status || '').toLowerCase();
+      return status === 'completed';
+    }).length;
+    
+    const rejected = verifiedSiteEntries.filter(e => {
+      const status = String(e.status || '').toLowerCase();
+      return status === 'rejected' || status === 'declined';
+    }).length;
+    
+    const approvedCosted = verifiedSiteEntries.filter(e => {
+      const status = String(e.status || '').toLowerCase();
+      return status.includes('approved') && status.includes('costed');
+    }).length;
+    
+    // "New Sites" = sites ready for approval/costing (verified, pending, approved-only, or unrecognized statuses)
+    // Basically: total minus all other specific subcategories
+    const newSites = verifiedSiteEntries.filter(e => {
+      const status = String(e.status || '').toLowerCase();
+      const acceptedBy = (e as any).accepted_by;
+      // Exclude all other subcategory statuses
+      const isDispatched = status === 'dispatched' && !acceptedBy;
+      const isAccepted = status === 'accepted';
+      const isAssigned = status === 'assigned';
+      const isOngoing = /inprogress|in_progress|ongoing/.test(status);
+      const isCompleted = status === 'completed';
+      const isRejected = status === 'rejected' || status === 'declined';
+      const isApprovedCosted = status.includes('approved') && status.includes('costed');
+      
+      return !isDispatched && !isAccepted && !isAssigned && !isOngoing && 
+             !isCompleted && !isRejected && !isApprovedCosted;
+    }).length;
+    
     return {
-      verified: verifiedSiteEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'verified';
-      }).length,
-      dispatched: verifiedSiteEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        const acceptedBy = (e as any).accepted_by;
-        return status === 'dispatched' && !acceptedBy;
-      }).length,
-      accepted: verifiedSiteEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'accepted';
-      }).length,
-      smartAssigned: verifiedSiteEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'assigned';
-      }).length,
-      ongoing: verifiedSiteEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return /inprogress|in_progress|ongoing/.test(status);
-      }).length,
-      completed: verifiedSiteEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'completed';
-      }).length,
-      rejected: verifiedSiteEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'rejected' || status === 'declined';
-      }).length,
-      approvedCosted: verifiedSiteEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status.includes('approved') && status.includes('costed');
-      }).length
+      verified: newSites, // "New Sites" subcategory
+      dispatched,
+      accepted,
+      smartAssigned,
+      ongoing,
+      completed,
+      rejected,
+      approvedCosted
     };
   }, [verifiedSiteEntries]);
 
@@ -2716,21 +2747,8 @@ const MMP = () => {
   }, [verifiedTabSiteEntryCounts]);
 
   // Always calculate verified sites count for "newSites" subcategory (for badge display)
-  const newSitesVerifiedCount = useMemo(() => {
-    const allVerifiedMMPs = categorizedMMPs.verified || [];
-    
-    if (allVerifiedMMPs.length === 0) return 0;
-    
-    // Filter to only count verified sites from any MMP
-    const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      // Show sites that are verified (from mmp_site_entries)
-      // Check both lowercase and capitalized versions
-      const status = row.status?.toLowerCase() || '';
-      return status === 'verified';
-    });
-    
-    return verifiedSites.length;
-  }, [categorizedMMPs.verified, siteVisitRows]);
+  // Use verifiedTabSiteEntryCounts.verified for consistency (already calculated)
+  const newSitesVerifiedCount = verifiedTabSiteEntryCounts.verified;
 
   // Verified site rows per subcategory (all roles seeing Verified tab)
   const verifiedCategorySiteRows = useMemo(() => {
@@ -2743,16 +2761,27 @@ const MMP = () => {
       
       if (allVerifiedMMPs.length === 0) return [];
       
-      // Filter to only show verified sites from any MMP
-      const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-        // Show sites that are verified (from mmp_site_entries)
-        // Check both lowercase and capitalized versions
+      // Filter to show sites ready for approval/costing
+      // Includes: verified, pending, approved-only, and any unrecognized statuses
+      // Excludes: dispatched, accepted, assigned, ongoing, completed, rejected, approved+costed
+      const newSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
         const status = row.status?.toLowerCase() || '';
-        return status === 'verified';
+        const acceptedBy = (row as any).accepted_by;
+        
+        // Exclude all other subcategory statuses
+        const isDispatched = status === 'dispatched' && !acceptedBy;
+        const isAccepted = status === 'accepted';
+        const isAssigned = status === 'assigned';
+        const isOngoing = /inprogress|in_progress|ongoing/.test(status);
+        const isCompleted = status === 'completed';
+        const isRejected = status === 'rejected' || status === 'declined';
+        const isApprovedCosted = status.includes('approved') && status.includes('costed');
+        
+        return !isDispatched && !isAccepted && !isAssigned && !isOngoing && 
+               !isCompleted && !isRejected && !isApprovedCosted;
       });
       
-      // Only return sites that are actually verified
-      return verifiedSites;
+      return newSites;
     }
     
     // For "dispatched" subcategory, filter to only show dispatched entries
