@@ -19,7 +19,7 @@ interface StateBreakdown {
   percentage: number;
 }
 
-function getStateBreakdown(mmp: any): StateBreakdown[] {
+function getStateBreakdown(mmp: any, coordNameLookup?: Map<string, string>): StateBreakdown[] {
   const siteEntries = mmp.siteEntries || [];
   if (siteEntries.length === 0) return [];
 
@@ -62,9 +62,9 @@ function getStateBreakdown(mmp: any): StateBreakdown[] {
 
     // Track coordinators for this state
     const coordId = entry.additional_data?.assigned_to || entry.forwarded_to_user_id;
-    const coordName = entry.additional_data?.assigned_to_name || entry.coordinator_name;
+    const coordName = entry.additional_data?.assigned_to_name || entry.coordinator_name || coordNameLookup?.get(coordId);
     if (coordId && !stateData.coordinators.find(c => c.id === coordId)) {
-      stateData.coordinators.push({ id: coordId, name: coordName || coordId.substring(0, 8) });
+      stateData.coordinators.push({ id: coordId, name: coordName || 'Unknown Coordinator' });
     }
   });
 
@@ -201,7 +201,7 @@ interface CoordinatorByState {
   hasReceivedSites: boolean;
 }
 
-function getCoordinatorsByState(mmp: any): CoordinatorByState[] {
+function getCoordinatorsByState(mmp: any, coordNameLookup?: Map<string, string>): CoordinatorByState[] {
   const siteEntries = mmp.siteEntries || [];
   if (siteEntries.length === 0) return [];
 
@@ -225,7 +225,8 @@ function getCoordinatorsByState(mmp: any): CoordinatorByState[] {
                    entry.forwardedToUserId;
     const coordName = entry.additional_data?.assigned_to_name || 
                      entry.coordinator_name || 
-                     entry.coordinatorName;
+                     entry.coordinatorName ||
+                     coordNameLookup?.get(coordId);
     const receivedAt = entry.forwarded_at || entry.forwardedAt || entry.dispatched_at || entry.dispatchedAt;
     
     if (coordId) {
@@ -240,7 +241,7 @@ function getCoordinatorsByState(mmp: any): CoordinatorByState[] {
       } else {
         stateData.coordinators.push({ 
           id: coordId, 
-          name: coordName || coordId.substring(0, 8),
+          name: coordName || 'Unknown Coordinator',
           sitesAssigned: 1,
           sitesVerified: isVerified ? 1 : 0,
           receivedAt: receivedAt,
@@ -598,16 +599,40 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
   const [coordinatorFilter, setCoordinatorFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Build a coordinator name lookup map from passed coordinators and MMP workflow data
+  const coordNameLookup = useMemo(() => {
+    const lookup = new Map<string, string>();
+    
+    // Add passed coordinators first
+    coordinators.forEach(c => {
+      if (c.id && c.name) lookup.set(c.id, c.name);
+    });
+    
+    // Also extract from MMP workflow data (forwardedToCoordinatorIds/Names)
+    mmpFiles.forEach(mmp => {
+      const workflow = mmp.workflow || {};
+      const ids = workflow.forwardedToCoordinatorIds || [];
+      const names = workflow.forwardedToCoordinatorNames || [];
+      ids.forEach((id: string, index: number) => {
+        if (id && names[index] && !lookup.has(id)) {
+          lookup.set(id, names[index]);
+        }
+      });
+    });
+    
+    return lookup;
+  }, [coordinators, mmpFiles]);
+
   const enrichedMMPs = useMemo(() => {
     return mmpFiles.map(mmp => ({
       ...mmp,
       derivedStage: deriveWorkflowStage(mmp),
       verificationProgress: getVerificationProgress(mmp),
       timeline: buildTimeline(mmp),
-      stateBreakdown: getStateBreakdown(mmp),
-      coordinatorsByState: getCoordinatorsByState(mmp),
+      stateBreakdown: getStateBreakdown(mmp, coordNameLookup),
+      coordinatorsByState: getCoordinatorsByState(mmp, coordNameLookup),
     }));
-  }, [mmpFiles]);
+  }, [mmpFiles, coordNameLookup]);
 
   const uniqueHubs = useMemo(() => {
     const hubs = new Set<string>();
