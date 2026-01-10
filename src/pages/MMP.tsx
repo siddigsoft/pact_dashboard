@@ -2752,18 +2752,11 @@ const MMP = () => {
     }
     
     // Use buildSiteRowsFromMMPs with same filters as verifiedCategorySiteRows
+    // "New Sites" shows ONLY sites with status 'verified' (not pending - those go to Forwarded MMPs)
     const newSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
       const status = row.status?.toLowerCase() || '';
-      const acceptedBy = (row as any).accepted_by;
-      const isDispatched = status === 'dispatched' && !acceptedBy;
-      const isAccepted = status === 'accepted';
-      const isAssigned = status === 'assigned';
-      const isOngoing = /inprogress|in_progress|ongoing/.test(status);
-      const isCompleted = status === 'completed';
-      const isRejected = status === 'rejected' || status === 'declined';
-      const isApprovedCosted = status.includes('approved') && status.includes('costed');
-      return !isDispatched && !isAccepted && !isAssigned && !isOngoing && 
-             !isCompleted && !isRejected && !isApprovedCosted;
+      // Only include sites that have been verified (status === 'verified')
+      return status === 'verified';
     });
     
     const dispatched = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
