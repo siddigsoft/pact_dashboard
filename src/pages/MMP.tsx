@@ -2925,11 +2925,8 @@ const MMP = () => {
         </div>
       </div>
 
-      {/* Body */}
-      {loading ? (
-        <MMPTabsSkeleton />
-      ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      {/* Body - Show tabs immediately with loading states per section for faster perceived loading */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="overflow-x-auto mb-6">
               <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/90 to-blue-900/90 border border-blue-500/40 backdrop-blur-xl p-1.5 min-h-[48px] rounded-xl shadow-lg">
                 {canClaimSites && (
@@ -3141,6 +3138,15 @@ const MMP = () => {
                       )}
                     </CardContent>
                   </Card>
+                ) : loading ? (
+                  <Card>
+                    <CardContent className="py-8">
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
+                        <span className="text-muted-foreground">{t('common.loading')}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ) : (
                   <MMPList mmpFiles={(isFOM || isSupervisor || isAdmin || isICT) ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
                 )}
@@ -3176,7 +3182,18 @@ const MMP = () => {
                       </div>
                   </div>
                 )}
-                <MMPList mmpFiles={(isAdmin || isICT || isFOM || isSupervisor) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
+                {loading ? (
+                  <Card>
+                    <CardContent className="py-8">
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
+                        <span className="text-muted-foreground">{t('common.loading')}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <MMPList mmpFiles={(isAdmin || isICT || isFOM || isSupervisor) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
+                )}
                 {(isFOM || isSupervisor) && (
                   <SitesDisplayTable 
                     siteRows={forwardedCategorySiteRows}
@@ -3281,7 +3298,20 @@ const MMP = () => {
                   </div>
                 </div>
               )}
-              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
+              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && (
+                loading ? (
+                  <Card>
+                    <CardContent className="py-8">
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
+                        <span className="text-muted-foreground">{t('common.loading')}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <MMPList mmpFiles={verifiedVisibleMMPs} />
+                )
+              )}
               {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'newSites' && (
                 <>
                   {(isAdmin || isICT) && verifiedCategorySiteRows.length > 0 && (
@@ -4301,11 +4331,21 @@ const MMP = () => {
             {/* MMP Tracker Status Tab */}
             {!canClaimSites && (
               <TabsContent value="tracker">
-                <WorkflowTrackerTab mmpFiles={mmpFiles} />
+                {loading ? (
+                  <Card>
+                    <CardContent className="py-8">
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
+                        <span className="text-muted-foreground">{t('common.loading')}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <WorkflowTrackerTab mmpFiles={mmpFiles} />
+                )}
               </TabsContent>
             )}
           </Tabs>
-        )}
       {(isAdmin || isICT) && (
         <>
         <BulkClearForwardedDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen} />
