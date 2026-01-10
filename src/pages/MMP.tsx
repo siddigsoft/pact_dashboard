@@ -2118,55 +2118,6 @@ const MMP = () => {
     };
   }, [mmpFiles]);
 
-  // Calculate counts specifically for Verified Sites tab (only from verified MMPs)
-  const verifiedTabSiteEntryCounts = useMemo(() => {
-    const verifiedMMPs = categorizedMMPs.verified || [];
-    const allEntries = verifiedMMPs.flatMap(mmp => {
-      const entries = mmp.siteEntries || [];
-      return entries.map(entry => ({
-        ...entry,
-        mmp_file_id: mmp.id,
-        mmpId: mmp.id
-      }));
-    });
-    
-    return {
-      verified: allEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'verified';
-      }).length,
-      dispatched: allEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        const acceptedBy = (e as any).accepted_by;
-        return status === 'dispatched' && !acceptedBy;
-      }).length,
-      accepted: allEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'accepted';
-      }).length,
-      smartAssigned: allEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'assigned';
-      }).length,
-      ongoing: allEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return /inprogress|in_progress|ongoing/.test(status);
-      }).length,
-      completed: allEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'completed';
-      }).length,
-      rejected: allEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'rejected' || status === 'declined';
-      }).length,
-      approvedCosted: allEntries.filter(e => {
-        const status = String(e.status || '').toLowerCase();
-        return status === 'approved and costed';
-      }).length
-    };
-  }, [categorizedMMPs.verified]);
-
   // Update count state from context (fast counts loaded separately from site entries)
   useEffect(() => {
     setDispatchedCount(contextCounts.dispatched);
@@ -2230,18 +2181,66 @@ const MMP = () => {
     });
   }, [mmpFiles]);
 
-  // Extract site entries ONLY from verified MMPs (for Verified Sites tab)
-  const verifiedSiteEntries = useMemo(() => {
+  // Create a stable set of verified MMP IDs to avoid reference changes
+  const verifiedMMPIds = useMemo(() => {
     const verifiedMMPs = categorizedMMPs.verified || [];
-    return verifiedMMPs.flatMap(mmp => {
-      const entries = mmp.siteEntries || [];
-      return entries.map(entry => ({
-        ...entry,
-        mmp_file_id: mmp.id,
-        mmpId: mmp.id
-      }));
-    });
-  }, [categorizedMMPs.verified]);
+    return new Set(verifiedMMPs.map(mmp => mmp.id));
+  }, [categorizedMMPs]);
+
+  // Extract site entries ONLY from verified MMPs (for Verified Sites tab)
+  // Uses verifiedMMPIds set for stable filtering
+  const verifiedSiteEntries = useMemo(() => {
+    return mmpFiles
+      .filter(mmp => verifiedMMPIds.has(mmp.id))
+      .flatMap(mmp => {
+        const entries = mmp.siteEntries || [];
+        return entries.map(entry => ({
+          ...entry,
+          mmp_file_id: mmp.id,
+          mmpId: mmp.id
+        }));
+      });
+  }, [mmpFiles, verifiedMMPIds]);
+
+  // Calculate counts specifically for Verified Sites tab (only from verified MMPs)
+  // Uses verifiedSiteEntries for consistency with table data sources
+  const verifiedTabSiteEntryCounts = useMemo(() => {
+    return {
+      verified: verifiedSiteEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'verified';
+      }).length,
+      dispatched: verifiedSiteEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        const acceptedBy = (e as any).accepted_by;
+        return status === 'dispatched' && !acceptedBy;
+      }).length,
+      accepted: verifiedSiteEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'accepted';
+      }).length,
+      smartAssigned: verifiedSiteEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'assigned';
+      }).length,
+      ongoing: verifiedSiteEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return /inprogress|in_progress|ongoing/.test(status);
+      }).length,
+      completed: verifiedSiteEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'completed';
+      }).length,
+      rejected: verifiedSiteEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'rejected' || status === 'declined';
+      }).length,
+      approvedCosted: verifiedSiteEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status.includes('approved') && status.includes('costed');
+      }).length
+    };
+  }, [verifiedSiteEntries]);
 
   // Derive enumerator data from context (Available Sites, Smart Assigned, My Sites)
   const enumeratorData = useMemo(() => {
