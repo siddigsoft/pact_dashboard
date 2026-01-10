@@ -2666,15 +2666,27 @@ const MMP = () => {
   }, [categorizedMMPs.verified, siteVisitStats]);
 
   // Build unified site rows (mmp_site_entries + fallback to mmp.siteEntries) for given MMP list
+  // This merges siteVisitRows with any siteEntries that don't have a corresponding visit row
   const buildSiteRowsFromMMPs = (mmps: any[], filterFn?: (row: SiteVisitRow) => boolean): SiteVisitRow[] => {
     const rows: SiteVisitRow[] = [];
-    const existingIds = new Set(siteVisitRows.map(r => r.mmpId));
+    const mmpIds = new Set(mmps.map(m => m.id));
+    
+    // First, get all siteVisitRows for these MMPs
+    const visitRows = siteVisitRows.filter(r => mmpIds.has(r.mmpId));
+    
+    // Track which site entry IDs have visit rows to avoid duplicates
+    const visitRowSiteIds = new Set(visitRows.map(r => r.id));
+    
+    // For each MMP, add siteEntries that don't have corresponding visit rows
     for (const mmp of mmps) {
-      // Use siteEntries when we don't yet have mmp_site_entries for this MMP
-      if (!existingIds.has(mmp.id) && Array.isArray(mmp.siteEntries)) {
+      if (Array.isArray(mmp.siteEntries)) {
         for (const se of mmp.siteEntries) {
-          const row: SiteVisitRow = {
-            id: se.id || `${mmp.id}-site-${rows.length}`,
+          const siteId = se.id || `${mmp.id}-site-${rows.length}`;
+          // Skip if this site entry already has a visit row
+          if (visitRowSiteIds.has(siteId)) continue;
+          
+          const row = {
+            id: siteId,
             mmpId: mmp.id,
             siteName: se.siteName || se.siteCode || se.state || 'Site',
             siteCode: se.siteCode,
@@ -2685,20 +2697,20 @@ const MMP = () => {
             assignedAt: undefined,
             completedAt: undefined,
             rejectionReason: undefined,
-          };
+            accepted_by: se.accepted_by,
+            dispatched_by: se.dispatched_by,
+            verified_by: se.verified_by,
+          } as SiteVisitRow;
           if (!filterFn || filterFn(row)) {
             rows.push(row);
           }
         }
       }
     }
-    // Merge with siteVisitRows restricted to those MMPs
-    const visitRows = siteVisitRows.filter(r => {
-      const matchesMMP = mmps.find(m => m.id === r.mmpId);
-      if (!matchesMMP) return false;
-      return !filterFn || filterFn(r);
-    });
-    return [...visitRows, ...rows];
+    
+    // Apply filter to visit rows and merge
+    const filteredVisitRows = filterFn ? visitRows.filter(filterFn) : visitRows;
+    return [...filteredVisitRows, ...rows];
   };
 
   // Pre-compute all subcategory site rows using buildSiteRowsFromMMPs for consistent counts
