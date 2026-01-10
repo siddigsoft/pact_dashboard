@@ -4,11 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Eye, ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
+import { PostponementDialog } from './PostponementDialog';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
+import { PostponementHistoryEntry } from '@/types/mmp/site';
+import { useUser } from '@/context/user/UserContext';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -26,6 +29,9 @@ interface MMPSiteEntriesTableProps {
   onSendBackToCoordinator?: (site: any, comments: string) => void;
   showClaimButton?: boolean;
   onSiteClaimed?: () => void;
+  onDateChange?: (siteEntryId: string, postponement: PostponementHistoryEntry) => Promise<void>;
+  onDirectDateChange?: (siteEntryId: string, newDate: string, newDateTo?: string, reason?: string) => Promise<void>;
+  showDateChangeButton?: boolean;
 }
 
 const MMPSiteEntriesTable = ({ 
@@ -43,15 +49,21 @@ const MMPSiteEntriesTable = ({
   showVisitActions = false,
   onSendBackToCoordinator,
   showClaimButton = false,
-  onSiteClaimed
+  onSiteClaimed,
+  onDateChange,
+  onDirectDateChange,
+  showDateChangeButton = true
 }: MMPSiteEntriesTableProps) => {
+  const { currentUser } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<any | null>(null);
-  const [calculatedFees, setCalculatedFees] = useState<Record<string, number>>({}); // Map of siteId -> calculatedFee
+  const [calculatedFees, setCalculatedFees] = useState<Record<string, number>>({});
+  const [postponementOpen, setPostponementOpen] = useState(false);
+  const [postponementSite, setPostponementSite] = useState<any | null>(null);
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -424,6 +436,21 @@ const MMPSiteEntriesTable = ({
                             )}
                           </>
                         ) : null}
+                        {showDateChangeButton && (onDateChange || onDirectDateChange) && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              setPostponementSite(site);
+                              setPostponementOpen(true);
+                            }}
+                            className="w-full min-h-[44px] flex items-center justify-center gap-2"
+                            data-testid={`button-date-change-${site.id}`}
+                          >
+                            <CalendarDays className="h-4 w-4" />
+                            Change Date
+                          </Button>
+                        )}
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -492,6 +519,33 @@ const MMPSiteEntriesTable = ({
         currentUserId={currentUserId}
         onStartVisit={onStartVisit}
       />
+
+      {/* Date Change/Postponement Dialog */}
+      {postponementSite && currentUser && (onDateChange || onDirectDateChange) && (
+        <PostponementDialog
+          open={postponementOpen}
+          onOpenChange={setPostponementOpen}
+          siteEntry={{
+            id: postponementSite.id,
+            siteName: postponementSite.siteName || postponementSite.site_name,
+            siteCode: postponementSite.siteCode || postponementSite.site_code,
+            visitDate: postponementSite.visitDate || postponementSite.visit_date,
+            visitDateFrom: postponementSite.visitDateFrom || postponementSite.visit_date_from,
+            visitDateTo: postponementSite.visitDateTo || postponementSite.visit_date_to,
+            mainActivity: postponementSite.siteActivity || postponementSite.activity_at_site,
+            postponementHistory: postponementSite.postponementHistory || postponementSite.additional_data?.postponementHistory || [],
+            verificationStarted: ['verified', 'approved', 'dispatched', 'completed'].includes(postponementSite.status?.toLowerCase())
+          }}
+          currentUser={{
+            id: currentUser.id,
+            full_name: currentUser.fullName || currentUser.email,
+            name: currentUser.fullName,
+            role: currentUser.role
+          }}
+          onSubmit={onDateChange || (async () => {})}
+          onDirectChange={onDirectDateChange}
+        />
+      )}
 
     </Card>
   );
