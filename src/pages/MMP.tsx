@@ -1889,6 +1889,28 @@ const MMP = () => {
     loadHubStates();
   }, [isFOM, isSupervisor, isAdmin, isICT, contextUsers]);
 
+  // Pre-compute which MMP IDs have sites with verified/dispatched/etc statuses
+  // This runs before categorization and updates when siteEntries are loaded
+  const mmpIdsWithVerifiedSites = useMemo(() => {
+    const idsWithVerified = new Set<string>();
+    for (const mmp of mmpFiles) {
+      const entries = mmp.siteEntries || [];
+      const hasVerified = entries.some(site => {
+        const siteStatus = (site.status || '').toLowerCase();
+        return siteStatus === 'verified' || 
+               siteStatus === 'dispatched' || 
+               siteStatus === 'accepted' || 
+               siteStatus === 'assigned' ||
+               siteStatus === 'completed' ||
+               (siteStatus.includes('approved') && siteStatus.includes('costed'));
+      });
+      if (hasVerified) {
+        idsWithVerified.add(mmp.id);
+      }
+    }
+    return idsWithVerified;
+  }, [mmpFiles]);
+
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
     let filteredMMPs = mmpFiles;
@@ -1989,17 +2011,9 @@ const MMP = () => {
       // Normalize status for case-insensitive comparison (production data may have mixed casing)
       const normalizedStatus = (mmp.status || '').toLowerCase();
       
-      // Check if MMP has any sites with verified/dispatched/accepted/completed status
-      // This allows MMPs to appear in Verified Sites tab when they contain verified sites
-      const hasVerifiedSites = mmp.siteEntries?.some(site => {
-        const siteStatus = (site.status || '').toLowerCase();
-        return siteStatus === 'verified' || 
-               siteStatus === 'dispatched' || 
-               siteStatus === 'accepted' || 
-               siteStatus === 'assigned' ||
-               siteStatus === 'completed' ||
-               (siteStatus.includes('approved') && siteStatus.includes('costed'));
-      });
+      // Use pre-computed set to check if MMP has verified sites
+      // This updates when siteEntries are loaded asynchronously
+      const hasVerifiedSites = mmpIdsWithVerifiedSites.has(mmp.id);
       
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
@@ -2026,7 +2040,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites]);
+  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
