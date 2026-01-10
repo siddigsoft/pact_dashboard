@@ -2230,6 +2230,19 @@ const MMP = () => {
     });
   }, [mmpFiles]);
 
+  // Extract site entries ONLY from verified MMPs (for Verified Sites tab)
+  const verifiedSiteEntries = useMemo(() => {
+    const verifiedMMPs = categorizedMMPs.verified || [];
+    return verifiedMMPs.flatMap(mmp => {
+      const entries = mmp.siteEntries || [];
+      return entries.map(entry => ({
+        ...entry,
+        mmp_file_id: mmp.id,
+        mmpId: mmp.id
+      }));
+    });
+  }, [categorizedMMPs.verified]);
+
   // Derive enumerator data from context (Available Sites, Smart Assigned, My Sites)
   const enumeratorData = useMemo(() => {
     if (!canClaimSites || !currentUser?.id) {
@@ -2393,6 +2406,7 @@ const MMP = () => {
   }, [enumeratorData]);
 
   // Load smart assigned site entries only when the tab is active
+  // Uses verifiedSiteEntries (only from verified MMPs) for consistency
   useEffect(() => {
     if (verifiedSubTab !== 'smartAssigned') {
       setSmartAssignedSiteEntries([]);
@@ -2403,7 +2417,7 @@ const MMP = () => {
     // Using in-memory data only, no async loading
     setLoadingSmartAssigned(false);
 
-    const formattedEntries = allSiteEntries
+    const formattedEntries = verifiedSiteEntries
       .map(formatSiteEntry)
       .filter(entry => {
         const status = String(entry.status || '').toLowerCase();
@@ -2424,9 +2438,10 @@ const MMP = () => {
 
     setSmartAssignedSiteEntries(formattedEntries);
     setSmartAssignedCount(formattedEntries.length);
-  }, [verifiedSubTab, allSiteEntries, formatSiteEntry]);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
   // Load approved and costed site entries only when the tab is active
+  // Uses verifiedSiteEntries (only from verified MMPs) to ensure data consistency
   useEffect(() => {
     
       if (verifiedSubTab !== 'approvedCosted') {
@@ -2437,7 +2452,7 @@ const MMP = () => {
 
       setLoadingApprovedCosted(false);
 
-      const formattedEntries = allSiteEntries
+      const formattedEntries = verifiedSiteEntries
       .map(formatSiteEntry)
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
@@ -2447,10 +2462,10 @@ const MMP = () => {
       )
       setApprovedCostedSiteEntries(formattedEntries);
       setApprovedCostedCount(formattedEntries.length);
-  }, [verifiedSubTab, allSiteEntries, formatSiteEntry]);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
   
-  // already-loaded MMP context (allSiteEntries).
+  // Load dispatched site entries (uses verifiedSiteEntries for consistency)
   useEffect(() => {
     if (verifiedSubTab !== 'dispatched') {
       setDispatchedSiteEntries([]);
@@ -2461,7 +2476,7 @@ const MMP = () => {
     
     setLoadingDispatched(false);
 
-    const formattedEntries = allSiteEntries
+    const formattedEntries = verifiedSiteEntries
       .map(formatSiteEntry)
       .filter(entry => {
         const status = String(entry.status || '').toLowerCase();
@@ -2476,9 +2491,10 @@ const MMP = () => {
 
     setDispatchedSiteEntries(formattedEntries);
     setDispatchedCount(formattedEntries.length);
-  }, [verifiedSubTab, allSiteEntries, formatSiteEntry]);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
   // Load accepted site entries only when the tab is active
+  // Uses verifiedSiteEntries (only from verified MMPs) for consistency
   useEffect(() => {
     
       if (verifiedSubTab !== 'accepted') {
@@ -2488,7 +2504,7 @@ const MMP = () => {
       }
 
       setLoadingAccepted(false);
-      const formattedEntries = allSiteEntries
+      const formattedEntries = verifiedSiteEntries
       .map(formatSiteEntry)
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
@@ -2504,9 +2520,10 @@ const MMP = () => {
     setAcceptedCount(formattedEntries.length);
 
     // No async operation needed - using in-memory data
-  }, [verifiedSubTab, allSiteEntries,formatSiteEntry]);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
   // Load ongoing site entries only when the tab is active
+  // Uses verifiedSiteEntries (only from verified MMPs) for consistency
   useEffect(() => {
     
       if (verifiedSubTab !== 'ongoing') {
@@ -2517,7 +2534,7 @@ const MMP = () => {
 
       setLoadingOngoing(false);
 
-      const formattedEntries = allSiteEntries
+      const formattedEntries = verifiedSiteEntries
       .map(formatSiteEntry)
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
@@ -2539,9 +2556,10 @@ const MMP = () => {
     
 
     
-  }, [verifiedSubTab,allSiteEntries,formatSiteEntry]);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
   // Load completed site entries only when the tab is active
+  // Uses verifiedSiteEntries (only from verified MMPs) for consistency
   useEffect(() => {
     
       if (verifiedSubTab !== 'completed') {
@@ -2552,7 +2570,7 @@ const MMP = () => {
 
       setLoadingCompleted(false);
 
-      const formattedEntries = allSiteEntries
+      const formattedEntries = verifiedSiteEntries
       .map(formatSiteEntry)
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
@@ -2569,9 +2587,10 @@ const MMP = () => {
     setCompletedCount(formattedEntries.length);
     
      
-  }, [verifiedSubTab,allSiteEntries,formatSiteEntry]);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
   // Load rejected site entries only when the tab is active
+  // Uses verifiedSiteEntries (only from verified MMPs) for consistency
   useEffect(() => {
     
       if (verifiedSubTab !== 'rejected') {
@@ -2581,7 +2600,7 @@ const MMP = () => {
       }
 
       setLoadingRejected(false);
-      const formattedEntries = allSiteEntries
+      const formattedEntries = verifiedSiteEntries
       .map(formatSiteEntry)
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
@@ -2599,7 +2618,7 @@ const MMP = () => {
     
 
     
-  }, [verifiedSubTab,allSiteEntries,formatSiteEntry]);
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
   // Verified subcategories for Admin/ICT
   const verifiedSubcategories = useMemo(() => {
