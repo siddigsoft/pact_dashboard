@@ -2202,76 +2202,8 @@ const MMP = () => {
       });
   }, [mmpFiles, verifiedMMPIds]);
 
-  // Calculate counts specifically for Verified Sites tab (only from verified MMPs)
-  // Uses verifiedSiteEntries for consistency with table data sources
-  // "New Sites" includes: verified, pending, approved (without costed), and any unrecognized status
-  const verifiedTabSiteEntryCounts = useMemo(() => {
-    // First count all specific statuses
-    const dispatched = verifiedSiteEntries.filter(e => {
-      const status = String(e.status || '').toLowerCase();
-      const acceptedBy = (e as any).accepted_by;
-      return status === 'dispatched' && !acceptedBy;
-    }).length;
-    
-    const accepted = verifiedSiteEntries.filter(e => {
-      const status = String(e.status || '').toLowerCase();
-      return status === 'accepted';
-    }).length;
-    
-    const smartAssigned = verifiedSiteEntries.filter(e => {
-      const status = String(e.status || '').toLowerCase();
-      return status === 'assigned';
-    }).length;
-    
-    const ongoing = verifiedSiteEntries.filter(e => {
-      const status = String(e.status || '').toLowerCase();
-      return /inprogress|in_progress|ongoing/.test(status);
-    }).length;
-    
-    const completed = verifiedSiteEntries.filter(e => {
-      const status = String(e.status || '').toLowerCase();
-      return status === 'completed';
-    }).length;
-    
-    const rejected = verifiedSiteEntries.filter(e => {
-      const status = String(e.status || '').toLowerCase();
-      return status === 'rejected' || status === 'declined';
-    }).length;
-    
-    const approvedCosted = verifiedSiteEntries.filter(e => {
-      const status = String(e.status || '').toLowerCase();
-      return status.includes('approved') && status.includes('costed');
-    }).length;
-    
-    // "New Sites" = sites ready for approval/costing (verified, pending, approved-only, or unrecognized statuses)
-    // Basically: total minus all other specific subcategories
-    const newSites = verifiedSiteEntries.filter(e => {
-      const status = String(e.status || '').toLowerCase();
-      const acceptedBy = (e as any).accepted_by;
-      // Exclude all other subcategory statuses
-      const isDispatched = status === 'dispatched' && !acceptedBy;
-      const isAccepted = status === 'accepted';
-      const isAssigned = status === 'assigned';
-      const isOngoing = /inprogress|in_progress|ongoing/.test(status);
-      const isCompleted = status === 'completed';
-      const isRejected = status === 'rejected' || status === 'declined';
-      const isApprovedCosted = status.includes('approved') && status.includes('costed');
-      
-      return !isDispatched && !isAccepted && !isAssigned && !isOngoing && 
-             !isCompleted && !isRejected && !isApprovedCosted;
-    }).length;
-    
-    return {
-      verified: newSites, // "New Sites" subcategory
-      dispatched,
-      accepted,
-      smartAssigned,
-      ongoing,
-      completed,
-      rejected,
-      approvedCosted
-    };
-  }, [verifiedSiteEntries]);
+  // Note: verifiedTabSiteEntryCounts is now derived from precomputedSubcategorySites
+  // which is calculated after buildSiteRowsFromMMPs is defined (around line 2736)
 
   // Derive enumerator data from context (Available Sites, Smart Assigned, My Sites)
   const enumeratorData = useMemo(() => {
@@ -2730,79 +2662,149 @@ const MMP = () => {
     return [...visitRows, ...rows];
   };
 
-  // Calculate total verified sites count across all verified MMPs (for "Verified Sites" tab badge)
-  // Uses verifiedTabSiteEntryCounts to ensure consistency with subcategory badges
-  const totalVerifiedSitesCount = useMemo(() => {
-    // Sum all subcategory counts from the same source to ensure tab total matches subcategory totals
-    return (
-      verifiedTabSiteEntryCounts.verified + // "New Sites" subcategory (sites with status = 'verified')
-      verifiedTabSiteEntryCounts.approvedCosted +
-      verifiedTabSiteEntryCounts.dispatched +
-      verifiedTabSiteEntryCounts.smartAssigned +
-      verifiedTabSiteEntryCounts.accepted +
-      verifiedTabSiteEntryCounts.ongoing +
-      verifiedTabSiteEntryCounts.completed +
-      verifiedTabSiteEntryCounts.rejected
-    );
-  }, [verifiedTabSiteEntryCounts]);
+  // Pre-compute all subcategory site rows using buildSiteRowsFromMMPs for consistent counts
+  // This ensures badge counts match table data (both use same deduplication logic)
+  const precomputedSubcategorySites = useMemo(() => {
+    const allVerifiedMMPs = categorizedMMPs.verified || [];
+    
+    if (allVerifiedMMPs.length === 0) {
+      return {
+        newSites: [],
+        dispatched: [],
+        accepted: [],
+        smartAssigned: [],
+        ongoing: [],
+        completed: [],
+        rejected: [],
+        approvedCosted: []
+      };
+    }
+    
+    // Use buildSiteRowsFromMMPs with same filters as verifiedCategorySiteRows
+    const newSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      const status = row.status?.toLowerCase() || '';
+      const acceptedBy = (row as any).accepted_by;
+      const isDispatched = status === 'dispatched' && !acceptedBy;
+      const isAccepted = status === 'accepted';
+      const isAssigned = status === 'assigned';
+      const isOngoing = /inprogress|in_progress|ongoing/.test(status);
+      const isCompleted = status === 'completed';
+      const isRejected = status === 'rejected' || status === 'declined';
+      const isApprovedCosted = status.includes('approved') && status.includes('costed');
+      return !isDispatched && !isAccepted && !isAssigned && !isOngoing && 
+             !isCompleted && !isRejected && !isApprovedCosted;
+    });
+    
+    const dispatched = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      const status = row.status?.toLowerCase() || '';
+      const acceptedBy = (row as any).accepted_by;
+      return status === 'dispatched' && !acceptedBy;
+    });
+    
+    const accepted = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      const status = row.status?.toLowerCase() || '';
+      return status === 'accepted';
+    });
+    
+    const smartAssigned = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      const status = row.status?.toLowerCase() || '';
+      return status === 'assigned';
+    });
+    
+    const ongoing = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      const status = row.status?.toLowerCase() || '';
+      return /inprogress|in_progress|ongoing/.test(status);
+    });
+    
+    const completed = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      const status = row.status?.toLowerCase() || '';
+      return status === 'completed';
+    });
+    
+    const rejected = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      const status = row.status?.toLowerCase() || '';
+      return status === 'rejected' || status === 'declined';
+    });
+    
+    const approvedCosted = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      const status = row.status?.toLowerCase() || '';
+      return status.includes('approved') && status.includes('costed');
+    });
+    
+    return { newSites, dispatched, accepted, smartAssigned, ongoing, completed, rejected, approvedCosted };
+  }, [categorizedMMPs.verified, siteVisitRows]);
 
-  // Always calculate verified sites count for "newSites" subcategory (for badge display)
-  // Use verifiedTabSiteEntryCounts.verified for consistency (already calculated)
-  const newSitesVerifiedCount = verifiedTabSiteEntryCounts.verified;
+  // Calculate total verified sites count from precomputed data
+  const totalVerifiedSitesCount = useMemo(() => {
+    return (
+      precomputedSubcategorySites.newSites.length +
+      precomputedSubcategorySites.approvedCosted.length +
+      precomputedSubcategorySites.dispatched.length +
+      precomputedSubcategorySites.smartAssigned.length +
+      precomputedSubcategorySites.accepted.length +
+      precomputedSubcategorySites.ongoing.length +
+      precomputedSubcategorySites.completed.length +
+      precomputedSubcategorySites.rejected.length
+    );
+  }, [precomputedSubcategorySites]);
+
+  // Use precomputed count for newSites badge
+  const newSitesVerifiedCount = precomputedSubcategorySites.newSites.length;
+
+  // Derive verifiedTabSiteEntryCounts from precomputed data for badge display
+  const verifiedTabSiteEntryCounts = useMemo(() => ({
+    verified: precomputedSubcategorySites.newSites.length,
+    dispatched: precomputedSubcategorySites.dispatched.length,
+    accepted: precomputedSubcategorySites.accepted.length,
+    smartAssigned: precomputedSubcategorySites.smartAssigned.length,
+    ongoing: precomputedSubcategorySites.ongoing.length,
+    completed: precomputedSubcategorySites.completed.length,
+    rejected: precomputedSubcategorySites.rejected.length,
+    approvedCosted: precomputedSubcategorySites.approvedCosted.length
+  }), [precomputedSubcategorySites]);
 
   // Verified site rows per subcategory (all roles seeing Verified tab)
+  // Uses precomputed data for consistency with badge counts
   const verifiedCategorySiteRows = useMemo(() => {
     const subKey = verifiedSubTab;
     
-    // For "newSites" subcategory, get all MMPs with verified sites
+    // Use precomputed data for each subcategory
     if (subKey === 'newSites') {
-      // Get all MMPs from verified category (they may or may not be marked coordinatorVerified yet)
-      const allVerifiedMMPs = categorizedMMPs.verified || [];
-      
-      if (allVerifiedMMPs.length === 0) return [];
-      
-      // Filter to show sites ready for approval/costing
-      // Includes: verified, pending, approved-only, and any unrecognized statuses
-      // Excludes: dispatched, accepted, assigned, ongoing, completed, rejected, approved+costed
-      const newSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-        const status = row.status?.toLowerCase() || '';
-        const acceptedBy = (row as any).accepted_by;
-        
-        // Exclude all other subcategory statuses
-        const isDispatched = status === 'dispatched' && !acceptedBy;
-        const isAccepted = status === 'accepted';
-        const isAssigned = status === 'assigned';
-        const isOngoing = /inprogress|in_progress|ongoing/.test(status);
-        const isCompleted = status === 'completed';
-        const isRejected = status === 'rejected' || status === 'declined';
-        const isApprovedCosted = status.includes('approved') && status.includes('costed');
-        
-        return !isDispatched && !isAccepted && !isAssigned && !isOngoing && 
-               !isCompleted && !isRejected && !isApprovedCosted;
-      });
-      
-      return newSites;
+      return precomputedSubcategorySites.newSites;
     }
     
-    // For "dispatched" subcategory, filter to only show dispatched entries
+    // Use precomputed data for other subcategories
     if (subKey === 'dispatched') {
-      const mmps = verifiedSubcategories[subKey] || [];
-      if (mmps.length === 0) return [];
-      
-      // Filter to only show entries with dispatched status
-      const dispatchedSites = buildSiteRowsFromMMPs(mmps, (row) => {
-        const status = row.status?.toLowerCase() || '';
-        // Show only entries with status = 'dispatched'
-        return status === 'dispatched';
-      });
-      
-      return dispatchedSites;
+      return precomputedSubcategorySites.dispatched;
     }
     
-    const mmps = verifiedSubcategories[subKey] || [];
-    if (mmps.length === 0) return [];
-    return buildSiteRowsFromMMPs(mmps);
-  }, [verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, siteVisitRows]);
+    if (subKey === 'approvedCosted') {
+      return precomputedSubcategorySites.approvedCosted;
+    }
+    
+    if (subKey === 'accepted') {
+      return precomputedSubcategorySites.accepted;
+    }
+    
+    if (subKey === 'smartAssigned') {
+      return precomputedSubcategorySites.smartAssigned;
+    }
+    
+    if (subKey === 'ongoing') {
+      return precomputedSubcategorySites.ongoing;
+    }
+    
+    if (subKey === 'completed') {
+      return precomputedSubcategorySites.completed;
+    }
+    
+    if (subKey === 'rejected') {
+      return precomputedSubcategorySites.rejected;
+    }
+    
+    // Fallback for any unknown subcategory (shouldn't reach here)
+    return [];
+  }, [verifiedSubTab, precomputedSubcategorySites, verifiedSubcategories, siteVisitRows]);
 
   // Group verified site rows by MMP for display
   const verifiedVisibleMMPs = useMemo(() => {
@@ -2825,24 +2827,13 @@ const MMP = () => {
   }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, verifiedCategorySiteRows]);
 
   const verifiedGroupedRows = useMemo(() => {
-    // For "newSites" subcategory, filter to only show verified sites
-    // For other sub-tabs, exclude completed sites since tables are editable
-    const filterFn = verifiedSubTab === 'newSites' 
-      ? (row: SiteVisitRow) => {
-          const status = row.status?.toLowerCase() || '';
-          return status === 'verified';
-        }
-      : (row: SiteVisitRow) => {
-          // Exclude completed sites from editable tables
-          const status = row.status?.toLowerCase() || '';
-          return status !== 'completed';
-        };
-    
+    // Group the precomputed site rows by MMP
+    // verifiedCategorySiteRows already has the correct data for each subcategory
     return verifiedVisibleMMPs.map(m => ({
       mmp: m,
-      rows: buildSiteRowsFromMMPs([m], filterFn),
+      rows: verifiedCategorySiteRows.filter(row => row.mmpId === m.id),
     }));
-  }, [verifiedVisibleMMPs, verifiedSubTab, siteVisitRows]);
+  }, [verifiedVisibleMMPs, verifiedCategorySiteRows]);
 
   // Forwarded site rows per subcategory (FOM/Supervisor only for site data)
   const forwardedCategorySiteRows = useMemo(() => {
