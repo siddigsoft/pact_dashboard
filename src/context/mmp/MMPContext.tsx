@@ -577,9 +577,16 @@ export const useMMPProvider = () => {
 
   // Track if we've started loading site entries to prevent duplicate calls
   const siteEntriesLoadingStarted = useRef(false);
+  const lastMmpFilesLength = useRef(0);
 
   // Load site entries in background after MMP files are loaded
   useEffect(() => {
+    // Reset the loading flag when mmpFiles.length changes (new data loaded)
+    if (mmpFiles.length !== lastMmpFilesLength.current) {
+      lastMmpFilesLength.current = mmpFiles.length;
+      siteEntriesLoadingStarted.current = false;
+    }
+    
     if (mmpFiles.length > 0 && hasLoadedOnce && !siteEntriesLoadingStarted.current) {
       // Only load entries for MMPs that don't have siteEntries yet
       const mmpIdsWithoutEntries = mmpFiles
@@ -589,7 +596,15 @@ export const useMMPProvider = () => {
       if (mmpIdsWithoutEntries.length > 0) {
         siteEntriesLoadingStarted.current = true;
         console.log('[MMP Context] Loading site entries for', mmpIdsWithoutEntries.length, 'MMPs');
-        loadSiteEntriesInBackground(mmpIdsWithoutEntries);
+        loadSiteEntriesInBackground(mmpIdsWithoutEntries).then(() => {
+          console.log('[MMP Context] Site entries loading completed');
+        }).catch(err => {
+          console.error('[MMP Context] Site entries loading failed:', err);
+          // Reset flag to allow retry on next render
+          siteEntriesLoadingStarted.current = false;
+        });
+      } else {
+        console.log('[MMP Context] All MMPs already have site entries loaded');
       }
     }
   }, [mmpFiles.length, hasLoadedOnce, loadSiteEntriesInBackground]);
