@@ -1986,17 +1986,22 @@ const MMP = () => {
     });
     
     const verifiedMMPs = filteredMMPs.filter(mmp => {
+      // Normalize status for case-insensitive comparison (production data may have mixed casing)
+      const normalizedStatus = (mmp.status || '').toLowerCase();
+      
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
         return (mmp.workflow as any)?.forwardedToCoordinators === true;
       } else if (isFOM || isSupervisor) {
         // For FOM/Supervisor: Verified means MMPs with sites available for verification
         return mmp.type === 'verified-template' || 
-               mmp.status === 'approved' ||
+               normalizedStatus === 'verified' ||
+               normalizedStatus === 'approved' ||
                ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
       } else {
-        // For admin/other roles: keep existing logic
-        return mmp.status === 'approved' || 
+        // For admin/other roles: Include verified, approved, and specific workflow stages
+        return normalizedStatus === 'verified' ||
+               normalizedStatus === 'approved' || 
                mmp.type === 'verified-template' ||
                ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
       }
@@ -2012,10 +2017,16 @@ const MMP = () => {
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
     const base = categorizedMMPs.forwarded || [];
-    // Pending: All forwarded MMPs that are not yet approved
-    const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
-    // Verified: All forwarded MMPs that have been approved
-    const verified = base.filter(mmp => mmp.status === 'approved');
+    // Pending: All forwarded MMPs that are not yet verified or approved
+    const pending = base.filter(mmp => {
+      const status = (mmp.status || '').toLowerCase();
+      return status !== 'approved' && status !== 'verified' && status !== 'rejected';
+    });
+    // Verified: All forwarded MMPs that have been verified or approved
+    const verified = base.filter(mmp => {
+      const status = (mmp.status || '').toLowerCase();
+      return status === 'approved' || status === 'verified';
+    });
     return { pending, verified };
   }, [categorizedMMPs.forwarded]);
 
@@ -2023,11 +2034,20 @@ const MMP = () => {
   const newFomSubcategories = useMemo(() => {
     if (!isFOM && !isSupervisor && !isAdmin && !isICT) return { pending: [], verified: [], returned: [] } as Record<string, typeof categorizedMMPs.new>;
     const base = categorizedMMPs.new || [];
-    const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
-    const verified = base.filter(mmp => mmp.status === 'approved');
+    const pending = base.filter(mmp => {
+      const status = (mmp.status || '').toLowerCase();
+      return status !== 'approved' && status !== 'verified' && status !== 'rejected';
+    });
+    const verified = base.filter(mmp => {
+      const status = (mmp.status || '').toLowerCase();
+      return status === 'approved' || status === 'verified';
+    });
     // Returned: Search ALL mmpFiles for any MMP that has sites with 'returned_to_fom' status
     const returned = mmpFiles.filter(mmp => 
-      mmp.siteEntries?.some(site => site.status === 'returned_to_fom')
+      mmp.siteEntries?.some(site => {
+        const siteStatus = (site.status || '').toLowerCase();
+        return siteStatus === 'returned_to_fom';
+      })
     );
     return { pending, verified, returned };
   }, [isFOM, isSupervisor, isAdmin, isICT, categorizedMMPs.new, mmpFiles]);
@@ -2054,7 +2074,7 @@ const MMP = () => {
     return Object.values(grouped);
   }, [mmpFiles]);
 
-  // Calculate all counts from context using useMemo
+  // Calculate all counts from context using useMemo (for global stats, not specific to Verified Sites tab)
   const siteEntryCounts = useMemo(() => {
     const allEntries = mmpFiles.flatMap(mmp => {
       const entries = mmp.siteEntries || [];
@@ -2097,6 +2117,55 @@ const MMP = () => {
       }).length
     };
   }, [mmpFiles]);
+
+  // Calculate counts specifically for Verified Sites tab (only from verified MMPs)
+  const verifiedTabSiteEntryCounts = useMemo(() => {
+    const verifiedMMPs = categorizedMMPs.verified || [];
+    const allEntries = verifiedMMPs.flatMap(mmp => {
+      const entries = mmp.siteEntries || [];
+      return entries.map(entry => ({
+        ...entry,
+        mmp_file_id: mmp.id,
+        mmpId: mmp.id
+      }));
+    });
+    
+    return {
+      verified: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'verified';
+      }).length,
+      dispatched: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        const acceptedBy = (e as any).accepted_by;
+        return status === 'dispatched' && !acceptedBy;
+      }).length,
+      accepted: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'accepted';
+      }).length,
+      smartAssigned: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'assigned';
+      }).length,
+      ongoing: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return /inprogress|in_progress|ongoing/.test(status);
+      }).length,
+      completed: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'completed';
+      }).length,
+      rejected: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'rejected' || status === 'declined';
+      }).length,
+      approvedCosted: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'approved and costed';
+      }).length
+    };
+  }, [categorizedMMPs.verified]);
 
   // Update count state from context (fast counts loaded separately from site entries)
   useEffect(() => {
@@ -2613,20 +2682,27 @@ const MMP = () => {
   };
 
   // Calculate total verified sites count across all verified MMPs (for "Verified Sites" tab badge)
+  // This includes all sites in the verification workflow: verified, approved and costed, dispatched, etc.
   const totalVerifiedSitesCount = useMemo(() => {
     const allVerifiedMMPs = categorizedMMPs.verified || [];
     
     if (allVerifiedMMPs.length === 0) return 0;
     
-    // Filter to only count verified sites from any MMP
-    const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      // Show sites that are verified (from mmp_site_entries)
-      // Check both lowercase and capitalized versions
+    // Count all sites in the verification workflow (any status that indicates they've entered the verified workflow)
+    const allSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
       const status = row.status?.toLowerCase() || '';
-      return status === 'verified';
+      // Include: verified, approved and costed, dispatched, assigned, accepted, ongoing, completed
+      // These are all stages in the verification workflow
+      return status === 'verified' || 
+             status === 'approved and costed' || 
+             status === 'dispatched' || 
+             status === 'assigned' ||
+             status === 'accepted' ||
+             status.includes('progress') ||
+             status === 'completed';
     });
     
-    return verifiedSites.length;
+    return allSites.length;
   }, [categorizedMMPs.verified, siteVisitRows]);
 
   // Always calculate verified sites count for "newSites" subcategory (for badge display)
@@ -3228,7 +3304,7 @@ const MMP = () => {
                     >
                       <CheckSquare className="h-3.5 w-3.5 mr-1.5" />
                       {t('mmpPage.subcategories.approved')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'approvedCosted' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'}`}>{approvedCostedCount}</Badge>
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'approvedCosted' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'}`}>{verifiedTabSiteEntryCounts.approvedCosted}</Badge>
                     </Button>
                     <Button 
                       variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} 
@@ -3238,7 +3314,7 @@ const MMP = () => {
                     >
                       <Truck className="h-3.5 w-3.5 mr-1.5" />
                       {t('mmpPage.subcategories.dispatched')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'dispatched' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{dispatchedCount}</Badge>
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'dispatched' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{verifiedTabSiteEntryCounts.dispatched}</Badge>
                     </Button>
                     {(isAdmin || isICT || isFOM || isSupervisor) && (
                       <>
@@ -3250,7 +3326,7 @@ const MMP = () => {
                         >
                           <Wand2 className="h-3.5 w-3.5 mr-1.5" />
                           {t('mmpPage.subcategories.smartAssigned')}
-                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'smartAssigned' ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'}`}>{smartAssignedCount}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'smartAssigned' ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'}`}>{verifiedTabSiteEntryCounts.smartAssigned}</Badge>
                         </Button>
                         <Button 
                           variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} 
@@ -3260,7 +3336,7 @@ const MMP = () => {
                         >
                           <Handshake className="h-3.5 w-3.5 mr-1.5" />
                           {t('mmpPage.subcategories.accepted')}
-                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'accepted' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200'}`}>{acceptedCount}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'accepted' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200'}`}>{verifiedTabSiteEntryCounts.accepted}</Badge>
                         </Button>
                         <Button 
                           variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} 
@@ -3270,7 +3346,7 @@ const MMP = () => {
                         >
                           <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
                           {t('mmpPage.subcategories.ongoing')}
-                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'ongoing' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200'}`}>{ongoingCount}</Badge>
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'ongoing' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200'}`}>{verifiedTabSiteEntryCounts.ongoing}</Badge>
                         </Button>
                       </>
                     )}
@@ -3282,7 +3358,7 @@ const MMP = () => {
                     >
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                       {t('mmpPage.subcategories.completed')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'completed' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{completedCount}</Badge>
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'completed' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{verifiedTabSiteEntryCounts.completed}</Badge>
                     </Button>
                     <Button 
                       variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} 
@@ -3292,7 +3368,7 @@ const MMP = () => {
                     >
                       <XCircle className="h-3.5 w-3.5 mr-1.5" />
                       {t('mmpPage.subcategories.rejected')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'rejected' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{rejectedCount}</Badge>
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'rejected' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{verifiedTabSiteEntryCounts.rejected}</Badge>
                     </Button>
                   </div>
                 </div>
