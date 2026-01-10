@@ -2700,28 +2700,20 @@ const MMP = () => {
   };
 
   // Calculate total verified sites count across all verified MMPs (for "Verified Sites" tab badge)
-  // This includes all sites in the verification workflow: verified, approved and costed, dispatched, etc.
+  // Uses verifiedTabSiteEntryCounts to ensure consistency with subcategory badges
   const totalVerifiedSitesCount = useMemo(() => {
-    const allVerifiedMMPs = categorizedMMPs.verified || [];
-    
-    if (allVerifiedMMPs.length === 0) return 0;
-    
-    // Count all sites in the verification workflow (any status that indicates they've entered the verified workflow)
-    const allSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      const status = row.status?.toLowerCase() || '';
-      // Include: verified, approved and costed, dispatched, assigned, accepted, ongoing, completed
-      // These are all stages in the verification workflow
-      return status === 'verified' || 
-             status === 'approved and costed' || 
-             status === 'dispatched' || 
-             status === 'assigned' ||
-             status === 'accepted' ||
-             status.includes('progress') ||
-             status === 'completed';
-    });
-    
-    return allSites.length;
-  }, [categorizedMMPs.verified, siteVisitRows]);
+    // Sum all subcategory counts from the same source to ensure tab total matches subcategory totals
+    return (
+      verifiedTabSiteEntryCounts.verified + // "New Sites" subcategory (sites with status = 'verified')
+      verifiedTabSiteEntryCounts.approvedCosted +
+      verifiedTabSiteEntryCounts.dispatched +
+      verifiedTabSiteEntryCounts.smartAssigned +
+      verifiedTabSiteEntryCounts.accepted +
+      verifiedTabSiteEntryCounts.ongoing +
+      verifiedTabSiteEntryCounts.completed +
+      verifiedTabSiteEntryCounts.rejected
+    );
+  }, [verifiedTabSiteEntryCounts]);
 
   // Always calculate verified sites count for "newSites" subcategory (for badge display)
   const newSitesVerifiedCount = useMemo(() => {
