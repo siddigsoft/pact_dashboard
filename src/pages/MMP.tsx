@@ -1893,8 +1893,10 @@ const MMP = () => {
   // This runs before categorization and updates when siteEntries are loaded
   const mmpIdsWithVerifiedSites = useMemo(() => {
     const idsWithVerified = new Set<string>();
+    let totalSiteEntries = 0;
     for (const mmp of mmpFiles) {
       const entries = mmp.siteEntries || [];
+      totalSiteEntries += entries.length;
       const hasVerified = entries.some(site => {
         const siteStatus = (site.status || '').toLowerCase();
         return siteStatus === 'verified' || 
@@ -1908,6 +1910,7 @@ const MMP = () => {
         idsWithVerified.add(mmp.id);
       }
     }
+    console.log('[MMP Page] mmpIdsWithVerifiedSites:', idsWithVerified.size, 'MMPs with verified sites, total site entries:', totalSiteEntries);
     return idsWithVerified;
   }, [mmpFiles]);
 
@@ -2035,6 +2038,14 @@ const MMP = () => {
       }
     });
 
+    console.log('[MMP Page] categorizedMMPs:', {
+      new: newMMPs.length,
+      forwarded: forwardedMMPs.length,
+      verified: verifiedMMPs.length,
+      totalMmpFiles: mmpFiles.length,
+      mmpIdsWithVerifiedSites: mmpIdsWithVerifiedSites.size
+    });
+    
     return {
       new: newMMPs,
       forwarded: forwardedMMPs,
