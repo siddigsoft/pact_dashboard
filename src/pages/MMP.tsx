@@ -3454,7 +3454,7 @@ const MMP = () => {
                   </div>
                 </div>
               )}
-              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && (
+              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && verifiedSubTab !== 'newSites' && (
                 loading ? (
                   <Card>
                     <CardContent className="py-8">
