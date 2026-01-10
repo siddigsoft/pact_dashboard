@@ -1,14 +1,28 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { MapPin, User, Clock, Play, Car, Navigation, CheckCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { MapPin, User, Clock, Play, Car, Navigation, CheckCircle, Calendar } from 'lucide-react';
 import { MMPSiteEntry } from '@/types/mmp';
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+] as const;
+
+export interface CycleInfo {
+  cycleMonth: string;
+  cycleStartDate: string;
+  cycleEndDate: string;
+}
 
 interface StartVisitDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   site: MMPSiteEntry | null;
-  onConfirm: () => Promise<void>;
+  onConfirm: (cycleInfo?: CycleInfo) => Promise<void>;
   isStarting?: boolean;
   currentUser?: any;
 }
@@ -21,11 +35,59 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
   isStarting = false,
   currentUser
 }) => {
+  const [cycleMonth, setCycleMonth] = useState<string>('');
+  const [cycleStartDate, setCycleStartDate] = useState<string>('');
+  const [cycleEndDate, setCycleEndDate] = useState<string>('');
+
+  const isDMActivity = site?.siteActivity?.toLowerCase()?.includes('distribution monitoring') || 
+                       site?.siteActivity?.toLowerCase()?.includes('dm') ||
+                       site?.activity_at_site?.toLowerCase()?.includes('distribution monitoring') ||
+                       site?.activity_at_site?.toLowerCase()?.includes('dm');
+
+  useEffect(() => {
+    if (open && isDMActivity) {
+      const now = new Date();
+      const currentMonthName = MONTHS[now.getMonth()];
+      setCycleMonth(currentMonthName);
+      
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      
+      setCycleStartDate(firstDay.toISOString().split('T')[0]);
+      setCycleEndDate(lastDay.toISOString().split('T')[0]);
+    }
+  }, [open, isDMActivity]);
+
+  useEffect(() => {
+    if (cycleMonth) {
+      const monthIndex = MONTHS.indexOf(cycleMonth as typeof MONTHS[number]);
+      if (monthIndex !== -1) {
+        const currentYear = new Date().getFullYear();
+        
+        const firstDay = new Date(currentYear, monthIndex, 1);
+        const lastDay = new Date(currentYear, monthIndex + 1, 0);
+        
+        setCycleStartDate(firstDay.toISOString().split('T')[0]);
+        setCycleEndDate(lastDay.toISOString().split('T')[0]);
+      }
+    }
+  }, [cycleMonth]);
+
   const handleStartVisit = async () => {
     if (!site) return;
 
     try {
-      await onConfirm();
+      if (isDMActivity && cycleMonth) {
+        await onConfirm({
+          cycleMonth,
+          cycleStartDate,
+          cycleEndDate
+        });
+      } else {
+        await onConfirm();
+      }
     } catch (error) {
       console.error('Error starting visit:', error);
     }
@@ -109,6 +171,78 @@ export const StartVisitDialog: React.FC<StartVisitDialogProps> = ({
               </p>
             </div>
           </div>
+
+          {/* Cycle Month Section - Only for DM Activities */}
+          {isDMActivity && (
+            <div className="rounded-2xl p-5 shadow-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-blue-600 dark:bg-blue-500 flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                    Cycle Month Information
+                  </h3>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    Required for Distribution Monitoring visits
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cycleMonth" className="text-xs font-medium text-blue-800 dark:text-blue-200 uppercase">
+                    Cycle Month
+                  </Label>
+                  <Select value={cycleMonth} onValueChange={setCycleMonth}>
+                    <SelectTrigger 
+                      id="cycleMonth"
+                      className="w-full bg-white dark:bg-neutral-800 border-blue-200 dark:border-blue-700"
+                      data-testid="select-cycle-month"
+                    >
+                      <SelectValue placeholder="Select monitoring cycle month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((month) => (
+                        <SelectItem key={month} value={month} data-testid={`option-month-${month.toLowerCase()}`}>
+                          {month}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="cycleStartDate" className="text-xs font-medium text-blue-800 dark:text-blue-200 uppercase">
+                      Cycle Start Date
+                    </Label>
+                    <Input
+                      id="cycleStartDate"
+                      type="date"
+                      value={cycleStartDate}
+                      onChange={(e) => setCycleStartDate(e.target.value)}
+                      className="bg-white dark:bg-neutral-800 border-blue-200 dark:border-blue-700"
+                      data-testid="input-cycle-start-date"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cycleEndDate" className="text-xs font-medium text-blue-800 dark:text-blue-200 uppercase">
+                      Cycle End Date
+                    </Label>
+                    <Input
+                      id="cycleEndDate"
+                      type="date"
+                      value={cycleEndDate}
+                      onChange={(e) => setCycleEndDate(e.target.value)}
+                      className="bg-white dark:bg-neutral-800 border-blue-200 dark:border-blue-700"
+                      data-testid="input-cycle-end-date"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* What Happens Next - Floating Card */}
           <div className="rounded-2xl p-5 shadow-lg bg-gray-50 dark:bg-neutral-800">

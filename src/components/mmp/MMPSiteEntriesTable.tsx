@@ -542,7 +542,7 @@ const MMPSiteEntriesTable = ({
             name: currentUser.fullName,
             role: currentUser.role
           }}
-          onSubmit={onDateChange || (async () => {})}
+          onSubmit={onDateChange || (async (_id: string, _postponement: PostponementHistoryEntry) => {})}
           onDirectChange={onDirectDateChange}
         />
       )}
