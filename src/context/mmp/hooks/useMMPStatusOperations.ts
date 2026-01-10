@@ -100,7 +100,8 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
           throw mmpError;
         }
 
-        // Update all forwarded site entries to 'verified' status
+        // Update all site entries (in various pre-verified statuses) to 'verified' status
+        // Include all possible pre-verification statuses (case variations may exist in production data)
         const { error: sitesError } = await supabase
           .from('mmp_site_entries')
           .update({
@@ -110,7 +111,7 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
             updated_at: timestamp,
           })
           .eq('mmp_file_id', id)
-          .in('status', ['pending', 'dispatched', 'assigned', 'in_progress', 'forwarded', 'permits_attached']);
+          .or('status.ilike.pending,status.ilike.dispatched,status.ilike.assigned,status.ilike.in_progress,status.ilike.forwarded,status.ilike.permits_attached,status.ilike.approved,status.ilike.cp_verified');
 
         if (sitesError) {
           console.error('Error updating site entries to verified:', sitesError);
