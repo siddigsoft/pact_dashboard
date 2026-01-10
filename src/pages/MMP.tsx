@@ -1989,6 +1989,18 @@ const MMP = () => {
       // Normalize status for case-insensitive comparison (production data may have mixed casing)
       const normalizedStatus = (mmp.status || '').toLowerCase();
       
+      // Check if MMP has any sites with verified/dispatched/accepted/completed status
+      // This allows MMPs to appear in Verified Sites tab when they contain verified sites
+      const hasVerifiedSites = mmp.siteEntries?.some(site => {
+        const siteStatus = (site.status || '').toLowerCase();
+        return siteStatus === 'verified' || 
+               siteStatus === 'dispatched' || 
+               siteStatus === 'accepted' || 
+               siteStatus === 'assigned' ||
+               siteStatus === 'completed' ||
+               (siteStatus.includes('approved') && siteStatus.includes('costed'));
+      });
+      
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
         return (mmp.workflow as any)?.forwardedToCoordinators === true;
@@ -1997,12 +2009,14 @@ const MMP = () => {
         return mmp.type === 'verified-template' || 
                normalizedStatus === 'verified' ||
                normalizedStatus === 'approved' ||
+               hasVerifiedSites ||
                ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
       } else {
-        // For admin/other roles: Include verified, approved, and specific workflow stages
+        // For admin/other roles: Include verified, approved, specific workflow stages, OR MMPs with verified sites
         return normalizedStatus === 'verified' ||
                normalizedStatus === 'approved' || 
                mmp.type === 'verified-template' ||
+               hasVerifiedSites ||
                ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
       }
     });
