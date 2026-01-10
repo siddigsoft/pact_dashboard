@@ -6,9 +6,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Save, X, Play, Banknote } from 'lucide-react';
+import { Pencil, Save, X, Play, Banknote, CalendarClock } from 'lucide-react';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
+import { PostponementDialog } from './PostponementDialog';
+import type { PostponementHistoryEntry } from '@/types/mmp/site';
 import { useAppContext } from '@/context/AppContext';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +29,9 @@ interface SiteDetailDialogProps {
   onClaimed?: () => void;
   enableFirstClaim?: boolean;
   onStartVisit?: (site: any) => void;
+  onDateChange?: (siteEntryId: string, postponement: PostponementHistoryEntry) => Promise<void>;
+  onDirectDateChange?: (siteEntryId: string, newDate: string, newDateTo?: string, reason?: string) => Promise<void>;
+  showDateChangeButton?: boolean;
 }
 
 const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
@@ -40,13 +45,17 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   currentUserId,
   onClaimed,
   enableFirstClaim = false,
-  onStartVisit
+  onStartVisit,
+  onDateChange,
+  onDirectDateChange,
+  showDateChangeButton = true
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [sendBackOpen, setSendBackOpen] = useState(false);
   const [sendBackComments, setSendBackComments] = useState('');
+  const [postponementOpen, setPostponementOpen] = useState(false);
   const { users } = useAppContext();
   const { currentUser } = useUser();
   const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
@@ -1158,6 +1167,40 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
               }
               return null;
             })()}
+
+            {/* Request Date Change Button */}
+            {(() => {
+              const status = (row.status || site?.status || '').toLowerCase();
+              const canRequestDateChange = showDateChangeButton && 
+                (onDateChange || onDirectDateChange) && 
+                !isEditing &&
+                ['accepted', 'assigned', 'verified', 'approved', 'dispatched', 'pending'].includes(status);
+              
+              if (canRequestDateChange) {
+                return (
+                  <div className="border-t pt-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">Need to change visit date?</p>
+                        <p className="text-xs text-muted-foreground">
+                          Request a postponement or date change for this visit
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => setPostponementOpen(true)}
+                        className="w-full sm:w-auto"
+                        data-testid="button-request-date-change-dialog"
+                      >
+                        <CalendarClock className="h-4 w-4 mr-2" />
+                        Request Date Change
+                      </Button>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <DialogFooter>
@@ -1229,6 +1272,33 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Date Change/Postponement Dialog */}
+      {site && currentUser && (onDateChange || onDirectDateChange) && (
+        <PostponementDialog
+          open={postponementOpen}
+          onOpenChange={setPostponementOpen}
+          siteEntry={{
+            id: site.id,
+            siteName: row.siteName,
+            siteCode: row.siteCode,
+            visitDate: row.visitDate,
+            visitDateFrom: row.visitDateFrom,
+            visitDateTo: row.visitDateTo,
+            mainActivity: row.siteActivity,
+            postponementHistory: site.postponementHistory || site.additional_data?.postponementHistory || [],
+            verificationStarted: ['verified', 'approved', 'dispatched', 'completed'].includes((row.status || site?.status || '').toLowerCase())
+          }}
+          currentUser={{
+            id: currentUser.id,
+            full_name: currentUser.fullName || currentUser.email,
+            name: currentUser.fullName,
+            role: currentUser.role
+          }}
+          onSubmit={onDateChange || (async (_id: string, _postponement: PostponementHistoryEntry) => {})}
+          onDirectChange={onDirectDateChange}
+        />
+      )}
     </>
   );
 };
