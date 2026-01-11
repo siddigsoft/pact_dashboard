@@ -77,9 +77,12 @@ const SITE_NAME_PATTERNS = [
 
 const STATE_PATTERNS = [
   /^state$/i, /state_name/i, /statename/i,
+  /SECTION_A\/A03$/i,
+  /A03$/i,
   /A04.*state/i, /SECTION.*state/i,
   /_state$/i, /State$/,
   /[/_]state[/_]/i,
+  /location.*hub/i,
 ];
 
 const LOCALITY_PATTERNS = [
@@ -93,9 +96,7 @@ const LOCALITY_PATTERNS = [
 
 const HUB_PATTERNS = [
   /^hub$/i, /hub_name/i, /hubname/i, /wfp.*hub/i,
-  /SECTION_A\/A03$/i,
-  /A03$/i,
-  /[/_]hub[/_]/i, /location.*hub/i,
+  /[/_]hub[/_]/i,
 ];
 
 const GPS_COLUMN_PATTERNS = {
@@ -387,9 +388,16 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       const parsed: ParsedSite[] = rows.map((row, idx) => {
         const siteId = siteIdCol ? row[siteIdCol] || '' : '';
         const siteName = siteNameCol ? row[siteNameCol] || '' : '';
-        const hub = hubCol ? row[hubCol] || '' : '';
         const state = stateCol ? row[stateCol] || '' : '';
         const locality = localityCol ? row[localityCol] || '' : '';
+        
+        let hub = hubCol ? row[hubCol] || '' : '';
+        if (!hub && state) {
+          const derivedHub = getHubForState(state);
+          if (derivedHub) {
+            hub = derivedHub;
+          }
+        }
         
         let latitude: number | null = null;
         let longitude: number | null = null;
@@ -457,7 +465,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         
         const validationErrors: string[] = [];
         if (!siteId && !siteName) validationErrors.push('Missing site ID or name');
-        if (!state && !hub && !locality) validationErrors.push('Missing location info (state, hub, or locality)');
+        if (!state && !locality) validationErrors.push('Missing location info (state or locality)');
         const hasSiteGps = latitude !== null && longitude !== null;
         const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
         if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Invalid or missing GPS coordinates (need site or residence)');
