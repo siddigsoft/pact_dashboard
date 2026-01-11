@@ -50,7 +50,8 @@ import {
   Cpu,
   Search,
   Eye,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -196,6 +197,10 @@ export default function CostPredictions() {
   const [historicalDataPage, setHistoricalDataPage] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  
+  // Preview record editing state
+  const [editingCell, setEditingCell] = useState<{ idx: number; field: 'month' | 'cost' } | null>(null);
+  const [editValue, setEditValue] = useState('');
   
   const { isSuperAdmin } = useSuperAdmin();
 
@@ -1428,9 +1433,71 @@ export default function CostPredictions() {
     setValidationSummary(null);
     setParsedRecords([]);
     setImportResult(null);
+    setEditingCell(null);
+    setEditValue('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  // Update a preview record field
+  const updatePreviewRecord = (idx: number, field: 'month' | 'cost', value: string) => {
+    const updatedRecords = [...parsedRecords];
+    const record = updatedRecords[idx];
+    
+    if (field === 'month') {
+      // Parse month input (e.g., "2025-04" or "Apr 2025" or "April 2025")
+      let newDate: Date | null = null;
+      const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                         'july', 'august', 'september', 'october', 'november', 'december'];
+      const shortMonthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 
+                               'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+      
+      // Try YYYY-MM format
+      const isoMatch = value.match(/^(\d{4})-(\d{1,2})$/);
+      if (isoMatch) {
+        newDate = new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, 1);
+      }
+      
+      // Try "Month Year" format
+      if (!newDate) {
+        const monthYearMatch = value.toLowerCase().match(/^([a-z]+)\s*(\d{4})$/);
+        if (monthYearMatch) {
+          let monthIdx = monthNames.indexOf(monthYearMatch[1]);
+          if (monthIdx === -1) monthIdx = shortMonthNames.indexOf(monthYearMatch[1]);
+          if (monthIdx !== -1) {
+            newDate = new Date(parseInt(monthYearMatch[2]), monthIdx, 1);
+          }
+        }
+      }
+      
+      if (newDate && !isNaN(newDate.getTime())) {
+        record.visitDate = format(newDate, 'yyyy-MM-dd');
+        // Clear error if it was a date-related error
+        if (record.validationStatus === 'error' && 
+            (record.validationMessage?.includes('date') || record.validationMessage?.includes('Date'))) {
+          record.validationStatus = record.matchedSiteId ? 'valid' : 'error';
+          record.validationMessage = record.matchedSiteId ? '' : 'Site not found in registry';
+        }
+        toast.success(`Month updated to ${format(newDate, 'MMM yyyy')}`);
+      } else {
+        toast.error('Invalid month format. Use "2025-04" or "Apr 2025"');
+        return;
+      }
+    } else if (field === 'cost') {
+      const numValue = parseFloat(value.replace(/[^0-9.-]/g, ''));
+      if (!isNaN(numValue) && numValue > 0) {
+        record.actualCost = numValue;
+        toast.success(`Cost updated to SDG ${numValue.toLocaleString()}`);
+      } else {
+        toast.error('Invalid cost. Enter a positive number.');
+        return;
+      }
+    }
+    
+    setParsedRecords(updatedRecords);
+    setEditingCell(null);
+    setEditValue('');
   };
 
   const handleDeleteAllHistoricalData = async () => {
@@ -1946,12 +2013,77 @@ export default function CostPredictions() {
                                   <TableCell>{record.state}</TableCell>
                                   <TableCell>{record.locality}</TableCell>
                                   <TableCell>
-                                    <Badge variant="outline" className="font-mono text-xs">
-                                      <Calendar className="h-3 w-3 mr-1" />
-                                      {monthDisplay}
-                                    </Badge>
+                                    {editingCell?.idx === idx && editingCell?.field === 'month' ? (
+                                      <div className="flex items-center gap-1">
+                                        <Input
+                                          value={editValue}
+                                          onChange={(e) => setEditValue(e.target.value)}
+                                          placeholder="2025-04 or Apr 2025"
+                                          className="h-7 w-28 text-xs"
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') updatePreviewRecord(idx, 'month', editValue);
+                                            if (e.key === 'Escape') { setEditingCell(null); setEditValue(''); }
+                                          }}
+                                          autoFocus
+                                        />
+                                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => updatePreviewRecord(idx, 'month', editValue)}>
+                                          <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditingCell(null); setEditValue(''); }}>
+                                          <XCircle className="h-3 w-3 text-muted-foreground" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <Badge 
+                                        variant="outline" 
+                                        className="font-mono text-xs cursor-pointer hover:bg-accent"
+                                        onClick={() => {
+                                          setEditingCell({ idx, field: 'month' });
+                                          setEditValue(record.visitDate ? format(new Date(record.visitDate), 'yyyy-MM') : '');
+                                        }}
+                                      >
+                                        <Calendar className="h-3 w-3 mr-1" />
+                                        {monthDisplay}
+                                        <Pencil className="h-2.5 w-2.5 ml-1 opacity-50" />
+                                      </Badge>
+                                    )}
                                   </TableCell>
-                                  <TableCell>{record.actualCost ? formatCurrency(record.actualCost) : '-'}</TableCell>
+                                  <TableCell>
+                                    {editingCell?.idx === idx && editingCell?.field === 'cost' ? (
+                                      <div className="flex items-center gap-1">
+                                        <Input
+                                          value={editValue}
+                                          onChange={(e) => setEditValue(e.target.value)}
+                                          placeholder="Enter cost"
+                                          className="h-7 w-24 text-xs"
+                                          type="number"
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') updatePreviewRecord(idx, 'cost', editValue);
+                                            if (e.key === 'Escape') { setEditingCell(null); setEditValue(''); }
+                                          }}
+                                          autoFocus
+                                        />
+                                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => updatePreviewRecord(idx, 'cost', editValue)}>
+                                          <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditingCell(null); setEditValue(''); }}>
+                                          <XCircle className="h-3 w-3 text-muted-foreground" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <Badge 
+                                        variant="outline" 
+                                        className="font-mono text-xs cursor-pointer hover:bg-accent"
+                                        onClick={() => {
+                                          setEditingCell({ idx, field: 'cost' });
+                                          setEditValue(record.actualCost?.toString() || '');
+                                        }}
+                                      >
+                                        {record.actualCost ? formatCurrency(record.actualCost) : '-'}
+                                        <Pencil className="h-2.5 w-2.5 ml-1 opacity-50" />
+                                      </Badge>
+                                    )}
+                                  </TableCell>
                                   <TableCell>
                                     {record.enrichment ? (
                                       <Badge variant={record.enrichment.completed_visits_last_12m > 0 ? "secondary" : "outline"} className="text-xs">
