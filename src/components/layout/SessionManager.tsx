@@ -63,23 +63,10 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
         const recovered = await recoverFromFrozenClient();
         if (!recovered) {
           consecutiveFailuresRef.current += 1;
-          if (consecutiveFailuresRef.current >= 3) {
+          // Just log the issue - don't show intrusive UI for connection problems
+          console.warn('[SessionManager] Connection recovery failed, attempt:', consecutiveFailuresRef.current);
+          if (consecutiveFailuresRef.current >= 5) {
             setIsHealthy(false);
-            if (!silent) {
-              toast({
-                title: 'Connection Issue Detected',
-                description: 'The connection appears to be frozen. Please refresh the page.',
-                variant: 'destructive',
-                action: (
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="underline font-medium"
-                  >
-                    Refresh Now
-                  </button>
-                ),
-              });
-            }
           }
           setIsChecking(false);
           return;
@@ -92,15 +79,10 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
       const connectionOk = await testConnection(3000);
       if (!connectionOk) {
         consecutiveFailuresRef.current += 1;
-        if (consecutiveFailuresRef.current >= 3) {
+        // Just log - don't show intrusive UI
+        console.warn('[SessionManager] Connection test failed, attempt:', consecutiveFailuresRef.current);
+        if (consecutiveFailuresRef.current >= 5) {
           setIsHealthy(false);
-          if (!silent) {
-            toast({
-              title: 'Connection Problem',
-              description: 'Unable to connect to the server. Please check your internet connection.',
-              variant: 'destructive',
-            });
-          }
         }
       } else {
         consecutiveFailuresRef.current = 0;
@@ -109,7 +91,7 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
     } catch (error) {
       console.error('[SessionManager] Health check error:', error);
       consecutiveFailuresRef.current += 1;
-      if (consecutiveFailuresRef.current >= 3) {
+      if (consecutiveFailuresRef.current >= 5) {
         setIsHealthy(false);
       }
     } finally {
@@ -269,34 +251,8 @@ const SessionManager: React.FC<SessionManagerProps> = ({ children }) => {
     // Don't delete on unmount - keep it available for debugging
   }, [performHealthCheck, isHealthy, isChecking]);
 
-  // Show warning banner if connection is unhealthy
-  if (!isHealthy && !isChecking) {
-    return (
-      <>
-        <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white p-3 text-center shadow-lg">
-          <div className="flex items-center justify-center gap-3">
-            <span className="font-medium">Connection Issue Detected</span>
-            <button
-              onClick={() => {
-                performHealthCheck(false);
-              }}
-              className="px-3 py-1 bg-white text-red-600 rounded hover:bg-gray-100 font-medium"
-            >
-              Retry
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-3 py-1 bg-white text-red-600 rounded hover:bg-gray-100 font-medium"
-            >
-              Refresh Page
-            </button>
-          </div>
-        </div>
-        {children}
-      </>
-    );
-  }
-
+  // Connection issues don't block the app - just log them for debugging
+  // The app works fine even without realtime connections
   return <>{children}</>;
 };
 
