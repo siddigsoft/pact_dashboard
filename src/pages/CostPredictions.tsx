@@ -133,6 +133,14 @@ interface ValidationSummary {
   errors: string[];
 }
 
+interface NormalizationResult {
+  raw: string;
+  normalized: string;
+  normalizedId?: string;
+  status: 'exact' | 'alias' | 'fuzzy' | 'unmatched';
+  suggestion?: string;
+}
+
 interface ParsedRecord {
   rowNumber: number;
   siteName: string;
@@ -142,6 +150,14 @@ interface ParsedRecord {
   visitDate?: string;
   actualCost?: number;
   transportMode?: string;
+  // Raw values from file (before normalization)
+  rawHub?: string;
+  rawState?: string;
+  rawLocality?: string;
+  // Normalization results
+  hubNormalization?: NormalizationResult;
+  stateNormalization?: NormalizationResult;
+  localityNormalization?: NormalizationResult;
   // Additional fields from user's file
   siteId?: string;
   activityType?: string;
@@ -949,11 +965,13 @@ export default function CostPredictions() {
             'Site Name', 'site_name', 'SiteName', 'Site',
             'Activity Site', 'activity_site'
           ]);
-          const state = getColumnValue([
+          
+          // Get raw values first (before normalization)
+          const rawState = getColumnValue([
             '1.8 State of the site/where the site is located', 
             'State', 'state', 'State Name', 'state_name'
           ]);
-          const locality = getColumnValue([
+          const rawLocality = getColumnValue([
             '1.9 Locality of the site/where the site is located', 
             'Locality', 'locality', 'Locality Name', 'locality_name'
           ]);
@@ -961,11 +979,46 @@ export default function CostPredictions() {
             '1.7 WFP HUB', 
             'Hub', 'hub', 'WFP HUB', 'Hub Office', 'hub_office'
           ]);
-          // Normalize hub to match system hub IDs
+          
+          // Normalize hub and compute normalization result
           const normalizedHubId = normalizeHubId(rawHub);
-          const hub = normalizedHubId 
-            ? (hubs.find(h => h.id === normalizedHubId)?.name || rawHub)
-            : rawHub;
+          const hubMatch = normalizedHubId ? hubs.find(h => h.id === normalizedHubId) : null;
+          const hub = hubMatch?.name || rawHub;
+          const hubNormalization: NormalizationResult = {
+            raw: rawHub,
+            normalized: hub,
+            normalizedId: normalizedHubId || undefined,
+            status: normalizedHubId 
+              ? (rawHub.toLowerCase().replace(/[\s-]+/g, '') === normalizedHubId.replace(/-/g, '') ? 'exact' : 'alias')
+              : 'unmatched',
+            suggestion: hubMatch ? `→ ${hubMatch.name}` : 'No matching hub found'
+          };
+          
+          // Normalize state and compute normalization result
+          const normalizedStateIdResult = normalizeStateId(rawState);
+          const state = normalizedStateIdResult || rawState;
+          const stateNormalization: NormalizationResult = {
+            raw: rawState,
+            normalized: state,
+            normalizedId: normalizedStateIdResult || undefined,
+            status: normalizedStateIdResult 
+              ? (rawState.toLowerCase().replace(/[\s-]+/g, '') === normalizedStateIdResult.replace(/-/g, '') ? 'exact' : 'alias')
+              : 'unmatched',
+            suggestion: normalizedStateIdResult ? `→ ${normalizedStateIdResult}` : 'No matching state found'
+          };
+          
+          // Normalize locality and compute normalization result
+          const normalizedLocalityIdResult = normalizeLocalityId(rawLocality, rawState);
+          const locality = normalizedLocalityIdResult || rawLocality;
+          const localityNormalization: NormalizationResult = {
+            raw: rawLocality,
+            normalized: locality,
+            normalizedId: normalizedLocalityIdResult || undefined,
+            status: normalizedLocalityIdResult 
+              ? (rawLocality.toLowerCase().replace(/[\s-]+/g, '') === normalizedLocalityIdResult.replace(/-/g, '') ? 'exact' : 'alias')
+              : 'unmatched',
+            suggestion: normalizedLocalityIdResult ? `→ ${normalizedLocalityIdResult}` : 'No matching locality found'
+          };
           
           // Additional fields from user's file
           const siteId = getColumnValue(['siteID', 'site_id', 'SiteID', 'Site ID']);
@@ -1163,6 +1216,14 @@ export default function CostPredictions() {
             visitDate: normalizedDateStr || (visitDate ? String(visitDate) : undefined), // Use normalized YYYY-MM-01 format
             actualCost: actualCost || undefined,
             transportMode: transportMode?.trim() || undefined,
+            // Raw values from file (before normalization)
+            rawHub: rawHub.trim(),
+            rawState: rawState.trim(),
+            rawLocality: rawLocality.trim(),
+            // Normalization results
+            hubNormalization,
+            stateNormalization,
+            localityNormalization,
             // Additional fields from user's file
             siteId: siteId?.trim() || undefined,
             activityType: activityType?.trim() || activityConfirm?.trim() || undefined,
@@ -1964,13 +2025,13 @@ export default function CostPredictions() {
                             <TableRow>
                               <TableHead>Status</TableHead>
                               <TableHead>Site Name</TableHead>
-                              <TableHead>State</TableHead>
-                              <TableHead>Locality</TableHead>
+                              <TableHead>Hub (File → System)</TableHead>
+                              <TableHead>State (File → System)</TableHead>
+                              <TableHead>Locality (File → System)</TableHead>
                               <TableHead>Month</TableHead>
                               <TableHead>Cost</TableHead>
                               <TableHead>Visits (12M)</TableHead>
                               <TableHead>Recent Costs</TableHead>
-                              <TableHead>Predicted</TableHead>
                               <TableHead>Notes</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -2010,8 +2071,102 @@ export default function CostPredictions() {
                                     )}
                                   </TableCell>
                                   <TableCell className="font-medium">{record.siteName}</TableCell>
-                                  <TableCell>{record.state}</TableCell>
-                                  <TableCell>{record.locality}</TableCell>
+                                  <TableCell>
+                                    <UITooltip>
+                                      <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-1 text-xs">
+                                          <span className="text-muted-foreground">{record.rawHub || record.hub}</span>
+                                          {record.hubNormalization && record.hubNormalization.status !== 'unmatched' && (
+                                            <>
+                                              <span className="text-muted-foreground">→</span>
+                                              <Badge variant={record.hubNormalization.status === 'exact' ? 'outline' : 'secondary'} className="text-xs py-0">
+                                                {record.hubNormalization.status === 'exact' ? (
+                                                  <CheckCircle2 className="h-2.5 w-2.5 mr-0.5 text-green-600" />
+                                                ) : (
+                                                  <AlertCircle className="h-2.5 w-2.5 mr-0.5 text-amber-500" />
+                                                )}
+                                                {record.hub}
+                                              </Badge>
+                                            </>
+                                          )}
+                                          {record.hubNormalization?.status === 'unmatched' && (
+                                            <XCircle className="h-3 w-3 text-red-500" />
+                                          )}
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <div className="text-xs space-y-1">
+                                          <p><span className="font-medium">File:</span> {record.rawHub}</p>
+                                          <p><span className="font-medium">System:</span> {record.hub}</p>
+                                          <p><span className="font-medium">Status:</span> {record.hubNormalization?.status || 'unknown'}</p>
+                                        </div>
+                                      </TooltipContent>
+                                    </UITooltip>
+                                  </TableCell>
+                                  <TableCell>
+                                    <UITooltip>
+                                      <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-1 text-xs">
+                                          <span className="text-muted-foreground">{record.rawState || record.state}</span>
+                                          {record.stateNormalization && record.stateNormalization.status !== 'unmatched' && record.rawState !== record.state && (
+                                            <>
+                                              <span className="text-muted-foreground">→</span>
+                                              <Badge variant={record.stateNormalization.status === 'exact' ? 'outline' : 'secondary'} className="text-xs py-0">
+                                                {record.stateNormalization.status === 'exact' ? (
+                                                  <CheckCircle2 className="h-2.5 w-2.5 mr-0.5 text-green-600" />
+                                                ) : (
+                                                  <AlertCircle className="h-2.5 w-2.5 mr-0.5 text-amber-500" />
+                                                )}
+                                                {record.state}
+                                              </Badge>
+                                            </>
+                                          )}
+                                          {record.stateNormalization?.status === 'unmatched' && (
+                                            <XCircle className="h-3 w-3 text-red-500" />
+                                          )}
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <div className="text-xs space-y-1">
+                                          <p><span className="font-medium">File:</span> {record.rawState}</p>
+                                          <p><span className="font-medium">System:</span> {record.state}</p>
+                                          <p><span className="font-medium">Status:</span> {record.stateNormalization?.status || 'unknown'}</p>
+                                        </div>
+                                      </TooltipContent>
+                                    </UITooltip>
+                                  </TableCell>
+                                  <TableCell>
+                                    <UITooltip>
+                                      <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-1 text-xs">
+                                          <span className="text-muted-foreground">{record.rawLocality || record.locality}</span>
+                                          {record.localityNormalization && record.localityNormalization.status !== 'unmatched' && record.rawLocality !== record.locality && (
+                                            <>
+                                              <span className="text-muted-foreground">→</span>
+                                              <Badge variant={record.localityNormalization.status === 'exact' ? 'outline' : 'secondary'} className="text-xs py-0">
+                                                {record.localityNormalization.status === 'exact' ? (
+                                                  <CheckCircle2 className="h-2.5 w-2.5 mr-0.5 text-green-600" />
+                                                ) : (
+                                                  <AlertCircle className="h-2.5 w-2.5 mr-0.5 text-amber-500" />
+                                                )}
+                                                {record.locality}
+                                              </Badge>
+                                            </>
+                                          )}
+                                          {record.localityNormalization?.status === 'unmatched' && (
+                                            <XCircle className="h-3 w-3 text-red-500" />
+                                          )}
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <div className="text-xs space-y-1">
+                                          <p><span className="font-medium">File:</span> {record.rawLocality}</p>
+                                          <p><span className="font-medium">System:</span> {record.locality}</p>
+                                          <p><span className="font-medium">Status:</span> {record.localityNormalization?.status || 'unknown'}</p>
+                                        </div>
+                                      </TooltipContent>
+                                    </UITooltip>
+                                  </TableCell>
                                   <TableCell>
                                     {editingCell?.idx === idx && editingCell?.field === 'month' ? (
                                       <div className="flex items-center gap-1">
@@ -2109,26 +2264,6 @@ export default function CostPredictions() {
                                             {record.enrichment.last_three_costs.map((c, i) => (
                                               <p key={i}>{format(new Date(c.visit_date), 'MMM yyyy')}: {formatCurrency(c.actual_cost)}</p>
                                             ))}
-                                          </div>
-                                        </TooltipContent>
-                                      </UITooltip>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">-</span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {record.enrichment?.predicted_cost ? (
-                                      <UITooltip>
-                                        <TooltipTrigger asChild>
-                                          <Badge variant="outline" className="text-xs cursor-help">
-                                            <TrendingUp className="h-3 w-3 mr-1" />
-                                            {formatCurrency(record.enrichment.predicted_cost)}
-                                          </Badge>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <div className="text-xs space-y-1">
-                                            <p><span className="font-medium">Algorithm:</span> {record.enrichment.prediction_algorithm?.replace(/_/g, ' ')}</p>
-                                            <p><span className="font-medium">Confidence:</span> {record.enrichment.prediction_confidence}%</p>
                                           </div>
                                         </TooltipContent>
                                       </UITooltip>
