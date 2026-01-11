@@ -29,34 +29,25 @@ export function RealtimeBanner({
   const [showBanner, setShowBanner] = useState(false);
   const [stableErrorState, setStableErrorState] = useState(false);
 
-  const isConnected = health.isOnline && health.connectedChannels > 0 && !health.maxRetriesReached;
-  const isReconnecting = health.isOnline && health.channelCount > 0 && health.connectedChannels < health.channelCount && !health.maxRetriesReached;
+  // Only show banner for true offline state (no network)
+  // Realtime websocket issues don't block the app - data just refreshes manually
   const isOffline = !health.isOnline;
-  const hasError = health.maxRetriesReached || (health.errorChannels > 0 && health.totalRetries > 3);
 
   useEffect(() => {
-    if (isConnected) {
-      setIsDismissed(false);
+    if (!isOffline) {
       setShowBanner(false);
       setStableErrorState(false);
+      setIsDismissed(false);
       return;
     }
 
-    if (hasError || isOffline) {
-      const timer = setTimeout(() => {
-        setStableErrorState(true);
-        setShowBanner(true);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-
-    if (isReconnecting && health.totalRetries > 2) {
-      const timer = setTimeout(() => {
-        setShowBanner(true);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [isConnected, hasError, isOffline, isReconnecting, health.totalRetries]);
+    // Only show banner after being offline for 2 seconds (avoid brief disconnects)
+    const timer = setTimeout(() => {
+      setStableErrorState(true);
+      setShowBanner(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [isOffline]);
 
   const handleRefresh = async () => {
     if (!onRefresh || isRefreshing) return;
@@ -70,46 +61,17 @@ export function RealtimeBanner({
     }
   };
 
-  if (showOnlyWhenDisconnected && isConnected) return null;
-  if (isDismissed && !stableErrorState && !isOffline) return null;
-  if (!showBanner && !isOffline) return null;
+  // Only show banner when truly offline (no network connection)
+  if (!isOffline || !showBanner || isDismissed) return null;
 
-  const getBannerConfig = () => {
-    if (isOffline) {
-      return {
-        icon: WifiOff,
-        title: "You're offline",
-        message: "Changes will sync when you reconnect",
-        bgClass: "bg-slate-800 dark:bg-slate-900",
-        textClass: "text-white",
-        iconClass: "text-slate-300",
-      };
-    }
-    if (hasError) {
-      return {
-        icon: AlertTriangle,
-        title: "Connection lost",
-        message: "Data may be outdated. Click refresh to try again.",
-        bgClass: "bg-red-500/90 dark:bg-red-900/90",
-        textClass: "text-white",
-        iconClass: "text-red-100",
-      };
-    }
-    if (isReconnecting) {
-      return {
-        icon: RefreshCw,
-        title: "Reconnecting...",
-        message: `Attempt ${health.totalRetries}`,
-        bgClass: "bg-amber-500/90 dark:bg-amber-900/90",
-        textClass: "text-white",
-        iconClass: "text-amber-100 animate-spin",
-      };
-    }
-    return null;
+  const config = {
+    icon: WifiOff,
+    title: "You're offline",
+    message: "Changes will sync when you reconnect",
+    bgClass: "bg-slate-800 dark:bg-slate-900",
+    textClass: "text-white",
+    iconClass: "text-slate-300",
   };
-
-  const config = getBannerConfig();
-  if (!config) return null;
 
   const Icon = config.icon;
 
@@ -133,20 +95,7 @@ export function RealtimeBanner({
       </div>
       
       <div className="flex items-center gap-2">
-        {onRefresh && (hasError || isOffline) && (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={handleRefresh}
-            disabled={isRefreshing || isOffline}
-            className="h-7 text-xs bg-white/20 hover:bg-white/30 text-white border-0"
-            data-testid="button-banner-refresh"
-          >
-            <RefreshCw className={cn("h-3 w-3 mr-1", isRefreshing && "animate-spin")} />
-            Refresh
-          </Button>
-        )}
-        {dismissible && !hasError && !isOffline && (
+        {dismissible && (
           <Button
             size="icon"
             variant="ghost"
