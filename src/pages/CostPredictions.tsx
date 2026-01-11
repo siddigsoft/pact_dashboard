@@ -777,6 +777,57 @@ export default function CostPredictions() {
         const jsonData = XLSX.utils.sheet_to_json(sheet);
         console.log('[CostPredictions] Sheet', sheetName, 'has', jsonData.length, 'rows');
         
+        // Try to parse month/year from sheet name (e.g., "January 2025", "Jan-25", "2025-01", "01-2025")
+        let sheetMonthDate: Date | null = null;
+        const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                           'july', 'august', 'september', 'october', 'november', 'december'];
+        const shortMonthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 
+                                 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+        
+        // Normalize sheet name for parsing
+        const normalizedSheetName = sheetName.toLowerCase().trim();
+        
+        // Pattern 1: "January 2025" or "Jan 2025" or "January-2025"
+        const monthYearMatch = normalizedSheetName.match(/^([a-z]+)[\s\-_]*(\d{4}|\d{2})$/);
+        if (monthYearMatch) {
+          const monthStr = monthYearMatch[1];
+          let yearStr = monthYearMatch[2];
+          if (yearStr.length === 2) {
+            yearStr = parseInt(yearStr) > 50 ? `19${yearStr}` : `20${yearStr}`;
+          }
+          let monthIndex = monthNames.indexOf(monthStr);
+          if (monthIndex === -1) monthIndex = shortMonthNames.indexOf(monthStr);
+          if (monthIndex !== -1) {
+            sheetMonthDate = new Date(parseInt(yearStr), monthIndex, 1);
+            console.log('[CostPredictions] Parsed sheet name as month:', format(sheetMonthDate, 'MMM yyyy'));
+          }
+        }
+        
+        // Pattern 2: "2025-01" or "01-2025" or "2025/01"
+        const numericMatch = normalizedSheetName.match(/^(\d{4})[\-\/](\d{1,2})$/) || 
+                            normalizedSheetName.match(/^(\d{1,2})[\-\/](\d{4})$/);
+        if (!sheetMonthDate && numericMatch) {
+          const first = parseInt(numericMatch[1]);
+          const second = parseInt(numericMatch[2]);
+          const year = first > 100 ? first : second;
+          const month = first > 100 ? second : first;
+          if (month >= 1 && month <= 12 && year >= 2000 && year <= 2100) {
+            sheetMonthDate = new Date(year, month - 1, 1);
+            console.log('[CostPredictions] Parsed sheet name as month:', format(sheetMonthDate, 'MMM yyyy'));
+          }
+        }
+        
+        // Pattern 3: Just month name "January" or "Jan" (assume current year)
+        if (!sheetMonthDate) {
+          let monthIndex = monthNames.indexOf(normalizedSheetName);
+          if (monthIndex === -1) monthIndex = shortMonthNames.indexOf(normalizedSheetName);
+          if (monthIndex !== -1) {
+            const currentYear = new Date().getFullYear();
+            sheetMonthDate = new Date(currentYear, monthIndex, 1);
+            console.log('[CostPredictions] Parsed sheet name as month (current year):', format(sheetMonthDate, 'MMM yyyy'));
+          }
+        }
+        
         // Log first row columns for debugging
         if (jsonData.length > 0) {
           const firstRow = jsonData[0] as any;
@@ -963,16 +1014,45 @@ export default function CostPredictions() {
           let isDuplicate = false;
           let parsedMonthKey: string | null = null;
 
-          // Visit date/month - use current month as fallback if not provided
+          // Visit date/month - use sheet name month or current month as fallback
           let normalizedDateStr: string | null = null; // YYYY-MM-01 format
           
           if (!visitDate) {
-            // Use current month as default when date is not provided
-            const now = new Date();
-            const currentMonth = now.toISOString().substring(0, 7); // YYYY-MM
-            normalizedDateStr = `${currentMonth}-01`;
-            validationStatus = 'warning';
-            validationMessage = 'No date column found - using current month as default';
+            // Try to use sheet name as the month (for multi-sheet monthly files)
+            if (sheetMonthDate) {
+              const sheetMonth = format(sheetMonthDate, 'yyyy-MM');
+              normalizedDateStr = `${sheetMonth}-01`;
+              parsedMonthKey = sheetMonth;
+              // This is OK, not a warning - we got the date from sheet name
+              if (rowCounter <= 3) {
+                console.log(`[CostPredictions] Row ${rowCounter}: Using sheet name "${sheetName}" as date: ${sheetMonth}`);
+              }
+              
+              // Check for duplicates using sheet-derived date
+              const normalizedStateForKey = normalizeStateId(state) || state.toLowerCase().trim().replace(/\s+/g, '-');
+              const dupCheckKey = matchedSite 
+                ? `${matchedSite.id}-${parsedMonthKey}` 
+                : `${siteName.toLowerCase().trim()}-${normalizedStateForKey}-${parsedMonthKey}`;
+              
+              if (existingMonthKeys.has(dupCheckKey)) {
+                validationStatus = 'error';
+                validationMessage = `Duplicate: Cost for this site already exists in database for ${parsedMonthKey}`;
+                isDuplicate = true;
+              } else if (uploadFileMonthKeys.has(dupCheckKey)) {
+                validationStatus = 'error';
+                validationMessage = `Duplicate: This site appears multiple times in your file for ${parsedMonthKey}`;
+                isDuplicate = true;
+              } else {
+                uploadFileMonthKeys.add(dupCheckKey);
+              }
+            } else {
+              // Use current month as fallback when no date column AND no sheet name date
+              const now = new Date();
+              const currentMonth = now.toISOString().substring(0, 7); // YYYY-MM
+              normalizedDateStr = `${currentMonth}-01`;
+              validationStatus = 'warning';
+              validationMessage = `No date found - using current month. Tip: name sheets like "January 2025" for automatic date detection`;
+            }
           } else {
             let parsedDate: Date | null = null;
             try {
