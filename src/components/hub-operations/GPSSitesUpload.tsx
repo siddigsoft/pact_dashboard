@@ -560,6 +560,10 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         const hasSiteGps = latitude !== null && longitude !== null;
         const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
         if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Missing GPS coordinates');
+        if (residenceLatitude === null) validationErrors.push('Missing Residence Latitude (A05)');
+        if (residenceLongitude === null) validationErrors.push('Missing Residence Longitude (A05)');
+        if (residenceAltitude === null) validationErrors.push('Missing Residence Altitude (A05)');
+        if (residencePrecision === null) validationErrors.push('Missing Residence Precision (A05)');
         if (latitude !== null && (latitude < -90 || latitude > 90)) validationErrors.push('Site latitude out of range');
         if (longitude !== null && (longitude < -180 || longitude > 180)) validationErrors.push('Site longitude out of range');
         if (residenceLatitude !== null && (residenceLatitude < -90 || residenceLatitude > 90)) validationErrors.push('Residence latitude out of range');
@@ -802,7 +806,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             variant="outline"
             size="sm"
             onClick={() => {
-              const template = 'Hub,State,Locality,Site name,CP name,Activity at the site,Tool to be used,Use Market Diversion Monitoring,Use Warehouse Monitoring,GPS\nKassala Hub,Kassala,Reifi Kassla,Health Center A,WFP,DM,ODK,Yes,No,"15.4500 36.4000 432.19 6.65"';
+              const template = 'Hub,State,Locality,Site name,CP name,Activity at the site,Tool to be used,Use Market Diversion Monitoring,Use Warehouse Monitoring,SECTION_A/_A05_latitude,SECTION_A/_A05_longitude,SECTION_A/_A05_altitude,SECTION_A/_A05_precision,SECTION_A/_A06_latitude,SECTION_A/_A06_longitude,SECTION_A/_A06_altitude,SECTION_A/_A06_precision\nKassala Hub,Kassala,Reifi Kassla,Health Center A,WFP,DM,ODK,Yes,No,15.4510,36.4045,430.50,5.20,15.4500,36.4000,432.19,6.65';
               const blob = new Blob([template], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
