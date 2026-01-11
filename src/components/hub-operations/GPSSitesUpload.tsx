@@ -555,8 +555,6 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         if (!activity) validationErrors.push('Missing Activity');
         if (!cp) validationErrors.push('Missing CP (Cooperating Partner)');
         if (!tool) validationErrors.push('Missing Tool');
-        if (!useMarketDiversion) validationErrors.push('Missing Market Diversion Monitoring');
-        if (!useWarehouseMonitoring) validationErrors.push('Missing Warehouse Monitoring');
         const hasSiteGps = latitude !== null && longitude !== null;
         const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
         if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Missing GPS coordinates');
