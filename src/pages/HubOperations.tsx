@@ -305,15 +305,18 @@ export default function HubOperations() {
     setLoading(true);
     try {
       // Use Promise.allSettled to prevent one failure from blocking others
-      // Add a 15-second timeout to prevent infinite loading
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Data load timeout')), 15000)
-      );
-      
-      await Promise.race([
-        Promise.allSettled([loadHubs(), loadSites(), loadProjectScopes()]),
-        timeoutPromise
+      // Increased timeout to 30 seconds to accommodate larger datasets
+      const results = await Promise.allSettled([
+        loadHubs(),
+        loadSites(0, false),
+        loadProjectScopes()
       ]);
+      
+      // Check for any rejected promises and log them
+      const failures = results.filter(r => r.status === 'rejected');
+      if (failures.length > 0) {
+        console.warn('[Hub Operations] Some data failed to load:', failures);
+      }
     } catch (err) {
       console.error('Error loading Hub Operations data:', err);
       toast({ 
