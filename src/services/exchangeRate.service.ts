@@ -124,9 +124,9 @@ export class ExchangeRateService {
   private static getDefaultRates(): ExchangeRateSummary {
     return {
       bank_of_sudan: { mid: 601.50 },
-      bank_of_khartoum: { buy: 602.00, sell: 604.00, mid: 603.00 },
-      faisal_islamic: { buy: 601.00, sell: 603.00, mid: 602.00 },
-      weighted_average: 602.17,
+      bank_of_khartoum: { buy: 3450.00, sell: 3550.00, mid: 3500.00 },
+      faisal_islamic: { buy: 3400.00, sell: 3500.00, mid: 3450.00 },
+      weighted_average: 3500.00,
       last_updated: new Date().toISOString(),
       sources_available: 3
     };
@@ -154,12 +154,12 @@ export class ExchangeRateService {
 
     const newRates: { source_bank: string; rate_type: string; usd_to_sdg: number }[] = [
       { source_bank: 'bank_of_sudan', rate_type: 'mid', usd_to_sdg: 601.50 },
-      { source_bank: 'bank_of_khartoum', rate_type: 'buy', usd_to_sdg: 602.00 },
-      { source_bank: 'bank_of_khartoum', rate_type: 'sell', usd_to_sdg: 604.00 },
-      { source_bank: 'bank_of_khartoum', rate_type: 'mid', usd_to_sdg: 603.00 },
-      { source_bank: 'faisal_islamic', rate_type: 'buy', usd_to_sdg: 601.00 },
-      { source_bank: 'faisal_islamic', rate_type: 'sell', usd_to_sdg: 603.00 },
-      { source_bank: 'faisal_islamic', rate_type: 'mid', usd_to_sdg: 602.00 },
+      { source_bank: 'bank_of_khartoum', rate_type: 'buy', usd_to_sdg: 3450.00 },
+      { source_bank: 'bank_of_khartoum', rate_type: 'sell', usd_to_sdg: 3550.00 },
+      { source_bank: 'bank_of_khartoum', rate_type: 'mid', usd_to_sdg: 3500.00 },
+      { source_bank: 'faisal_islamic', rate_type: 'buy', usd_to_sdg: 3400.00 },
+      { source_bank: 'faisal_islamic', rate_type: 'sell', usd_to_sdg: 3500.00 },
+      { source_bank: 'faisal_islamic', rate_type: 'mid', usd_to_sdg: 3450.00 },
     ];
 
     let updatedCount = 0;
