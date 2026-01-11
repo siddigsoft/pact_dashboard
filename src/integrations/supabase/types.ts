@@ -99,6 +99,36 @@ export type Database = {
           },
         ]
       }
+      exchange_rates: {
+        Row: {
+          id: string
+          source_bank: string
+          rate_type: string
+          usd_to_sdg: number
+          fetched_at: string
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          source_bank: string
+          rate_type?: string
+          usd_to_sdg: number
+          fetched_at?: string
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          source_bank?: string
+          rate_type?: string
+          usd_to_sdg?: number
+          fetched_at?: string
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
       field_team_settings: {
         Row: {
           coordinator_id: string | null
