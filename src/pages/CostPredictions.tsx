@@ -828,6 +828,13 @@ export default function CostPredictions() {
           }
         }
         
+        // Log result for debugging
+        if (sheetMonthDate) {
+          console.log(`[CostPredictions] Sheet "${sheetName}" → Date: ${format(sheetMonthDate, 'yyyy-MM-dd')}`);
+        } else {
+          console.log(`[CostPredictions] Sheet "${sheetName}" → No date detected from name`);
+        }
+        
         // Log first row columns for debugging
         if (jsonData.length > 0) {
           const firstRow = jsonData[0] as any;
