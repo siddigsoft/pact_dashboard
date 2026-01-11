@@ -27,6 +27,9 @@ interface ParsedSite {
   locality: string;
   activity: string;
   cp: string;
+  tool: string;
+  useMarketDiversion: string;
+  useWarehouseMonitoring: string;
   latitude: number | null;
   longitude: number | null;
   altitude: number | null;
@@ -68,7 +71,7 @@ const SITE_ID_PATTERNS = [
 ];
 
 const SITE_NAME_PATTERNS = [
-  /site_name/i, /sitename/i, /^name$/i,
+  /^site\s*name$/i, /site_name/i, /sitename/i, /^name$/i,
   /SECTION_A\/A06$/i,
   /A06$/i,
   /A03.*site.*name/i, /A03.*sitename/i, /SECTION.*A03.*name/i,
@@ -104,14 +107,27 @@ const HUB_PATTERNS = [
 
 const ACTIVITY_PATTERNS = [
   /^activity$/i, /activity_type/i, /activitytype/i,
+  /activity\s*at\s*the\s*site/i,
   /SECTION_A\/A07$/i, /A07$/i,
   /_activity$/i, /Activity$/,
 ];
 
 const CP_PATTERNS = [
-  /^cp$/i, /cooperating.*partner/i, /cp_name/i, /cpname/i,
+  /^cp$/i, /^cp\s*name$/i, /cooperating.*partner/i, /cp_name/i, /cpname/i,
   /SECTION_A\/A08$/i, /A08$/i,
   /_cp$/i, /partner$/i,
+];
+
+const TOOL_PATTERNS = [
+  /^tool$/i, /tool\s*to\s*be\s*used/i, /tool_type/i,
+];
+
+const MARKET_DIVERSION_PATTERNS = [
+  /use\s*market\s*diversion/i, /market\s*diversion\s*monitoring/i,
+];
+
+const WAREHOUSE_MONITORING_PATTERNS = [
+  /use\s*warehouse\s*monitoring/i, /warehouse\s*monitoring/i,
 ];
 
 const GPS_COLUMN_PATTERNS = {
@@ -238,6 +254,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     locality: string | null;
     activity: string | null;
     cp: string | null;
+    tool: string | null;
+    useMarketDiversion: string | null;
+    useWarehouseMonitoring: string | null;
     latitude: string | null;
     longitude: string | null;
     altitude: string | null;
@@ -256,6 +275,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     locality: null,
     activity: null,
     cp: null,
+    tool: null,
+    useMarketDiversion: null,
+    useWarehouseMonitoring: null,
     latitude: null,
     longitude: null,
     altitude: null,
@@ -354,10 +376,13 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       const localityCol = findColumn(fileHeaders, LOCALITY_PATTERNS);
       const activityCol = findColumn(fileHeaders, ACTIVITY_PATTERNS);
       const cpCol = findColumn(fileHeaders, CP_PATTERNS);
+      const toolCol = findColumn(fileHeaders, TOOL_PATTERNS);
+      const marketDiversionCol = findColumn(fileHeaders, MARKET_DIVERSION_PATTERNS);
+      const warehouseMonitoringCol = findColumn(fileHeaders, WAREHOUSE_MONITORING_PATTERNS);
       const latCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.latitude);
       
       console.log('[GPS Upload] File headers:', fileHeaders.slice(0, 20));
-      console.log('[GPS Upload] Column detection:', { siteIdCol, siteNameCol, hubCol, stateCol, localityCol, activityCol, cpCol, latCol });
+      console.log('[GPS Upload] Column detection:', { siteIdCol, siteNameCol, hubCol, stateCol, localityCol, activityCol, cpCol, toolCol, marketDiversionCol, warehouseMonitoringCol, latCol });
       const lngCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.longitude);
       const altCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.altitude);
       const precisionCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.precision);
@@ -396,6 +421,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         locality: localityCol,
         activity: activityCol,
         cp: cpCol,
+        tool: toolCol,
+        useMarketDiversion: marketDiversionCol,
+        useWarehouseMonitoring: warehouseMonitoringCol,
         latitude: latCol,
         longitude: lngCol,
         altitude: altCol,
@@ -428,6 +456,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         const locality = localityCol ? row[localityCol] || '' : '';
         const activity = activityCol ? row[activityCol] || '' : '';
         const cp = cpCol ? row[cpCol] || '' : '';
+        const tool = toolCol ? row[toolCol] || '' : '';
+        const useMarketDiversion = marketDiversionCol ? row[marketDiversionCol] || '' : '';
+        const useWarehouseMonitoring = warehouseMonitoringCol ? row[warehouseMonitoringCol] || '' : '';
         
         const normalizedStateId = normalizeStateId(rawState);
         const state = normalizedStateId || rawState;
@@ -517,12 +548,15 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         }
         
         const validationErrors: string[] = [];
+        if (!hub) validationErrors.push('Missing Hub');
         if (!state) validationErrors.push('Missing State');
         if (!locality) validationErrors.push('Missing Locality');
         if (!siteName) validationErrors.push('Missing Site Name');
-        if (!siteId) validationErrors.push('Missing Site ID');
         if (!activity) validationErrors.push('Missing Activity');
         if (!cp) validationErrors.push('Missing CP (Cooperating Partner)');
+        if (!tool) validationErrors.push('Missing Tool');
+        if (!useMarketDiversion) validationErrors.push('Missing Market Diversion Monitoring');
+        if (!useWarehouseMonitoring) validationErrors.push('Missing Warehouse Monitoring');
         const hasSiteGps = latitude !== null && longitude !== null;
         const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
         if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Missing GPS coordinates');
@@ -546,6 +580,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           locality,
           activity,
           cp,
+          tool,
+          useMarketDiversion,
+          useWarehouseMonitoring,
           latitude,
           longitude,
           altitude,
@@ -765,7 +802,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             variant="outline"
             size="sm"
             onClick={() => {
-              const template = 'state,locality,site_name,site_id,activity,cp,gps\nKassala,Reifi Kassla,Health Center A,SITE001,DM,WFP,"15.4500 36.4000 432.19 6.65"';
+              const template = 'Hub,State,Locality,Site name,CP name,Activity at the site,Tool to be used,Use Market Diversion Monitoring,Use Warehouse Monitoring,GPS\nKassala Hub,Kassala,Reifi Kassla,Health Center A,WFP,DM,ODK,Yes,No,"15.4500 36.4000 432.19 6.65"';
               const blob = new Blob([template], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
