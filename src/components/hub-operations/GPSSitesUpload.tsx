@@ -55,6 +55,33 @@ const EXPECTED_COLUMNS = [
   'locality',
 ];
 
+const SITE_ID_PATTERNS = [
+  /site_id/i, /site_code/i, /siteid/i, /^id$/i,
+  /A02.*site.*id/i, /A02.*siteid/i, /SECTION.*A02.*id/i,
+  /A01.*site.*id/i, /A01.*siteid/i,
+  /siteID$/i, /_siteid$/i,
+];
+
+const SITE_NAME_PATTERNS = [
+  /site_name/i, /sitename/i, /^name$/i,
+  /A03.*site.*name/i, /A03.*sitename/i, /SECTION.*A03.*name/i,
+  /A02.*site.*name/i, /A02.*sitename/i,
+  /Activity.*site$/i, /activity_site$/i,
+  /_sitename$/i,
+];
+
+const STATE_PATTERNS = [
+  /^state$/i, /state_name/i, /statename/i,
+  /A04.*state/i, /SECTION.*state/i,
+  /_state$/i, /State$/,
+];
+
+const LOCALITY_PATTERNS = [
+  /^locality$/i, /locality_name/i, /localityname/i,
+  /A04.*locality/i, /SECTION.*locality/i,
+  /_locality$/i, /Locality$/,
+];
+
 const GPS_COLUMN_PATTERNS = {
   latitude: [/[/_]A06[/_]latitude$/i, /A06.*latitude/i, /site.*latitude/i, /_latitude$/i, /^latitude$/i, /^lat$/i, /_lat$/i, /:latitude$/i],
   longitude: [/[/_]A06[/_]longitude$/i, /A06.*longitude/i, /site.*longitude/i, /_longitude$/i, /^longitude$/i, /^lng$/i, /^lon$/i, /_lon$/i, /_lng$/i, /:longitude$/i],
@@ -269,10 +296,10 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       
       setHeaders(fileHeaders);
       
-      const siteIdCol = findColumn(fileHeaders, [/site_id/i, /site_code/i, /siteid/i, /^id$/i]);
-      const siteNameCol = findColumn(fileHeaders, [/site_name/i, /sitename/i, /^name$/i]);
-      const stateCol = findColumn(fileHeaders, [/^state$/i, /state_name/i]);
-      const localityCol = findColumn(fileHeaders, [/^locality$/i, /locality_name/i]);
+      const siteIdCol = findColumn(fileHeaders, SITE_ID_PATTERNS);
+      const siteNameCol = findColumn(fileHeaders, SITE_NAME_PATTERNS);
+      const stateCol = findColumn(fileHeaders, STATE_PATTERNS);
+      const localityCol = findColumn(fileHeaders, LOCALITY_PATTERNS);
       const latCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.latitude);
       const lngCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.longitude);
       const altCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.altitude);
@@ -796,11 +823,26 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
             <DialogHeader className="flex-shrink-0">
               <DialogTitle>Preview GPS Sites Data</DialogTitle>
-              <DialogDescription>
-                Review the parsed data before uploading. Column mapping: 
-                {columnMapping.latitude && ` Lat: ${columnMapping.latitude}`}
-                {columnMapping.longitude && `, Lng: ${columnMapping.longitude}`}
-                {columnMapping.combinedGps && `, GPS: ${columnMapping.combinedGps}`}
+              <DialogDescription className="space-y-1">
+                <p>Review the parsed data before uploading.</p>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {columnMapping.siteId && <Badge variant="outline">ID: {columnMapping.siteId}</Badge>}
+                  {columnMapping.siteName && <Badge variant="outline">Name: {columnMapping.siteName}</Badge>}
+                  {columnMapping.state && <Badge variant="outline">State: {columnMapping.state}</Badge>}
+                  {columnMapping.locality && <Badge variant="outline">Locality: {columnMapping.locality}</Badge>}
+                  {(columnMapping.latitude || columnMapping.residenceLatitude) && (
+                    <Badge variant="secondary">Lat: {columnMapping.latitude || columnMapping.residenceLatitude}</Badge>
+                  )}
+                  {(columnMapping.longitude || columnMapping.residenceLongitude) && (
+                    <Badge variant="secondary">Lng: {columnMapping.longitude || columnMapping.residenceLongitude}</Badge>
+                  )}
+                  {columnMapping.combinedGps && <Badge variant="secondary">GPS: {columnMapping.combinedGps}</Badge>}
+                </div>
+                {!columnMapping.siteId && !columnMapping.siteName && (
+                  <p className="text-amber-600 dark:text-amber-400">
+                    No site ID/name columns detected. Expected: site_id, siteid, site_name, Activity site, etc.
+                  </p>
+                )}
               </DialogDescription>
             </DialogHeader>
             
@@ -845,10 +887,16 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
                       <TableCell>{site.state || '-'}</TableCell>
                       <TableCell>{site.locality || '-'}</TableCell>
                       <TableCell className="font-mono text-xs">
-                        {site.latitude?.toFixed(6) || '-'}
+                        {(site.latitude ?? site.residenceLatitude)?.toFixed(6) || '-'}
+                        {site.latitude === null && site.residenceLatitude !== null && (
+                          <span className="text-amber-500 ml-1" title="Using residence GPS">(R)</span>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-xs">
-                        {site.longitude?.toFixed(6) || '-'}
+                        {(site.longitude ?? site.residenceLongitude)?.toFixed(6) || '-'}
+                        {site.longitude === null && site.residenceLongitude !== null && (
+                          <span className="text-amber-500 ml-1" title="Using residence GPS">(R)</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {!site.isValid ? (
