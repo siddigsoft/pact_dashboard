@@ -21,6 +21,7 @@ interface ParsedSite {
   rowIndex: number;
   siteId: string;
   siteName: string;
+  hub: string;
   state: string;
   locality: string;
   latitude: number | null;
@@ -60,26 +61,35 @@ const SITE_ID_PATTERNS = [
   /A02.*site.*id/i, /A02.*siteid/i, /SECTION.*A02.*id/i,
   /A01.*site.*id/i, /A01.*siteid/i,
   /siteID$/i, /_siteid$/i,
+  /site.*code/i, /code.*site/i,
 ];
 
 const SITE_NAME_PATTERNS = [
   /site_name/i, /sitename/i, /^name$/i,
   /A03.*site.*name/i, /A03.*sitename/i, /SECTION.*A03.*name/i,
   /A02.*site.*name/i, /A02.*sitename/i,
-  /Activity.*site$/i, /activity_site$/i,
+  /Activity.*site/i, /activity_site/i,
   /_sitename$/i,
+  /site.*name/i, /name.*site/i,
 ];
 
 const STATE_PATTERNS = [
   /^state$/i, /state_name/i, /statename/i,
   /A04.*state/i, /SECTION.*state/i,
   /_state$/i, /State$/,
+  /[/_]state[/_]/i, /state/i,
 ];
 
 const LOCALITY_PATTERNS = [
   /^locality$/i, /locality_name/i, /localityname/i,
   /A04.*locality/i, /SECTION.*locality/i,
   /_locality$/i, /Locality$/,
+  /[/_]locality[/_]/i, /locality/i,
+];
+
+const HUB_PATTERNS = [
+  /^hub$/i, /hub_name/i, /hubname/i, /wfp.*hub/i,
+  /[/_]hub[/_]/i, /hub/i,
 ];
 
 const GPS_COLUMN_PATTERNS = {
@@ -195,6 +205,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   const [columnMapping, setColumnMapping] = useState<{
     siteId: string | null;
     siteName: string | null;
+    hub: string | null;
     state: string | null;
     locality: string | null;
     latitude: string | null;
@@ -210,6 +221,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   }>({
     siteId: null,
     siteName: null,
+    hub: null,
     state: null,
     locality: null,
     latitude: null,
@@ -298,9 +310,13 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       
       const siteIdCol = findColumn(fileHeaders, SITE_ID_PATTERNS);
       const siteNameCol = findColumn(fileHeaders, SITE_NAME_PATTERNS);
+      const hubCol = findColumn(fileHeaders, HUB_PATTERNS);
       const stateCol = findColumn(fileHeaders, STATE_PATTERNS);
       const localityCol = findColumn(fileHeaders, LOCALITY_PATTERNS);
       const latCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.latitude);
+      
+      console.log('[GPS Upload] File headers:', fileHeaders.slice(0, 20));
+      console.log('[GPS Upload] Column detection:', { siteIdCol, siteNameCol, hubCol, stateCol, localityCol, latCol });
       const lngCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.longitude);
       const altCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.altitude);
       const precisionCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.precision);
@@ -334,6 +350,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       setColumnMapping({
         siteId: siteIdCol,
         siteName: siteNameCol,
+        hub: hubCol,
         state: stateCol,
         locality: localityCol,
         latitude: latCol,
@@ -364,6 +381,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       const parsed: ParsedSite[] = rows.map((row, idx) => {
         const siteId = siteIdCol ? row[siteIdCol] || '' : '';
         const siteName = siteNameCol ? row[siteNameCol] || '' : '';
+        const hub = hubCol ? row[hubCol] || '' : '';
         const state = stateCol ? row[stateCol] || '' : '';
         const locality = localityCol ? row[localityCol] || '' : '';
         
@@ -452,6 +470,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           rowIndex: idx + 2,
           siteId,
           siteName,
+          hub,
           state,
           locality,
           latitude,
@@ -828,6 +847,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
                 <div className="flex flex-wrap gap-2 text-xs">
                   {columnMapping.siteId && <Badge variant="outline">ID: {columnMapping.siteId}</Badge>}
                   {columnMapping.siteName && <Badge variant="outline">Name: {columnMapping.siteName}</Badge>}
+                  {columnMapping.hub && <Badge variant="outline">Hub: {columnMapping.hub}</Badge>}
                   {columnMapping.state && <Badge variant="outline">State: {columnMapping.state}</Badge>}
                   {columnMapping.locality && <Badge variant="outline">Locality: {columnMapping.locality}</Badge>}
                   {(columnMapping.latitude || columnMapping.residenceLatitude) && (
@@ -860,6 +880,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
                     <TableHead>Row</TableHead>
                     <TableHead>Site ID</TableHead>
                     <TableHead>Site Name</TableHead>
+                    <TableHead>Hub</TableHead>
                     <TableHead>State</TableHead>
                     <TableHead>Locality</TableHead>
                     <TableHead>Latitude</TableHead>
@@ -884,6 +905,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
                       <TableCell>{site.rowIndex}</TableCell>
                       <TableCell className="font-mono text-xs">{site.siteId || '-'}</TableCell>
                       <TableCell>{site.siteName || '-'}</TableCell>
+                      <TableCell>{site.hub || '-'}</TableCell>
                       <TableCell>{site.state || '-'}</TableCell>
                       <TableCell>{site.locality || '-'}</TableCell>
                       <TableCell className="font-mono text-xs">
