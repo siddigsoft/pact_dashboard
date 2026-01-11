@@ -575,39 +575,9 @@ export const useMMPProvider = () => {
     Promise.all([refreshMMPFiles(), refreshSiteEntryCounts()]);
   }, []);
 
-  // Track if we've started loading site entries to prevent duplicate calls
-  const siteEntriesLoadingStarted = useRef(false);
-  const lastMmpFilesLength = useRef(0);
-
-  // Load site entries in background after MMP files are loaded
-  useEffect(() => {
-    // Reset the loading flag when mmpFiles.length changes (new data loaded)
-    if (mmpFiles.length !== lastMmpFilesLength.current) {
-      lastMmpFilesLength.current = mmpFiles.length;
-      siteEntriesLoadingStarted.current = false;
-    }
-    
-    if (mmpFiles.length > 0 && hasLoadedOnce && !siteEntriesLoadingStarted.current) {
-      // Only load entries for MMPs that don't have siteEntries yet
-      const mmpIdsWithoutEntries = mmpFiles
-        .filter(mmp => !mmp.siteEntries || mmp.siteEntries.length === 0)
-        .map(mmp => mmp.id);
-      
-      if (mmpIdsWithoutEntries.length > 0) {
-        siteEntriesLoadingStarted.current = true;
-        console.log('[MMP Context] Loading site entries for', mmpIdsWithoutEntries.length, 'MMPs');
-        loadSiteEntriesInBackground(mmpIdsWithoutEntries).then(() => {
-          console.log('[MMP Context] Site entries loading completed');
-        }).catch(err => {
-          console.error('[MMP Context] Site entries loading failed:', err);
-          // Reset flag to allow retry on next render
-          siteEntriesLoadingStarted.current = false;
-        });
-      } else {
-        console.log('[MMP Context] All MMPs already have site entries loaded');
-      }
-    }
-  }, [mmpFiles.length, hasLoadedOnce, loadSiteEntriesInBackground]);
+  // PERFORMANCE OPTIMIZATION: Removed automatic background loading of ALL site entries
+  // Site entries are now loaded on-demand via fetchSiteEntriesForMMP when viewing a specific MMP
+  // This prevents loading megabytes of data on page open and significantly speeds up initial load
 
   // Automatic background refresh DISABLED to prevent excessive re-renders and UI blinking
   // Data now refreshes only on user actions (button clicks, page loads, saves, etc.)
