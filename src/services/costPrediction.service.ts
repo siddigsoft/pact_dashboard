@@ -504,18 +504,39 @@ export class CostPredictionService {
     if (sites.length === 0) return predictions;
     
     try {
-      const siteIds = sites.map(s => s.site_id || s.id);
+      // Collect all possible identifiers (both registry id and site_id/site_code)
+      const allSiteIds = new Set<string>();
+      sites.forEach(s => {
+        allSiteIds.add(s.id); // Registry ID
+        if (s.site_id) allSiteIds.add(s.site_id); // Site code
+      });
+      const siteIdsArray = Array.from(allSiteIds);
       
+      // Fetch real visits only (exclude baseline records)
       const { data: historicalData, error } = await supabase
         .from('historical_site_costs')
-        .select('site_id, actual_cost, visit_date')
-        .in('site_id', siteIds)
+        .select('site_id, actual_cost, visit_date, source')
+        .in('site_id', siteIdsArray)
+        .neq('source', 'baseline') // Exclude baseline records from batch predictions
         .order('visit_date', { ascending: false });
 
       if (error) {
         console.error('Error fetching batch historical costs:', error);
         return predictions;
       }
+
+      // Also fetch baseline costs as fallback (baselines are stored by registry id)
+      const registryIds = sites.map(s => s.id);
+      const { data: baselineData } = await supabase
+        .from('historical_site_costs')
+        .select('site_id, actual_cost')
+        .in('site_id', registryIds)
+        .eq('source', 'baseline');
+
+      const baselineBySite = new Map<string, number>();
+      baselineData?.forEach(record => {
+        baselineBySite.set(record.site_id, record.actual_cost);
+      });
 
       const costsBySite = new Map<string, number[]>();
       historicalData?.forEach(record => {
@@ -645,6 +666,42 @@ export class CostPredictionService {
                     avg_cost: hubStats.avg,
                     min_cost: hubStats.min,
                     max_cost: hubStats.max
+                  }
+                });
+              } else {
+                // Final fallback: use baseline cost if set for this site (lookup by registry id)
+                const baselineCost = baselineBySite.get(site.id);
+                if (baselineCost) {
+                  predictions.set(site.id, {
+                    site_id: siteId,
+                    predicted_cost: baselineCost,
+                    confidence: 30,
+                    algorithm_used: 'baseline',
+                    visit_count: 0,
+                    last_calculated: new Date().toISOString(),
+                    provenance: {
+                      method: 'Baseline Estimate',
+                      description: 'Using manually set baseline cost - no historical data available',
+                      data_points: 1
+                    }
+                  });
+                }
+              }
+            } else {
+              // No hub_id - try baseline as final fallback (lookup by registry id)
+              const baselineCost = baselineBySite.get(site.id);
+              if (baselineCost) {
+                predictions.set(site.id, {
+                  site_id: siteId,
+                  predicted_cost: baselineCost,
+                  confidence: 30,
+                  algorithm_used: 'baseline',
+                  visit_count: 0,
+                  last_calculated: new Date().toISOString(),
+                  provenance: {
+                    method: 'Baseline Estimate',
+                    description: 'Using manually set baseline cost - no historical data available',
+                    data_points: 1
                   }
                 });
               }

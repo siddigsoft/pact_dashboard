@@ -62,6 +62,7 @@ import { ExchangeRatePanel } from '@/components/mmp/ExchangeRatePanel';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import { normalizeHubId, getNormalizedHubName, hubs } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { BaselineCostManagement } from '@/components/cost-predictions/BaselineCostManagement';
 import * as XLSX from 'xlsx';
 import { 
   BarChart, 
@@ -1570,6 +1571,10 @@ export default function CostPredictions() {
             <DollarSign className="h-4 w-4 mr-2" />
             Exchange Rates
           </TabsTrigger>
+          <TabsTrigger value="baselines" data-testid="tab-baselines">
+            <Target className="h-4 w-4 mr-2" />
+            Baseline Costs
+          </TabsTrigger>
         </TabsList>
 
         {/* Upload Tab Content */}
@@ -2555,6 +2560,11 @@ export default function CostPredictions() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Baseline Costs Tab Content */}
+        <TabsContent value="baselines" className="space-y-4">
+          <BaselineCostManagement onBaselineUpdated={handleRefresh} />
         </TabsContent>
 
         {/* Analytics Tab Content */}
