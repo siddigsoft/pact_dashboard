@@ -17,8 +17,10 @@ export interface HistoricalSiteCost {
   data_collector_id?: string | null;
   collector_distance_km?: number | null;
   mmp_id?: string | null;
-  source: 'historical_upload' | 'live';
+  source: 'historical_upload' | 'live' | 'baseline';
   uploaded_at?: string;
+  created_by?: string | null;
+  notes?: string | null;
 }
 
 export interface PredictionProvenance {
@@ -37,7 +39,7 @@ export interface CostPrediction {
   site_id: string;
   predicted_cost: number;
   confidence: number;
-  algorithm_used: 'exponential_smoothing' | 'site_average' | 'locality_median' | 'state_median' | 'hub_median';
+  algorithm_used: 'exponential_smoothing' | 'site_average' | 'locality_median' | 'state_median' | 'hub_median' | 'baseline';
   visit_count: number;
   last_calculated: string;
   history?: { date: string; cost: number }[];
@@ -157,22 +159,25 @@ export class CostPredictionService {
     hubId?: string
   ): Promise<CostPrediction | null> {
     try {
-      const { data: historicalCosts, error } = await supabase
+      const { data: allCosts, error } = await supabase
         .from('historical_site_costs')
         .select('*')
         .eq('site_id', siteId)
         .order('visit_date', { ascending: false })
-        .limit(10);
+        .limit(15);
 
       if (error) {
         console.error('Error fetching historical costs:', error);
         return null;
       }
 
-      const visitCount = historicalCosts?.length || 0;
+      // Separate real visits from baseline estimates
+      const realVisits = (allCosts ?? []).filter(r => r.source !== 'baseline');
+      const baselineRecord = (allCosts ?? []).find(r => r.source === 'baseline');
+      const visitCount = realVisits.length;
 
       if (visitCount >= 3) {
-        return this.exponentialSmoothing(siteId, historicalCosts!);
+        return this.exponentialSmoothing(siteId, realVisits);
       } else if (visitCount > 0 && visitCount < 3) {
         const localityStats = await this.getLocalityMedianWithStats(localityName || '', stateName);
         if (localityStats) {
@@ -183,7 +188,7 @@ export class CostPredictionService {
             algorithm_used: 'locality_median',
             visit_count: visitCount,
             last_calculated: new Date().toISOString(),
-            history: historicalCosts?.map(c => ({ date: c.visit_date, cost: c.actual_cost })),
+            history: realVisits?.map(c => ({ date: c.visit_date, cost: c.actual_cost })),
             provenance: {
               method: 'Locality Median',
               description: `Based on ${localityStats.count} visits across ${localityStats.areaName} locality`,
@@ -255,6 +260,27 @@ export class CostPredictionService {
             avg_cost: hubStats.avg,
             min_cost: hubStats.min,
             max_cost: hubStats.max
+          }
+        };
+      }
+
+      // Final fallback: use baseline cost if set for this site
+      if (baselineRecord) {
+        return {
+          site_id: siteId,
+          predicted_cost: baselineRecord.actual_cost,
+          confidence: 30,
+          algorithm_used: 'baseline',
+          visit_count: 0,
+          last_calculated: new Date().toISOString(),
+          history: [{ date: baselineRecord.visit_date, cost: baselineRecord.actual_cost }],
+          provenance: {
+            method: 'Baseline Estimate',
+            description: 'Using manually provided baseline cost until live visits are recorded',
+            data_points: 1,
+            avg_cost: baselineRecord.actual_cost,
+            min_cost: baselineRecord.actual_cost,
+            max_cost: baselineRecord.actual_cost
           }
         };
       }
@@ -366,7 +392,8 @@ export class CostPredictionService {
         const { data, error } = await supabase
           .from('historical_site_costs')
           .select('actual_cost')
-          .eq('locality_id', lookupId);
+          .eq('locality_id', lookupId)
+          .neq('source', 'baseline'); // Exclude baseline records from median calculations
 
         if (!error && data && data.length > 0) {
           const costs = data.map(d => d.actual_cost).sort((a, b) => a - b);
@@ -432,7 +459,8 @@ export class CostPredictionService {
         const { data, error } = await supabase
           .from('historical_site_costs')
           .select('actual_cost')
-          .eq('state_id', lookupId);
+          .eq('state_id', lookupId)
+          .neq('source', 'baseline'); // Exclude baseline records from median calculations
 
         if (!error && data && data.length > 0) {
           const costs = data.map(d => d.actual_cost).sort((a, b) => a - b);
@@ -642,7 +670,8 @@ export class CostPredictionService {
       const { data, error } = await supabase
         .from('historical_site_costs')
         .select('actual_cost')
-        .eq('hub_id', hubId);
+        .eq('hub_id', hubId)
+        .neq('source', 'baseline'); // Exclude baseline records from median calculations
 
       if (error || !data || data.length === 0) return null;
 
@@ -1371,6 +1400,155 @@ export class CostPredictionService {
 
     console.log(`[CostPrediction] Import complete: ${inserted} inserted, ${errors.length} errors`);
     return { success: errors.length === 0, inserted, errors };
+  }
+
+  /**
+   * Set or update baseline cost for a site
+   * Baseline costs are used as fallback when no historical visit data exists
+   */
+  static async setBaselineCost(
+    siteId: string,
+    siteName: string,
+    stateId: string,
+    localityId: string,
+    baselineCost: number,
+    hubId?: string,
+    notes?: string,
+    createdBy?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Check if baseline already exists for this site
+      const { data: existing } = await supabase
+        .from('historical_site_costs')
+        .select('id')
+        .eq('site_id', siteId)
+        .eq('source', 'baseline')
+        .single();
+
+      const baselineRecord = {
+        site_id: siteId,
+        site_name: siteName,
+        state_id: stateId,
+        locality_id: localityId,
+        hub_id: hubId || null,
+        visit_date: new Date().toISOString().substring(0, 10),
+        actual_cost: baselineCost,
+        source: 'baseline' as const,
+        notes: notes || 'Baseline cost estimate',
+        created_by: createdBy || null,
+        uploaded_at: new Date().toISOString()
+      };
+
+      if (existing?.id) {
+        // Update existing baseline
+        const { error } = await supabase
+          .from('historical_site_costs')
+          .update({
+            actual_cost: baselineCost,
+            notes: notes || 'Baseline cost estimate (updated)',
+            uploaded_at: new Date().toISOString()
+          })
+          .eq('id', existing.id);
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+      } else {
+        // Insert new baseline
+        const { error } = await supabase
+          .from('historical_site_costs')
+          .insert(baselineRecord);
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('[CostPrediction] Error setting baseline cost:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Set baseline costs for multiple sites at once
+   */
+  static async setBulkBaselineCosts(
+    sites: Array<{
+      siteId: string;
+      siteName: string;
+      stateId: string;
+      localityId: string;
+      hubId?: string;
+      baselineCost: number;
+    }>,
+    createdBy?: string
+  ): Promise<{ success: number; failed: number; errors: string[] }> {
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const site of sites) {
+      const result = await this.setBaselineCost(
+        site.siteId,
+        site.siteName,
+        site.stateId,
+        site.localityId,
+        site.baselineCost,
+        site.hubId,
+        'Bulk baseline cost',
+        createdBy
+      );
+
+      if (result.success) {
+        success++;
+      } else {
+        failed++;
+        errors.push(`${site.siteName}: ${result.error}`);
+      }
+    }
+
+    return { success, failed, errors };
+  }
+
+  /**
+   * Get baseline cost for a site (if exists)
+   */
+  static async getBaselineCost(siteId: string): Promise<number | null> {
+    try {
+      const { data, error } = await supabase
+        .from('historical_site_costs')
+        .select('actual_cost')
+        .eq('site_id', siteId)
+        .eq('source', 'baseline')
+        .single();
+
+      if (error || !data) return null;
+      return data.actual_cost;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Delete baseline cost for a site
+   */
+  static async deleteBaselineCost(siteId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase
+        .from('historical_site_costs')
+        .delete()
+        .eq('site_id', siteId)
+        .eq('source', 'baseline');
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   }
 }
 

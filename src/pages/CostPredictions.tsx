@@ -2636,11 +2636,8 @@ export default function CostPredictions() {
             </Card>
           )}
 
-          {/* Show analytics content when data exists */}
-          {(historicalDataStats.total > 0 || sitePredictions.length > 0) && (
-            <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card data-testid="card-total-costs">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Costs</CardTitle>
@@ -2946,8 +2943,6 @@ export default function CostPredictions() {
               </CardContent>
             </Card>
           </div>
-          </>
-          )}
         </TabsContent>
 
         <TabsContent value="hubs">
@@ -2979,6 +2974,7 @@ export default function CostPredictions() {
           </Card>
         </TabsContent>
       </Tabs>
+        </TabsContent>
 
       {/* Uploaded Historical Data Viewer */}
       <Card data-testid="card-historical-data">
@@ -3175,7 +3171,6 @@ export default function CostPredictions() {
           )}
         </CardContent>
       </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
