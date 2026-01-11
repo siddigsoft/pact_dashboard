@@ -14,8 +14,8 @@ import { useToast } from '@/hooks/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2 } from 'lucide-react';
-import { getHubForState, getHubNameForState, hubs } from '@/data/sudanStates';
-import { normalizeStateId } from '@/utils/siteNormalization';
+import { getHubForState, getHubNameForState, hubs, sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
+import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import * as XLSX from 'xlsx';
 
 interface ParsedSite {
@@ -674,52 +674,55 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               result.updated++;
             }
           } else {
-            const { data: stateData } = await supabase
-              .from('states')
-              .select('id, name')
-              .ilike('name', site.state)
-              .single();
+            // Use local state data from sudanStates.ts instead of database query
+            const normalizedStateId = normalizeStateId(site.state);
+            const stateInfo = sudanStates.find(s => s.id === normalizedStateId);
+            const stateName = stateInfo?.name || site.state;
             
-            let localityData = null;
-            if (stateData && site.locality) {
-              const { data: locData } = await supabase
-                .from('localities')
-                .select('id, name')
-                .eq('state_id', stateData.id)
-                .ilike('name', site.locality)
-                .single();
-              localityData = locData;
+            // Find locality in state
+            let localityId = '';
+            let localityName = site.locality;
+            if (stateInfo && site.locality) {
+              const normalizedLocality = site.locality.toLowerCase().trim();
+              const localityInfo = stateInfo.localities.find(l => 
+                l.id.toLowerCase() === normalizedLocality ||
+                l.name.toLowerCase() === normalizedLocality ||
+                l.name.toLowerCase().includes(normalizedLocality) ||
+                normalizedLocality.includes(l.name.toLowerCase())
+              );
+              if (localityInfo) {
+                localityId = localityInfo.id;
+                localityName = localityInfo.name;
+              }
             }
             
             const siteCode = site.siteId || `SITE-${Date.now()}-${i}`;
             
             // Get hub information based on state
-            const stateId = stateData?.id || '';
-            const hubId = stateId ? getHubForState(stateId) : undefined;
-            const hubName = stateId ? getHubNameForState(stateId) : undefined;
+            const hubId = normalizedStateId ? getHubForState(normalizedStateId) : site.hub;
+            const hubName = normalizedStateId ? getHubNameForState(normalizedStateId) : site.hub;
             
-            // Only include columns that exist in sites_registry table:
-            // id, site_code, site_name, state_id, state_name, locality_id, locality_name,
-            // hub_id, hub_name, gps_latitude, gps_longitude, activity_type, status, mmp_count,
-            // created_at, updated_at, created_by
+            // Only include columns that exist in sites_registry table
             const insertData: Record<string, any> = {
               site_code: siteCode,
               site_name: site.siteName || siteCode,
-              state_id: stateId,
-              state_name: stateData?.name || site.state,
-              locality_id: localityData?.id || '',
-              locality_name: localityData?.name || site.locality,
-              hub_id: hubId || '',
-              hub_name: hubName || '',
-              activity_type: 'GFA',
+              state_id: normalizedStateId || site.state,
+              state_name: stateName,
+              locality_id: localityId || site.locality,
+              locality_name: localityName,
+              hub_id: hubId || site.hub || '',
+              hub_name: hubName || site.hub || '',
+              activity_type: site.activity || 'GFA',
               status: 'active',
               mmp_count: 0,
               created_by: currentUser?.id || 'system',
               created_at: new Date().toISOString(),
             };
-            // Only add GPS if available (these columns exist in the table)
-            if (site.latitude !== null) insertData.gps_latitude = site.latitude;
-            if (site.longitude !== null) insertData.gps_longitude = site.longitude;
+            // Add GPS if available - use residence GPS (A05) as primary, fallback to site GPS (A06)
+            const lat = site.residenceLatitude ?? site.latitude;
+            const lng = site.residenceLongitude ?? site.longitude;
+            if (lat !== null) insertData.gps_latitude = lat;
+            if (lng !== null) insertData.gps_longitude = lng;
             
             const { error } = await supabase
               .from('sites_registry')
