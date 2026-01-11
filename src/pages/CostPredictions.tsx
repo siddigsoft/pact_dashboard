@@ -59,6 +59,7 @@ import { CostSparkline } from '@/components/mmp/CostSparkline';
 import { VarianceAlertBanner } from '@/components/mmp/VarianceAlertBanner';
 import { ExchangeRatePanel } from '@/components/mmp/ExchangeRatePanel';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import * as XLSX from 'xlsx';
 import { 
   BarChart, 
@@ -186,6 +187,8 @@ export default function CostPredictions() {
   const [historicalDataPage, setHistoricalDataPage] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  
+  const { isSuperAdmin } = useSuperAdmin();
 
   const fetchAccuracyMetrics = async () => {
     try {
@@ -579,27 +582,45 @@ export default function CostPredictions() {
 
   const loadRegistrySites = async (): Promise<Map<string, any>> => {
     try {
-      const { data, error } = await supabase
-        .from('sites_registry')
-        .select('*');
+      const siteMap = new Map();
+      const BATCH_SIZE = 1000;
+      let offset = 0;
+      let hasMore = true;
+      let totalLoaded = 0;
       
-      if (data) {
-        const siteMap = new Map();
-        data.forEach(site => {
-          const key = `${site.site_name?.toLowerCase()}-${site.state_name?.toLowerCase()}-${site.locality_name?.toLowerCase()}`;
-          siteMap.set(key, site);
-          if (site.id) {
-            siteMap.set(site.id, site);
-          }
-          if (site.site_code) {
-            siteMap.set(site.site_code.toLowerCase(), site);
-          }
-        });
-        setRegistrySites(siteMap);
-        console.log('[CostPredictions] Loaded', data.length, 'registry sites');
-        return siteMap;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('sites_registry')
+          .select('*')
+          .range(offset, offset + BATCH_SIZE - 1);
+        
+        if (error) {
+          console.error('[CostPredictions] Error fetching sites batch:', error);
+          break;
+        }
+        
+        if (data && data.length > 0) {
+          data.forEach(site => {
+            const key = `${site.site_name?.toLowerCase()}-${site.state_name?.toLowerCase()}-${site.locality_name?.toLowerCase()}`;
+            siteMap.set(key, site);
+            if (site.id) {
+              siteMap.set(site.id, site);
+            }
+            if (site.site_code) {
+              siteMap.set(site.site_code.toLowerCase(), site);
+            }
+          });
+          totalLoaded += data.length;
+          offset += BATCH_SIZE;
+          hasMore = data.length === BATCH_SIZE;
+        } else {
+          hasMore = false;
+        }
       }
-      return new Map();
+      
+      setRegistrySites(siteMap);
+      console.log('[CostPredictions] Loaded', totalLoaded, 'registry sites (paginated)');
+      return siteMap;
     } catch (err) {
       console.error('Error loading registry sites:', err);
       return new Map();
@@ -1229,6 +1250,11 @@ export default function CostPredictions() {
   };
 
   const handleDeleteAllHistoricalData = async () => {
+    if (!isSuperAdmin) {
+      toast.error('Only Super Admins can delete historical cost data');
+      return;
+    }
+    
     setDeleting(true);
     try {
       const { error } = await supabase
@@ -1325,6 +1351,11 @@ export default function CostPredictions() {
   };
 
   const handleDeleteDuplicatesOnly = async () => {
+    if (!isSuperAdmin) {
+      toast.error('Only Super Admins can delete historical cost data');
+      return;
+    }
+    
     setDeletingDuplicates(true);
     try {
       const { duplicateIds, count } = await findDuplicates();
@@ -1927,7 +1958,7 @@ export default function CostPredictions() {
 
               {historicalDataStats.total > 0 && (
                 <div className="space-y-4 pt-4 border-t">
-                  {/* Delete Duplicates Only */}
+                  {/* Duplicate info (visible to all) */}
                   {duplicateCount > 0 && (
                     <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
                       <div>
@@ -1938,87 +1969,93 @@ export default function CostPredictions() {
                           These are records with the same site and month that were uploaded multiple times
                         </p>
                       </div>
-                      {!showDeleteDuplicatesConfirm ? (
+                      {isSuperAdmin && (
+                        <>
+                          {!showDeleteDuplicatesConfirm ? (
+                            <Button 
+                              variant="outline"
+                              className="border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300"
+                              onClick={() => setShowDeleteDuplicatesConfirm(true)}
+                              data-testid="button-show-delete-duplicates"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Duplicates Only
+                            </Button>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => setShowDeleteDuplicatesConfirm(false)}
+                                data-testid="button-cancel-delete-duplicates"
+                              >
+                                Cancel
+                              </Button>
+                              <Button 
+                                variant="destructive" 
+                                size="sm"
+                                onClick={handleDeleteDuplicatesOnly}
+                                disabled={deletingDuplicates}
+                                data-testid="button-confirm-delete-duplicates"
+                              >
+                                {deletingDuplicates ? (
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                )}
+                                Yes, Delete {duplicateCount}
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Delete All Data - Super Admin Only */}
+                  {isSuperAdmin && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Delete all historical data to start fresh or re-upload corrected data
+                      </p>
+                      {!showDeleteConfirm ? (
                         <Button 
-                          variant="outline"
-                          className="border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300"
-                          onClick={() => setShowDeleteDuplicatesConfirm(true)}
-                          data-testid="button-show-delete-duplicates"
+                          variant="destructive" 
+                          onClick={() => setShowDeleteConfirm(true)}
+                          data-testid="button-show-delete-confirm"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Duplicates Only
+                          Delete All Data
                         </Button>
                       ) : (
                         <div className="flex items-center gap-2">
+                          <span className="text-sm text-destructive font-medium">Are you sure?</span>
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => setShowDeleteDuplicatesConfirm(false)}
-                            data-testid="button-cancel-delete-duplicates"
+                            onClick={() => setShowDeleteConfirm(false)}
+                            data-testid="button-cancel-delete"
                           >
                             Cancel
                           </Button>
                           <Button 
                             variant="destructive" 
                             size="sm"
-                            onClick={handleDeleteDuplicatesOnly}
-                            disabled={deletingDuplicates}
-                            data-testid="button-confirm-delete-duplicates"
+                            onClick={handleDeleteAllHistoricalData}
+                            disabled={deleting}
+                            data-testid="button-confirm-delete"
                           >
-                            {deletingDuplicates ? (
+                            {deleting ? (
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                             ) : (
                               <Trash2 className="h-4 w-4 mr-2" />
                             )}
-                            Yes, Delete {duplicateCount}
+                            Yes, Delete All
                           </Button>
                         </div>
                       )}
                     </div>
                   )}
-
-                  {/* Delete All Data */}
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      Delete all historical data to start fresh or re-upload corrected data
-                    </p>
-                    {!showDeleteConfirm ? (
-                      <Button 
-                        variant="destructive" 
-                        onClick={() => setShowDeleteConfirm(true)}
-                        data-testid="button-show-delete-confirm"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete All Data
-                      </Button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-destructive font-medium">Are you sure?</span>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => setShowDeleteConfirm(false)}
-                          data-testid="button-cancel-delete"
-                        >
-                          Cancel
-                        </Button>
-                        <Button 
-                          variant="destructive" 
-                          size="sm"
-                          onClick={handleDeleteAllHistoricalData}
-                          disabled={deleting}
-                          data-testid="button-confirm-delete"
-                        >
-                          {deleting ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4 mr-2" />
-                          )}
-                          Yes, Delete All
-                        </Button>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
 
