@@ -14,7 +14,8 @@ import { useToast } from '@/hooks/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2 } from 'lucide-react';
-import { getHubForState, getHubNameForState } from '@/data/sudanStates';
+import { getHubForState, getHubNameForState, hubs } from '@/data/sudanStates';
+import { normalizeStateId } from '@/utils/siteNormalization';
 import * as XLSX from 'xlsx';
 
 interface ParsedSite {
@@ -388,14 +389,29 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       const parsed: ParsedSite[] = rows.map((row, idx) => {
         const siteId = siteIdCol ? row[siteIdCol] || '' : '';
         const siteName = siteNameCol ? row[siteNameCol] || '' : '';
-        const state = stateCol ? row[stateCol] || '' : '';
+        const rawState = stateCol ? row[stateCol] || '' : '';
         const locality = localityCol ? row[localityCol] || '' : '';
         
+        const normalizedStateId = normalizeStateId(rawState);
+        const state = normalizedStateId || rawState;
+        
         let hub = hubCol ? row[hubCol] || '' : '';
-        if (!hub && state) {
-          const derivedHub = getHubForState(state);
+        if (!hub && normalizedStateId) {
+          const derivedHub = getHubForState(normalizedStateId);
           if (derivedHub) {
             hub = derivedHub;
+          }
+        }
+        
+        if (hub && !hubs.find(h => h.id === hub)) {
+          const normalizedHub = hub.toLowerCase().trim().replace(/\s+/g, '-');
+          const matchedHub = hubs.find(h => 
+            h.id === normalizedHub || 
+            h.name.toLowerCase().includes(normalizedHub) ||
+            normalizedHub.includes(h.id.replace('-hub', ''))
+          );
+          if (matchedHub) {
+            hub = matchedHub.id;
           }
         }
         
