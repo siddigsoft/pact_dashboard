@@ -786,9 +786,11 @@ export default function CostPredictions() {
         
         // Normalize sheet name for parsing
         const normalizedSheetName = sheetName.toLowerCase().trim();
+        console.log(`[CostPredictions] Processing sheet: "${sheetName}" → normalized: "${normalizedSheetName}"`);
         
-        // Pattern 1: "January 2025" or "Jan 2025" or "January-2025"
+        // Pattern 1: "January 2025" or "Jan 2025" or "January-2025" or "May2025" (no space)
         const monthYearMatch = normalizedSheetName.match(/^([a-z]+)[\s\-_]*(\d{4}|\d{2})$/);
+        console.log(`[CostPredictions] Pattern 1 match result:`, monthYearMatch);
         if (monthYearMatch) {
           const monthStr = monthYearMatch[1];
           let yearStr = monthYearMatch[2];
