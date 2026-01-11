@@ -66,6 +66,8 @@ const SITE_ID_PATTERNS = [
 
 const SITE_NAME_PATTERNS = [
   /site_name/i, /sitename/i, /^name$/i,
+  /SECTION_A\/A06$/i,
+  /A06$/i,
   /A03.*site.*name/i, /A03.*sitename/i, /SECTION.*A03.*name/i,
   /A02.*site.*name/i, /A02.*sitename/i,
   /Activity.*site/i, /activity_site/i,
@@ -77,19 +79,23 @@ const STATE_PATTERNS = [
   /^state$/i, /state_name/i, /statename/i,
   /A04.*state/i, /SECTION.*state/i,
   /_state$/i, /State$/,
-  /[/_]state[/_]/i, /state/i,
+  /[/_]state[/_]/i,
 ];
 
 const LOCALITY_PATTERNS = [
   /^locality$/i, /locality_name/i, /localityname/i,
+  /SECTION_A\/A04$/i,
+  /A04$/i,
   /A04.*locality/i, /SECTION.*locality/i,
   /_locality$/i, /Locality$/,
-  /[/_]locality[/_]/i, /locality/i,
+  /[/_]locality[/_]/i,
 ];
 
 const HUB_PATTERNS = [
   /^hub$/i, /hub_name/i, /hubname/i, /wfp.*hub/i,
-  /[/_]hub[/_]/i, /hub/i,
+  /SECTION_A\/A03$/i,
+  /A03$/i,
+  /[/_]hub[/_]/i, /location.*hub/i,
 ];
 
 const GPS_COLUMN_PATTERNS = {
@@ -451,7 +457,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         
         const validationErrors: string[] = [];
         if (!siteId && !siteName) validationErrors.push('Missing site ID or name');
-        if (!state) validationErrors.push('Missing state');
+        if (!state && !hub && !locality) validationErrors.push('Missing location info (state, hub, or locality)');
         const hasSiteGps = latitude !== null && longitude !== null;
         const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
         if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Invalid or missing GPS coordinates (need site or residence)');
