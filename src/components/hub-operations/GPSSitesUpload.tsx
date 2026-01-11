@@ -172,7 +172,13 @@ function parseCSV(csvText: string): { headers: string[]; rows: Record<string, st
   const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
   const rows: Record<string, string>[] = [];
   
-  for (let i = 1; i < lines.length; i++) {
+  // Detect MoDa/ODK format: Row 1 = internal column names, Row 2 = display labels, data starts Row 3
+  const isMoDaFormat = headers.some(h => /^SECTION_/i.test(h) || /^[A-Z]_[A-Z0-9]+$/i.test(h));
+  const dataStartRow = isMoDaFormat ? 2 : 1;
+  
+  console.log(`[GPS Upload CSV] File format: ${isMoDaFormat ? 'MoDa/ODK' : 'Standard'}, data starts at row ${dataStartRow + 1}`);
+  
+  for (let i = dataStartRow; i < lines.length; i++) {
     const values: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -263,7 +269,14 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     const headers = (jsonData[0] as string[]).map(h => String(h || '').trim());
     const rows: Record<string, string>[] = [];
     
-    for (let i = 1; i < jsonData.length; i++) {
+    // Detect MoDa/ODK format: Row 1 = internal column names, Row 2 = display labels, data starts Row 3
+    // MoDa files have SECTION_* style headers
+    const isMoDaFormat = headers.some(h => /^SECTION_/i.test(h) || /^[A-Z]_[A-Z0-9]+$/i.test(h));
+    const dataStartRow = isMoDaFormat ? 2 : 1; // Skip row 2 (display labels) for MoDa files
+    
+    console.log(`[GPS Upload] File format: ${isMoDaFormat ? 'MoDa/ODK' : 'Standard'}, data starts at row ${dataStartRow + 1}`);
+    
+    for (let i = dataStartRow; i < jsonData.length; i++) {
       const rowData = jsonData[i] as any[];
       const row: Record<string, string> = {};
       headers.forEach((header, idx) => {
