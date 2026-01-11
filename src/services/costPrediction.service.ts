@@ -93,6 +93,12 @@ export interface ParsedHistoricalRecord {
   visit_date?: string;
   actual_cost?: number;
   transport_mode?: string;
+  // Additional fields from user's file
+  site_id?: string;
+  activity_type?: string;
+  implementing_partner?: string;
+  monitoring_type?: string;
+  enumerator_name?: string;
   matched_site_id?: string;
   has_gps: boolean;
   gps_latitude?: number;
