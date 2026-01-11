@@ -219,6 +219,13 @@ export default function HubOperations() {
   const [sites, setSites] = useState<SiteRegistry[]>([]);
   const [projectScopes, setProjectScopes] = useState<ProjectScope[]>([]);
   
+  // Pagination state for sites - larger page size for better UX
+  const SITES_PAGE_SIZE = 500;
+  const [sitesPage, setSitesPage] = useState(0);
+  const [hasMoreSites, setHasMoreSites] = useState(true);
+  const [loadingMoreSites, setLoadingMoreSites] = useState(false);
+  const [totalSitesCount, setTotalSitesCount] = useState(0);
+  
   const [hubDialogOpen, setHubDialogOpen] = useState(false);
   const [siteDialogOpen, setSiteDialogOpen] = useState(false);
   const [stateDetailOpen, setStateDetailOpen] = useState(false);
@@ -261,28 +268,35 @@ export default function HubOperations() {
     loadData();
   }, []);
 
+  // Throttled realtime subscription - debounced reload on changes
   useEffect(() => {
+    let reloadTimer: NodeJS.Timeout | null = null;
+    const throttledReload = () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        console.log('[Hub Operations] Debounced reload triggered');
+        setSitesPage(0);
+        setHasMoreSites(true);
+        loadSites(0, false);
+      }, 2000); // 2 second debounce
+    };
+    
     const channel = supabase
       .channel('sites_changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sites_registry' },
-        (payload) => {
-          console.log('[Hub Operations] Sites registry change detected:', payload.eventType);
-          loadSites();
-        }
+        () => throttledReload()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mmp_site_entries' },
-        (payload) => {
-          console.log('[Hub Operations] MMP site entries change detected:', payload.eventType);
-          loadSites();
-        }
+        () => throttledReload()
       )
       .subscribe();
 
     return () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -350,13 +364,40 @@ export default function HubOperations() {
     }
   };
 
-  const loadSites = async () => {
+  const loadSites = async (page: number = 0, append: boolean = false) => {
     try {
-      // Load sites from sites_registry (master registry)
-      const { data: registrySites, error: registryError } = await supabase
+      const startIdx = page * SITES_PAGE_SIZE;
+      const endIdx = startIdx + SITES_PAGE_SIZE - 1;
+      
+      // Run queries in parallel for better performance
+      // Only select columns needed for list display
+      const registryColumns = 'id, site_code, site_name, state_id, state_name, locality_id, locality_name, hub_id, hub_name, gps_latitude, gps_longitude, activity_type, status, mmp_count, last_mmp_date, created_at, created_by, updated_at, source';
+      const mmpColumns = 'id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, visit_date, status';
+      
+      // Run queries in parallel
+      const registryPromise = supabase
         .from('sites_registry')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select(registryColumns)
+        .order('created_at', { ascending: false })
+        .range(startIdx, endIdx);
+        
+      const countPromise = supabase
+        .from('sites_registry')
+        .select('id', { count: 'exact', head: true });
+      
+      // Only fetch MMP entries on first page for MMP-only sites and counting
+      const mmpPromise = page === 0 
+        ? supabase.from('mmp_site_entries').select(mmpColumns).order('created_at', { ascending: false })
+        : Promise.resolve({ data: null, error: null });
+      
+      const [registryResult, countResult, mmpResult] = await Promise.all([
+        registryPromise, countPromise, mmpPromise
+      ]);
+      
+      const { data: registrySites, error: registryError } = registryResult;
+      const { count: totalCount } = countResult;
+      const mmpSitesData = mmpResult?.data;
+      const mmpError = mmpResult?.error;
       
       if (registryError && registryError.code !== '42P01') {
         console.error('Error loading registry sites:', registryError);
@@ -366,41 +407,18 @@ export default function HubOperations() {
           variant: 'destructive',
         });
       }
+      
+      // Update total count and pagination state
+      setTotalSitesCount(totalCount || 0);
+      setHasMoreSites((registrySites?.length || 0) === SITES_PAGE_SIZE);
 
-      // Load unique sites from MMP entries (sites uploaded via MMP)
-      let mmpSites: MMPSiteEntry[] | null = null;
+      // Build MMP lookup (only on first page)
+      let mmpSites: MMPSiteEntry[] = page === 0 
+        ? (mmpSitesData || []).map((s: any) => ({ ...s, registry_site_id: s.registry_site_id || null })) as MMPSiteEntry[]
+        : [];
       
-      const { data: mmpSitesWithRegistry, error: mmpErrorWithRegistry } = await supabase
-        .from('mmp_site_entries')
-        .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, cp_name, activity_at_site, monitoring_by, survey_tool, visit_date, visit_type, main_activity, use_market_diversion, use_warehouse_monitoring, comments, additional_data, status, mmp_file_id')
-        .order('created_at', { ascending: false });
-      
-      if (mmpErrorWithRegistry && mmpErrorWithRegistry.code === '42703') {
-        // Column doesn't exist, try without registry_site_id
-        const { data: mmpSitesBasic, error: mmpErrorBasic } = await supabase
-          .from('mmp_site_entries')
-          .select('id, site_code, site_name, state, locality, hub_office, created_at, cp_name, activity_at_site, monitoring_by, survey_tool, visit_date, visit_type, main_activity, use_market_diversion, use_warehouse_monitoring, comments, additional_data, status')
-          .order('created_at', { ascending: false });
-        
-        if (mmpErrorBasic && mmpErrorBasic.code !== '42P01') {
-          console.error('Error loading MMP sites:', mmpErrorBasic);
-          toast({
-            title: 'Warning',
-            description: 'Some MMP entries could not be loaded',
-            variant: 'destructive',
-          });
-        }
-        mmpSites = (mmpSitesBasic || []).map(s => ({ ...s, registry_site_id: null })) as MMPSiteEntry[];
-      } else {
-        if (mmpErrorWithRegistry && mmpErrorWithRegistry.code !== '42P01') {
-          console.error('Error loading MMP sites:', mmpErrorWithRegistry);
-          toast({
-            title: 'Warning',
-            description: 'Some MMP entries could not be loaded',
-            variant: 'destructive',
-          });
-        }
-        mmpSites = (mmpSitesWithRegistry || []) as MMPSiteEntry[];
+      if (mmpError && mmpError.code !== '42P01' && mmpError.code !== '42703') {
+        console.error('Error loading MMP sites:', mmpError);
       }
 
       // Build lookup maps using centralized utility with multi-key indexing
@@ -590,26 +608,39 @@ export default function HubOperations() {
         });
       }
 
-      console.log(`[loadSites] Loaded ${combinedSites.length} sites (${registrySites?.length || 0} from registry, ${combinedSites.length - (registrySites?.length || 0)} from MMP)`);
+      console.log(`[loadSites] Page ${page}: Loaded ${combinedSites.length} sites (${registrySites?.length || 0} from registry)`);
       
       // Show warning if there were unmatched locations
       if (unmatchedStates > 0 || unmatchedLocalities > 0) {
         console.warn(`[loadSites] ${unmatchedStates} sites with unmatched states, ${unmatchedLocalities} with unmatched localities`);
       }
       
-      if (combinedSites.length > 0) {
-        console.log('[loadSites] Sample site with MMP fields:', {
-          site_name: combinedSites[0].site_name,
-          cp_name: combinedSites[0].cp_name,
-          activity_at_site: combinedSites[0].activity_at_site,
-          monitoring_by: combinedSites[0].monitoring_by,
-          survey_tool: combinedSites[0].survey_tool,
-          visit_date: combinedSites[0].visit_date,
-          mmp_count: combinedSites[0].mmp_count,
-          source: combinedSites[0].source,
+      // Update state: append to existing or replace
+      if (append) {
+        // When appending, remove any MMP-only sites that now have registry counterparts
+        const newRegistryIds = new Set(combinedSites.filter(s => s.source === 'registry').map(s => s.id));
+        const newRegistrySiteKeys = new Set(combinedSites.filter(s => s.source === 'registry').map(s => 
+          generateNormalizedSiteKey(s.site_code, s.site_name, s.state_name, s.locality_name)
+        ));
+        const newRegistrySiteCodes = new Set(combinedSites.filter(s => s.source === 'registry' && s.site_code).map(s => 
+          normalizeSiteCode(s.site_code)
+        ));
+        
+        setSites(prev => {
+          // Filter out MMP-only duplicates from previous load
+          const dedupedPrev = prev.filter(site => {
+            if (site.source !== 'mmp') return true;
+            const siteKey = generateNormalizedSiteKey(site.site_code, site.site_name, site.state_name, site.locality_name);
+            const codeKey = site.site_code ? normalizeSiteCode(site.site_code) : '';
+            // Keep if no matching registry entry in new page
+            return !newRegistrySiteKeys.has(siteKey) && !(codeKey && newRegistrySiteCodes.has(codeKey));
+          });
+          return [...dedupedPrev, ...combinedSites];
         });
+      } else {
+        setSites(combinedSites);
       }
-      setSites(combinedSites);
+      setSitesPage(page);
       localStorage.removeItem('pact_sites_local');
     } catch (err) {
       console.error('Error loading sites from database:', err);
@@ -637,6 +668,16 @@ export default function HubOperations() {
     }
   };
   
+  // Load more sites (pagination)
+  const loadMoreSites = async () => {
+    if (!hasMoreSites || loadingMoreSites) return;
+    setLoadingMoreSites(true);
+    try {
+      await loadSites(sitesPage + 1, true);
+    } finally {
+      setLoadingMoreSites(false);
+    }
+  };
 
   const fetchMmpEntryDataForSite = async (site: SiteRegistry): Promise<any> => {
     try {
@@ -1854,6 +1895,27 @@ export default function HubOperations() {
                 </div>
               </CardContent>
             </Card>
+          )}
+            
+          {/* Load More Button */}
+          {hasMoreSites && sites.length > 0 && (
+            <div className="flex justify-center mt-4">
+              <Button 
+                variant="outline" 
+                onClick={loadMoreSites}
+                disabled={loadingMoreSites}
+                data-testid="button-load-more-sites"
+              >
+                {loadingMoreSites ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>Load More Sites ({sites.length} of {totalSitesCount})</>
+                )}
+              </Button>
+            </div>
           )}
 
           {filteredSites.length === 0 && (
