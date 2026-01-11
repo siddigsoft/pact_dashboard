@@ -204,7 +204,11 @@ import {
   Filter,
   Grid3X3,
   List,
-  Eye
+  Eye,
+  X,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export default function HubOperations() {
@@ -243,8 +247,11 @@ export default function HubOperations() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterState, setFilterState] = useState<string>('');
   const [filterHub, setFilterHub] = useState<string>('');
+  const [filterLocality, setFilterLocality] = useState<string>('');
   const [filterActivityType, setFilterActivityType] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('');
   const [siteSourceFilter, setSiteSourceFilter] = useState<'all' | 'registry' | 'mmp' | 'with_gps'>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
   const [newHub, setNewHub] = useState({
     name: '',
@@ -1051,7 +1058,9 @@ export default function HubOperations() {
         site.site_code.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesState = !filterState || site.state_id === filterState;
       const matchesHub = !filterHub || site.hub_id === filterHub;
+      const matchesLocality = !filterLocality || site.locality_id === filterLocality;
       const matchesActivity = !filterActivityType || site.activity_type === filterActivityType;
+      const matchesStatus = !filterStatus || site.status === filterStatus;
       
       let matchesSourceFilter = true;
       if (siteSourceFilter === 'registry') {
@@ -1062,9 +1071,50 @@ export default function HubOperations() {
         matchesSourceFilter = !!(site.gps_latitude && site.gps_longitude);
       }
       
-      return matchesSearch && matchesState && matchesHub && matchesActivity && matchesSourceFilter;
+      return matchesSearch && matchesState && matchesHub && matchesLocality && matchesActivity && matchesStatus && matchesSourceFilter;
     });
-  }, [sites, searchTerm, filterState, filterHub, filterActivityType, siteSourceFilter]);
+  }, [sites, searchTerm, filterState, filterHub, filterLocality, filterActivityType, filterStatus, siteSourceFilter]);
+  
+  // Get unique activity types from sites
+  const activityTypes = useMemo(() => {
+    const types = new Set(sites.map(s => s.activity_type).filter(Boolean));
+    return Array.from(types).sort();
+  }, [sites]);
+  
+  // Get unique statuses from sites
+  const siteStatuses = useMemo(() => {
+    const statuses = new Set(sites.map(s => s.status).filter(Boolean));
+    return Array.from(statuses).sort();
+  }, [sites]);
+  
+  // Get localities for selected state
+  const filteredLocalities = useMemo(() => {
+    if (!filterState) return [];
+    return getLocalitiesByState(filterState);
+  }, [filterState]);
+  
+  // Count active filters
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filterState) count++;
+    if (filterHub) count++;
+    if (filterLocality) count++;
+    if (filterActivityType) count++;
+    if (filterStatus) count++;
+    if (siteSourceFilter !== 'all') count++;
+    return count;
+  }, [filterState, filterHub, filterLocality, filterActivityType, filterStatus, siteSourceFilter]);
+  
+  // Clear all filters
+  const clearAllFilters = () => {
+    setFilterState('');
+    setFilterHub('');
+    setFilterLocality('');
+    setFilterActivityType('');
+    setFilterStatus('');
+    setSiteSourceFilter('all');
+    setSearchTerm('');
+  };
 
   const stats = useMemo(() => ({
     totalHubs: hubs.length,
@@ -1493,7 +1543,7 @@ export default function HubOperations() {
           </TabsList>
 
           {activeTab === 'sites' && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -1504,17 +1554,30 @@ export default function HubOperations() {
                   data-testid="input-search-sites"
                 />
               </div>
-              <Select value={filterState || "all"} onValueChange={(val) => setFilterState(val === "all" ? "" : val)}>
-                <SelectTrigger className="w-[150px]" data-testid="select-filter-state">
-                  <SelectValue placeholder="All States" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All States</SelectItem>
-                  {sudanStates.map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Button
+                variant={showAdvancedFilters ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                data-testid="button-toggle-filters"
+              >
+                <SlidersHorizontal className="h-4 w-4 mr-2" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="default" className="ml-2">{activeFilterCount}</Badge>
+                )}
+                {showAdvancedFilters ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+              </Button>
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  data-testid="button-clear-filters"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+              )}
               <div className="flex border rounded-md">
                 <Button
                   variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
@@ -1675,6 +1738,155 @@ export default function HubOperations() {
 
         {/* Sites Tab */}
         <TabsContent value="sites" className="space-y-4">
+          {/* Advanced Filters Panel */}
+          {showAdvancedFilters && (
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filter Sites
+                </h3>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters} data-testid="button-clear-all-filters">
+                    <X className="h-4 w-4 mr-1" />
+                    Clear All ({activeFilterCount})
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">State</Label>
+                  <Select value={filterState || "all"} onValueChange={(val) => { setFilterState(val === "all" ? "" : val); setFilterLocality(''); }}>
+                    <SelectTrigger data-testid="select-filter-state">
+                      <SelectValue placeholder="All States" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {sudanStates.map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Locality</Label>
+                  <Select 
+                    value={filterLocality || "all"} 
+                    onValueChange={(val) => setFilterLocality(val === "all" ? "" : val)}
+                    disabled={!filterState}
+                  >
+                    <SelectTrigger data-testid="select-filter-locality">
+                      <SelectValue placeholder={filterState ? "All Localities" : "Select State First"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Localities</SelectItem>
+                      {filteredLocalities.map(l => (
+                        <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Hub</Label>
+                  <Select value={filterHub || "all"} onValueChange={(val) => setFilterHub(val === "all" ? "" : val)}>
+                    <SelectTrigger data-testid="select-filter-hub">
+                      <SelectValue placeholder="All Hubs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Hubs</SelectItem>
+                      {hubs.map(h => (
+                        <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Activity Type</Label>
+                  <Select value={filterActivityType || "all"} onValueChange={(val) => setFilterActivityType(val === "all" ? "" : val)}>
+                    <SelectTrigger data-testid="select-filter-activity">
+                      <SelectValue placeholder="All Activities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Activities</SelectItem>
+                      {activityTypes.map(type => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Status</Label>
+                  <Select value={filterStatus || "all"} onValueChange={(val) => setFilterStatus(val === "all" ? "" : val)}>
+                    <SelectTrigger data-testid="select-filter-status">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      {siteStatuses.map(status => (
+                        <SelectItem key={status} value={status} className="capitalize">{status}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Source</Label>
+                  <Select value={siteSourceFilter} onValueChange={(val) => setSiteSourceFilter(val as typeof siteSourceFilter)}>
+                    <SelectTrigger data-testid="select-filter-source">
+                      <SelectValue placeholder="All Sources" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sources</SelectItem>
+                      <SelectItem value="registry">Registry Only</SelectItem>
+                      <SelectItem value="mmp">MMP Only</SelectItem>
+                      <SelectItem value="with_gps">With GPS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {activeFilterCount > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span className="text-sm text-muted-foreground">Active filters:</span>
+                  {filterState && (
+                    <Badge variant="secondary" className="gap-1">
+                      State: {sudanStates.find(s => s.id === filterState)?.name}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => { setFilterState(''); setFilterLocality(''); }} />
+                    </Badge>
+                  )}
+                  {filterLocality && (
+                    <Badge variant="secondary" className="gap-1">
+                      Locality: {filteredLocalities.find(l => l.id === filterLocality)?.name}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterLocality('')} />
+                    </Badge>
+                  )}
+                  {filterHub && (
+                    <Badge variant="secondary" className="gap-1">
+                      Hub: {hubs.find(h => h.id === filterHub)?.name}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterHub('')} />
+                    </Badge>
+                  )}
+                  {filterActivityType && (
+                    <Badge variant="secondary" className="gap-1">
+                      Activity: {filterActivityType}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterActivityType('')} />
+                    </Badge>
+                  )}
+                  {filterStatus && (
+                    <Badge variant="secondary" className="gap-1">
+                      Status: {filterStatus}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setFilterStatus('')} />
+                    </Badge>
+                  )}
+                  {siteSourceFilter !== 'all' && (
+                    <Badge variant="secondary" className="gap-1">
+                      Source: {siteSourceFilter === 'registry' ? 'Registry' : siteSourceFilter === 'mmp' ? 'MMP' : 'With GPS'}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setSiteSourceFilter('all')} />
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
+          
           {/* Sites Summary - Clickable Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Card 
