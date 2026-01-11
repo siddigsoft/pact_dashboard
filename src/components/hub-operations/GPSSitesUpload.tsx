@@ -17,6 +17,7 @@ import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Do
 import { getHubForState, getHubNameForState, hubs, sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import * as XLSX from 'xlsx';
+import { v4 as uuidv4 } from 'uuid';
 
 interface ParsedSite {
   rowIndex: number;
@@ -704,6 +705,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             
             // Only include columns that exist in sites_registry table
             const insertData: Record<string, any> = {
+              id: uuidv4(),
               site_code: siteCode,
               site_name: site.siteName || siteCode,
               state_id: normalizedStateId || site.state,
