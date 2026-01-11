@@ -887,7 +887,7 @@ export default function CostPredictions() {
             console.log(`[CostPredictions] Row ${rowCounter} visitDate:`, visitDate, '| Raw row keys:', Object.keys(row));
           }
           const actualCost = getCostValue();
-          const transportMode = getColumnValue(['Transportation Means', 'Transport Mode', 'transport_mode', '2.2 Transportation means', 'TransportMode']);
+          const transportMode = getColumnValue(['Transportation Means', 'Transport Mode', 'transport_mode', '2.2 Transportation means', 'TransportMode', 'Transportation Type', 'Transport Type']);
 
           if (!siteName || !state || !locality) {
             continue;
