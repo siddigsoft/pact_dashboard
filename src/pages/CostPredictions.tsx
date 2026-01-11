@@ -784,9 +784,13 @@ export default function CostPredictions() {
         const shortMonthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 
                                  'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
         
-        // Normalize sheet name for parsing
-        const normalizedSheetName = sheetName.toLowerCase().trim();
-        console.log(`[CostPredictions] Processing sheet: "${sheetName}" → normalized: "${normalizedSheetName}"`);
+        // Normalize sheet name for parsing - handle Unicode whitespace (NBSP U+00A0) from Excel
+        const normalizedSheetName = sheetName
+          .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, ' ') // Replace all Unicode whitespace with regular space
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, ' '); // Collapse multiple spaces to single space
+        console.log(`[CostPredictions] Processing sheet: "${sheetName}" → normalized: "${normalizedSheetName}" (original chars: ${[...sheetName].map(c => c.charCodeAt(0)).join(',')})`);
         
         // Pattern 1: "January 2025" or "Jan 2025" or "January-2025" or "May2025" (no space)
         const monthYearMatch = normalizedSheetName.match(/^([a-z]+)[\s\-_]*(\d{4}|\d{2})$/);
