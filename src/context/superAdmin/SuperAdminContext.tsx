@@ -146,8 +146,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
   const refreshSuperAdmins = useCallback(async () => {
     // Only admins should fetch super-admin data
-    const userRole = currentUser?.role?.toLowerCase();
-    if (!currentUser || (userRole !== 'admin' && userRole !== 'superadmin')) {
+    const userRole = currentUser?.role?.toLowerCase()?.replace(/[\s_-]/g, '');
+    const adminRoles = ['admin', 'superadmin', 'ict'];
+    if (!currentUser || !adminRoles.includes(userRole || '')) {
       setSuperAdmins([]);
       setStats(null);
       setLoading(false);
