@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -2552,9 +2553,88 @@ export default function CostPredictions() {
 
         {/* Analytics Tab Content */}
         <TabsContent value="analytics" className="space-y-6">
+          
+          {/* Empty State - No Historical Data */}
+          {!loading && historicalDataStats.total === 0 && sitePredictions.length === 0 && (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="rounded-full bg-muted p-4 mb-4">
+                  <Database className="h-10 w-10 text-muted-foreground" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">No Historical Cost Data</h3>
+                <p className="text-muted-foreground max-w-md mb-6">
+                  Cost predictions require historical cost data from site visits. You can add cost data in two ways:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+                  <Card className="p-4 text-left">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg bg-primary/10 p-2">
+                        <Upload className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium mb-1">Upload Historical Data</h4>
+                        <p className="text-sm text-muted-foreground mb-3">
+                          Import existing cost data from Excel files with site visits and transportation costs.
+                        </p>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setMainTab('upload')}
+                          data-testid="button-go-upload"
+                        >
+                          <FileSpreadsheet className="h-4 w-4 mr-2" />
+                          Upload Data
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                  <Card className="p-4 text-left">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-lg bg-green-500/10 p-2">
+                        <Navigation className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium mb-1">Add Costs from MMP</h4>
+                        <p className="text-sm text-muted-foreground mb-3">
+                          Submit cost data through the MMP workflow when dispatching and completing site visits.
+                        </p>
+                        <Link to="/mmp">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            data-testid="button-go-mmp"
+                          >
+                            <Building2 className="h-4 w-4 mr-2" />
+                            Go to MMP Management
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+                <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900 max-w-2xl">
+                  <div className="flex gap-2 text-left">
+                    <Info className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        How Cost Predictions Work
+                      </p>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                        Once you have cost data from at least 3 site visits, the system will analyze spending patterns 
+                        to predict future transportation costs, helping you plan budgets more accurately.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Show analytics content when data exists */}
+          {(historicalDataStats.total > 0 || sitePredictions.length > 0) && (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card data-testid="card-total-costs">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Costs</CardTitle>
@@ -2860,6 +2940,8 @@ export default function CostPredictions() {
               </CardContent>
             </Card>
           </div>
+          </>
+          )}
         </TabsContent>
 
         <TabsContent value="hubs">
