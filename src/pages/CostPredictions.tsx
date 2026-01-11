@@ -138,6 +138,12 @@ interface ParsedRecord {
   visitDate?: string;
   actualCost?: number;
   transportMode?: string;
+  // Additional fields from user's file
+  siteId?: string;
+  activityType?: string;
+  implementingPartner?: string;
+  monitoringType?: string;
+  enumeratorName?: string;
   matchedSiteId?: string;
   hasGps: boolean;
   isNewSite: boolean;
@@ -865,16 +871,60 @@ export default function CostPredictions() {
             return 0;
           };
           
-          const siteName = getColumnValue(['1.10 Select The activity site', 'Site Name', 'site_name', 'SiteName', 'Site']);
-          const state = getColumnValue(['1.8 State of the site/where the site is located', 'State', 'state']);
-          const locality = getColumnValue(['1.9 Locality of the site/where the site is located', 'Locality', 'locality']);
-          const hub = getColumnValue(['1.7 WFP HUB', 'Hub', 'hub', 'WFP HUB']);
+          // Core required fields - exact column names from user's file
+          const siteName = getColumnValue([
+            '1.10 Select The activity site', 
+            'Site Name', 'site_name', 'SiteName', 'Site',
+            'Activity Site', 'activity_site'
+          ]);
+          const state = getColumnValue([
+            '1.8 State of the site/where the site is located', 
+            'State', 'state', 'State Name', 'state_name'
+          ]);
+          const locality = getColumnValue([
+            '1.9 Locality of the site/where the site is located', 
+            'Locality', 'locality', 'Locality Name', 'locality_name'
+          ]);
+          const hub = getColumnValue([
+            '1.7 WFP HUB', 
+            'Hub', 'hub', 'WFP HUB', 'Hub Office', 'hub_office'
+          ]);
+          
+          // Additional fields from user's file
+          const siteId = getColumnValue(['siteID', 'site_id', 'SiteID', 'Site ID']);
+          const activityConfirm = getColumnValue([
+            '1.10a Confirm the activity of the site from the monthly monitoring plan',
+            'Activity Confirm', 'activity_confirm'
+          ]);
+          const implementingPartner = getColumnValue([
+            '1.10c Name of Implementing Partner',
+            'Implementing Partner', 'IP', 'Partner', 'implementing_partner'
+          ]);
+          const otherIP = getColumnValue([
+            '1.10d Other Implementing Partner',
+            'Other IP', 'other_ip', 'Other Partner'
+          ]);
+          const monitoringType = getColumnValue([
+            '1.11 What kind of process monitoring are you going to conduct?',
+            'Monitoring Type', 'monitoring_type', 'Process Monitoring'
+          ]);
+          const activityType = getColumnValue([
+            '1.12 What is the specific activity you are monitoring?',
+            'Activity Type', 'activity_type', 'Specific Activity', 'Activity'
+          ]);
+          const enumeratorName = getColumnValue([
+            'Name of Enumators', 'Name of Enumerators', 
+            'Enumerator', 'enumerator', 'Enumerator Name', 'enumerator_name',
+            'Data Collector', 'data_collector'
+          ]);
+          
           // Try exact match first, then partial match for date column
           let visitDate = getColumnValue([
             'Visit Date', 'visit_date', '2.1 Date of visit', 'Date', 'date',
             'Month', 'month', 'Visit Month', 'visit_month', 'Period', 'period',
             'Report Month', 'report_month', 'Data Collection Date', 'data_collection_date',
-            '1.6 Date of visit', '1.5 Date of visit', 'VisitDate', 'visitDate'
+            '1.6 Date of visit', '1.5 Date of visit', 'VisitDate', 'visitDate',
+            '2.5 Visit Date', 'Collection Date', 'Survey Date'
           ], false);
           
           // If no date found, try partial matching
@@ -887,7 +937,11 @@ export default function CostPredictions() {
             console.log(`[CostPredictions] Row ${rowCounter} visitDate:`, visitDate, '| Raw row keys:', Object.keys(row));
           }
           const actualCost = getCostValue();
-          const transportMode = getColumnValue(['Transportation Means', 'Transport Mode', 'transport_mode', '2.2 Transportation means', 'TransportMode', 'Transportation Type', 'Transport Type']);
+          const transportMode = getColumnValue([
+            'Transportation Type', 'Transport Type',
+            'Transportation Means', 'Transport Mode', 'transport_mode', 
+            '2.2 Transportation means', 'TransportMode'
+          ]);
 
           if (!siteName || !state || !locality) {
             continue;
@@ -901,12 +955,16 @@ export default function CostPredictions() {
           let isDuplicate = false;
           let parsedMonthKey: string | null = null;
 
-          // MANDATORY: Visit date/month is required
+          // Visit date/month - use current month as fallback if not provided
           let normalizedDateStr: string | null = null; // YYYY-MM-01 format
           
           if (!visitDate) {
-            validationStatus = 'error';
-            validationMessage = 'Missing visit date - month is required for all records';
+            // Use current month as default when date is not provided
+            const now = new Date();
+            const currentMonth = now.toISOString().substring(0, 7); // YYYY-MM
+            normalizedDateStr = `${currentMonth}-01`;
+            validationStatus = 'warning';
+            validationMessage = 'No date column found - using current month as default';
           } else {
             let parsedDate: Date | null = null;
             try {
@@ -980,6 +1038,12 @@ export default function CostPredictions() {
             visitDate: normalizedDateStr || (visitDate ? String(visitDate) : undefined), // Use normalized YYYY-MM-01 format
             actualCost: actualCost || undefined,
             transportMode: transportMode?.trim() || undefined,
+            // Additional fields from user's file
+            siteId: siteId?.trim() || undefined,
+            activityType: activityType?.trim() || activityConfirm?.trim() || undefined,
+            implementingPartner: implementingPartner?.trim() || otherIP?.trim() || undefined,
+            monitoringType: monitoringType?.trim() || undefined,
+            enumeratorName: enumeratorName?.trim() || undefined,
             matchedSiteId: matchedSite?.id,
             hasGps: !!(matchedSite?.gps_latitude && matchedSite?.gps_longitude),
             isNewSite: !matchedSite,
