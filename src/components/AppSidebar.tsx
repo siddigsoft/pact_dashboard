@@ -277,6 +277,9 @@
     if (!isHidden('/cost-predictions') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       financeItems.push({ id: 'cost-predictions', title: "Cost Predictions", url: "/cost-predictions", icon: TrendingUp, priority: 8, isPinned: isPinned('/cost-predictions') });
     }
+    if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      financeItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 9, isPinned: isPinned('/exchange-rates') });
+    }
     if (financeItems.length) groups.push({ id: 'finance', label: "Finance", order: 6, items: financeItems });
 
     // Administration category - User and role management
