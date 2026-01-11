@@ -999,9 +999,28 @@ export default function CostPredictions() {
             '2.5 Visit Date', 'Collection Date', 'Survey Date'
           ], false);
           
-          // If no date found, try partial matching
+          // If no date found, try partial matching BUT exclude false positives
+          // IMPORTANT: Skip columns that contain activity/monitoring/plan as these are not date columns
           if (!visitDate) {
-            visitDate = getColumnValue(['month', 'date', 'visit', 'period'], true);
+            const rowKeys = Object.keys(row);
+            for (const key of rowKeys) {
+              const lowerKey = key.toLowerCase();
+              // Skip if it's an activity/monitoring column (false positive for "month")
+              if (lowerKey.includes('activity') || lowerKey.includes('monitoring') || lowerKey.includes('plan')) {
+                continue;
+              }
+              // Only match if column name suggests it's actually a date column
+              if (lowerKey.includes('date') || 
+                  (lowerKey.includes('month') && !lowerKey.includes('monthly')) ||
+                  lowerKey.includes('period') ||
+                  (lowerKey.includes('visit') && lowerKey.includes('date'))) {
+                const val = row[key];
+                if (val !== undefined && val !== null && val !== '') {
+                  visitDate = String(val);
+                  break;
+                }
+              }
+            }
           }
           
           // Log first few rows to debug
