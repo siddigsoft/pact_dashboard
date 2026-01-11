@@ -30,10 +30,10 @@ interface ManagedSubscription {
   handlers: Map<string, Set<HandlerEntry>>;
 }
 
-const RECONNECT_DELAY_MS = 1000;
-const MAX_RECONNECT_DELAY_MS = 60000;
-const MAX_RECONNECT_ATTEMPTS = 10;
-const JITTER_FACTOR = 0.3;
+const RECONNECT_DELAY_MS = 2000;
+const MAX_RECONNECT_DELAY_MS = 30000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const JITTER_FACTOR = 0.2;
 
 function getBackoffDelay(attempt: number): number {
   const baseDelay = RECONNECT_DELAY_MS * Math.pow(2, attempt);

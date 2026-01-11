@@ -26,30 +26,53 @@ export function RealtimeBanner({
   const health = useRealtimeHealth();
   const [isDismissed, setIsDismissed] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showBanner, setShowBanner] = useState(false);
+  const [stableErrorState, setStableErrorState] = useState(false);
+
+  const isConnected = health.isOnline && health.connectedChannels > 0 && !health.maxRetriesReached;
+  const isReconnecting = health.isOnline && health.channelCount > 0 && health.connectedChannels < health.channelCount && !health.maxRetriesReached;
+  const isOffline = !health.isOnline;
+  const hasError = health.maxRetriesReached || (health.errorChannels > 0 && health.totalRetries > 3);
 
   useEffect(() => {
-    if (health.isOnline && health.connectedChannels > 0 && !health.maxRetriesReached) {
+    if (isConnected) {
       setIsDismissed(false);
+      setShowBanner(false);
+      setStableErrorState(false);
+      return;
     }
-  }, [health.isOnline, health.connectedChannels, health.maxRetriesReached]);
+
+    if (hasError || isOffline) {
+      const timer = setTimeout(() => {
+        setStableErrorState(true);
+        setShowBanner(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+
+    if (isReconnecting && health.totalRetries > 2) {
+      const timer = setTimeout(() => {
+        setShowBanner(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isConnected, hasError, isOffline, isReconnecting, health.totalRetries]);
 
   const handleRefresh = async () => {
     if (!onRefresh || isRefreshing) return;
     setIsRefreshing(true);
     try {
       await onRefresh();
+      setShowBanner(false);
+      setStableErrorState(false);
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  const isConnected = health.isOnline && health.connectedChannels > 0 && !health.maxRetriesReached;
-  const isReconnecting = health.isOnline && health.channelCount > 0 && health.connectedChannels < health.channelCount && !health.maxRetriesReached;
-  const isOffline = !health.isOnline;
-  const hasError = health.maxRetriesReached || health.errorChannels > 0;
-
   if (showOnlyWhenDisconnected && isConnected) return null;
-  if (isDismissed && !hasError && !isOffline) return null;
+  if (isDismissed && !stableErrorState && !isOffline) return null;
+  if (!showBanner && !isOffline) return null;
 
   const getBannerConfig = () => {
     if (isOffline) {
