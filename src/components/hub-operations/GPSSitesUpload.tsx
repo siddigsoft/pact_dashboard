@@ -25,6 +25,8 @@ interface ParsedSite {
   hub: string;
   state: string;
   locality: string;
+  activity: string;
+  cp: string;
   latitude: number | null;
   longitude: number | null;
   altitude: number | null;
@@ -98,6 +100,18 @@ const LOCALITY_PATTERNS = [
 const HUB_PATTERNS = [
   /^hub$/i, /hub_name/i, /hubname/i, /wfp.*hub/i,
   /[/_]hub[/_]/i,
+];
+
+const ACTIVITY_PATTERNS = [
+  /^activity$/i, /activity_type/i, /activitytype/i,
+  /SECTION_A\/A07$/i, /A07$/i,
+  /_activity$/i, /Activity$/,
+];
+
+const CP_PATTERNS = [
+  /^cp$/i, /cooperating.*partner/i, /cp_name/i, /cpname/i,
+  /SECTION_A\/A08$/i, /A08$/i,
+  /_cp$/i, /partner$/i,
 ];
 
 const GPS_COLUMN_PATTERNS = {
@@ -222,6 +236,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     hub: string | null;
     state: string | null;
     locality: string | null;
+    activity: string | null;
+    cp: string | null;
     latitude: string | null;
     longitude: string | null;
     altitude: string | null;
@@ -238,6 +254,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     hub: null,
     state: null,
     locality: null,
+    activity: null,
+    cp: null,
     latitude: null,
     longitude: null,
     altitude: null,
@@ -334,10 +352,12 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       const hubCol = findColumn(fileHeaders, HUB_PATTERNS);
       const stateCol = findColumn(fileHeaders, STATE_PATTERNS);
       const localityCol = findColumn(fileHeaders, LOCALITY_PATTERNS);
+      const activityCol = findColumn(fileHeaders, ACTIVITY_PATTERNS);
+      const cpCol = findColumn(fileHeaders, CP_PATTERNS);
       const latCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.latitude);
       
       console.log('[GPS Upload] File headers:', fileHeaders.slice(0, 20));
-      console.log('[GPS Upload] Column detection:', { siteIdCol, siteNameCol, hubCol, stateCol, localityCol, latCol });
+      console.log('[GPS Upload] Column detection:', { siteIdCol, siteNameCol, hubCol, stateCol, localityCol, activityCol, cpCol, latCol });
       const lngCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.longitude);
       const altCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.altitude);
       const precisionCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.precision);
@@ -374,6 +394,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         hub: hubCol,
         state: stateCol,
         locality: localityCol,
+        activity: activityCol,
+        cp: cpCol,
         latitude: latCol,
         longitude: lngCol,
         altitude: altCol,
@@ -404,6 +426,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         const siteName = siteNameCol ? row[siteNameCol] || '' : '';
         const rawState = stateCol ? row[stateCol] || '' : '';
         const locality = localityCol ? row[localityCol] || '' : '';
+        const activity = activityCol ? row[activityCol] || '' : '';
+        const cp = cpCol ? row[cpCol] || '' : '';
         
         const normalizedStateId = normalizeStateId(rawState);
         const state = normalizedStateId || rawState;
@@ -493,11 +517,15 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         }
         
         const validationErrors: string[] = [];
-        if (!siteId && !siteName) validationErrors.push('Missing site ID or name');
-        if (!state && !locality) validationErrors.push('Missing location info (state or locality)');
+        if (!state) validationErrors.push('Missing State');
+        if (!locality) validationErrors.push('Missing Locality');
+        if (!siteName) validationErrors.push('Missing Site Name');
+        if (!siteId) validationErrors.push('Missing Site ID');
+        if (!activity) validationErrors.push('Missing Activity');
+        if (!cp) validationErrors.push('Missing CP (Cooperating Partner)');
         const hasSiteGps = latitude !== null && longitude !== null;
         const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
-        if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Invalid or missing GPS coordinates (need site or residence)');
+        if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Missing GPS coordinates');
         if (latitude !== null && (latitude < -90 || latitude > 90)) validationErrors.push('Site latitude out of range');
         if (longitude !== null && (longitude < -180 || longitude > 180)) validationErrors.push('Site longitude out of range');
         if (residenceLatitude !== null && (residenceLatitude < -90 || residenceLatitude > 90)) validationErrors.push('Residence latitude out of range');
@@ -516,6 +544,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           hub,
           state,
           locality,
+          activity,
+          cp,
           latitude,
           longitude,
           altitude,
@@ -735,7 +765,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             variant="outline"
             size="sm"
             onClick={() => {
-              const template = 'site_id,site_name,state,locality,SECTION_A/_A06_latitude,SECTION_A/_A06_longitude,SECTION_A/_A06_altitude,SECTION_A/_A06_precision,SECTION_A/_A05_latitude,SECTION_A/_A05_longitude,SECTION_A/_A05_altitude,SECTION_A/_A05_precision\nSITE001,Health Center A,North Darfur,Al Fasher,13.7506,34.4040,432.19,6.65,13.7510,34.4045,430.50,5.20';
+              const template = 'state,locality,site_name,site_id,activity,cp,gps\nKassala,Reifi Kassla,Health Center A,SITE001,DM,WFP,"15.4500 36.4000 432.19 6.65"';
               const blob = new Blob([template], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
