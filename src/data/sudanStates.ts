@@ -510,3 +510,112 @@ export const searchLocalities = (searchTerm: string): { state: SudanState; local
   
   return results;
 };
+
+/**
+ * Hub name aliases for normalization
+ * Maps various formats from Excel files to standard hub IDs
+ */
+const hubAliases: Record<string, string> = {
+  // Country Office / Khartoum variations
+  'country office': 'country-office',
+  'country office (khartoum)': 'country-office',
+  'co': 'country-office',
+  'khartoum': 'country-office',
+  'khartoum hub': 'country-office',
+  'red sea': 'country-office',
+  'port sudan': 'country-office',
+  
+  // Dongola Hub variations
+  'dongola': 'dongola-hub',
+  'dongola hub': 'dongola-hub',
+  'dongola-hub': 'dongola-hub',
+  'northern hub': 'dongola-hub',
+  
+  // Forchana Hub variations (West/Central Darfur)
+  'forchana': 'forchana-hub',
+  'forchana hub': 'forchana-hub',
+  'forchana-hub': 'forchana-hub',
+  'zalingei': 'forchana-hub',
+  'zalingei hub': 'forchana-hub',
+  'west darfur': 'forchana-hub',
+  'central darfur': 'forchana-hub',
+  'el geneina': 'forchana-hub',
+  'geneina': 'forchana-hub',
+  
+  // Kassala Hub variations
+  'kassala': 'kassala-hub',
+  'kassala hub': 'kassala-hub',
+  'kassala-hub': 'kassala-hub',
+  'gedaref': 'kassala-hub',
+  'al gadaref': 'kassala-hub',
+  'gadarif': 'kassala-hub',
+  'gezira': 'kassala-hub',
+  'al-gezira': 'kassala-hub',
+  'al jazira': 'kassala-hub',
+  'sennar': 'kassala-hub',
+  'blue nile': 'kassala-hub',
+  
+  // Kosti Hub variations
+  'kosti': 'kosti-hub',
+  'kosti hub': 'kosti-hub',
+  'kosti-hub': 'kosti-hub',
+  'white nile': 'kosti-hub',
+  'rabak': 'kosti-hub',
+  'north kordofan': 'kosti-hub',
+  'south kordofan': 'kosti-hub',
+  'west kordofan': 'kosti-hub',
+  'north darfur': 'kosti-hub',
+  'south darfur': 'kosti-hub',
+  'east darfur': 'kosti-hub',
+  'el fasher': 'kosti-hub',
+  'fasher': 'kosti-hub',
+  'nyala': 'kosti-hub',
+  'ed daein': 'kosti-hub',
+  'daein': 'kosti-hub',
+  'el obeid': 'kosti-hub',
+  'obeid': 'kosti-hub',
+  'kadugli': 'kosti-hub',
+};
+
+/**
+ * Normalize hub name to standard hub ID
+ * Handles various formats from Excel files and user input
+ */
+export const normalizeHubId = (hubInput: string | null | undefined): string | null => {
+  if (!hubInput) return null;
+  
+  const normalized = hubInput.toLowerCase().trim();
+  
+  // Direct lookup in aliases
+  if (hubAliases[normalized]) {
+    return hubAliases[normalized];
+  }
+  
+  // Check if it's already a valid hub ID
+  const directMatch = hubs.find(h => h.id === normalized);
+  if (directMatch) {
+    return directMatch.id;
+  }
+  
+  // Partial matching - find hub whose name contains the input or vice versa
+  for (const hub of hubs) {
+    const hubNameLower = hub.name.toLowerCase();
+    if (hubNameLower.includes(normalized) || normalized.includes(hubNameLower.replace(' hub', '').replace('(khartoum)', '').trim())) {
+      return hub.id;
+    }
+  }
+  
+  // Return null if no match found - caller can decide how to handle
+  return null;
+};
+
+/**
+ * Get normalized hub name from hub ID or raw hub input
+ */
+export const getNormalizedHubName = (hubInput: string | null | undefined): string | null => {
+  const hubId = normalizeHubId(hubInput);
+  if (!hubId) return null;
+  
+  const hub = hubs.find(h => h.id === hubId);
+  return hub?.name || null;
+};

@@ -60,6 +60,7 @@ import { CostSparkline } from '@/components/mmp/CostSparkline';
 import { VarianceAlertBanner } from '@/components/mmp/VarianceAlertBanner';
 import { ExchangeRatePanel } from '@/components/mmp/ExchangeRatePanel';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
+import { normalizeHubId, getNormalizedHubName, hubs } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import * as XLSX from 'xlsx';
 import { 
@@ -886,10 +887,15 @@ export default function CostPredictions() {
             '1.9 Locality of the site/where the site is located', 
             'Locality', 'locality', 'Locality Name', 'locality_name'
           ]);
-          const hub = getColumnValue([
+          const rawHub = getColumnValue([
             '1.7 WFP HUB', 
             'Hub', 'hub', 'WFP HUB', 'Hub Office', 'hub_office'
           ]);
+          // Normalize hub to match system hub IDs
+          const normalizedHubId = normalizeHubId(rawHub);
+          const hub = normalizedHubId 
+            ? (hubs.find(h => h.id === normalizedHubId)?.name || rawHub)
+            : rawHub;
           
           // Additional fields from user's file
           const siteId = getColumnValue(['siteID', 'site_id', 'SiteID', 'Site ID']);
