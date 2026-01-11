@@ -967,6 +967,13 @@ export default function HubOperations() {
 
   const handleDeleteSite = async () => {
     if (!deleteTarget || deleteTarget.type !== 'site') return;
+    
+    if (!isSuperAdmin) {
+      toast({ title: 'Access Denied', description: 'Only Super Admins can delete sites from the registry', variant: 'destructive' });
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -1823,20 +1830,20 @@ export default function HubOperations() {
                                 <Eye className="h-4 w-4" />
                               </Button>
                               {canManage && (
-                                <>
-                                  <Button size="icon" variant="ghost" onClick={() => {
-                                    setEditingSite(site);
-                                    setSiteDialogOpen(true);
-                                  }}>
-                                    <Edit2 className="h-4 w-4" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" onClick={() => {
-                                    setDeleteTarget({ type: 'site', id: site.id, name: site.site_name });
-                                    setDeleteDialogOpen(true);
-                                  }}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </>
+                                <Button size="icon" variant="ghost" onClick={() => {
+                                  setEditingSite(site);
+                                  setSiteDialogOpen(true);
+                                }}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {isSuperAdmin && (
+                                <Button size="icon" variant="ghost" onClick={() => {
+                                  setDeleteTarget({ type: 'site', id: site.id, name: site.site_name });
+                                  setDeleteDialogOpen(true);
+                                }}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               )}
                             </div>
                           </td>
