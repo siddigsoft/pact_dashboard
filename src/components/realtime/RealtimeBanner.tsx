@@ -6,7 +6,7 @@
 
 import { useRealtimeHealth } from '@/hooks/useRealtimeHealth';
 import { Button } from '@/components/ui/button';
-import { WifiOff, RefreshCw, AlertTriangle, Wifi, X } from 'lucide-react';
+import { WifiOff, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 
