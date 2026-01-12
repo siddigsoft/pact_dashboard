@@ -585,6 +585,14 @@ async function executeRecall(
       delete workflow.coordinatorVerifiedAt;
       delete workflow.locked;
       delete workflow.currentStage;
+      // Clear verification progress data
+      delete workflow.verificationProgress;
+      delete workflow.coordinatorAssignments;
+      delete workflow.stateAssignments;
+      delete workflow.cpVerifiedCount;
+      delete workflow.cpVerifiedAt;
+      delete workflow.cpVerifiedBy;
+      delete workflow.comprehensiveVerification;
       workflow.recalledAt = now;
       workflow.recalledBy = recallerName;
       workflow.lastRecallReason = request.reason;
@@ -592,7 +600,7 @@ async function executeRecall(
       workflow.isRecalled = true;
       newStatus = 'pending'; // Changed from 'uploaded' to match "New MMPs" filter
       
-      // Revert ALL site entries to 'New' status
+      // Revert ALL site entries to 'New' status and clear verification data
       const adminRecallSiteIds = affectedSites.map(s => s.id);
       if (adminRecallSiteIds.length > 0) {
         await supabase
@@ -607,7 +615,17 @@ async function executeRecall(
             recall_status: 'recalled',
             recall_event_id: recallEventId,
             recalled_at: now,
-            recalled_by: recallerName
+            recalled_by: recallerName,
+            // Clear verification fields
+            verified: false,
+            verified_at: null,
+            verified_by: null,
+            cp_verified: false,
+            cp_verified_at: null,
+            cp_verified_by: null,
+            forwarded_to_user_id: null,
+            forwarded_by_user_id: null,
+            forwarded_at: null
           })
           .in('id', adminRecallSiteIds);
       }
@@ -682,6 +700,14 @@ async function executeRecall(
       delete workflow.currentStage;
       delete workflow.approvedAt;
       delete workflow.approvedBy;
+      // Clear verification progress data
+      delete workflow.verificationProgress;
+      delete workflow.coordinatorAssignments;
+      delete workflow.stateAssignments;
+      delete workflow.cpVerifiedCount;
+      delete workflow.cpVerifiedAt;
+      delete workflow.cpVerifiedBy;
+      delete workflow.comprehensiveVerification;
       workflow.recalledAt = now;
       workflow.recalledBy = recallerName;
       workflow.lastRecallReason = request.reason;
@@ -704,7 +730,17 @@ async function executeRecall(
             recall_status: 'recalled',
             recall_event_id: recallEventId,
             recalled_at: now,
-            recalled_by: recallerName
+            recalled_by: recallerName,
+            // Clear verification fields
+            verified: false,
+            verified_at: null,
+            verified_by: null,
+            cp_verified: false,
+            cp_verified_at: null,
+            cp_verified_by: null,
+            forwarded_to_user_id: null,
+            forwarded_by_user_id: null,
+            forwarded_at: null
           })
           .in('id', allSiteIds);
       }
