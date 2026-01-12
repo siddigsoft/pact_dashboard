@@ -21,6 +21,7 @@ import {
   insertNotifications
 } from '@/services/mmpActions';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 
 const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -225,33 +226,19 @@ const ReviewAssignCoordinators: React.FC = () => {
       return;
     }
     
-    // Recompute groupMap here (same logic as in render, but in useEffect)
-    const stateNameToId = new Map<string, string>();
-    states.forEach(state => {
-      const normalizedName = state.name.toLowerCase();
-      stateNameToId.set(normalizedName, state.id);
-      if (normalizedName.endsWith(' state')) {
-        stateNameToId.set(normalizedName.replace(/\s+state$/, ''), state.id);
-      }
-    });
-
-    const localitiesByState = new Map<string, Map<string, string>>();
-    states.forEach(state => {
-      const map = new Map<string, string>();
-      localities
-        .filter(loc => loc.state_id === state.id)
-        .forEach(loc => map.set(loc.name.toLowerCase(), loc.id));
-      localitiesByState.set(state.id, map);
-    });
-
+    // Recompute groupMap using normalized state/locality IDs
+    // This ensures variations like "River Nile", "River Nile State", "river nile" all map to the same group
     const groupMap: Record<string, any[]> = {};
     entries.forEach((e: any) => {
-      const sName = String(e.state || '').trim().toLowerCase();
-      const stateId = stateNameToId.get(sName);
-      const locName = String(e.locality || '').trim().toLowerCase();
-      const locMap = stateId ? localitiesByState.get(stateId) : null;
-      const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
-      const key = stateId ? `${stateId}|${localityId}` : 'unassigned|unassigned';
+      const rawState = String(e.state || '').trim();
+      const rawLocality = String(e.locality || '').trim();
+      
+      // Use comprehensive normalization that handles aliases
+      const stateId = normalizeStateId(rawState);
+      const localityId = stateId ? normalizeLocalityId(rawLocality, stateId) : null;
+      
+      // Create group key using normalized IDs
+      const key = stateId ? `${stateId}|${localityId || ''}` : 'unassigned|unassigned';
       if (!groupMap[key]) groupMap[key] = [];
       groupMap[key].push(e);
     });
@@ -356,15 +343,19 @@ const ReviewAssignCoordinators: React.FC = () => {
   const selectedStateObj = hubStateOptions.find(s => s.state_id === selectedState);
   const localityOptions = selectedStateObj ? localities.filter(loc => loc.state_id === selectedStateObj.state_id) : [];
 
-  // Create group map from entries
+  // Create group map from entries using normalized state/locality IDs
+  // This ensures variations like "River Nile", "River Nile State", "river nile" all map to the same group
   const groupMap: Record<string, any[]> = {};
   entries.forEach((e: any) => {
-    const sName = String(e.state || '').trim().toLowerCase();
-    const stateId = stateNameToId.get(sName);
-    const locName = String(e.locality || '').trim().toLowerCase();
-    const locMap = stateId ? localitiesByState.get(stateId) : null;
-    const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
-    const key = stateId ? `${stateId}|${localityId}` : 'unassigned|unassigned';
+    const rawState = String(e.state || '').trim();
+    const rawLocality = String(e.locality || '').trim();
+    
+    // Use comprehensive normalization that handles aliases
+    const stateId = normalizeStateId(rawState);
+    const localityId = stateId ? normalizeLocalityId(rawLocality, stateId) : null;
+    
+    // Create group key using normalized IDs
+    const key = stateId ? `${stateId}|${localityId || ''}` : 'unassigned|unassigned';
     if (!groupMap[key]) groupMap[key] = [];
     groupMap[key].push(e);
   });
