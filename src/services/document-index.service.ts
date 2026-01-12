@@ -810,5 +810,295 @@ export const DocumentIndexService = {
     } catch {
       return false;
     }
+  },
+
+  /**
+   * Rebuild/sync the document index from all source tables
+   * This scans MMP files, permits, cost submissions, etc. and indexes them
+   */
+  async rebuildIndex(onProgress?: (current: number, total: number, message: string) => void): Promise<{ success: boolean; indexed: number; errors: number; message: string }> {
+    let indexed = 0;
+    let errors = 0;
+    const seenUrls = new Set<string>();
+
+    try {
+      onProgress?.(0, 100, 'Fetching projects...');
+
+      // Fetch reference data
+      const { data: projects } = await supabase.from('projects').select('id, name');
+      const projectMap = new Map(projects?.map(p => [p.id, p.name]) || []);
+
+      onProgress?.(5, 100, 'Fetching MMP files...');
+
+      // 1. Index MMP Files and their permits
+      const { data: mmpFiles } = await supabase
+        .from('mmp_files')
+        .select('id, name, original_filename, filename, file_url, created_at, permits, project_id, project_name, status, uploaded_by')
+        .order('created_at', { ascending: false });
+
+      const totalMmps = mmpFiles?.length || 0;
+      let mmpCount = 0;
+
+      for (const mmp of (mmpFiles || [])) {
+        mmpCount++;
+        onProgress?.(5 + Math.floor((mmpCount / Math.max(totalMmps, 1)) * 40), 100, `Processing MMP ${mmpCount}/${totalMmps}...`);
+
+        const projectName = mmp.project_name || projectMap.get(mmp.project_id) || 'Unknown Project';
+        const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : format(new Date(), 'yyyy-MM');
+        const mmpFileName = mmp.filename || mmp.original_filename || mmp.name || 'Untitled MMP';
+
+        // Index MMP file itself
+        if (mmp.file_url && !seenUrls.has(mmp.file_url)) {
+          seenUrls.add(mmp.file_url);
+          const exists = await this.documentExists('mmp_files', mmp.id, mmp.file_url);
+          if (!exists) {
+            const result = await this.recordDocument({
+              fileName: mmpFileName,
+              fileUrl: mmp.file_url,
+              category: 'mmp_file',
+              uploadedAt: mmp.created_at || new Date().toISOString(),
+              uploadedBy: mmp.uploaded_by,
+              projectId: mmp.project_id,
+              projectName,
+              mmpId: mmp.id,
+              mmpName: mmpFileName,
+              monthBucket,
+              status: mmp.status === 'approved' ? 'approved' : 'pending',
+              verified: mmp.status === 'approved',
+              sourceType: 'mmp',
+              sourceTable: 'mmp_files',
+              sourceId: mmp.id
+            });
+            if (result.success) indexed++;
+            else errors++;
+          }
+        }
+
+        // Index permits from MMP
+        const permits = mmp.permits as any || {};
+
+        // Federal permits
+        if (permits.documents && Array.isArray(permits.documents)) {
+          for (let i = 0; i < permits.documents.length; i++) {
+            const doc = permits.documents[i];
+            if (doc.fileUrl && !seenUrls.has(doc.fileUrl)) {
+              seenUrls.add(doc.fileUrl);
+              const exists = await this.documentExists('mmp_files', `${mmp.id}-fed-${i}`, doc.fileUrl);
+              if (!exists) {
+                const result = await this.recordDocument({
+                  fileName: doc.fileName || 'Federal Permit',
+                  fileUrl: doc.fileUrl,
+                  category: 'federal_permit',
+                  uploadedAt: doc.uploadedAt || mmp.created_at,
+                  projectId: mmp.project_id,
+                  projectName,
+                  mmpId: mmp.id,
+                  mmpName: mmpFileName,
+                  monthBucket,
+                  status: doc.validated ? 'verified' : 'pending',
+                  verified: doc.validated || false,
+                  sourceType: 'permit',
+                  sourceTable: 'mmp_files',
+                  sourceId: `${mmp.id}-fed-${i}`
+                });
+                if (result.success) indexed++;
+                else errors++;
+              }
+            }
+          }
+        }
+
+        // State permits
+        if (permits.statePermits && Array.isArray(permits.statePermits)) {
+          for (const sp of permits.statePermits) {
+            for (let i = 0; i < (sp.documents || []).length; i++) {
+              const doc = sp.documents[i];
+              if (doc.fileUrl && !seenUrls.has(doc.fileUrl)) {
+                seenUrls.add(doc.fileUrl);
+                const exists = await this.documentExists('mmp_files', `${mmp.id}-state-${sp.stateName}-${i}`, doc.fileUrl);
+                if (!exists) {
+                  const result = await this.recordDocument({
+                    fileName: doc.fileName || `State Permit - ${sp.stateName}`,
+                    fileUrl: doc.fileUrl,
+                    category: 'state_permit',
+                    uploadedAt: doc.uploadedAt || mmp.created_at,
+                    projectId: mmp.project_id,
+                    projectName,
+                    state: sp.stateName,
+                    mmpId: mmp.id,
+                    mmpName: mmpFileName,
+                    monthBucket,
+                    issueDate: doc.issueDate,
+                    expiryDate: doc.expiryDate,
+                    status: doc.validated || sp.verified ? 'verified' : 'pending',
+                    verified: doc.validated || sp.verified || false,
+                    sourceType: 'permit',
+                    sourceTable: 'mmp_files',
+                    sourceId: `${mmp.id}-state-${sp.stateName}-${i}`
+                  });
+                  if (result.success) indexed++;
+                  else errors++;
+                }
+              }
+            }
+          }
+        }
+
+        // Local permits
+        if (permits.localPermits && Array.isArray(permits.localPermits)) {
+          for (const lp of permits.localPermits) {
+            for (let i = 0; i < (lp.documents || []).length; i++) {
+              const doc = lp.documents[i];
+              if (doc.fileUrl && !seenUrls.has(doc.fileUrl)) {
+                seenUrls.add(doc.fileUrl);
+                const exists = await this.documentExists('mmp_files', `${mmp.id}-local-${lp.localityName}-${i}`, doc.fileUrl);
+                if (!exists) {
+                  const result = await this.recordDocument({
+                    fileName: doc.fileName || `Local Permit - ${lp.localityName}`,
+                    fileUrl: doc.fileUrl,
+                    category: 'local_permit',
+                    uploadedAt: doc.uploadedAt || mmp.created_at,
+                    projectId: mmp.project_id,
+                    projectName,
+                    state: lp.state,
+                    locality: lp.localityName,
+                    mmpId: mmp.id,
+                    mmpName: mmpFileName,
+                    monthBucket,
+                    issueDate: doc.issueDate,
+                    expiryDate: doc.expiryDate,
+                    status: doc.validated || lp.verified ? 'verified' : 'pending',
+                    verified: doc.validated || lp.verified || false,
+                    sourceType: 'permit',
+                    sourceTable: 'mmp_files',
+                    sourceId: `${mmp.id}-local-${lp.localityName}-${i}`
+                  });
+                  if (result.success) indexed++;
+                  else errors++;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      onProgress?.(50, 100, 'Fetching cost submissions...');
+
+      // 2. Index Cost Submission Receipts
+      const { data: costSubmissions } = await supabase
+        .from('cost_submissions')
+        .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, submitted_by')
+        .order('created_at', { ascending: false });
+
+      const totalCosts = costSubmissions?.length || 0;
+      let costCount = 0;
+
+      for (const cost of (costSubmissions || [])) {
+        costCount++;
+        onProgress?.(50 + Math.floor((costCount / Math.max(totalCosts, 1)) * 30), 100, `Processing cost ${costCount}/${totalCosts}...`);
+
+        const projectName = projectMap.get(cost.project_id);
+        const monthBucket = cost.created_at ? format(parseISO(cost.created_at), 'yyyy-MM') : undefined;
+
+        if (cost.receipt_url && !seenUrls.has(cost.receipt_url)) {
+          seenUrls.add(cost.receipt_url);
+          const exists = await this.documentExists('cost_submissions', cost.id, cost.receipt_url);
+          if (!exists) {
+            const result = await this.recordDocument({
+              fileName: cost.receipt_filename || `Receipt - SDG ${cost.amount || 0}`,
+              fileUrl: cost.receipt_url,
+              category: 'cost_receipt',
+              uploadedAt: cost.created_at,
+              uploadedBy: cost.submitted_by,
+              projectId: cost.project_id,
+              projectName,
+              siteVisitId: cost.site_visit_id,
+              costSubmissionId: cost.id,
+              monthBucket,
+              status: cost.status === 'approved' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending',
+              verified: cost.status === 'approved',
+              sourceType: 'cost',
+              sourceTable: 'cost_submissions',
+              sourceId: cost.id
+            });
+            if (result.success) indexed++;
+            else errors++;
+          }
+        }
+      }
+
+      onProgress?.(85, 100, 'Fetching site visit photos...');
+
+      // 3. Index Report Photos
+      const { data: reportPhotos } = await supabase
+        .from('report_photos')
+        .select('id, photo_url, caption, created_at, site_visit_id')
+        .order('created_at', { ascending: false });
+
+      const totalPhotos = reportPhotos?.length || 0;
+      let photoCount = 0;
+
+      for (const photo of (reportPhotos || [])) {
+        photoCount++;
+        onProgress?.(85 + Math.floor((photoCount / Math.max(totalPhotos, 1)) * 10), 100, `Processing photo ${photoCount}/${totalPhotos}...`);
+
+        if (photo.photo_url && !seenUrls.has(photo.photo_url)) {
+          seenUrls.add(photo.photo_url);
+          const exists = await this.documentExists('report_photos', photo.id, photo.photo_url);
+          if (!exists) {
+            const monthBucket = photo.created_at ? format(parseISO(photo.created_at), 'yyyy-MM') : undefined;
+            const result = await this.recordDocument({
+              fileName: photo.caption || 'Site Visit Photo',
+              fileUrl: photo.photo_url,
+              category: 'site_visit_photo',
+              uploadedAt: photo.created_at,
+              siteVisitId: photo.site_visit_id,
+              monthBucket,
+              status: 'verified',
+              verified: true,
+              sourceType: 'site_visit',
+              sourceTable: 'report_photos',
+              sourceId: photo.id
+            });
+            if (result.success) indexed++;
+            else errors++;
+          }
+        }
+      }
+
+      onProgress?.(100, 100, 'Complete!');
+
+      console.log(`[DocumentIndexService] Rebuild complete: ${indexed} indexed, ${errors} errors`);
+      return { 
+        success: true, 
+        indexed, 
+        errors, 
+        message: `Successfully indexed ${indexed} documents${errors > 0 ? ` (${errors} errors)` : ''}`
+      };
+    } catch (err: any) {
+      console.error('[DocumentIndexService] Rebuild error:', err);
+      return { 
+        success: false, 
+        indexed, 
+        errors, 
+        message: `Error rebuilding index: ${err.message}`
+      };
+    }
+  },
+
+  /**
+   * Get count of documents in the index
+   */
+  async getIndexCount(): Promise<number> {
+    try {
+      const { count, error } = await supabase
+        .from('document_index')
+        .select('*', { count: 'exact', head: true });
+      
+      if (error) return 0;
+      return count || 0;
+    } catch {
+      return 0;
+    }
   }
 };
