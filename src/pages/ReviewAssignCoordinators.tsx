@@ -937,57 +937,93 @@ const ReviewAssignCoordinators: React.FC = () => {
                     {expandedGroups[groupKey] && (
                       <div className="mt-3">
                         <div className="font-medium text-sm mb-2">Select sites to forward:</div>
-                        <div className="max-h-40 overflow-y-auto border rounded p-3 bg-white">
-                          <div className="space-y-2">
-                            {/* Show unforwarded sites first */}
-                            {unforwardedSites.map((site: any) => (
-                              <div 
-                                key={site.id} 
-                                className="flex items-center gap-2 hover:bg-gray-50 p-1 rounded"
-                              >
-                                <label className="flex items-center gap-2 cursor-pointer flex-1">
-                                  <Checkbox
-                                    checked={selectedSites[groupKey]?.has(site.id) || false}
-                                    onCheckedChange={checked => {
-                                      setSelectedSites(s => {
-                                        const set = new Set(s[groupKey] || []);
-                                        if (checked) set.add(site.id); else set.delete(site.id);
-                                        return { ...s, [groupKey]: set };
-                                      });
-                                    }}
-                                  />
-                                  <span className="text-sm">{site.siteName || site.name || site.id}</span>
-                                </label>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 w-7 p-0"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedSiteForView(site);
-                                      setViewDialogOpen(true);
-                                    }}
-                                    title="View Details"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 w-7 p-0"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      navigate(`/site-visits/${site.id}/edit`);
-                                    }}
-                                    title="Edit"
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                            {/* Show forwarded sites below, visually distinct */}
+                        <div className="max-h-60 overflow-y-auto border rounded p-3 bg-white">
+                          <div className="space-y-3">
+                            {/* Group unforwarded sites by locality */}
+                            {(() => {
+                              const sitesByLocality: Record<string, any[]> = {};
+                              unforwardedSites.forEach((site: any) => {
+                                const localityName = String(site.locality || '').trim() || 'Unknown Locality';
+                                if (!sitesByLocality[localityName]) {
+                                  sitesByLocality[localityName] = [];
+                                }
+                                sitesByLocality[localityName].push(site);
+                              });
+                              
+                              const sortedLocalities = Object.keys(sitesByLocality).sort();
+                              
+                              return sortedLocalities.map((localityName) => {
+                                const localitySites = sitesByLocality[localityName];
+                                const sudanState = sudanStates.find(s => s.id === stateId);
+                                const localityData = sudanState?.localities.find(l => 
+                                  l.name.toLowerCase() === localityName.toLowerCase() ||
+                                  l.id.toLowerCase().includes(localityName.toLowerCase().replace(/\s+/g, '-'))
+                                );
+                                const localityArabic = localityData?.nameAr;
+                                
+                                return (
+                                  <div key={localityName} className="border-l-2 border-blue-300 pl-3">
+                                    <div className="font-medium text-sm text-blue-800 mb-1">
+                                      {localityName}
+                                      {localityArabic && <span className="text-blue-600 mr-1"> ({localityArabic})</span>}
+                                      <span className="text-muted-foreground font-normal text-xs ml-1">
+                                        ({localitySites.length} {localitySites.length === 1 ? 'site' : 'sites'})
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1 ml-2">
+                                      {localitySites.map((site: any) => (
+                                        <div 
+                                          key={site.id} 
+                                          className="flex items-center gap-2 hover:bg-gray-50 p-1 rounded"
+                                        >
+                                          <label className="flex items-center gap-2 cursor-pointer flex-1">
+                                            <Checkbox
+                                              checked={selectedSites[groupKey]?.has(site.id) || false}
+                                              onCheckedChange={checked => {
+                                                setSelectedSites(s => {
+                                                  const set = new Set(s[groupKey] || []);
+                                                  if (checked) set.add(site.id); else set.delete(site.id);
+                                                  return { ...s, [groupKey]: set };
+                                                });
+                                              }}
+                                            />
+                                            <span className="text-sm">{site.siteName || site.name || site.id}</span>
+                                          </label>
+                                          <div className="flex items-center gap-1">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-7 w-7 p-0"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedSiteForView(site);
+                                                setViewDialogOpen(true);
+                                              }}
+                                              title="View Details"
+                                            >
+                                              <Eye className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-7 w-7 p-0"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigate(`/site-visits/${site.id}/edit`);
+                                              }}
+                                              title="Edit"
+                                            >
+                                              <Pencil className="h-4 w-4" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()}
+                            {/* Show forwarded sites below, grouped by locality */}
                             {forwardedSites.length > 0 && (
                               <>
                                 {unforwardedSites.length > 0 && (
@@ -995,49 +1031,86 @@ const ReviewAssignCoordinators: React.FC = () => {
                                     <div className="text-xs text-muted-foreground mb-1 font-medium">Already Forwarded:</div>
                                   </div>
                                 )}
-                                {forwardedSites.map((site: any) => (
-                                  <div 
-                                    key={site.id} 
-                                    className="flex items-center gap-2 p-1 rounded opacity-60"
-                                  >
-                                    <label className="flex items-center gap-2 cursor-not-allowed flex-1">
-                                      <Checkbox
-                                        checked={false}
-                                        disabled={true}
-                                      />
-                                      <span className="text-sm">
-                                        {site.siteName || site.name || site.id}
-                                        <span className="ml-2 text-green-600 text-xs font-medium">✓ Forwarded</span>
-                                      </span>
-                                    </label>
-                                    <div className="flex items-center gap-1">
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-7 w-7 p-0"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedSiteForView(site);
-                                          setViewDialogOpen(true);
-                                        }}
-                                        title="View Details"
-                                      >
-                                        <Eye className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-7 w-7 p-0"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          navigate(`/site-visits/${site.id}/edit`);
-                                        }}
-                                        title="Edit"
-                                      >
-                                        <Pencil className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </div>
+                                {(() => {
+                                  const forwardedByLocality: Record<string, any[]> = {};
+                                  forwardedSites.forEach((site: any) => {
+                                    const localityName = String(site.locality || '').trim() || 'Unknown Locality';
+                                    if (!forwardedByLocality[localityName]) {
+                                      forwardedByLocality[localityName] = [];
+                                    }
+                                    forwardedByLocality[localityName].push(site);
+                                  });
+                                  
+                                  const sortedLocalities = Object.keys(forwardedByLocality).sort();
+                                  
+                                  return sortedLocalities.map((localityName) => {
+                                    const localitySites = forwardedByLocality[localityName];
+                                    const sudanState = sudanStates.find(s => s.id === stateId);
+                                    const localityData = sudanState?.localities.find(l => 
+                                      l.name.toLowerCase() === localityName.toLowerCase() ||
+                                      l.id.toLowerCase().includes(localityName.toLowerCase().replace(/\s+/g, '-'))
+                                    );
+                                    const localityArabic = localityData?.nameAr;
+                                    
+                                    return (
+                                      <div key={localityName} className="border-l-2 border-gray-300 pl-3 opacity-60">
+                                        <div className="font-medium text-sm text-gray-600 mb-1">
+                                          {localityName}
+                                          {localityArabic && <span className="text-gray-500 mr-1"> ({localityArabic})</span>}
+                                          <span className="text-muted-foreground font-normal text-xs ml-1">
+                                            ({localitySites.length} {localitySites.length === 1 ? 'site' : 'sites'})
+                                          </span>
+                                        </div>
+                                        <div className="space-y-1 ml-2">
+                                          {localitySites.map((site: any) => (
+                                            <div 
+                                              key={site.id} 
+                                              className="flex items-center gap-2 p-1 rounded"
+                                            >
+                                              <label className="flex items-center gap-2 cursor-not-allowed flex-1">
+                                                <Checkbox
+                                                  checked={false}
+                                                  disabled={true}
+                                                />
+                                                <span className="text-sm">
+                                                  {site.siteName || site.name || site.id}
+                                                  <span className="ml-2 text-green-600 text-xs font-medium">Forwarded</span>
+                                                </span>
+                                              </label>
+                                              <div className="flex items-center gap-1">
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  className="h-7 w-7 p-0"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedSiteForView(site);
+                                                    setViewDialogOpen(true);
+                                                  }}
+                                                  title="View Details"
+                                                >
+                                                  <Eye className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  className="h-7 w-7 p-0"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/site-visits/${site.id}/edit`);
+                                                  }}
+                                                  title="Edit"
+                                                >
+                                                  <Pencil className="h-4 w-4" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                })()}
                                 ))}
                               </>
                             )}
