@@ -31,6 +31,7 @@ interface SiteWithGPS {
   residence_precision?: number | null;
   source?: string;
   activity_type?: string | null;
+  tools_used?: string | null;
   last_visit_date?: string | null;
   mmp_count?: number | null;
 }
@@ -227,6 +228,13 @@ export default function SitesMapRenderer({ sites, height = '400px', isVisible = 
                       <Badge variant="secondary" className="text-xs">
                         {site.activity_type}
                       </Badge>
+                    </div>
+                  )}
+                  
+                  {site.tools_used && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground w-14">Tools:</span>
+                      <span className="font-medium text-xs">{site.tools_used}</span>
                     </div>
                   )}
                   
