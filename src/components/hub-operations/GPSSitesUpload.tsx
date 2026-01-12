@@ -118,6 +118,7 @@ const ACTIVITY_PATTERNS = [
   /activity\s*at\s*the\s*site/i,
   /SECTION_A\/A07$/i, /A07$/i,
   /_activity$/i, /Activity$/,
+  /kind\s*of\s*process\s*monitoring/i, /process\s*monitoring/i,
 ];
 
 const CP_PATTERNS = [
