@@ -779,13 +779,23 @@ const ReviewAssignCoordinators: React.FC = () => {
                 // Get unique localities within this state group for display
                 const localitiesInGroup = [...new Set(groupSites.map((s: any) => String(s.locality || '').trim()).filter(Boolean))];
                 
+                // For unassigned sites, get the unique raw state names to show what's not matching
+                const rawStateNames = isUnassigned 
+                  ? [...new Set(groupSites.map((s: any) => String(s.state || '').trim()).filter(Boolean))]
+                  : [];
+                
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
-                    <div className="flex items-center mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
+                    <div className="flex items-center flex-wrap gap-1 mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
                       {expandedGroups[groupKey] ? <ChevronDown className="w-4 h-4 mr-2" /> : <ChevronRight className="w-4 h-4 mr-2" />}
-                      {groupSites.length} site(s) in <span className="text-blue-700 ml-1">
+                      {groupSites.length} site(s) in <span className={isUnassigned ? "text-orange-600 ml-1" : "text-blue-700 ml-1"}>
                         {isUnassigned ? 'Unassigned State' : `${states.find(s => s.id === stateId)?.name || stateId}`}
                       </span>
+                      {isUnassigned && rawStateNames.length > 0 && (
+                        <span className="text-orange-500 text-sm ml-1">
+                          - unrecognized: {rawStateNames.slice(0, 3).map(n => `"${n}"`).join(', ')}{rawStateNames.length > 3 ? `, +${rawStateNames.length - 3} more` : ''}
+                        </span>
+                      )}
                       {!isUnassigned && localitiesInGroup.length > 0 && (
                         <span className="text-muted-foreground text-sm ml-2">
                           ({localitiesInGroup.length} {localitiesInGroup.length === 1 ? 'locality' : 'localities'})
