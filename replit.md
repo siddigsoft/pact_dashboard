@@ -14,7 +14,7 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, featurin
 ### Technical Implementations
 *   **Frontend:** Built with React Router DOM v6, Vite, and React Context API. It uses TanStack Query for server state management and Supabase Realtime for subscriptions. Data consistency between web and mobile is maintained via a shared Supabase database with real-time subscriptions and an offline queue for mobile.
 *   **Backend:** Leverages PostgreSQL through Supabase, utilizing Row Level Security (RLS) and real-time subscriptions. Supabase Auth handles authentication (email/password, Google OAuth), session management, role-based access control, and TOTP-based 2FA. The database schema supports core entities like profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions, with audit logs for financial transactions and deletions.
-*   **Mobile Offline Infrastructure:** Features IndexedDB for local storage, a Sync Manager for robust offline-to-online data synchronization with configurable conflict resolution, and a Service Worker for caching. Offline capabilities include site visit workflows, GPS/photo capture, cost submissions, and cached MMP lists. Online-only features include real-time dashboards, wallet operations, chat, live location maps, reports, user management, and push notifications. The Android APK is Capacitor-based with native plugins, R8/ProGuard optimization, ABI splits, Firebase Crashlytics, security hardening, and enhanced FCM push notifications. It includes an Android 10+ compliant foreground service for continuous GPS tracking.
+*   **Mobile Offline Infrastructure:** Features IndexedDB for local storage, a Sync Manager for robust offline-to-online data synchronization with configurable conflict resolution, and a Service Worker for caching. Offline capabilities include site visit workflows, GPS/photo capture, cost submissions, and cached MMP lists. The Android APK is Capacitor-based with native plugins for enhanced push notifications and continuous GPS tracking.
 *   **Authorization System:** Implements a resource-action based permission model with granular control enforced across the UI, route guards, and server-side RLS.
 *   **File Processing:** Includes an MMP Upload Workflow for CSV files with Zod validation, parsing, database insertion, rollback, and duplicate prevention.
 *   **Real-Time Capabilities:** Features a Live Dashboard with automatic data refresh and notifications via Supabase Realtime, and real-time GPS location sharing with privacy controls.
@@ -23,60 +23,24 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, featurin
 *   **Site Visits Enhancements:** Redesigned interface with data collector-specific views, geographic filtering, GPS-based proximity matching, and a first-claim dispatch system.
 *   **Unified Site Management System:** Prevents duplicate site entries and enables GPS enrichment.
 *   **Signature & Transaction Module:** Comprehensive digital signature system for wallet transactions and document signing, supporting SHA-256 hashing, cryptographically secure OTP, handwriting signatures, and audit logging.
-*   **Task-Level Budget Tracking:** Granular budget management at the individual task/activity level with variance analysis (CPI, SPI, EAC), status classification, trend detection, spending restrictions, and utilization alerts.
+*   **Task-Level Budget Tracking:** Granular budget management at the individual task/activity level with variance analysis, status classification, spending restrictions, and utilization alerts.
 *   **Password Management System:** Custom password reset with 6-digit OTP via email, password change with MFA, and admin password reset capabilities, all with bilingual support.
 *   **Email Verification & Notification System:** Features email verification, admin manual email confirmation, IONOS SMTP integration for transactional emails, and bilingual email templates for various notifications.
-*   **Comprehensive Email Tracking System:** Real-time tracking of all emails sent from the platform via the EmailTracking page (`src/pages/EmailTracking.tsx`). Features include:
-    - **Real-time updates:** Uses Supabase Realtime subscriptions for live email status monitoring
-    - **Centralized logging:** All Edge Functions (`send-email`, `dispatch-notification`, `verify-reset-otp`) log emails to `audit_logs` table with `module='notification'` and `entity_type='email'/'otp'`
-    - **Delivery status tracking:** Tracks successful deliveries, failures, and skipped emails with error messages
-    - **Filtering and search:** Filter by status (delivered/failed), type (notification/OTP), and date range
-    - **Statistics dashboard:** Monthly summaries, error breakdowns, and delivery rate metrics
-    - **Test email functionality:** Send test emails directly from the tracking page
-    - **Source tracking:** Each email log includes source Edge Function name in metadata for debugging
-*   **Realtime Status Indicators:** Components like `RealtimeBanner`, `DataFreshnessBadge`, `RealtimeActivityIndicator`, and `RealtimeStatusDot` provide visual feedback on connection and data freshness.
-*   **Hub Management Notification System:** Centralized service for sending notifications to relevant management users (Hub Supervisors, Hub FOMs, Admins, Super Admins) for MMP forwarding, site operations, financial transactions, and activity milestones, with deduplication.
-*   **Targeted Email Notification System:** Optimized to reduce email volume, sending notifications to specific recipients (e.g., selected FOMs, coordinators) with Super Admin CC, and including a 2-second delay for multiple recipients.
-*   **Multi-Tier MMP Recall System:** Implements a three-tier recall hierarchy (Admin→FOM, FOM→Coordinator, Coordinator→Data Collector) with scope-based filtering and force recall for Super Admins/Admins. Includes a financial recovery system for transportation advances (deduction, cash return, write-off) and an approval workflow, with comprehensive audit logging and bilingual notifications. Features an impact preview and enhanced approval queue and recovery dashboard.
+*   **Comprehensive Email Tracking System:** Real-time tracking of all emails sent from the platform via the EmailTracking page, including delivery status, filtering, search, and statistics dashboard.
+*   **Realtime Status Indicators:** Components provide visual feedback on connection and data freshness.
+*   **Hub Management Notification System:** Centralized service for sending notifications to relevant management users for MMP forwarding, site operations, financial transactions, and activity milestones, with deduplication.
+*   **Targeted Email Notification System:** Optimized to reduce email volume, sending notifications to specific recipients with Super Admin CC, and including a 2-second delay for multiple recipients.
+*   **Multi-Tier MMP Recall System:** Implements a three-tier recall hierarchy with scope-based filtering and force recall for Super Admins/Admins. Includes a financial recovery system for transportation advances and an approval workflow, with comprehensive audit logging and bilingual notifications. Features an impact preview and enhanced approval queue and recovery dashboard.
 *   **Visit Postponement System:** Allows data collectors and coordinators to request visit date changes with an approval workflow and historical tracking.
 *   **Date Range Visit Support:** Enables multi-day visits with `visitDateFrom` and `visitDateTo` fields, special handling for DM/GFA activities, and deadline calculations based on the start date.
 *   **Configurable Auto-Release System:** Administrators can configure auto-release timing, confirmation deadlines, and reminder frequency presets for site visits.
-*   **MoDa Webhook Integration:** Supabase Edge Function (`moda-webhook`) receives real-time form submissions from MoDa/ODK. Uses same GPS parsing patterns as bulk upload (A05 for residence, A06 for site GPS). Automatically registers sites with coordinates, supporting combined geopoint strings or separate lat/lng fields. Optional webhook secret for security (`MODA_WEBHOOK_SECRET`).
-*   **Site Normalization System:** Centralized utility (`src/utils/siteNormalization.ts`) provides consistent state/locality/site matching across the application. Features include:
-    - **State/locality aliasing:** Maps common variations (e.g., "River Nile State" → "river-nile", "Al Jazirah" → "gezira") to normalized IDs
-    - **State prefix mapping:** Extracts state from locality-style ID prefixes (e.g., "kh-omdurman" → "Khartoum" state)
-    - **State code lookup:** Resolves 2-letter state codes (e.g., "KH" → "Khartoum")
-    - **Locality-derived state:** When input appears to be a locality ID, derives parent state from sudanStates data
-    - **Fuzzy matching:** Uses Levenshtein distance (threshold ≤2) to match locality names with minor spelling differences
-    - **Multi-level site matching:** Falls back through registry_site_id → site_code → normalized key → alternate keys (name+state, name+locality)
-    - **MMP history aggregation:** Tracks multiple visits per site with proper mmp_count and latest entry extraction
-    - **Boolean parsing:** Standardizes "YES"/"Yes"/"true"/"1" handling via `parseBoolean()` utility
-    - **No silent drops:** Sites with unmatched states/localities are included with warnings instead of being skipped
-*   **Smart Dispatch System:** Three-tier collector recommendation system (`src/services/collectorRecommendation.service.ts`) for optimal site assignment:
-    - **In-Locality tier:** Highest priority, collectors in the exact same locality as the site (100 points base)
-    - **Neighboring tier:** Collectors within 100km GPS radius of the site location
-    - **State-Wide tier:** All collectors in the same state within 80km proximity
-    - **Priority scoring:** Combines locality match, online status (+20), workload penalty (-2 per active site), and distance penalty (-km/10)
-    - **UI Component:** `CollectorRecommendationsPanel.tsx` with tiered display, coverage alerts, search, and "Assign Best" button
-*   **Coverage Gap Notification System:** Detects and notifies admins when dispatching to localities with insufficient collector coverage (`src/services/coverageGapNotification.service.ts`):
-    - **Critical gaps (0 collectors):** Trigger both in-app notifications and email alerts to admins
-    - **Warning gaps (1-2 collectors):** Trigger in-app notifications only
-    - **Integration:** Called during dispatch before site assignment, using normalized state/locality names
-    - **GPS proximity:** Detects neighboring localities using GPS coordinates from sites registry
-    - **Limitations:** Effectiveness depends on data quality; malformed state/locality IDs may result in fallback values that don't match collector assignments
-*   **Flexible Locality Permit Requirement Workflow:** Streamlined locality permit verification process (`src/components/mmp/LocalityRequirementTriageDialog.tsx`, `src/pages/coordinator/CoordinatorSites.tsx`):
-    - **Upfront locality triage:** Before permit upload, coordinators specify which localities require local permits via a dialog listing all localities with site counts
-    - **Smart filtering:** Only localities marked as "required" appear in the Locality Permit tab after triage
-    - **Auto-advancement:** Sites in localities marked as "not required" are automatically moved to CP Verification status with preserved metadata
-    - **Metadata preservation:** Auto-advance logic merges new flags (locality_permit_not_required, locality_permit_triage_date) with existing additional_data
-    - **Re-assessment support:** Coordinators can update permit requirements at any time via "Update Requirements" button
-*   **MMP Verification Workflow:** Final verification step enabling MMP progression to approval/costing/dispatch (`src/context/mmp/hooks/useMMPStatusOperations.ts`):
-    - **Role-based access:** Super Admins, Admins, ICT can verify any forwarded MMP; FOMs can verify MMPs assigned to them via workflow.forwardedToFomIds
-    - **Verifiable statuses:** Accepts MMPs with status pending, forwarded_to_fom, forwarded_to_coordinator, or cp_verified
-    - **Deep merge preservation:** Fetches existing workflow.comprehensiveVerification and deeply merges to preserve all nested structures including permits array
-    - **Metadata integrity:** Preserves systemValidation, contentVerification, cpVerification, and permitVerification with all nested fields
-    - **Status progression:** Changes MMP status to 'verified', enabling approval and dispatch workflows
-    - **Storage location:** Verification data stored inside workflow JSONB column as workflow.comprehensiveVerification
+*   **MoDa Webhook Integration:** Supabase Edge Function (`moda-webhook`) receives real-time form submissions from MoDa/ODK, automatically registering sites with coordinates.
+*   **Site Normalization System:** Centralized utility (`src/utils/siteNormalization.ts`) provides consistent state/locality/site matching across the application, including state/locality aliasing, state code lookup, fuzzy matching, and multi-level site matching.
+*   **Smart Dispatch System:** Three-tier collector recommendation system (`src/services/collectorRecommendation.service.ts`) for optimal site assignment, prioritizing in-locality, neighboring, and state-wide collectors with a priority scoring mechanism.
+*   **Coverage Gap Notification System:** Detects and notifies admins when dispatching to localities with insufficient collector coverage (`src/services/coverageGapNotification.service.ts`), providing critical and warning gap alerts.
+*   **Flexible Locality Permit Requirement Workflow:** Streamlined locality permit verification process (`src/components/mmp/LocalityRequirementTriageDialog.tsx`, `src/pages/coordinator/CoordinatorSites.tsx`) with upfront locality triage, smart filtering, and auto-advancement of sites.
+*   **MMP Verification Workflow:** Final verification step enabling MMP progression to approval/costing/dispatch (`src/context/mmp/hooks/useMMPStatusOperations.ts`) with role-based access, deep merge preservation of verification data, and status progression.
+*   **Document Registry & Indexing System:** Persistent document management with comprehensive metadata indexing (`src/services/document-index.service.ts`, `src/pages/Documents.tsx`), including automatic indexing of uploaded permits, deduplication, cross-source merging, and comprehensive filtering.
 
 ### System Design Choices
 The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.
