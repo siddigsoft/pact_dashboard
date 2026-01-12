@@ -412,7 +412,7 @@ export default function HubOperations() {
         console.error('Error loading registry sites:', registryError);
         toast({
           title: 'Warning',
-          description: 'Some registry sites could not be loaded',
+          description: `Sites error: ${registryError.message || registryError.code || 'Unknown error'}`,
           variant: 'destructive',
         });
       }
