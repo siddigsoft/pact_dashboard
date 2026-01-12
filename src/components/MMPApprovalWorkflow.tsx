@@ -517,7 +517,7 @@ export function MMPApprovalWorkflow({ mmpFile, onApprove, onReject, onVerify }: 
       </Card>
 
       <Dialog open={showFileDetails} onOpenChange={setShowFileDetails}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />

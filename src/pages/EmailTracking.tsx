@@ -1384,7 +1384,7 @@ export default function EmailTracking() {
 
       {/* Log Detail Dialog */}
       <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh]" data-testid="dialog-log-details">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-log-details">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedLog?.entity_type === 'email' ? (
