@@ -61,28 +61,46 @@ export function SiteRecallDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [targetStatus, setTargetStatus] = useState<SiteStatus | ''>('');
   const [reason, setReason] = useState('');
+  const [selectedState, setSelectedState] = useState<string>('all');
+
+  // Get unique states from sites
+  const availableStates = useMemo(() => {
+    const states = new Set<string>();
+    sites.forEach(site => {
+      if (site.state) {
+        states.add(site.state);
+      }
+    });
+    return Array.from(states).sort();
+  }, [sites]);
+
+  // Filter sites by selected state
+  const filteredSites = useMemo(() => {
+    if (selectedState === 'all') return sites;
+    return sites.filter(site => site.state === selectedState);
+  }, [sites, selectedState]);
 
   const targetStatusOptions = useMemo(() => {
-    if (sites.length === 0) return [];
+    if (filteredSites.length === 0) return [];
     
-    const firstSiteStatus = sites[0].status;
-    const allSameStatus = sites.every(s => 
+    const firstSiteStatus = filteredSites[0].status;
+    const allSameStatus = filteredSites.every(s => 
       s.status?.toLowerCase().replace(/\s+/g, '_') === firstSiteStatus?.toLowerCase().replace(/\s+/g, '_')
     );
     
     if (!allSameStatus) {
       const allOptions = new Set<SiteStatus>();
-      sites.forEach(site => {
+      filteredSites.forEach(site => {
         getTargetStatusOptions(site.status).forEach(opt => allOptions.add(opt));
       });
       const optionsArray = Array.from(allOptions);
       return optionsArray.filter(opt => 
-        sites.every(site => getTargetStatusOptions(site.status).includes(opt))
+        filteredSites.every(site => getTargetStatusOptions(site.status).includes(opt))
       );
     }
     
     return getTargetStatusOptions(firstSiteStatus);
-  }, [sites]);
+  }, [filteredSites]);
 
   const handleRecall = async () => {
     if (!targetStatus || !reason.trim()) {
@@ -94,11 +112,20 @@ export function SiteRecallDialog({
       return;
     }
 
+    if (filteredSites.length === 0) {
+      toast({
+        title: 'No Sites Selected',
+        description: 'Please select a state with sites to recall.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const request: SiteRecallRequest = {
-        siteEntryIds: sites.map(s => s.id),
+        siteEntryIds: filteredSites.map(s => s.id),
         targetStatus,
         reason,
         recalledBy: currentUserId,
@@ -117,6 +144,7 @@ export function SiteRecallDialog({
         onOpenChange(false);
         setReason('');
         setTargetStatus('');
+        setSelectedState('all');
       } else if (result.successCount > 0) {
         toast({
           title: 'Partial Success',
@@ -127,6 +155,7 @@ export function SiteRecallDialog({
         onOpenChange(false);
         setReason('');
         setTargetStatus('');
+        setSelectedState('all');
       } else {
         toast({
           title: 'Recall Failed',
@@ -150,6 +179,7 @@ export function SiteRecallDialog({
       onOpenChange(false);
       setReason('');
       setTargetStatus('');
+      setSelectedState('all');
     }
   };
 
@@ -175,21 +205,68 @@ export function SiteRecallDialog({
             </AlertDescription>
           </Alert>
 
+          {/* State Filter - only show if there are multiple states */}
+          {availableStates.length > 1 && (
+            <div className="space-y-2">
+              <Label htmlFor="state-filter">Filter by State</Label>
+              <Select 
+                value={selectedState} 
+                onValueChange={(value) => {
+                  setSelectedState(value);
+                  setTargetStatus(''); // Reset target status when state changes
+                }}
+              >
+                <SelectTrigger id="state-filter" data-testid="select-state-filter">
+                  <SelectValue placeholder="Select state..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All States ({sites.length} sites)</SelectItem>
+                  {availableStates.map(state => {
+                    const count = sites.filter(s => s.state === state).length;
+                    return (
+                      <SelectItem key={state} value={state}>
+                        {state} ({count} site{count !== 1 ? 's' : ''})
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Sites to Recall</Label>
+            <Label className="text-sm font-medium">
+              Sites to Recall
+              {selectedState !== 'all' && (
+                <span className="ml-2 text-muted-foreground font-normal">
+                  ({filteredSites.length} from {selectedState})
+                </span>
+              )}
+            </Label>
             <ScrollArea className="h-[120px] rounded-md border p-2">
               <div className="space-y-1">
-                {sites.map(site => (
-                  <div key={site.id} className="flex items-center justify-between py-1 text-sm">
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-medium">{site.site_name}</span>
+                {filteredSites.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No sites found for the selected state.
+                  </p>
+                ) : (
+                  filteredSites.map(site => (
+                    <div key={site.id} className="flex items-center justify-between py-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-medium">{site.site_name}</span>
+                        {selectedState === 'all' && site.state && (
+                          <Badge variant="secondary" className="text-xs">
+                            {site.state}
+                          </Badge>
+                        )}
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {site.status}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-xs">
-                      {site.status}
-                    </Badge>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </ScrollArea>
           </div>
@@ -246,7 +323,7 @@ export function SiteRecallDialog({
           </Button>
           <Button
             onClick={handleRecall}
-            disabled={isLoading || !targetStatus || !reason.trim() || targetStatusOptions.length === 0}
+            disabled={isLoading || !targetStatus || !reason.trim() || targetStatusOptions.length === 0 || filteredSites.length === 0}
             className="bg-amber-600 hover:bg-amber-700"
             data-testid="button-confirm-recall"
           >
@@ -258,7 +335,7 @@ export function SiteRecallDialog({
             ) : (
               <>
                 <RotateCcw className="mr-2 h-4 w-4" />
-                Recall {sites.length === 1 ? 'Site' : 'Sites'}
+                Recall {filteredSites.length} {filteredSites.length === 1 ? 'Site' : 'Sites'}
               </>
             )}
           </Button>
