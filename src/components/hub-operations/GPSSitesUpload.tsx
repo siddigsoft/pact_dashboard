@@ -13,7 +13,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
-import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2, Calendar } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getHubForState, getHubNameForState, hubs, sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import { siteRegistryService, SiteMatchResult } from '@/services/siteRegistry.service';
@@ -252,6 +253,20 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   const [parsing, setParsing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [parsedSites, setParsedSites] = useState<ParsedSite[]>([]);
+  const [monitoringCycleMonth, setMonitoringCycleMonth] = useState<string>('');
+  
+  // Generate cycle month options (current month and next 12 months)
+  const cycleMonthOptions = (() => {
+    const options: { value: string; label: string }[] = [];
+    const now = new Date();
+    for (let i = -2; i <= 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      options.push({ value, label });
+    }
+    return options;
+  })();
   const [columnMapping, setColumnMapping] = useState<{
     siteId: string | null;
     siteName: string | null;
@@ -635,6 +650,16 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   };
 
   const handleUpload = async () => {
+    // Validate monitoring cycle month is selected
+    if (!monitoringCycleMonth) {
+      toast({
+        title: 'Monitoring cycle required',
+        description: 'Please select the monitoring cycle month before uploading',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     const sitesToUpload = parsedSites.filter(s => selectedRows.has(s.rowIndex) && s.isValid);
     
     if (sitesToUpload.length === 0) {
@@ -687,6 +712,17 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               result.errors.push(`Row ${site.rowIndex}: ${error.message}`);
             } else {
               result.updated++;
+              // Record monitoring cycle for existing site
+              const { error: cycleError } = await supabase
+                .from('site_monitoring_cycles')
+                .upsert({
+                  site_registry_id: site.registrySiteId,
+                  cycle_month: monitoringCycleMonth,
+                  created_by: currentUser?.id || 'system',
+                }, { onConflict: 'site_registry_id,cycle_month' });
+              if (cycleError) {
+                console.error(`[GPS Upload] Failed to record cycle for site ${site.registrySiteId}:`, cycleError);
+              }
             }
           } else {
             // Use local state data from sudanStates.ts instead of database query
@@ -718,8 +754,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             const hubName = normalizedStateId ? getHubNameForState(normalizedStateId) : site.hub;
             
             // Only include columns that exist in sites_registry table
+            const newSiteId = uuidv4();
             const insertData: Record<string, any> = {
-              id: uuidv4(),
+              id: newSiteId,
               site_code: siteCode,
               site_name: site.siteName || siteCode,
               state_id: normalizedStateId || site.state,
@@ -752,6 +789,17 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               }
             } else {
               result.created++;
+              // Record monitoring cycle for new site
+              const { error: cycleError } = await supabase
+                .from('site_monitoring_cycles')
+                .insert({
+                  site_registry_id: newSiteId,
+                  cycle_month: monitoringCycleMonth,
+                  created_by: currentUser?.id || 'system',
+                });
+              if (cycleError) {
+                console.error(`[GPS Upload] Failed to record cycle for new site ${newSiteId}:`, cycleError);
+              }
             }
           }
         } catch (err: any) {
@@ -844,6 +892,27 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Monitoring Cycle Month Selector */}
+        <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-md">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="cycle-month" className="text-sm font-medium">Monitoring Cycle:</Label>
+          </div>
+          <Select value={monitoringCycleMonth} onValueChange={setMonitoringCycleMonth}>
+            <SelectTrigger className="w-[200px]" data-testid="select-cycle-month">
+              <SelectValue placeholder="Select month..." />
+            </SelectTrigger>
+            <SelectContent>
+              {cycleMonthOptions.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!monitoringCycleMonth && (
+            <span className="text-xs text-amber-600">Required for upload</span>
+          )}
+        </div>
+        
         <div className="border-2 border-dashed rounded-md p-6 text-center">
           <input
             ref={fileInputRef}
