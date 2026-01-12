@@ -600,35 +600,12 @@ async function executeRecall(
       workflow.isRecalled = true;
       newStatus = 'pending'; // Changed from 'uploaded' to match "New MMPs" filter
       
-      // Revert ALL site entries to 'New' status and clear verification data
+      // DELETE ALL site entries to allow fresh re-upload
       const adminRecallSiteIds = affectedSites.map(s => s.id);
       if (adminRecallSiteIds.length > 0) {
         await supabase
           .from('mmp_site_entries')
-          .update({
-            status: 'New',
-            assigned_to: null,
-            claimed_by: null,
-            assignment_status: 'recalled',
-            claim_status: null,
-            dispatch_status: null,
-            recall_status: 'recalled',
-            recall_event_id: recallEventId,
-            recalled_at: now,
-            recalled_by: recallerName,
-            // Clear verification fields
-            verified: false,
-            verified_at: null,
-            verified_by: null,
-            cp_verified: false,
-            cp_verified_at: null,
-            cp_verified_by: null,
-            forwarded_to_user_id: null,
-            forwarded_by_user_id: null,
-            forwarded_at: null,
-            // Clear additional_data coordinator assignments
-            additional_data: {}
-          })
+          .delete()
           .in('id', adminRecallSiteIds);
       }
       break;
@@ -718,34 +695,12 @@ async function executeRecall(
       workflow.isRecalled = true;
       newStatus = 'pending'; // Changed from 'uploaded' to match "New MMPs" filter
       
+      // DELETE ALL site entries to allow fresh re-upload
       const allSiteIds = affectedSites.map(s => s.id);
       if (allSiteIds.length > 0) {
         await supabase
           .from('mmp_site_entries')
-          .update({
-            status: 'New', // Revert ALL sites to New status
-            assigned_to: null,
-            claimed_by: null,
-            assignment_status: 'recalled',
-            claim_status: 'recalled',
-            dispatch_status: 'recalled',
-            recall_status: 'recalled',
-            recall_event_id: recallEventId,
-            recalled_at: now,
-            recalled_by: recallerName,
-            // Clear verification fields
-            verified: false,
-            verified_at: null,
-            verified_by: null,
-            cp_verified: false,
-            cp_verified_at: null,
-            cp_verified_by: null,
-            forwarded_to_user_id: null,
-            forwarded_by_user_id: null,
-            forwarded_at: null,
-            // Clear additional_data coordinator assignments
-            additional_data: {}
-          })
+          .delete()
           .in('id', allSiteIds);
       }
       break;
