@@ -1443,6 +1443,8 @@ export async function computeRecallImpact(
 ): Promise<RecallImpactPreview> {
   const warnings: string[] = [];
 
+  console.log('[RECALL_IMPACT] Computing impact for MMP:', request.mmpId, 'Scope:', request.scopeType);
+
   // First, query the mmp_site_entries table
   let query = supabase
     .from('mmp_site_entries')
@@ -1461,6 +1463,8 @@ export async function computeRecallImpact(
   }
 
   const { data: sites, error } = await query;
+  console.log('[RECALL_IMPACT] mmp_site_entries query result:', sites?.length || 0, 'sites, error:', error?.message || 'none');
+  
   if (error) {
     console.error('Error computing recall impact:', error);
     return {
@@ -1479,11 +1483,14 @@ export async function computeRecallImpact(
   
   // If no sites found in mmp_site_entries, check the mmp_files.site_entries JSONB field
   if (affectedSites.length === 0) {
-    const { data: mmpFile } = await supabase
+    console.log('[RECALL_IMPACT] No sites in table, checking JSONB field...');
+    const { data: mmpFile, error: mmpError } = await supabase
       .from('mmp_files')
-      .select('site_entries')
+      .select('site_entries, entries')
       .eq('id', request.mmpId)
       .single();
+    
+    console.log('[RECALL_IMPACT] JSONB query result - entries field:', mmpFile?.entries, 'site_entries length:', Array.isArray(mmpFile?.site_entries) ? mmpFile.site_entries.length : 'not array', 'error:', mmpError?.message || 'none');
     
     if (mmpFile?.site_entries && Array.isArray(mmpFile.site_entries)) {
       let jsonbSites = mmpFile.site_entries;
@@ -1504,10 +1511,12 @@ export async function computeRecallImpact(
       }
       
       affectedSites = jsonbSites;
+      console.log('[RECALL_IMPACT] Using JSONB sites:', affectedSites.length);
     }
   }
   
   const affectedSiteCount = affectedSites.length;
+  console.log('[RECALL_IMPACT] Final affected sites count:', affectedSiteCount);
 
   const collectorIds = new Set<string>();
   let financialAmount = 0;

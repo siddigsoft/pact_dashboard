@@ -125,12 +125,28 @@ export function RecallDialog({
   const loadScopeOptions = async () => {
     setIsLoadingOptions(true);
     try {
+      // First try mmp_site_entries table
       const { data: siteEntries } = await supabase
         .from('mmp_site_entries')
         .select('*')
         .eq('mmp_file_id', mmpFile.id);
 
-      if (siteEntries) {
+      let entries = siteEntries || [];
+      
+      // If no entries in table, try JSONB field in mmp_files
+      if (entries.length === 0) {
+        const { data: mmpData } = await supabase
+          .from('mmp_files')
+          .select('site_entries')
+          .eq('id', mmpFile.id)
+          .single();
+        
+        if (mmpData?.site_entries && Array.isArray(mmpData.site_entries)) {
+          entries = mmpData.site_entries;
+        }
+      }
+
+      if (entries.length > 0) {
         const activitySet = new Map<string, number>();
         const siteSet = new Map<string, number>();
         const localitySet = new Map<string, number>();
@@ -138,13 +154,14 @@ export function RecallDialog({
         const hubSet = new Map<string, number>();
         const cpSet = new Map<string, number>();
 
-        siteEntries.forEach((entry: any) => {
-          const activity = entry.main_activity || entry.activity_at_site;
+        entries.forEach((entry: any) => {
+          const activity = entry.main_activity || entry.mainActivity || entry.activity_at_site || entry.activityAtSite;
           if (activity) {
             activitySet.set(activity, (activitySet.get(activity) || 0) + 1);
           }
-          if (entry.site_name) {
-            siteSet.set(entry.site_name, (siteSet.get(entry.site_name) || 0) + 1);
+          const siteName = entry.site_name || entry.siteName;
+          if (siteName) {
+            siteSet.set(siteName, (siteSet.get(siteName) || 0) + 1);
           }
           if (entry.locality) {
             localitySet.set(entry.locality, (localitySet.get(entry.locality) || 0) + 1);
@@ -152,11 +169,13 @@ export function RecallDialog({
           if (entry.state) {
             stateSet.set(entry.state, (stateSet.get(entry.state) || 0) + 1);
           }
-          if (entry.hub_office) {
-            hubSet.set(entry.hub_office, (hubSet.get(entry.hub_office) || 0) + 1);
+          const hubOffice = entry.hub_office || entry.hubOffice;
+          if (hubOffice) {
+            hubSet.set(hubOffice, (hubSet.get(hubOffice) || 0) + 1);
           }
-          if (entry.cp_name) {
-            cpSet.set(entry.cp_name, (cpSet.get(entry.cp_name) || 0) + 1);
+          const cpName = entry.cp_name || entry.cpName;
+          if (cpName) {
+            cpSet.set(cpName, (cpSet.get(cpName) || 0) + 1);
           }
         });
 
