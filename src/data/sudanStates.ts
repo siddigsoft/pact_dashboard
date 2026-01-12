@@ -4,6 +4,7 @@ import { Hub } from '@/types';
 export interface SudanState {
   id: string;
   name: string;
+  nameAr?: string;
   code: string;
   localities: { id: string; name: string; nameAr?: string; }[];
 }
@@ -19,6 +20,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'khartoum', 
     name: 'Khartoum', 
+    nameAr: 'الخرطوم',
     code: 'KH', 
     localities: [
       { id: 'kh-khartoum', name: 'Khartoum', nameAr: 'الخرطوم' },
@@ -35,6 +37,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'gezira', 
     name: 'Aj Jazirah', 
+    nameAr: 'الجزيرة',
     code: 'GZ', 
     localities: [
       { id: 'gz-medani-al-kubra', name: 'Medani Al Kubra', nameAr: 'مدني الكبري' },
@@ -52,6 +55,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'red-sea', 
     name: 'Red Sea', 
+    nameAr: 'البحر الأحمر',
     code: 'RS', 
     localities: [
       { id: 'rs-port-sudan', name: 'Port Sudan', nameAr: 'بورتسودان' },
@@ -71,6 +75,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'kassala', 
     name: 'Kassala', 
+    nameAr: 'كسلا',
     code: 'KS', 
     localities: [
       { id: 'ks-madeinat-kassala', name: 'Madeinat Kassala', nameAr: 'مدينة كسلا' },
@@ -91,6 +96,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'gedarif', 
     name: 'Gedarif', 
+    nameAr: 'القضارف',
     code: 'GD', 
     localities: [
       { id: 'gd-madeinat-al-gedarif', name: 'Madeinat Al Gedarif', nameAr: 'مدينة القضارف' },
@@ -112,6 +118,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'white-nile', 
     name: 'White Nile', 
+    nameAr: 'النيل الأبيض',
     code: 'WN', 
     localities: [
       { id: 'wn-rabak', name: 'Rabak', nameAr: 'ربك' },
@@ -130,6 +137,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'blue-nile', 
     name: 'Blue Nile', 
+    nameAr: 'النيل الأزرق',
     code: 'BN', 
     localities: [
       { id: 'bn-ed-damazine', name: 'Ed Damazine', nameAr: 'الدمازين' },
@@ -146,6 +154,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'sennar', 
     name: 'Sennar', 
+    nameAr: 'سنار',
     code: 'SN', 
     localities: [
       { id: 'sn-sinja', name: 'Sinja', nameAr: 'سنجة' },
@@ -162,6 +171,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'north-kordofan', 
     name: 'North Kordofan', 
+    nameAr: 'شمال كردفان',
     code: 'NK', 
     localities: [
       { id: 'nk-sheikan', name: 'Sheikan', nameAr: 'شيكان' },
@@ -179,6 +189,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'south-kordofan', 
     name: 'South Kordofan', 
+    nameAr: 'جنوب كردفان',
     code: 'SK', 
     localities: [
       { id: 'sk-kadugli', name: 'Kadugli', nameAr: 'كادقلي' },
@@ -205,6 +216,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'west-kordofan', 
     name: 'West Kordofan', 
+    nameAr: 'غرب كردفان',
     code: 'WK', 
     localities: [
       { id: 'wk-an-nuhud', name: 'An Nuhud', nameAr: 'النهود' },
@@ -228,6 +240,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'north-darfur', 
     name: 'North Darfur', 
+    nameAr: 'شمال دارفور',
     code: 'ND', 
     localities: [
       { id: 'nd-al-fasher', name: 'Al Fasher', nameAr: 'الفاشر' },
@@ -254,6 +267,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'south-darfur', 
     name: 'South Darfur', 
+    nameAr: 'جنوب دارفور',
     code: 'SD', 
     localities: [
       { id: 'sd-nyala-shimal', name: 'Nyala Shimal', nameAr: 'نيالا شمال' },
@@ -284,6 +298,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'west-darfur', 
     name: 'West Darfur', 
+    nameAr: 'غرب دارفور',
     code: 'WD', 
     localities: [
       { id: 'wd-ag-geneina', name: 'Ag Geneina', nameAr: 'الجنينة' },
@@ -301,6 +316,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'east-darfur', 
     name: 'East Darfur', 
+    nameAr: 'شرق دارفور',
     code: 'ED', 
     localities: [
       { id: 'ed-ad-duayn', name: "Ad Du'ayn", nameAr: 'الضعين' },
@@ -319,6 +335,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'central-darfur', 
     name: 'Central Darfur', 
+    nameAr: 'وسط دارفور',
     code: 'CD', 
     localities: [
       { id: 'cd-zalingi', name: 'Zalingi', nameAr: 'زالنجى' },
@@ -337,6 +354,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'river-nile', 
     name: 'River Nile', 
+    nameAr: 'نهر النيل',
     code: 'RN', 
     localities: [
       { id: 'rn-ad-damar', name: 'Al Damar', nameAr: 'الدامر' },
@@ -353,6 +371,7 @@ export const sudanStates: SudanState[] = [
   { 
     id: 'northern', 
     name: 'Northern', 
+    nameAr: 'الشمالية',
     code: 'NO', 
     localities: [
       { id: 'no-dongola', name: 'Dongola', nameAr: 'دنقلا' },
