@@ -570,7 +570,6 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         if (!siteName) validationErrors.push('Missing Site Name');
         if (!activity) validationErrors.push('Missing Activity');
         if (!cp) validationErrors.push('Missing CP (Cooperating Partner)');
-        if (!tool) validationErrors.push('Missing Tool');
         const hasSiteGps = latitude !== null && longitude !== null;
         const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
         if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Missing GPS coordinates');
