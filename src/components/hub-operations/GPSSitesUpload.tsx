@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
-import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2, Calendar } from 'lucide-react';
+import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getHubForState, getHubNameForState, hubs, sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
@@ -259,20 +259,6 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   const [parsing, setParsing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [parsedSites, setParsedSites] = useState<ParsedSite[]>([]);
-  const [monitoringCycleMonth, setMonitoringCycleMonth] = useState<string>('');
-  
-  // Generate cycle month options (current month and next 12 months)
-  const cycleMonthOptions = (() => {
-    const options: { value: string; label: string }[] = [];
-    const now = new Date();
-    for (let i = -2; i <= 12; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const label = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      options.push({ value, label });
-    }
-    return options;
-  })();
   const [columnMapping, setColumnMapping] = useState<{
     siteId: string | null;
     siteName: string | null;
@@ -664,14 +650,12 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   const handleUpload = async () => {
     const sitesToUpload = parsedSites.filter(s => selectedRows.has(s.rowIndex) && s.isValid);
     
-    // Check if any sites are missing a monitoring cycle (either from row or UI selector)
-    const sitesWithoutCycle = sitesToUpload.filter(s => !s.monitoringCycle && !monitoringCycleMonth);
+    // Check if any sites are missing a monitoring cycle from the file
+    const sitesWithoutCycle = sitesToUpload.filter(s => !s.monitoringCycle);
     if (sitesWithoutCycle.length > 0) {
       toast({
         title: 'Monitoring cycle required',
-        description: sitesWithoutCycle.length === sitesToUpload.length 
-          ? 'Please select the monitoring cycle month before uploading, or add a "cycle" column to your file'
-          : `${sitesWithoutCycle.length} site(s) are missing a monitoring cycle. Add a "cycle" column or select a default cycle above.`,
+        description: `${sitesWithoutCycle.length} site(s) are missing a monitoring cycle. Add a "cycle" or "monitoring_cycle" column to your file.`,
         variant: 'destructive',
       });
       return;
@@ -727,8 +711,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               result.errors.push(`Row ${site.rowIndex}: ${error.message}`);
             } else {
               result.updated++;
-              // Record monitoring cycle for existing site (prefer row-level, fallback to UI selector)
-              const effectiveCycle = site.monitoringCycle || monitoringCycleMonth;
+              // Record monitoring cycle for existing site
+              const effectiveCycle = site.monitoringCycle;
               const { error: cycleError } = await supabase
                 .from('site_monitoring_cycles')
                 .upsert({
@@ -805,8 +789,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               }
             } else {
               result.created++;
-              // Record monitoring cycle for new site (prefer row-level, fallback to UI selector)
-              const effectiveCycle = site.monitoringCycle || monitoringCycleMonth;
+              // Record monitoring cycle for new site
+              const effectiveCycle = site.monitoringCycle;
               const { error: cycleError } = await supabase
                 .from('site_monitoring_cycles')
                 .insert({
@@ -909,31 +893,6 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Monitoring Cycle Month Selector */}
-        <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-md flex-wrap">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <Label htmlFor="cycle-month" className="text-sm font-medium">Default Monitoring Cycle:</Label>
-          </div>
-          <Select value={monitoringCycleMonth} onValueChange={setMonitoringCycleMonth}>
-            <SelectTrigger className="w-[200px]" data-testid="select-cycle-month">
-              <SelectValue placeholder="Select month..." />
-            </SelectTrigger>
-            <SelectContent>
-              {cycleMonthOptions.map(opt => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {columnMapping.monitoringCycle ? (
-            <Badge variant="secondary" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" />
-              Cycle column detected in file
-            </Badge>
-          ) : !monitoringCycleMonth ? (
-            <span className="text-xs text-amber-600">Required (or add "cycle" column to file)</span>
-          ) : null}
-        </div>
         
         <div className="border-2 border-dashed rounded-md p-6 text-center">
           <input
