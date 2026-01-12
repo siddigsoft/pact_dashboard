@@ -253,6 +253,142 @@ function getCoordinatorsByState(mmp: any, coordNameLookup?: Map<string, string>)
   return Array.from(stateMap.values()).sort((a, b) => a.state.localeCompare(b.state));
 }
 
+interface RecallHistoryEntry {
+  action: string;
+  recallEventId?: string;
+  tier?: string;
+  by: string;
+  byEmail?: string;
+  date: string;
+  reason?: string;
+  affectedSites?: number;
+  previousState?: any;
+  isForceRecall?: boolean;
+}
+
+function RecallHistorySection({ workflow }: { workflow: any }) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  const recallHistory: RecallHistoryEntry[] = workflow?.recallHistory || [];
+  
+  if (recallHistory.length === 0 && !workflow?.recalledAt) {
+    return null;
+  }
+
+  const tierLabels: Record<string, string> = {
+    'admin_to_fom': 'Admin → FOM',
+    'fom_to_coordinator': 'FOM → Coordinator',
+    'coordinator_to_collector': 'Coordinator → Collector',
+    'super_admin_approved': 'Super Admin (Approved)'
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover-elevate rounded px-2 py-1 -mx-2 w-full" data-testid="trigger-recall-history">
+        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        <RotateCcw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+        <span>Recall History</span>
+        <Badge variant="secondary" className="ml-auto bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+          {recallHistory.length} recall{recallHistory.length !== 1 ? 's' : ''}
+        </Badge>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 space-y-2">
+        {recallHistory.length === 0 && workflow?.recalledAt ? (
+          <div className="p-3 rounded-lg border bg-amber-50 dark:bg-amber-900/20">
+            <div className="flex items-center gap-2 text-sm">
+              <RotateCcw className="h-4 w-4 text-amber-600" />
+              <span className="font-medium">Recalled</span>
+              <span className="text-muted-foreground">
+                {workflow.recalledAt ? format(new Date(workflow.recalledAt), 'MMM d, yyyy HH:mm') : '—'}
+              </span>
+            </div>
+            {workflow.recalledBy && (
+              <div className="text-xs text-muted-foreground mt-1">
+                By: {workflow.recalledBy}
+              </div>
+            )}
+            {workflow.lastRecallReason && (
+              <div className="text-xs mt-1 p-2 bg-muted/50 rounded">
+                Reason: {workflow.lastRecallReason}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {recallHistory.slice().reverse().map((entry, index) => (
+              <div key={index} className="p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <RotateCcw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <span className="font-medium text-sm">
+                      {entry.action === 'recall_completed' ? 'Recall Completed' : 
+                       entry.action === 'recall_initiated' ? 'Recall Initiated' : 
+                       entry.action === 'recall' ? 'Recalled' : entry.action}
+                    </span>
+                    {entry.isForceRecall && (
+                      <Badge variant="destructive" className="text-xs py-0">Force</Badge>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {entry.date ? format(new Date(entry.date), 'MMM d, yyyy HH:mm') : '—'}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {entry.tier && (
+                    <div>
+                      <span className="text-muted-foreground">Tier:</span>{' '}
+                      <Badge variant="outline" className="text-xs py-0">
+                        {tierLabels[entry.tier] || entry.tier}
+                      </Badge>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground">By:</span>{' '}
+                    <span className="font-medium">{entry.by || 'Unknown'}</span>
+                  </div>
+                  {entry.affectedSites !== undefined && (
+                    <div>
+                      <span className="text-muted-foreground">Affected Sites:</span>{' '}
+                      <span className="font-medium">{entry.affectedSites}</span>
+                    </div>
+                  )}
+                  {entry.byEmail && (
+                    <div>
+                      <span className="text-muted-foreground">Email:</span>{' '}
+                      <span className="text-xs">{entry.byEmail}</span>
+                    </div>
+                  )}
+                </div>
+                
+                {entry.reason && (
+                  <div className="mt-2 p-2 bg-muted/50 rounded text-xs">
+                    <span className="text-muted-foreground">Reason:</span> {entry.reason}
+                  </div>
+                )}
+                
+                {entry.previousState?.forwardedToFomIds?.length > 0 && (
+                  <div className="mt-2 text-xs">
+                    <span className="text-muted-foreground">Previous FOM IDs cleared:</span>{' '}
+                    <span>{entry.previousState.forwardedToFomIds.length}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {workflow?.lastRecallReason && recallHistory.length === 0 && (
+          <div className="p-2 bg-muted/30 rounded text-xs">
+            <span className="text-muted-foreground">Last Recall Reason:</span>{' '}
+            {workflow.lastRecallReason}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function CoordinatorsByStateSection({ coordinatorsByState }: { coordinatorsByState: CoordinatorByState[] }) {
   const [isOpen, setIsOpen] = useState(true);
 
@@ -962,6 +1098,9 @@ export default function WorkflowTrackerTab({ mmpFiles, coordinators = [] }: Work
                       {mmp.verificationProgress.verified}/{mmp.verificationProgress.total}
                     </span>
                   </div>
+
+                  {/* Recall History Section - Show if MMP has been recalled */}
+                  <RecallHistorySection workflow={mmp.workflow} />
 
                   {/* Coordinators by State Section */}
                   <CoordinatorsByStateSection coordinatorsByState={mmp.coordinatorsByState} />
