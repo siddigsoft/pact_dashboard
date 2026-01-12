@@ -71,7 +71,7 @@ export const LocalityRequirementTriageDialog: React.FC<LocalityRequirementTriage
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Building2 className="h-5 w-5 text-purple-600" />
@@ -99,7 +99,7 @@ export const LocalityRequirementTriageDialog: React.FC<LocalityRequirementTriage
           )}
         </div>
 
-        <ScrollArea className="max-h-[400px] pr-4">
+        <ScrollArea className="flex-1 min-h-0 max-h-[50vh] pr-4">
           <div className="space-y-3">
             {localities.map((loc, index) => {
               const key = `${loc.state}|${loc.locality}`;
