@@ -384,7 +384,7 @@ export const abyeiPCA = {
 export const hubs: Hub[] = [
   {
     id: 'country-office',
-    name: 'Country Office (Khartoum)',
+    name: 'Country Office',
     states: ['khartoum', 'red-sea'],
     coordinates: { latitude: 15.5007, longitude: 32.5599 }
   },
