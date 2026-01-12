@@ -11,7 +11,8 @@ import {
   ChevronRight,
   Activity,
   Calendar,
-  FileText
+  FileText,
+  Handshake
 } from 'lucide-react';
 import { SiteRegistry } from '@/types/hub-operations';
 import { format } from 'date-fns';
@@ -125,6 +126,12 @@ export default function SiteCard({
             <div className="flex items-center gap-2 text-muted-foreground">
               <Building2 className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">{site.hub_name}</span>
+            </div>
+          )}
+          {site.cp_name && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Handshake className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">{site.cp_name}</span>
             </div>
           )}
         </div>

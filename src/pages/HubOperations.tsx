@@ -1964,6 +1964,8 @@ export default function HubOperations() {
               site_name: s.site_name,
               state_name: s.state_name,
               locality_name: s.locality_name,
+              hub_name: s.hub_name,
+              cp_name: s.cp_name,
               gps_latitude: s.gps_latitude!,
               gps_longitude: s.gps_longitude!,
               gps_altitude: s.gps_altitude,
