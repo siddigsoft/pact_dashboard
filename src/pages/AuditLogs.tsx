@@ -64,10 +64,23 @@ import {
   Eye,
   TrendingUp,
   History,
-  ChevronLeft
+  ChevronLeft,
+  Calendar
 } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO, subDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
+import { supabase } from '@/integrations/supabase/client';
+
+interface UserProfile {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  hubId?: string;
+}
 
 const AuditLogs = () => {
   const navigate = useNavigate();
@@ -94,6 +107,40 @@ const AuditLogs = () => {
   const [isLiveMode, setIsLiveMode] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const logsPerPage = 100;
+  
+  const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+
+  // Fetch all user profiles
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      setProfilesLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, role, status, created_at, updated_at, hub_id')
+          .order('updated_at', { ascending: false });
+        
+        if (!error && data) {
+          setAllProfiles(data.map(p => ({
+            id: p.id,
+            fullName: p.full_name || 'Unknown User',
+            email: p.email || '',
+            role: p.role || 'user',
+            status: p.status || 'unknown',
+            createdAt: p.created_at,
+            updatedAt: p.updated_at,
+            hubId: p.hub_id
+          })));
+        }
+      } catch (err) {
+        console.error('[AuditLogs] Error fetching profiles:', err);
+      } finally {
+        setProfilesLoading(false);
+      }
+    };
+    fetchProfiles();
+  }, []);
 
   // Auto-refresh in live mode
   useEffect(() => {
@@ -336,23 +383,49 @@ const AuditLogs = () => {
     );
   }, [filteredLogs]);
 
-  // Group by user for User Activity tab
+  // Group by user for User Activity tab - Enhanced to include ALL users from profiles
   interface UserActivity {
     userId: string;
     userName: string;
     userEmail?: string;
     userRole: string;
+    userStatus: string;
+    registeredAt: string;
+    lastProfileUpdate: string;
     logs: AuditLogEntry[];
     lastActivity: string;
     totalActions: number;
     moduleBreakdown: Record<string, number>;
     severityBreakdown: Record<string, number>;
     successRate: number;
+    isFromProfile: boolean;
+    firstActivityAt?: string;
   }
 
   const groupedByUser = useMemo(() => {
     const users: Record<string, UserActivity> = {};
     
+    // First, add ALL users from profiles (so everyone appears even without activity)
+    for (const profile of allProfiles) {
+      users[profile.id] = {
+        userId: profile.id,
+        userName: profile.fullName,
+        userEmail: profile.email,
+        userRole: profile.role,
+        userStatus: profile.status,
+        registeredAt: profile.createdAt,
+        lastProfileUpdate: profile.updatedAt,
+        logs: [],
+        lastActivity: profile.updatedAt,
+        totalActions: 0,
+        moduleBreakdown: {},
+        severityBreakdown: {},
+        successRate: 100,
+        isFromProfile: true,
+      };
+    }
+    
+    // Then add/merge with audit log activity data
     for (const log of filteredLogs) {
       if (!users[log.actorId]) {
         users[log.actorId] = {
@@ -360,12 +433,16 @@ const AuditLogs = () => {
           userName: log.actorName,
           userEmail: log.actorEmail,
           userRole: log.actorRole,
+          userStatus: 'unknown',
+          registeredAt: '',
+          lastProfileUpdate: '',
           logs: [],
           lastActivity: log.timestamp,
           totalActions: 0,
           moduleBreakdown: {},
           severityBreakdown: {},
           successRate: 0,
+          isFromProfile: false,
         };
       }
       
@@ -375,6 +452,12 @@ const AuditLogs = () => {
       user.moduleBreakdown[log.module] = (user.moduleBreakdown[log.module] || 0) + 1;
       user.severityBreakdown[log.severity] = (user.severityBreakdown[log.severity] || 0) + 1;
       
+      // Track first activity
+      if (!user.firstActivityAt || new Date(log.timestamp) < new Date(user.firstActivityAt)) {
+        user.firstActivityAt = log.timestamp;
+      }
+      
+      // Track last activity
       if (new Date(log.timestamp) > new Date(user.lastActivity)) {
         user.lastActivity = log.timestamp;
       }
@@ -382,14 +465,21 @@ const AuditLogs = () => {
     
     // Calculate success rates
     for (const user of Object.values(users)) {
-      const successCount = user.logs.filter(l => l.success).length;
-      user.successRate = user.totalActions > 0 ? (successCount / user.totalActions) * 100 : 0;
+      if (user.totalActions > 0) {
+        const successCount = user.logs.filter(l => l.success).length;
+        user.successRate = (successCount / user.totalActions) * 100;
+      }
     }
     
-    return Object.values(users).sort(
-      (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
-    );
-  }, [filteredLogs]);
+    // Sort by last activity (most recent first), then by total actions
+    return Object.values(users).sort((a, b) => {
+      // Users with activity come first
+      if (a.totalActions > 0 && b.totalActions === 0) return -1;
+      if (b.totalActions > 0 && a.totalActions === 0) return 1;
+      // Then by last activity
+      return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime();
+    });
+  }, [filteredLogs, allProfiles]);
 
   const getWorkflowStepIcon = (step: WorkflowStep | null, isCompleted: boolean, hasFailed: boolean) => {
     if (hasFailed) {
@@ -1142,19 +1232,23 @@ const AuditLogs = () => {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[600px]">
-                {loading ? (
+                {loading || profilesLoading ? (
                   <div className="flex items-center justify-center py-12">
                     <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : groupedByUser.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <Users className="h-12 w-12 mb-4" />
-                    <p>No user activities found</p>
+                    <p>No users found</p>
                   </div>
                 ) : (
                   <div className="divide-y">
+                    <div className="px-4 py-2 bg-muted/50 text-sm text-muted-foreground flex items-center justify-between">
+                      <span>Showing {groupedByUser.length} users ({groupedByUser.filter(u => u.totalActions > 0).length} with recorded activity)</span>
+                    </div>
                     {groupedByUser.map((user) => {
                       const isExpanded = expandedUserId === user.userId;
+                      const statusColor = user.userStatus === 'approved' ? 'bg-green-500' : user.userStatus === 'pending' ? 'bg-yellow-500' : 'bg-gray-400';
                       
                       return (
                         <div key={user.userId}>
@@ -1164,17 +1258,28 @@ const AuditLogs = () => {
                             data-testid={`user-activity-${user.userId}`}
                           >
                             <div className="flex items-start gap-4">
-                              <Avatar>
-                                <AvatarFallback>
-                                  {user.userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
+                              <div className="relative">
+                                <Avatar>
+                                  <AvatarFallback>
+                                    {user.userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-background ${statusColor}`} title={user.userStatus} />
+                              </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-medium">{user.userName}</span>
                                   <Badge variant="outline" className="text-xs">{user.userRole}</Badge>
-                                  {user.successRate === 100 && (
+                                  {user.userStatus && (
+                                    <Badge variant={user.userStatus === 'approved' ? 'default' : 'secondary'} className="text-xs">
+                                      {user.userStatus}
+                                    </Badge>
+                                  )}
+                                  {user.totalActions > 0 && user.successRate === 100 && (
                                     <Badge className="bg-green-500 text-white text-xs">Perfect Record</Badge>
+                                  )}
+                                  {user.totalActions === 0 && (
+                                    <Badge variant="secondary" className="text-xs">No Activity</Badge>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
@@ -1188,31 +1293,50 @@ const AuditLogs = () => {
                                     <Activity className="h-3 w-3" />
                                     {user.totalActions} actions
                                   </span>
-                                  <span className="flex items-center gap-1">
-                                    <Clock className="h-3 w-3" />
-                                    Last: {format(parseISO(user.lastActivity), 'MMM d, HH:mm')}
-                                  </span>
+                                  {user.totalActions > 0 && (
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      Last: {format(parseISO(user.lastActivity), 'MMM d, yyyy HH:mm')}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Registration and timestamps */}
+                                <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground flex-wrap">
+                                  {user.registeredAt && (
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      Registered: {format(parseISO(user.registeredAt), 'MMM d, yyyy')}
+                                    </span>
+                                  )}
+                                  {user.firstActivityAt && (
+                                    <span className="flex items-center gap-1">
+                                      <PlayCircle className="h-3 w-3" />
+                                      First activity: {format(parseISO(user.firstActivityAt), 'MMM d, yyyy HH:mm')}
+                                    </span>
+                                  )}
                                 </div>
                                 {/* Mini stats */}
-                                <div className="flex items-center gap-3 mt-2">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs text-muted-foreground">Success:</span>
-                                    <span className={`text-xs font-medium ${user.successRate >= 90 ? 'text-green-600' : user.successRate >= 70 ? 'text-yellow-600' : 'text-destructive'}`}>
-                                      {user.successRate.toFixed(0)}%
-                                    </span>
+                                {user.totalActions > 0 && (
+                                  <div className="flex items-center gap-3 mt-2">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-xs text-muted-foreground">Success:</span>
+                                      <span className={`text-xs font-medium ${user.successRate >= 90 ? 'text-green-600' : user.successRate >= 70 ? 'text-yellow-600' : 'text-destructive'}`}>
+                                        {user.successRate.toFixed(0)}%
+                                      </span>
+                                    </div>
+                                    {user.severityBreakdown.warning && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        <AlertTriangle className="h-3 w-3 mr-1 text-yellow-500" />
+                                        {user.severityBreakdown.warning} warnings
+                                      </Badge>
+                                    )}
+                                    {user.severityBreakdown.error && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        {user.severityBreakdown.error} errors
+                                      </Badge>
+                                    )}
                                   </div>
-                                  {user.severityBreakdown.warning && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      <AlertTriangle className="h-3 w-3 mr-1 text-yellow-500" />
-                                      {user.severityBreakdown.warning} warnings
-                                    </Badge>
-                                  )}
-                                  {user.severityBreakdown.error && (
-                                    <Badge variant="destructive" className="text-xs">
-                                      {user.severityBreakdown.error} errors
-                                    </Badge>
-                                  )}
-                                </div>
+                                )}
                               </div>
                               <div>
                                 {isExpanded ? (
