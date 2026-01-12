@@ -159,9 +159,13 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
         setIsFullscreen(open);
         if (!open) resetFilters();
       }}>
-        <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] p-0 overflow-hidden">
+        <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] p-0 overflow-hidden flex flex-col">
+          <DialogHeader className="sr-only">
+            <DialogTitle>PACT Sites Map</DialogTitle>
+          </DialogHeader>
+          
           {/* Enhanced Header */}
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4">
+          <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4 flex-shrink-0">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-lg">
@@ -188,7 +192,7 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
           </div>
 
           {/* Filter Controls */}
-          <div className="p-3 bg-muted/50 border-b flex items-center gap-3 flex-wrap">
+          <div className="p-3 bg-muted/50 border-b flex items-center gap-3 flex-wrap flex-shrink-0">
             <div className="relative flex-1 min-w-[200px] max-w-[300px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -250,12 +254,12 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
             </div>
           </div>
 
-          {/* Map Container */}
-          <div className="flex-1" style={{ height: 'calc(95vh - 180px)', minHeight: '400px' }}>
+          {/* Map Container - use fixed height instead of flex-1 */}
+          <div className="flex-grow overflow-hidden" style={{ minHeight: '300px' }}>
             {isClient && isFullscreen && (
               <Suspense fallback={<MapPlaceholder />}>
                 <LazySitesMap 
-                  key={`fullscreen-map-${isFullscreen}`} 
+                  key={`fullscreen-map-${Date.now()}`} 
                   sites={filteredSites} 
                   height="100%" 
                   isVisible={isFullscreen} 
@@ -265,7 +269,7 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
           </div>
 
           {/* Footer Stats */}
-          <div className="bg-muted/30 border-t p-2 flex items-center justify-between text-xs text-muted-foreground">
+          <div className="bg-muted/30 border-t p-2 flex items-center justify-between text-xs text-muted-foreground flex-shrink-0">
             <div className="flex items-center gap-4">
               <span>{uniqueStates.length} states</span>
               <span>{uniqueActivities.length} activity types</span>
