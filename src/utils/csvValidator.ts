@@ -2,6 +2,8 @@
 import { validateSiteCode } from './mmpIdGenerator';
 import { format, parse, isValid } from 'date-fns'; 
 import * as XLSX from 'xlsx';
+import { normalizeStateId, normalizeLocalityId } from './siteNormalization';
+import { sudanStates } from '@/data/sudanStates';
 
 export interface CSVValidationError {
   type: 'error' | 'warning';
@@ -380,6 +382,39 @@ export const validateCSV = async (
             });
           }
         });
+
+        // Validate state name against Sudan states reference
+        const stateValue = getVal('state');
+        if (stateValue) {
+          const normalizedState = normalizeStateId(stateValue);
+          if (!normalizedState) {
+            warnings.push({
+              type: 'warning',
+              message: `State "${stateValue}" not found in Sudan states reference`,
+              row,
+              column: 'State',
+              category: 'unmatched_state'
+            });
+          } else {
+            // Validate locality name against state's localities
+            const localityValue = getVal('locality');
+            if (localityValue) {
+              const normalizedLocality = normalizeLocalityId(localityValue, normalizedState);
+              if (!normalizedLocality) {
+                // Get the state's valid localities for a helpful message
+                const state = sudanStates.find(s => s.id === normalizedState);
+                const validLocalities = state?.localities.slice(0, 5).map(l => l.name).join(', ') || '';
+                warnings.push({
+                  type: 'warning',
+                  message: `Locality "${localityValue}" not found in ${state?.name || normalizedState}. Valid options include: ${validLocalities}${state && state.localities.length > 5 ? '...' : ''}`,
+                  row,
+                  column: 'Locality',
+                  category: 'unmatched_locality'
+                });
+              }
+            }
+          }
+        }
 
         // Duplicate detection within file
         const sc = getVal('siteCode');
