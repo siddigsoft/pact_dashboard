@@ -86,22 +86,24 @@ export const LocalityPermitManager: React.FC<LocalityPermitManagerProps> = ({
       let failCount = 0;
       
       for (const siteId of siteIds) {
+        // Query mmp_site_entries table (not site_visits) - these are MMP site entry IDs
         const { data: currentSite, error: fetchError } = await supabase
-          .from('site_visits')
+          .from('mmp_site_entries')
           .select('additional_data')
           .eq('id', siteId)
           .single();
 
         if (fetchError) {
-          console.error('Error fetching site:', fetchError);
+          console.error('Error fetching site entry:', fetchError, 'siteId:', siteId);
           failCount++;
           continue;
         }
 
         const existingData = (currentSite?.additional_data as Record<string, unknown>) || {};
         
+        // Update mmp_site_entries table with locality permit status
         const { error: updateError } = await supabase
-          .from('site_visits')
+          .from('mmp_site_entries')
           .update({
             status: 'cp_verification',
             additional_data: {
@@ -114,7 +116,7 @@ export const LocalityPermitManager: React.FC<LocalityPermitManagerProps> = ({
           .eq('id', siteId);
 
         if (updateError) {
-          console.error('Error updating site:', updateError);
+          console.error('Error updating site entry:', updateError, 'siteId:', siteId);
           failCount++;
         } else {
           successCount++;
