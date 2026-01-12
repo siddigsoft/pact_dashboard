@@ -273,7 +273,10 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   const [parsing, setParsing] = useState(false);
   const [parsingProgress, setParsingProgress] = useState({ current: 0, total: 0, phase: '' });
   const [uploading, setUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<'preparing' | 'uploading' | 'complete' | null>(null);
+  const [uploadEta, setUploadEta] = useState(0);
   const [parsedSites, setParsedSites] = useState<ParsedSite[]>([]);
+  const [previewLimit, setPreviewLimit] = useState(50);
   const [columnMapping, setColumnMapping] = useState<{
     siteId: string | null;
     siteName: string | null;
@@ -746,6 +749,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     
     setUploading(true);
     setUploadProgress(0);
+    setUploadPhase('preparing');
     
     const result: UploadResult = {
       total: sitesToUpload.length,
@@ -756,132 +760,165 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     };
     
     try {
-      for (let i = 0; i < sitesToUpload.length; i++) {
-        const site = sitesToUpload[i];
-        setUploadProgress(Math.round(((i + 1) / sitesToUpload.length) * 100));
-        
-        try {
-          if (site.existsInRegistry && site.registrySiteId) {
-            const updateData: Record<string, any> = {
-              gps_captured_by: currentUser?.id,
-              gps_captured_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            };
-            if (site.latitude !== null) updateData.gps_latitude = site.latitude;
-            if (site.longitude !== null) updateData.gps_longitude = site.longitude;
-            if (site.altitude !== null) updateData.gps_altitude = site.altitude;
-            if (site.precision !== null) updateData.gps_precision = site.precision;
-            if (site.residenceLatitude !== null) updateData.residence_latitude = site.residenceLatitude;
-            if (site.residenceLongitude !== null) updateData.residence_longitude = site.residenceLongitude;
-            if (site.residenceAltitude !== null) updateData.residence_altitude = site.residenceAltitude;
-            if (site.residencePrecision !== null) updateData.residence_precision = site.residencePrecision;
-            
-            const { error } = await supabase
-              .from('sites_registry')
-              .update(updateData)
-              .eq('id', site.registrySiteId);
-            
-            if (error) {
-              result.errors.push(`Row ${site.rowIndex}: ${error.message}`);
-            } else {
-              result.updated++;
-              // Record monitoring cycle for existing site
-              const effectiveCycle = site.monitoringCycle;
-              const { error: cycleError } = await supabase
-                .from('site_monitoring_cycles')
-                .upsert({
-                  site_registry_id: site.registrySiteId,
-                  cycle_month: effectiveCycle,
-                  created_by: currentUser?.id || 'system',
-                }, { onConflict: 'site_registry_id,cycle_month' });
-              if (cycleError) {
-                console.error(`[GPS Upload] Failed to record cycle for site ${site.registrySiteId}:`, cycleError);
-              }
-            }
-          } else {
-            // Use local state data from sudanStates.ts instead of database query
-            const normalizedStateId = normalizeStateId(site.state);
-            const stateInfo = sudanStates.find(s => s.id === normalizedStateId);
-            const stateName = stateInfo?.name || site.state;
-            
-            // Find locality in state
-            let localityId = '';
-            let localityName = site.locality;
-            if (stateInfo && site.locality) {
-              const normalizedLocality = site.locality.toLowerCase().trim();
-              const localityInfo = stateInfo.localities.find(l => 
-                l.id.toLowerCase() === normalizedLocality ||
-                l.name.toLowerCase() === normalizedLocality ||
-                l.name.toLowerCase().includes(normalizedLocality) ||
-                normalizedLocality.includes(l.name.toLowerCase())
-              );
-              if (localityInfo) {
-                localityId = localityInfo.id;
-                localityName = localityInfo.name;
-              }
-            }
-            
-            const siteCode = site.siteId || `SITE-${Date.now()}-${i}`;
-            
-            // Get hub information based on state
-            const hubId = normalizedStateId ? getHubForState(normalizedStateId) : site.hub;
-            const hubName = normalizedStateId ? getHubNameForState(normalizedStateId) : site.hub;
-            
-            // Only include columns that exist in sites_registry table
-            const newSiteId = uuidv4();
-            const insertData: Record<string, any> = {
-              id: newSiteId,
-              site_code: siteCode,
-              site_name: site.siteName || siteCode,
-              state_id: normalizedStateId || site.state,
-              state_name: stateName,
-              locality_id: localityId || site.locality,
-              locality_name: localityName,
-              hub_id: hubId || site.hub || '',
-              hub_name: hubName || site.hub || '',
-              activity_type: site.activity || 'GFA',
-              status: 'active',
-              mmp_count: 0,
-              created_by: currentUser?.id || 'system',
-              created_at: new Date().toISOString(),
-            };
-            // Add GPS if available - use residence GPS (A05) as primary, fallback to site GPS (A06)
-            const lat = site.residenceLatitude ?? site.latitude;
-            const lng = site.residenceLongitude ?? site.longitude;
-            if (lat !== null) insertData.gps_latitude = lat;
-            if (lng !== null) insertData.gps_longitude = lng;
-            
-            const { error } = await supabase
-              .from('sites_registry')
-              .insert(insertData);
-            
-            if (error) {
-              if (error.code === '23505') {
-                result.skipped++;
-              } else {
-                result.errors.push(`Row ${site.rowIndex}: ${error.message}`);
-              }
-            } else {
-              result.created++;
-              // Record monitoring cycle for new site
-              const effectiveCycle = site.monitoringCycle;
-              const { error: cycleError } = await supabase
-                .from('site_monitoring_cycles')
-                .insert({
-                  site_registry_id: newSiteId,
-                  cycle_month: effectiveCycle,
-                  created_by: currentUser?.id || 'system',
-                });
-              if (cycleError) {
-                console.error(`[GPS Upload] Failed to record cycle for new site ${newSiteId}:`, cycleError);
-              }
+      // Prepare all site data first (faster than doing it in the loop)
+      setUploadPhase('preparing');
+      const preparedSites: Array<{
+        site: ParsedSite;
+        isUpdate: boolean;
+        data: Record<string, any>;
+        newSiteId?: string;
+      }> = [];
+      
+      for (const site of sitesToUpload) {
+        if (site.existsInRegistry && site.registrySiteId) {
+          const updateData: Record<string, any> = {
+            gps_captured_by: currentUser?.id,
+            gps_captured_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          if (site.latitude !== null) updateData.gps_latitude = site.latitude;
+          if (site.longitude !== null) updateData.gps_longitude = site.longitude;
+          if (site.altitude !== null) updateData.gps_altitude = site.altitude;
+          if (site.precision !== null) updateData.gps_precision = site.precision;
+          if (site.residenceLatitude !== null) updateData.residence_latitude = site.residenceLatitude;
+          if (site.residenceLongitude !== null) updateData.residence_longitude = site.residenceLongitude;
+          if (site.residenceAltitude !== null) updateData.residence_altitude = site.residenceAltitude;
+          if (site.residencePrecision !== null) updateData.residence_precision = site.residencePrecision;
+          
+          preparedSites.push({ site, isUpdate: true, data: updateData });
+        } else {
+          const normalizedStateId = normalizeStateId(site.state);
+          const stateInfo = sudanStates.find(s => s.id === normalizedStateId);
+          const stateName = stateInfo?.name || site.state;
+          
+          let localityId = '';
+          let localityName = site.locality;
+          if (stateInfo && site.locality) {
+            const normalizedLocality = site.locality.toLowerCase().trim();
+            const localityInfo = stateInfo.localities.find(l => 
+              l.id.toLowerCase() === normalizedLocality ||
+              l.name.toLowerCase() === normalizedLocality ||
+              l.name.toLowerCase().includes(normalizedLocality) ||
+              normalizedLocality.includes(l.name.toLowerCase())
+            );
+            if (localityInfo) {
+              localityId = localityInfo.id;
+              localityName = localityInfo.name;
             }
           }
-        } catch (err: any) {
-          result.errors.push(`Row ${site.rowIndex}: ${err.message}`);
+          
+          const siteCode = site.siteId || `SITE-${Date.now()}-${preparedSites.length}`;
+          const hubId = normalizedStateId ? getHubForState(normalizedStateId) : site.hub;
+          const hubName = normalizedStateId ? getHubNameForState(normalizedStateId) : site.hub;
+          const newSiteId = uuidv4();
+          
+          const insertData: Record<string, any> = {
+            id: newSiteId,
+            site_code: siteCode,
+            site_name: site.siteName || siteCode,
+            state_id: normalizedStateId || site.state,
+            state_name: stateName,
+            locality_id: localityId || site.locality,
+            locality_name: localityName,
+            hub_id: hubId || site.hub || '',
+            hub_name: hubName || site.hub || '',
+            activity_type: site.activity || 'GFA',
+            status: 'active',
+            mmp_count: 0,
+            created_by: currentUser?.id || 'system',
+            created_at: new Date().toISOString(),
+          };
+          
+          const lat = site.residenceLatitude ?? site.latitude;
+          const lng = site.residenceLongitude ?? site.longitude;
+          if (lat !== null) insertData.gps_latitude = lat;
+          if (lng !== null) insertData.gps_longitude = lng;
+          
+          preparedSites.push({ site, isUpdate: false, data: insertData, newSiteId });
         }
       }
       
+      // Batch upload with parallel processing (5 concurrent operations)
+      setUploadPhase('uploading');
+      const BATCH_SIZE = 5;
+      const startTime = Date.now();
+      
+      for (let i = 0; i < preparedSites.length; i += BATCH_SIZE) {
+        const batch = preparedSites.slice(i, i + BATCH_SIZE);
+        
+        const batchPromises = batch.map(async ({ site, isUpdate, data, newSiteId }) => {
+          try {
+            if (isUpdate && site.registrySiteId) {
+              const { error } = await supabase
+                .from('sites_registry')
+                .update(data)
+                .eq('id', site.registrySiteId);
+              
+              if (error) {
+                return { type: 'error' as const, message: `Row ${site.rowIndex}: ${error.message}` };
+              }
+              
+              // Record monitoring cycle
+              await supabase
+                .from('site_monitoring_cycles')
+                .upsert({
+                  site_registry_id: site.registrySiteId,
+                  cycle_month: site.monitoringCycle,
+                  created_by: currentUser?.id || 'system',
+                }, { onConflict: 'site_registry_id,cycle_month' });
+              
+              return { type: 'updated' as const };
+            } else {
+              const { error } = await supabase
+                .from('sites_registry')
+                .insert(data);
+              
+              if (error) {
+                if (error.code === '23505') {
+                  return { type: 'skipped' as const };
+                }
+                return { type: 'error' as const, message: `Row ${site.rowIndex}: ${error.message}` };
+              }
+              
+              // Record monitoring cycle for new site
+              if (newSiteId) {
+                await supabase
+                  .from('site_monitoring_cycles')
+                  .insert({
+                    site_registry_id: newSiteId,
+                    cycle_month: site.monitoringCycle,
+                    created_by: currentUser?.id || 'system',
+                  });
+              }
+              
+              return { type: 'created' as const };
+            }
+          } catch (err: any) {
+            return { type: 'error' as const, message: `Row ${site.rowIndex}: ${err.message}` };
+          }
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        
+        for (const res of batchResults) {
+          if (res.type === 'created') result.created++;
+          else if (res.type === 'updated') result.updated++;
+          else if (res.type === 'skipped') result.skipped++;
+          else if (res.type === 'error' && res.message) result.errors.push(res.message);
+        }
+        
+        // Update progress with ETA
+        const processed = Math.min(i + BATCH_SIZE, preparedSites.length);
+        const elapsed = Date.now() - startTime;
+        const rate = processed / elapsed;
+        const remaining = preparedSites.length - processed;
+        const eta = remaining > 0 ? Math.round(remaining / rate / 1000) : 0;
+        
+        setUploadProgress(Math.round((processed / preparedSites.length) * 100));
+        setUploadEta(eta);
+      }
+      
+      setUploadPhase('complete');
       setUploadResult(result);
       
       toast({
@@ -902,6 +939,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       });
     } finally {
       setUploading(false);
+      setUploadPhase(null);
+      setUploadEta(0);
     }
   };
 
@@ -1139,6 +1178,23 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               </DialogDescription>
             </DialogHeader>
             
+            {/* Upload Progress Bar */}
+            {uploading && (
+              <div className="flex-shrink-0 space-y-2 py-3 px-3 bg-primary/10 rounded-md border border-primary/20">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    {uploadPhase === 'preparing' && 'Preparing site data...'}
+                    {uploadPhase === 'uploading' && 'Uploading to database...'}
+                    {uploadPhase === 'complete' && 'Finalizing...'}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {uploadProgress}% {uploadEta > 0 && `• ~${uploadEta}s remaining`}
+                  </span>
+                </div>
+                <Progress value={uploadProgress} className="h-2" />
+              </div>
+            )}
+
             {/* Summary Stats */}
             <div className="flex-shrink-0 flex flex-wrap gap-3 py-2 px-1 bg-muted/50 rounded-md text-sm">
               <div className="flex items-center gap-1">
@@ -1189,7 +1245,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {parsedSites.map((site) => (
+                  {parsedSites.slice(0, previewLimit).map((site) => (
                     <TableRow 
                       key={site.rowIndex}
                       className={!site.isValid ? 'bg-destructive/10' : site.existsInRegistry ? 'bg-blue-50 dark:bg-blue-950/20' : ''}
@@ -1247,6 +1303,22 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
                   ))}
                 </TableBody>
               </Table>
+              
+              {/* Show More Button */}
+              {parsedSites.length > previewLimit && (
+                <div className="py-3 text-center border-t">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setPreviewLimit(prev => prev + 50)}
+                  >
+                    Show {Math.min(50, parsedSites.length - previewLimit)} more 
+                    <span className="text-muted-foreground ml-1">
+                      (showing {Math.min(previewLimit, parsedSites.length)} of {parsedSites.length})
+                    </span>
+                  </Button>
+                </div>
+              )}
             </div>
             
             <DialogFooter className="flex-shrink-0">
@@ -1255,10 +1327,17 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               </Button>
               <Button onClick={handleUpload} disabled={uploading || selectedRows.size === 0}>
                 {uploading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Uploading...
-                  </>
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>
+                      {uploadPhase === 'preparing' && 'Preparing...'}
+                      {uploadPhase === 'uploading' && `Uploading ${uploadProgress}%`}
+                      {uploadPhase === 'complete' && 'Finishing...'}
+                    </span>
+                    {uploadEta > 0 && uploadPhase === 'uploading' && (
+                      <span className="text-xs opacity-70">~{uploadEta}s</span>
+                    )}
+                  </div>
                 ) : (
                   <>
                     <Upload className="h-4 w-4 mr-2" />
