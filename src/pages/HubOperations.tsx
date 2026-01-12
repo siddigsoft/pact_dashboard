@@ -380,14 +380,13 @@ export default function HubOperations() {
       const endIdx = startIdx + SITES_PAGE_SIZE - 1;
       
       // Run queries in parallel for better performance
-      // Only select columns that exist in the sites_registry table
-      const registryColumns = 'id, site_code, site_name, state_id, state_name, locality_id, locality_name, hub_id, hub_name, cp_name, gps_latitude, gps_longitude, activity_type, status, mmp_count, last_mmp_date, created_at, created_by, updated_at';
+      // Use * to select all available columns for maximum compatibility
       const mmpColumns = 'id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, visit_date, status';
       
       // Run queries in parallel
       const registryPromise = supabase
         .from('sites_registry')
-        .select(registryColumns)
+        .select('*')
         .order('created_at', { ascending: false })
         .range(startIdx, endIdx);
         
