@@ -295,7 +295,10 @@ const DocumentsPage = () => {
         indexedError
       });
 
-      // Process indexed documents first (persistent index takes priority)
+      // Process indexed documents first (persistent index takes priority for deduplication)
+      // Track indexed source IDs to prevent duplicates from legacy sources
+      const indexedSourceIds = new Set<string>();
+      
       try {
         if (indexedError) {
           console.warn('Document index fetch error:', indexedError);
@@ -306,6 +309,11 @@ const DocumentsPage = () => {
           const docId = `indexed-${doc.id}`;
           if (seenIds.has(docId)) return;
           seenIds.add(docId);
+          
+          // Track source IDs to deduplicate legacy sources
+          if (doc.source_table && doc.source_id) {
+            indexedSourceIds.add(`${doc.source_table}:${doc.source_id}`);
+          }
           
           const monthBucket = safeFormatDate(doc.uploaded_at, 'yyyy-MM');
           if (monthBucket) monthsSet.add(monthBucket);
@@ -340,10 +348,15 @@ const DocumentsPage = () => {
           });
         });
         
-        console.log(`Processed ${indexedDocs?.length || 0} documents from persistent index`);
+        console.log(`Processed ${indexedDocs?.length || 0} documents from persistent index, tracking ${indexedSourceIds.size} source IDs`);
       } catch (e) {
         console.error('Error processing indexed documents:', e);
       }
+      
+      // Helper function to check if a document source is already indexed
+      const isAlreadyIndexed = (sourceTable: string, sourceId: string) => {
+        return indexedSourceIds.has(`${sourceTable}:${sourceId}`);
+      };
       
       // Detailed MMP debug
       if (mmpFiles && mmpFiles.length > 0) {
@@ -382,13 +395,17 @@ const DocumentsPage = () => {
             sourceType: 'mmp'
           });
 
-          // Extract permit documents
+          // Extract permit documents (skip if already in persistent index)
           const permits = mmp.permits || {};
           
           // Federal permits
           if (Array.isArray(permits.documents)) {
             permits.documents.forEach((doc: any, idx: number) => {
               if (!doc) return;
+              // Skip if already indexed
+              const sourceId = doc.id || `${mmp.id}-fed-${idx}`;
+              if (isAlreadyIndexed('mmp_files', sourceId)) return;
+              
               const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
               if (docMonth) monthsSet.add(docMonth);
               
@@ -418,6 +435,10 @@ const DocumentsPage = () => {
               
               (Array.isArray(sp.documents) ? sp.documents : []).forEach((doc: any, idx: number) => {
                 if (!doc) return;
+                // Skip if already indexed
+                const sourceId = doc.id || `${mmp.id}-state-${sp.stateName}-${idx}`;
+                if (isAlreadyIndexed('mmp_files', sourceId)) return;
+                
                 const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
                 if (docMonth) monthsSet.add(docMonth);
                 
@@ -451,6 +472,10 @@ const DocumentsPage = () => {
               
               (Array.isArray(lp.documents) ? lp.documents : []).forEach((doc: any, idx: number) => {
                 if (!doc) return;
+                // Skip if already indexed
+                const sourceId = doc.id || `${mmp.id}-local-${lp.localityName}-${idx}`;
+                if (isAlreadyIndexed('mmp_files', sourceId)) return;
+                
                 const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
                 if (docMonth) monthsSet.add(docMonth);
                 
@@ -481,6 +506,10 @@ const DocumentsPage = () => {
           if (Array.isArray(permits.localityPermits)) {
             permits.localityPermits.forEach((lp: any, idx: number) => {
               if (!lp) return;
+              // Skip if already indexed
+              const sourceId = lp.id || `${mmp.id}-locality-${idx}`;
+              if (isAlreadyIndexed('mmp_files', sourceId)) return;
+              
               if (lp.state) statesSet.add(lp.state);
               const docMonth = safeFormatDate(lp.uploadedAt, 'yyyy-MM', monthBucket);
               if (docMonth) monthsSet.add(docMonth);

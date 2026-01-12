@@ -781,10 +781,24 @@ export const DocumentIndexService = {
   },
 
   /**
-   * Check if a document already exists in the index by source
+   * Check if a document already exists in the index by source or file URL
    */
-  async documentExists(sourceTable: string, sourceId: string): Promise<boolean> {
+  async documentExists(sourceTable: string, sourceId: string, fileUrl?: string): Promise<boolean> {
     try {
+      // If sourceId is missing or empty, skip the check
+      if (!sourceId || sourceId.trim() === '') {
+        // Try file URL as fallback if provided
+        if (fileUrl) {
+          const { data, error } = await supabase
+            .from('document_index')
+            .select('id')
+            .eq('file_url', fileUrl)
+            .maybeSingle();
+          return !error && data !== null;
+        }
+        return false;
+      }
+
       const { data, error } = await supabase
         .from('document_index')
         .select('id')

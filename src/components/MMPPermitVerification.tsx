@@ -307,42 +307,62 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       description: `${newPermit.fileName} has been uploaded successfully.`,
     });
 
-    // Record document to persistent index
+    // Record document to persistent index (with deduplication check)
     (async () => {
-      const mmpId = mmpFile?.id || mmpFile?.mmpId;
-      const category = newPermit.permitType === 'federal' ? 'federal_permit' 
-        : newPermit.permitType === 'state' ? 'state_permit' 
-        : newPermit.permitType === 'local' ? 'local_permit' 
-        : 'attachment';
-      
-      await DocumentIndexService.recordDocument({
-        fileName: newPermit.fileName,
-        fileUrl: newPermit.fileUrl,
-        category: category as any,
-        uploadedAt: newPermit.uploadedAt || new Date().toISOString(),
-        uploadedBy: currentUser?.id,
-        uploadedByName: currentUser?.fullName || currentUser?.username || currentUser?.email,
-        projectId: mmpFile?.project_id || mmpFile?.projectId,
-        projectName: mmpFile?.projectName || mmpFile?.projects?.name,
-        hubId: mmpFile?.hub_id || mmpFile?.hubId,
-        hubName: mmpFile?.hubName || mmpFile?.hubs?.name,
-        state: newPermit.state,
-        locality: newPermit.locality,
-        mmpId: mmpId,
-        mmpName: mmpFile?.filename || mmpFile?.name,
-        issueDate: newPermit.issueDate,
-        expiryDate: newPermit.expiryDate,
-        status: 'pending',
-        verified: false,
-        sourceType: 'permit',
-        sourceTable: 'mmp_files',
-        sourceId: newPermit.id,
-        metadata: {
-          permitType: newPermit.permitType,
-          comments: newPermit.comments
+      try {
+        const mmpId = mmpFile?.id || mmpFile?.mmpId;
+        // Generate reliable source ID from permit ID or file URL hash
+        const sourceId = newPermit.id || 
+          (newPermit.fileUrl ? `url-${newPermit.fileUrl.split('/').pop()}` : `${mmpId}-${newPermit.fileName}-${Date.now()}`);
+        
+        // Check if document already exists to prevent duplicates
+        const exists = await DocumentIndexService.documentExists('mmp_files', sourceId);
+        if (exists) {
+          console.log('[MMPPermitVerification] Document already indexed, skipping:', newPermit.fileName);
+          return;
         }
-      });
-      console.log('[MMPPermitVerification] Document indexed:', newPermit.fileName);
+        
+        const category = newPermit.permitType === 'federal' ? 'federal_permit' 
+          : newPermit.permitType === 'state' ? 'state_permit' 
+          : newPermit.permitType === 'local' ? 'local_permit' 
+          : 'attachment';
+        
+        const result = await DocumentIndexService.recordDocument({
+          fileName: newPermit.fileName,
+          fileUrl: newPermit.fileUrl,
+          category: category as any,
+          uploadedAt: newPermit.uploadedAt || new Date().toISOString(),
+          uploadedBy: currentUser?.id,
+          uploadedByName: currentUser?.fullName || currentUser?.username || currentUser?.email,
+          projectId: mmpFile?.project_id || mmpFile?.projectId,
+          projectName: mmpFile?.projectName || mmpFile?.projects?.name,
+          hubId: mmpFile?.hub_id || mmpFile?.hubId,
+          hubName: mmpFile?.hubName || mmpFile?.hubs?.name,
+          state: newPermit.state,
+          locality: newPermit.locality,
+          mmpId: mmpId,
+          mmpName: mmpFile?.filename || mmpFile?.name,
+          issueDate: newPermit.issueDate,
+          expiryDate: newPermit.expiryDate,
+          status: 'pending',
+          verified: false,
+          sourceType: 'permit',
+          sourceTable: 'mmp_files',
+          sourceId: sourceId,
+          metadata: {
+            permitType: newPermit.permitType,
+            comments: newPermit.comments
+          }
+        });
+        
+        if (result.success) {
+          console.log('[MMPPermitVerification] Document indexed successfully:', newPermit.fileName, result.id);
+        } else {
+          console.error('[MMPPermitVerification] Failed to index document:', result.error);
+        }
+      } catch (err) {
+        console.error('[MMPPermitVerification] Error indexing document:', err);
+      }
     })();
 
     // Notify stakeholders and share entries to coordinators
