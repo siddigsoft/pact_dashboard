@@ -5,7 +5,7 @@ import {
   FolderOpen, RefreshCw, FileSpreadsheet, Receipt, Shield, Hash,
   ArrowUpDown, ChevronDown, ChevronUp, File, Image, Folder,
   ExternalLink, History, Clock, Wallet, Filter, X, PenLine,
-  Briefcase, Home, ChevronLeft, ChevronRight, Loader2
+  Briefcase, Home, ChevronLeft, ChevronRight, Loader2, Database
 } from 'lucide-react';
 import { formatDistanceToNow, format, parseISO, isValid } from 'date-fns';
 
@@ -69,6 +69,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Progress } from '@/components/ui/progress';
+import { DocumentIndexService } from '@/services/document-index.service';
 
 interface Document {
   id: string;
@@ -190,6 +192,51 @@ const DocumentsPage = () => {
   
   // Cache status
   const [fromCache, setFromCache] = useState(false);
+  
+  // Sync/rebuild index state
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+  const [syncMessage, setSyncMessage] = useState('');
+
+  // Sync/rebuild document index
+  const handleSyncDocuments = async () => {
+    setSyncing(true);
+    setSyncProgress(0);
+    setSyncMessage('Starting sync...');
+    
+    try {
+      const result = await DocumentIndexService.rebuildIndex((current, total, message) => {
+        setSyncProgress(current);
+        setSyncMessage(message);
+      });
+      
+      if (result.success) {
+        toast({
+          title: 'Documents Synced',
+          description: result.message,
+        });
+        // Refresh documents after sync
+        clearCache();
+        await fetchDocuments(true);
+      } else {
+        toast({
+          title: 'Sync Error',
+          description: result.message,
+          variant: 'destructive'
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Sync Failed',
+        description: error.message || 'Unknown error occurred',
+        variant: 'destructive'
+      });
+    } finally {
+      setSyncing(false);
+      setSyncProgress(0);
+      setSyncMessage('');
+    }
+  };
 
   // Fetch filter options (projects, hubs, etc.) - parallelized for speed
   const fetchFilterOptions = async () => {
@@ -944,6 +991,20 @@ const DocumentsPage = () => {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSyncDocuments} 
+            disabled={syncing}
+            data-testid="button-sync-documents"
+          >
+            {syncing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Database className="h-4 w-4 mr-2" />
+            )}
+            {syncing ? 'Syncing...' : 'Sync Index'}
+          </Button>
           {fromCache && (
             <Badge variant="secondary" className="text-xs">
               <Clock className="h-3 w-3 mr-1" />
@@ -952,6 +1013,21 @@ const DocumentsPage = () => {
           )}
         </div>
       </div>
+      
+      {syncing && (
+        <Card className="border-border">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">{syncMessage}</p>
+                <Progress value={syncProgress} className="mt-2 h-2" />
+              </div>
+              <span className="text-sm text-muted-foreground">{syncProgress}%</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
