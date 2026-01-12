@@ -352,6 +352,23 @@ const MMP = () => {
   const navigate = useNavigate();
   const { mmpFiles, loading, updateMMP, refreshMMPFiles } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
+
+  // DEBUG: Log MMP files loading
+  useEffect(() => {
+    console.log('🔍 [MMP DEBUG] MMP Files State:', {
+      loading,
+      mmpFilesCount: mmpFiles.length,
+      mmpFiles: mmpFiles.slice(0, 5).map(m => ({
+        id: m.id,
+        name: m.name,
+        status: m.status,
+        type: m.type,
+        projectId: m.projectId,
+        siteEntriesCount: m.siteEntries?.length || 0,
+        workflow: m.workflow
+      }))
+    });
+  }, [mmpFiles, loading]);
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
@@ -1796,6 +1813,22 @@ const MMP = () => {
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'enumerator', 'Enumerator']);
   // Coordinators have full data collector capabilities (can claim sites, view transport fees, etc.)
   const canClaimSites = isDataCollector || isCoordinator;
+
+  // DEBUG: Log user role detection
+  console.log('🔍 [MMP DEBUG] User Role Detection:', {
+    currentUser: currentUser ? { id: currentUser.id, email: currentUser.email, role: currentUser.role, roles: currentUser.roles } : null,
+    isAdmin,
+    isICT,
+    isFOM,
+    isSupervisor,
+    isCoordinator,
+    isDataCollector,
+    isAdminOrSuperUser,
+    canClaimSites,
+    userProjectIds,
+    hubId: currentUser?.hubId,
+    stateId: currentUser?.stateId
+  });
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
@@ -1880,6 +1913,13 @@ const MMP = () => {
 
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
+    console.log('🔍 [MMP DEBUG] Starting categorizedMMPs calculation:', {
+      totalMMPFiles: mmpFiles.length,
+      isAdminOrSuperUser,
+      userProjectIds,
+      mmpFilesSample: mmpFiles.slice(0, 3).map(m => ({ id: m.id, name: m.name, status: m.status, type: m.type, projectId: m.projectId }))
+    });
+
     let filteredMMPs = mmpFiles;
 
     // PROJECT TEAM MEMBERSHIP FILTER
@@ -1971,25 +2011,60 @@ const MMP = () => {
     const verifiedMMPs = filteredMMPs.filter(mmp => {
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
-        return (mmp.workflow as any)?.forwardedToCoordinators === true;
+        const result = (mmp.workflow as any)?.forwardedToCoordinators === true;
+        console.log(`🔍 [MMP DEBUG] Coordinator verified check for ${mmp.id}:`, { result, forwardedToCoordinators: (mmp.workflow as any)?.forwardedToCoordinators });
+        return result;
       } else if (isFOM || isSupervisor) {
         // For FOM/Supervisor: Verified means MMPs with sites available for verification
-        return mmp.type === 'verified-template' || 
+        const result = mmp.type === 'verified-template' || 
                mmp.status === 'approved' ||
                ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
+        console.log(`🔍 [MMP DEBUG] FOM/Supervisor verified check for ${mmp.id}:`, { 
+          result, 
+          type: mmp.type, 
+          status: mmp.status, 
+          currentStage: (mmp.workflow as any)?.currentStage 
+        });
+        return result;
       } else {
         // For admin/other roles: keep existing logic
-        return mmp.status === 'approved' || 
+        const result = mmp.status === 'approved' || 
                mmp.type === 'verified-template' ||
                ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
+        console.log(`🔍 [MMP DEBUG] Admin/Other verified check for ${mmp.id}:`, { 
+          result, 
+          status: mmp.status, 
+          type: mmp.type, 
+          currentStage: (mmp.workflow as any)?.currentStage,
+          workflow: mmp.workflow
+        });
+        return result;
       }
     });
 
-    return {
+    const result = {
       new: newMMPs,
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
+
+    console.log('🔍 [MMP DEBUG] categorizedMMPs result:', {
+      totalFiltered: filteredMMPs.length,
+      new: result.new.length,
+      forwarded: result.forwarded.length,
+      verified: result.verified.length,
+      verifiedMMPsDetails: result.verified.map(m => ({
+        id: m.id,
+        name: m.name,
+        status: m.status,
+        type: m.type,
+        currentStage: (m.workflow as any)?.currentStage,
+        siteEntriesCount: m.siteEntries?.length || 0,
+        verifiedSitesCount: m.siteEntries?.filter((se: any) => se.status?.toLowerCase() === 'verified').length || 0
+      }))
+    });
+
+    return result;
   }, [mmpFiles, isFOM, isSupervisor, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
@@ -2518,6 +2593,13 @@ const MMP = () => {
   // Verified subcategories for Admin/ICT
   const verifiedSubcategories = useMemo(() => {
     const base = categorizedMMPs.verified || [];
+    
+    console.log('🔍 [MMP DEBUG] verifiedSubcategories calculation:', {
+      baseCount: base.length,
+      base: base.map(m => ({ id: m.id, name: m.name, status: m.status, type: m.type, currentStage: (m.workflow as any)?.currentStage })),
+      siteVisitStatsKeys: Object.keys(siteVisitStats)
+    });
+    
     return {
       newSites: base.filter(mmp => {
         const stage = (mmp.workflow as any)?.currentStage;
@@ -2528,7 +2610,20 @@ const MMP = () => {
         const isCoordinatorNew = coordinatorVerified && (stage === 'verified' || stage === 'draft') && mmp.status === 'pending' && !(stats?.hasCosted || stats?.hasInProgress || stats?.hasCompleted || stats?.hasRejected);
         // 2) Verified-template MMPs that have no cost/dispatch/completion/rejection yet (status may already be approved)
         const isVerifiedTemplateNew = (mmp.type === 'verified-template') && !(stats?.hasCosted || stats?.hasInProgress || stats?.hasCompleted || stats?.hasRejected);
-        return isCoordinatorNew || isVerifiedTemplateNew;
+        const result = isCoordinatorNew || isVerifiedTemplateNew;
+        
+        console.log(`🔍 [MMP DEBUG] newSites filter for ${mmp.id}:`, {
+          result,
+          coordinatorVerified,
+          stage,
+          status: mmp.status,
+          type: mmp.type,
+          stats,
+          isCoordinatorNew,
+          isVerifiedTemplateNew
+        });
+        
+        return result;
       }),
       approvedCosted: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
@@ -2559,11 +2654,37 @@ const MMP = () => {
     };
   }, [categorizedMMPs.verified, siteVisitStats]);
 
+  // Log verifiedSubcategories result
+  useEffect(() => {
+    console.log('🔍 [MMP DEBUG] verifiedSubcategories result:', {
+      newSites: verifiedSubcategories.newSites.length,
+      approvedCosted: verifiedSubcategories.approvedCosted.length,
+      dispatched: verifiedSubcategories.dispatched.length,
+      accepted: verifiedSubcategories.accepted.length,
+      ongoing: verifiedSubcategories.ongoing.length,
+      completed: verifiedSubcategories.completed.length,
+      allKeys: Object.keys(verifiedSubcategories)
+    });
+  }, [verifiedSubcategories]);
+
   // Build unified site rows (mmp_site_entries + fallback to mmp.siteEntries) for given MMP list
   const buildSiteRowsFromMMPs = (mmps: any[], filterFn?: (row: SiteVisitRow) => boolean): SiteVisitRow[] => {
+    console.log('🔍 [MMP DEBUG] buildSiteRowsFromMMPs called:', {
+      mmpsCount: mmps.length,
+      mmps: mmps.map(m => ({ id: m.id, name: m.name, siteEntriesCount: m.siteEntries?.length || 0 })),
+      hasFilterFn: !!filterFn,
+      existingSiteVisitRowsCount: siteVisitRows.length
+    });
+    
     const rows: SiteVisitRow[] = [];
     const existingIds = new Set(siteVisitRows.map(r => r.mmpId));
     for (const mmp of mmps) {
+      console.log(`🔍 [MMP DEBUG] Processing MMP ${mmp.id}:`, {
+        hasExistingId: existingIds.has(mmp.id),
+        siteEntriesCount: mmp.siteEntries?.length || 0,
+        siteEntries: mmp.siteEntries?.slice(0, 3).map((se: any) => ({ id: se.id, status: se.status, site_name: se.site_name })) || []
+      });
+      
       // Use siteEntries when we don't yet have mmp_site_entries for this MMP
       if (!existingIds.has(mmp.id) && Array.isArray(mmp.siteEntries)) {
         for (const se of mmp.siteEntries) {
@@ -2582,8 +2703,12 @@ const MMP = () => {
           };
           if (!filterFn || filterFn(row)) {
             rows.push(row);
+          } else {
+            console.log(`🔍 [MMP DEBUG] Row filtered out:`, { rowId: row.id, status: row.status, mmpId: row.mmpId });
           }
         }
+      } else {
+        console.log(`🔍 [MMP DEBUG] Skipping MMP ${mmp.id}:`, { hasExistingId: existingIds.has(mmp.id), hasSiteEntries: Array.isArray(mmp.siteEntries) });
       }
     }
     // Merge with siteVisitRows restricted to those MMPs
@@ -2592,7 +2717,16 @@ const MMP = () => {
       if (!matchesMMP) return false;
       return !filterFn || filterFn(r);
     });
-    return [...visitRows, ...rows];
+    
+    const result = [...visitRows, ...rows];
+    console.log('🔍 [MMP DEBUG] buildSiteRowsFromMMPs result:', {
+      totalRows: result.length,
+      fromVisitRows: visitRows.length,
+      fromMMPSiteEntries: rows.length,
+      resultSample: result.slice(0, 3).map(r => ({ id: r.id, mmpId: r.mmpId, status: r.status, siteName: r.siteName }))
+    });
+    
+    return result;
   };
 
   // Calculate total verified sites count across all verified MMPs (for "Verified Sites" tab badge)
@@ -2633,20 +2767,157 @@ const MMP = () => {
   const verifiedCategorySiteRows = useMemo(() => {
     const subKey = verifiedSubTab;
     
+    console.log('🔍 [MMP DEBUG] verifiedCategorySiteRows calculation:', {
+      subKey,
+      verifiedSubTab,
+      categorizedMMPsVerifiedCount: categorizedMMPs.verified?.length || 0,
+      isAdmin,
+      isICT
+    });
+    
     // For "newSites" subcategory, get all MMPs with verified sites
     if (subKey === 'newSites') {
-      // Get all MMPs from verified category (they may or may not be marked coordinatorVerified yet)
+      // IMPORTANT: Check ALL MMPs, not just categorizedMMPs.verified
+      // because an MMP might have verified sites but not be in the verified category yet
+      const allMMPs = mmpFiles || [];
       const allVerifiedMMPs = categorizedMMPs.verified || [];
       
-      if (allVerifiedMMPs.length === 0) return [];
-      
-      // Filter to only show verified sites from any MMP
-      const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-        // Show sites that are verified (from mmp_site_entries)
-        // Check both lowercase and capitalized versions
-        const status = row.status?.toLowerCase() || '';
-        return status === 'verified';
+      console.log('🔍 [MMP DEBUG] newSites subcategory - START:', {
+        totalMMPFiles: allMMPs.length,
+        verifiedMMPsCount: allVerifiedMMPs.length,
+        allVerifiedMMPs: allVerifiedMMPs.map(m => ({
+          id: m.id,
+          name: m.name,
+          status: m.status,
+          type: m.type,
+          siteEntriesCount: m.siteEntries?.length || 0
+        }))
       });
+      
+      // Log ALL site entries from ALL MMPs to find verified ones
+      console.log('🔍 [MMP DEBUG] ALL Site Entries from ALL MMPs (BEFORE FILTERING):', 
+        allMMPs.flatMap(mmp => 
+          (mmp.siteEntries || []).map((se: any) => ({
+            mmpId: mmp.id,
+            mmpName: mmp.name,
+            mmpStatus: mmp.status,
+            mmpType: mmp.type,
+            siteEntryId: se.id,
+            siteName: se.site_name || se.siteName,
+            siteCode: se.site_code || se.siteCode,
+            status: se.status,
+            statusLowercase: String(se.status || '').toLowerCase().trim(),
+            isVerified: String(se.status || '').toLowerCase().trim() === 'verified'
+          }))
+        )
+      );
+      
+      // Find ALL MMPs that have at least one verified site (case-insensitive)
+      const mmpsWithVerifiedSites = allMMPs.filter(mmp => {
+        const hasVerified = (mmp.siteEntries || []).some((se: any) => {
+          const status = String(se.status || '').toLowerCase().trim();
+          return status === 'verified';
+        });
+        if (hasVerified) {
+          console.log(`🔍 [MMP DEBUG] MMP ${mmp.id} (${mmp.name}) has verified sites:`, {
+            mmpId: mmp.id,
+            mmpName: mmp.name,
+            mmpStatus: mmp.status,
+            mmpType: mmp.type,
+            verifiedSitesCount: (mmp.siteEntries || []).filter((se: any) => 
+              String(se.status || '').toLowerCase().trim() === 'verified'
+            ).length,
+            allSitesCount: mmp.siteEntries?.length || 0
+          });
+        }
+        return hasVerified;
+      });
+      
+      console.log('🔍 [MMP DEBUG] MMPs with verified sites:', {
+        count: mmpsWithVerifiedSites.length,
+        mmps: mmpsWithVerifiedSites.map(m => ({
+          id: m.id,
+          name: m.name,
+          status: m.status,
+          type: m.type,
+          verifiedSites: (m.siteEntries || []).filter((se: any) => 
+            String(se.status || '').toLowerCase().trim() === 'verified'
+          ).map((se: any) => ({
+            id: se.id,
+            siteName: se.site_name || se.siteName,
+            status: se.status
+          }))
+        }))
+      });
+      
+      if (mmpsWithVerifiedSites.length === 0) {
+        console.log('🔍 [MMP DEBUG] No MMPs with verified sites found, returning empty array');
+        return [];
+      }
+      
+      // Filter to only show verified sites from any MMP (case-insensitive)
+      const verifiedSites = buildSiteRowsFromMMPs(mmpsWithVerifiedSites, (row) => {
+        // Show sites that are verified (from mmp_site_entries)
+        // Check case-insensitive - both "Verified" and "verified"
+        const status = String(row.status || '').toLowerCase().trim();
+        const isVerified = status === 'verified';
+        
+        if (isVerified) {
+          console.log(`✅ [MMP DEBUG] INCLUDING verified site:`, {
+            siteId: row.id,
+            mmpId: row.mmpId,
+            siteName: row.siteName,
+            originalStatus: row.status,
+            statusLowercase: status
+          });
+        } else {
+          console.log(`❌ [MMP DEBUG] EXCLUDING non-verified site:`, {
+            siteId: row.id,
+            mmpId: row.mmpId,
+            siteName: row.siteName,
+            originalStatus: row.status,
+            statusLowercase: status
+          });
+        }
+        
+        return isVerified;
+      });
+      
+      console.log('🔍 [MMP DEBUG] ✅ FINAL Verified sites found (AFTER FILTERING):', {
+        verifiedSitesCount: verifiedSites.length,
+        verifiedSites: verifiedSites.map(s => ({ 
+          id: s.id, 
+          mmpId: s.mmpId, 
+          status: s.status, 
+          siteName: s.siteName,
+          siteCode: s.siteCode,
+          state: s.state,
+          locality: s.locality
+        }))
+      });
+      
+      // Log breakdown by MMP
+      const verifiedByMMP = verifiedSites.reduce((acc: any, site: any) => {
+        if (!acc[site.mmpId]) {
+          acc[site.mmpId] = [];
+        }
+        acc[site.mmpId].push(site);
+        return acc;
+      }, {});
+      
+      console.log('🔍 [MMP DEBUG] Verified sites grouped by MMP:', 
+        Object.entries(verifiedByMMP).map(([mmpId, sites]: [string, any]) => ({
+          mmpId,
+          mmpName: mmpsWithVerifiedSites.find(m => m.id === mmpId)?.name || allMMPs.find(m => m.id === mmpId)?.name,
+          sitesCount: sites.length,
+          sites: sites.map((s: any) => ({ 
+            id: s.id, 
+            siteName: s.siteName, 
+            status: s.status,
+            siteCode: s.siteCode
+          }))
+        }))
+      );
       
       // Only return sites that are actually verified
       return verifiedSites;
@@ -2674,6 +2945,15 @@ const MMP = () => {
 
   // Group verified site rows by MMP for display
   const verifiedVisibleMMPs = useMemo(() => {
+    console.log('🔍 [MMP DEBUG] verifiedVisibleMMPs calculation:', {
+      verifiedSubTab,
+      verifiedCategorySiteRowsCount: verifiedCategorySiteRows.length,
+      isAdmin,
+      isICT,
+      verifiedSubcategoriesKeys: Object.keys(verifiedSubcategories),
+      verifiedSubcategoriesCount: verifiedSubcategories[verifiedSubTab]?.length || 0
+    });
+
     // For "newSites" subcategory, show all MMPs that have verified sites
     if (verifiedSubTab === 'newSites') {
       // Use the verifiedCategorySiteRows which already has the filtered verified sites
@@ -2682,23 +2962,53 @@ const MMP = () => {
       // Get unique MMP IDs from verified sites
       const mmpIdsWithVerifiedSites = new Set(verifiedSites.map(s => s.mmpId));
       
+      console.log('🔍 [MMP DEBUG] newSites MMP filtering:', {
+        verifiedSitesCount: verifiedSites.length,
+        mmpIdsWithVerifiedSites: Array.from(mmpIdsWithVerifiedSites),
+        allVerifiedMMPsCount: categorizedMMPs.verified?.length || 0
+      });
+      
       // Return only MMPs that have verified sites
       const allVerifiedMMPs = categorizedMMPs.verified || [];
-      return allVerifiedMMPs.filter(mmp => mmpIdsWithVerifiedSites.has(mmp.id));
+      const filtered = allVerifiedMMPs.filter(mmp => mmpIdsWithVerifiedSites.has(mmp.id));
+      
+      console.log('🔍 [MMP DEBUG] Filtered MMPs for newSites:', {
+        filteredCount: filtered.length,
+        filtered: filtered.map(m => ({ id: m.id, name: m.name }))
+      });
+      
+      return filtered;
     }
     
-    return (isAdmin || isICT || isFOM || isSupervisor || isCoordinator)
+    const result = (isAdmin || isICT || isFOM || isSupervisor || isCoordinator)
       ? (verifiedSubcategories[verifiedSubTab] || [])
       : (categorizedMMPs.verified || []);
+
+    console.log('🔍 [MMP DEBUG] verifiedVisibleMMPs result (non-newSites):', {
+      resultCount: result.length,
+      result: result.map(m => ({ id: m.id, name: m.name, status: m.status }))
+    });
+    
+    return result;
   }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, verifiedCategorySiteRows]);
 
   const verifiedGroupedRows = useMemo(() => {
+    console.log('🔍 [MMP DEBUG] verifiedGroupedRows calculation:', {
+      verifiedSubTab,
+      verifiedVisibleMMPsCount: verifiedVisibleMMPs.length,
+      verifiedVisibleMMPs: verifiedVisibleMMPs.map(m => ({ id: m.id, name: m.name }))
+    });
+
     // For "newSites" subcategory, filter to only show verified sites
     // For other sub-tabs, exclude completed sites since tables are editable
     const filterFn = verifiedSubTab === 'newSites' 
       ? (row: SiteVisitRow) => {
           const status = row.status?.toLowerCase() || '';
-          return status === 'verified';
+          const isVerified = status === 'verified';
+          if (!isVerified) {
+            console.log('🔍 [MMP DEBUG] Row filtered out (not verified):', { rowId: row.id, status: row.status, mmpId: row.mmpId });
+          }
+          return isVerified;
         }
       : (row: SiteVisitRow) => {
           // Exclude completed sites from editable tables
@@ -2706,10 +3016,22 @@ const MMP = () => {
           return status !== 'completed';
         };
     
-    return verifiedVisibleMMPs.map(m => ({
-      mmp: m,
-      rows: buildSiteRowsFromMMPs([m], filterFn),
-    }));
+    const result = verifiedVisibleMMPs.map(m => {
+      const rows = buildSiteRowsFromMMPs([m], filterFn);
+      console.log(`🔍 [MMP DEBUG] MMP ${m.id} (${m.name}) has ${rows.length} rows after filtering`);
+      return {
+        mmp: m,
+        rows
+      };
+    });
+
+    console.log('🔍 [MMP DEBUG] verifiedGroupedRows result:', {
+      totalGroups: result.length,
+      totalRows: result.reduce((sum, g) => sum + g.rows.length, 0),
+      groups: result.map(g => ({ mmpId: g.mmp.id, mmpName: g.mmp.name, rowsCount: g.rows.length }))
+    });
+    
+    return result;
   }, [verifiedVisibleMMPs, verifiedSubTab, siteVisitRows]);
 
   // Forwarded site rows per subcategory (FOM/Supervisor only for site data)
@@ -3132,6 +3454,22 @@ const MMP = () => {
             )}
 
             <TabsContent value="verified">
+              {(() => {
+                console.log('🔍 [MMP DEBUG] Rendering Verified Tab:', {
+                  isAdmin,
+                  isICT,
+                  isFOM,
+                  isSupervisor,
+                  isCoordinator,
+                  verifiedSubTab,
+                  verifiedCategorySiteRowsCount: verifiedCategorySiteRows.length,
+                  verifiedVisibleMMPsCount: verifiedVisibleMMPs.length,
+                  verifiedGroupedRowsCount: verifiedGroupedRows.length,
+                  totalVerifiedSitesCount,
+                  categorizedMMPsVerifiedCount: categorizedMMPs.verified?.length || 0
+                });
+                return null;
+              })()}
               {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && (
                 <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
                   <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
