@@ -171,7 +171,7 @@ export default function HubManagement() {
       'gezira': { lat: 14.4, lng: 33.5 },
       'red-sea': { lat: 19.6, lng: 37.2 },
       'kassala': { lat: 15.45, lng: 36.4 },
-      'gedaref': { lat: 14.0, lng: 35.4 },
+      'gedarif': { lat: 14.0, lng: 35.4 },
       'white-nile': { lat: 13.2, lng: 32.5 },
       'blue-nile': { lat: 11.8, lng: 34.2 },
       'sennar': { lat: 13.5, lng: 33.6 },

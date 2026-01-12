@@ -50,7 +50,7 @@ export interface User {
    * Hub assignment for supervisors and team members.
    * Each hub manages MULTIPLE states:
    * - Kosti Hub: 7 states (white-nile, north-kordofan, south-kordofan, west-kordofan, north-darfur, south-darfur, east-darfur)
-   * - Kassala Hub: 5 states (kassala, gedaref, gezira, sennar, blue-nile)
+   * - Kassala Hub: 5 states (kassala, gedarif, gezira, sennar, blue-nile)
    * - Dongola Hub: 2 states (northern, river-nile)
    * - Forchana Hub: 2 states (west-darfur, central-darfur)
    * - Country Office: 2 states (khartoum, red-sea)
