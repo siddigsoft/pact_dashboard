@@ -926,6 +926,15 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         variant: result.errors.length > 0 ? 'destructive' : 'default',
       });
       
+      // Close the preview dialog after successful upload
+      setPreviewOpen(false);
+      
+      // Reset file and parsed data to allow new uploads
+      setFile(null);
+      setParsedSites([]);
+      setSelectedRows(new Set());
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      
       if (onUploadComplete) {
         onUploadComplete();
       }
