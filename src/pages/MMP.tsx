@@ -381,7 +381,7 @@ const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verified
 const MMP = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { mmpFiles, loading, updateMMP, refreshMMPFiles, siteEntryCounts: contextCounts, refreshSiteEntryCounts } = useMMP();
+  const { mmpFiles, loading, updateMMP, refreshMMPFiles, siteEntryCounts: contextCounts, refreshSiteEntryCounts, loadSiteEntriesForMMPs } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
@@ -2072,6 +2072,32 @@ const MMP = () => {
       verified: verifiedMMPs
     };
   }, [mmpFiles, isFOM, isSupervisor, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites]);
+
+  // Load site entries for MMPs when tabs become active (ensures site data is synchronized)
+  useEffect(() => {
+    let mmpsToLoad: { id: string }[] = [];
+    
+    if (activeTab === 'verified') {
+      mmpsToLoad = categorizedMMPs.verified || [];
+    } else if (activeTab === 'forwarded') {
+      mmpsToLoad = categorizedMMPs.forwarded || [];
+    } else if (activeTab === 'new') {
+      mmpsToLoad = categorizedMMPs.new || [];
+    }
+    
+    // Find MMPs that don't have site entries loaded yet
+    const mmpsNeedingEntries = mmpsToLoad
+      .filter(mmp => {
+        const fullMmp = mmpFiles.find(m => m.id === mmp.id);
+        return !fullMmp?.siteEntries || fullMmp.siteEntries.length === 0;
+      })
+      .map(mmp => mmp.id);
+    
+    if (mmpsNeedingEntries.length > 0) {
+      console.log('[MMP Page] Loading site entries for', mmpsNeedingEntries.length, 'MMPs in', activeTab, 'tab');
+      loadSiteEntriesForMMPs(mmpsNeedingEntries);
+    }
+  }, [activeTab, categorizedMMPs.verified, categorizedMMPs.forwarded, categorizedMMPs.new, mmpFiles, loadSiteEntriesForMMPs]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {

@@ -298,6 +298,7 @@ const MMPContext = createContext<MMPContextType>({
   attachPermitsToMMP: async () => {},
   refreshMMPFiles: async () => {},
   fetchSiteEntriesForMMP: async () => [],
+  loadSiteEntriesForMMPs: async () => {},
   refreshSiteEntryCounts: async () => {},
 });
 
@@ -1083,6 +1084,7 @@ export const useMMPProvider = () => {
     attachPermitsToMMP,
     refreshMMPFiles,
     fetchSiteEntriesForMMP,
+    loadSiteEntriesForMMPs: loadSiteEntriesInBackground,
     refreshSiteEntryCounts,
   };
 };
