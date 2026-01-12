@@ -615,11 +615,16 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         if (!cp) validationErrors.push('Missing CP (Cooperating Partner)');
         const hasSiteGps = latitude !== null && longitude !== null;
         const hasResidenceGps = residenceLatitude !== null && residenceLongitude !== null;
+        // Only require GPS if neither site nor residence GPS is present
         if (!hasSiteGps && !hasResidenceGps) validationErrors.push('Missing GPS coordinates');
-        if (residenceLatitude === null) validationErrors.push('Missing Residence Latitude (A05)');
-        if (residenceLongitude === null) validationErrors.push('Missing Residence Longitude (A05)');
-        if (residenceAltitude === null) validationErrors.push('Missing Residence Altitude (A05)');
-        if (residencePrecision === null) validationErrors.push('Missing Residence Precision (A05)');
+        // Residence GPS is optional - only validate if columns were detected in the file
+        const hasResidenceColumnsInFile = resLatCol || resLngCol || resCombinedCol;
+        if (hasResidenceColumnsInFile) {
+          if (residenceLatitude === null) validationErrors.push('Missing Residence Latitude (A05)');
+          if (residenceLongitude === null) validationErrors.push('Missing Residence Longitude (A05)');
+          if (residenceAltitude === null) validationErrors.push('Missing Residence Altitude (A05)');
+          if (residencePrecision === null) validationErrors.push('Missing Residence Precision (A05)');
+        }
         if (latitude !== null && (latitude < -90 || latitude > 90)) validationErrors.push('Site latitude out of range');
         if (longitude !== null && (longitude < -180 || longitude > 180)) validationErrors.push('Site longitude out of range');
         if (residenceLatitude !== null && (residenceLatitude < -90 || residenceLatitude > 90)) validationErrors.push('Residence latitude out of range');
