@@ -74,7 +74,6 @@ export function AnalyticsReports() {
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [coverageSubTab, setCoverageSubTab] = useState<'hub' | 'state' | 'locality' | 'activity'>('hub');
-  const [activityViewMode, setActivityViewMode] = useState<'hub' | 'state'>('hub');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 30),
     to: new Date(),
@@ -559,6 +558,15 @@ export function AnalyticsReports() {
                         {(efficiencyData?.coverageByHub || []).map((hub, i) => (
                           <TableRow key={i}><TableCell className="font-medium">{hub.name}</TableCell><TableCell className="text-center">{hub.totalSites}</TableCell><TableCell className="text-center text-green-600">{hub.visitedSites}</TableCell><TableCell className="text-center text-amber-600">{hub.pendingSites}</TableCell><TableCell className="text-right"><Badge variant={getCoverageBadgeVariant(hub.coveragePercentage)}>{formatPercent(hub.coveragePercentage)}</Badge></TableCell></TableRow>
                         ))}
+                        {(efficiencyData?.coverageByHub || []).length > 0 && (
+                          <TableRow className="bg-muted/50 font-semibold">
+                            <TableCell>Total</TableCell>
+                            <TableCell className="text-center">{(efficiencyData?.coverageByHub || []).reduce((sum, h) => sum + h.totalSites, 0)}</TableCell>
+                            <TableCell className="text-center text-green-600">{(efficiencyData?.coverageByHub || []).reduce((sum, h) => sum + h.visitedSites, 0)}</TableCell>
+                            <TableCell className="text-center text-amber-600">{(efficiencyData?.coverageByHub || []).reduce((sum, h) => sum + h.pendingSites, 0)}</TableCell>
+                            <TableCell className="text-right"><Badge variant="outline">{formatPercent((efficiencyData?.coverageByHub || []).reduce((sum, h) => sum + h.visitedSites, 0) / Math.max(1, (efficiencyData?.coverageByHub || []).reduce((sum, h) => sum + h.totalSites, 0)) * 100)}</Badge></TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </ScrollArea>
@@ -577,6 +585,15 @@ export function AnalyticsReports() {
                         {(efficiencyData?.coverageByState || []).map((state, i) => (
                           <TableRow key={i}><TableCell className="font-medium">{state.name}</TableCell><TableCell className="text-center">{state.totalSites}</TableCell><TableCell className="text-center text-green-600">{state.visitedSites}</TableCell><TableCell className="text-center text-amber-600">{state.pendingSites}</TableCell><TableCell className="text-right"><Badge variant={getCoverageBadgeVariant(state.coveragePercentage)}>{formatPercent(state.coveragePercentage)}</Badge></TableCell></TableRow>
                         ))}
+                        {(efficiencyData?.coverageByState || []).length > 0 && (
+                          <TableRow className="bg-muted/50 font-semibold">
+                            <TableCell>Total</TableCell>
+                            <TableCell className="text-center">{(efficiencyData?.coverageByState || []).reduce((sum, s) => sum + s.totalSites, 0)}</TableCell>
+                            <TableCell className="text-center text-green-600">{(efficiencyData?.coverageByState || []).reduce((sum, s) => sum + s.visitedSites, 0)}</TableCell>
+                            <TableCell className="text-center text-amber-600">{(efficiencyData?.coverageByState || []).reduce((sum, s) => sum + s.pendingSites, 0)}</TableCell>
+                            <TableCell className="text-right"><Badge variant="outline">{formatPercent((efficiencyData?.coverageByState || []).reduce((sum, s) => sum + s.visitedSites, 0) / Math.max(1, (efficiencyData?.coverageByState || []).reduce((sum, s) => sum + s.totalSites, 0)) * 100)}</Badge></TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </ScrollArea>
@@ -595,6 +612,15 @@ export function AnalyticsReports() {
                         {localityCoverage.map((loc, i) => (
                           <TableRow key={i}><TableCell className="text-muted-foreground">{loc.state}</TableCell><TableCell className="font-medium">{loc.locality}</TableCell><TableCell className="text-center">{loc.totalSites}</TableCell><TableCell className="text-center text-green-600">{loc.visitedSites}</TableCell><TableCell className="text-center text-amber-600">{loc.pendingSites}</TableCell><TableCell className="text-right"><Badge variant={getCoverageBadgeVariant(loc.coveragePercentage)}>{formatPercent(loc.coveragePercentage)}</Badge></TableCell></TableRow>
                         ))}
+                        {localityCoverage.length > 0 && (
+                          <TableRow className="bg-muted/50 font-semibold">
+                            <TableCell colSpan={2}>Total ({localityCoverage.length} localities)</TableCell>
+                            <TableCell className="text-center">{localityCoverage.reduce((sum, l) => sum + l.totalSites, 0)}</TableCell>
+                            <TableCell className="text-center text-green-600">{localityCoverage.reduce((sum, l) => sum + l.visitedSites, 0)}</TableCell>
+                            <TableCell className="text-center text-amber-600">{localityCoverage.reduce((sum, l) => sum + l.pendingSites, 0)}</TableCell>
+                            <TableCell className="text-right"><Badge variant="outline">{formatPercent(localityCoverage.reduce((sum, l) => sum + l.visitedSites, 0) / Math.max(1, localityCoverage.reduce((sum, l) => sum + l.totalSites, 0)) * 100)}</Badge></TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </ScrollArea>
@@ -604,45 +630,26 @@ export function AnalyticsReports() {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <div><h3 className="text-lg font-semibold flex items-center gap-2"><Activity className="w-5 h-5" />Coverage by Activity</h3><p className="text-sm text-muted-foreground">Site visit coverage by activity type</p></div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex border rounded-md">
-                        <Button variant={activityViewMode === 'hub' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActivityViewMode('hub')} className="rounded-r-none" data-testid="button-activity-view-hub">Per Hub</Button>
-                        <Button variant={activityViewMode === 'state' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActivityViewMode('state')} className="rounded-l-none" data-testid="button-activity-view-state">Per State</Button>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('activity')} data-testid="button-export-coverage-activity"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>
-                    </div>
+                    <Button variant="outline" size="sm" onClick={() => handleExportCoverageExcel('activity')} data-testid="button-export-coverage-activity"><FileSpreadsheet className="w-4 h-4 mr-2" />Export</Button>
                   </div>
                   <ScrollArea className="h-[350px]">
-                    <div className="space-y-4">
-                      {activityCoverage.map((act, i) => (
-                        <Card key={i}>
-                          <CardHeader className="py-3">
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-base">{act.activity}</CardTitle>
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm text-muted-foreground">{act.totalSites} sites</span>
-                                <Badge variant={getCoverageBadgeVariant(act.coveragePercentage)}>{formatPercent(act.coveragePercentage)}</Badge>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                              {activityViewMode === 'hub' ? (act.byHub || []).slice(0, 6).map((h, j) => (
-                                <div key={j} className="text-sm border rounded-md p-2">
-                                  <p className="font-medium truncate">{h.hub}</p>
-                                  <p className="text-muted-foreground">{h.completed}/{h.sites}</p>
-                                </div>
-                              )) : (act.byState || []).slice(0, 6).map((s, j) => (
-                                <div key={j} className="text-sm border rounded-md p-2">
-                                  <p className="font-medium truncate">{s.state}</p>
-                                  <p className="text-muted-foreground">{s.completed}/{s.sites}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Activity</TableHead><TableHead className="text-center">Total Sites</TableHead><TableHead className="text-center">Visited</TableHead><TableHead className="text-center">Pending</TableHead><TableHead className="text-right">Coverage</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {activityCoverage.map((act, i) => (
+                          <TableRow key={i}><TableCell className="font-medium">{act.activity}</TableCell><TableCell className="text-center">{act.totalSites}</TableCell><TableCell className="text-center text-green-600">{act.visitedSites}</TableCell><TableCell className="text-center text-amber-600">{act.pendingSites}</TableCell><TableCell className="text-right"><Badge variant={getCoverageBadgeVariant(act.coveragePercentage)}>{formatPercent(act.coveragePercentage)}</Badge></TableCell></TableRow>
+                        ))}
+                        {activityCoverage.length > 0 && (
+                          <TableRow className="bg-muted/50 font-semibold">
+                            <TableCell>Total ({activityCoverage.length} activities)</TableCell>
+                            <TableCell className="text-center">{activityCoverage.reduce((sum, a) => sum + a.totalSites, 0)}</TableCell>
+                            <TableCell className="text-center text-green-600">{activityCoverage.reduce((sum, a) => sum + a.visitedSites, 0)}</TableCell>
+                            <TableCell className="text-center text-amber-600">{activityCoverage.reduce((sum, a) => sum + a.pendingSites, 0)}</TableCell>
+                            <TableCell className="text-right"><Badge variant="outline">{formatPercent(activityCoverage.reduce((sum, a) => sum + a.visitedSites, 0) / Math.max(1, activityCoverage.reduce((sum, a) => sum + a.totalSites, 0)) * 100)}</Badge></TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
                   </ScrollArea>
                 </div>
               )}
