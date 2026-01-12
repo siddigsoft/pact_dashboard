@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play, Upload } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play, Upload, RotateCcw } from 'lucide-react';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -26,6 +26,8 @@ import { LocalityPermitStatus } from '@/types/coordinator-permits';
 import { PermitVerificationQuestions, PermitDecision } from '@/components/PermitVerificationQuestions';
 import { LocalityRequirementTriageDialog } from '@/components/mmp/LocalityRequirementTriageDialog';
 import { LocalityPermitManager } from '@/components/coordinator/LocalityPermitManager';
+import { SiteRecallDialog } from '@/components/coordinator/SiteRecallDialog';
+import { canRecallSites } from '@/services/siteRecall.service';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { useGestures } from '@/hooks/use-gestures'; // Assuming this hook exists for swipe gestures
 import { useLocation } from '@/context/location/LocationContext';
@@ -545,6 +547,11 @@ const CoordinatorSites: React.FC = () => {
   
   // Initial yes/no prompt for locality permits
   const [localityPermitPromptOpen, setLocalityPermitPromptOpen] = useState(false);
+
+  // Site recall dialog state (Admin/FOM/Super Admin only)
+  const [recallDialogOpen, setRecallDialogOpen] = useState(false);
+  const [sitesForRecall, setSitesForRecall] = useState<SiteVisit[]>([]);
+  const userCanRecall = canRecallSites(currentUser?.role || '');
 
   // Location data is now provided by LocationContext (removed local state)
 
@@ -2505,6 +2512,23 @@ const CoordinatorSites: React.FC = () => {
                     >
                       <CheckCircle className="h-4 w-4 mr-2" />
                       Verify
+                    </Button>
+                  )}
+                  {userCanRecall && site.status?.toLowerCase() !== 'new' && site.status?.toLowerCase() !== 'pending' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSitesForRecall([site]);
+                        setRecallDialogOpen(true);
+                      }}
+                      className="flex-1 text-xs py-3 h-auto min-h-[44px] text-amber-600 border-amber-200 hover:bg-amber-50 active:scale-95"
+                      data-testid={`button-recall-site-${site.id}`}
+                      aria-label={`Recall site ${site.site_name}`}
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Recall
                     </Button>
                   )}
                 </div>
@@ -4580,6 +4604,20 @@ const CoordinatorSites: React.FC = () => {
           });
         }}
         onCancel={() => setLocalityTriageDialogOpen(false)}
+      />
+
+      {/* Site Recall Dialog - Admin/FOM/Super Admin only */}
+      <SiteRecallDialog
+        open={recallDialogOpen}
+        onOpenChange={setRecallDialogOpen}
+        sites={sitesForRecall}
+        currentUserId={currentUser?.id || ''}
+        currentUserEmail={currentUser?.email}
+        currentUserName={currentUser?.fullName || currentUser?.username}
+        onRecallComplete={() => {
+          refreshSites();
+          setSitesForRecall([]);
+        }}
       />
     </div>
   );
