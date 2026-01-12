@@ -24,6 +24,8 @@ interface SiteWithGPS {
   residence_precision?: number | null;
   source?: string;
   activity_type?: string | null;
+  last_visit_date?: string | null;
+  mmp_count?: number | null;
 }
 
 interface SitesRegistryMapProps {
