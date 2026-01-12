@@ -625,7 +625,9 @@ async function executeRecall(
             cp_verified_by: null,
             forwarded_to_user_id: null,
             forwarded_by_user_id: null,
-            forwarded_at: null
+            forwarded_at: null,
+            // Clear additional_data coordinator assignments
+            additional_data: {}
           })
           .in('id', adminRecallSiteIds);
       }
@@ -740,7 +742,9 @@ async function executeRecall(
             cp_verified_by: null,
             forwarded_to_user_id: null,
             forwarded_by_user_id: null,
-            forwarded_at: null
+            forwarded_at: null,
+            // Clear additional_data coordinator assignments
+            additional_data: {}
           })
           .in('id', allSiteIds);
       }
