@@ -115,6 +115,7 @@ export const useCoordinatorSites = () => {
 
       // OPTIMIZATION: Fetch only essential columns for faster initial load
       // Select specific fields instead of * for better performance
+      // Use dual-approach: Try forwarded_to_user_id column first, fallback to additional_data
       let query = supabase
         .from('mmp_site_entries')
         .select(`
@@ -148,8 +149,11 @@ export const useCoordinatorSites = () => {
             hub
           )
         `)
-        .eq('forwarded_to_user_id', currentUser.id)
         .neq('status', 'returned_to_fom');
+      
+      // Use OR filter to match either forwarded_to_user_id column or additional_data.assigned_to
+      // This provides backward compatibility while the database is being migrated
+      query = query.or(`forwarded_to_user_id.eq.${currentUser.id},additional_data->>assigned_to.eq.${currentUser.id}`);
 
       // For non-admins, filter by project membership
       if (!isAdminOrSuperUser && userProjectIds.length > 0) {
