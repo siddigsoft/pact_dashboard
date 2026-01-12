@@ -522,7 +522,40 @@ async function getAffectedSites(request: RecallRequest): Promise<any[]> {
 
   const { data, error } = await query;
   if (error) throw error;
-  return data || [];
+  
+  let sites = data || [];
+  
+  // If no sites found in mmp_site_entries, check the mmp_files.site_entries JSONB field
+  if (sites.length === 0) {
+    const { data: mmpFile } = await supabase
+      .from('mmp_files')
+      .select('site_entries')
+      .eq('id', request.mmpId)
+      .single();
+    
+    if (mmpFile?.site_entries && Array.isArray(mmpFile.site_entries)) {
+      let jsonbSites = mmpFile.site_entries;
+      
+      // Apply filters if not full_mmp scope
+      if (request.scopeType !== 'full_mmp' && request.scopeFilters) {
+        const filters = request.scopeFilters;
+        jsonbSites = jsonbSites.filter((site: any) => {
+          if (filters.siteIds?.length && !filters.siteIds.includes(site.id)) return false;
+          if (filters.siteNames?.length && !filters.siteNames.includes(site.site_name || site.siteName)) return false;
+          if (filters.localities?.length && !filters.localities.includes(site.locality)) return false;
+          if (filters.states?.length && !filters.states.includes(site.state)) return false;
+          if (filters.activityIds?.length && !filters.activityIds.includes(site.main_activity || site.mainActivity)) return false;
+          if (filters.hubs?.length && !filters.hubs.includes(site.hub_office || site.hubOffice)) return false;
+          if (filters.cpIds?.length && !filters.cpIds.includes(site.cp_name || site.cpName)) return false;
+          return true;
+        });
+      }
+      
+      sites = jsonbSites;
+    }
+  }
+  
+  return sites;
 }
 
 async function getAffectedUsers(request: RecallRequest, mmpData: any): Promise<string[]> {
@@ -1410,6 +1443,7 @@ export async function computeRecallImpact(
 ): Promise<RecallImpactPreview> {
   const warnings: string[] = [];
 
+  // First, query the mmp_site_entries table
   let query = supabase
     .from('mmp_site_entries')
     .select('*')
@@ -1441,7 +1475,38 @@ export async function computeRecallImpact(
     };
   }
 
-  const affectedSites = sites || [];
+  let affectedSites = sites || [];
+  
+  // If no sites found in mmp_site_entries, check the mmp_files.site_entries JSONB field
+  if (affectedSites.length === 0) {
+    const { data: mmpFile } = await supabase
+      .from('mmp_files')
+      .select('site_entries')
+      .eq('id', request.mmpId)
+      .single();
+    
+    if (mmpFile?.site_entries && Array.isArray(mmpFile.site_entries)) {
+      let jsonbSites = mmpFile.site_entries;
+      
+      // Apply filters if not full_mmp scope
+      if (request.scopeType !== 'full_mmp' && request.scopeFilters) {
+        const filters = request.scopeFilters;
+        jsonbSites = jsonbSites.filter((site: any) => {
+          if (filters.siteIds?.length && !filters.siteIds.includes(site.id)) return false;
+          if (filters.siteNames?.length && !filters.siteNames.includes(site.site_name || site.siteName)) return false;
+          if (filters.localities?.length && !filters.localities.includes(site.locality)) return false;
+          if (filters.states?.length && !filters.states.includes(site.state)) return false;
+          if (filters.activityIds?.length && !filters.activityIds.includes(site.main_activity || site.mainActivity)) return false;
+          if (filters.hubs?.length && !filters.hubs.includes(site.hub_office || site.hubOffice)) return false;
+          if (filters.cpIds?.length && !filters.cpIds.includes(site.cp_name || site.cpName)) return false;
+          return true;
+        });
+      }
+      
+      affectedSites = jsonbSites;
+    }
+  }
+  
   const affectedSiteCount = affectedSites.length;
 
   const collectorIds = new Set<string>();
