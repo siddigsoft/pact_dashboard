@@ -673,6 +673,14 @@ const DocumentsPage = () => {
         doc.indexNo = idx + 1;
       });
 
+      // Debug: Log final document count
+      console.log(`[Documents] Total documents after processing: ${docs.length}`, {
+        fromIndexedDocs: indexedDocs?.length || 0,
+        fromMmpFiles: mmpFiles?.length || 0,
+        fromCostSubmissions: costSubmissions?.length || 0,
+        fromPhotos: reportPhotos?.length || 0
+      });
+
       // Set available months and states for filters
       const months = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
       const states = Array.from(statesSet).sort();

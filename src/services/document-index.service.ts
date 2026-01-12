@@ -831,10 +831,16 @@ export const DocumentIndexService = {
       onProgress?.(5, 100, 'Fetching MMP files...');
 
       // 1. Index MMP Files and their permits
-      const { data: mmpFiles } = await supabase
+      const { data: mmpFiles, error: mmpError } = await supabase
         .from('mmp_files')
         .select('id, name, original_filename, filename, file_url, created_at, permits, project_id, project_name, status, uploaded_by')
         .order('created_at', { ascending: false });
+
+      if (mmpError) {
+        console.error('[DocumentIndexService] Error fetching MMP files:', mmpError);
+      }
+      
+      console.log(`[DocumentIndexService] Found ${mmpFiles?.length || 0} MMP files to index`);
 
       const totalMmps = mmpFiles?.length || 0;
       let mmpCount = 0;
@@ -847,10 +853,14 @@ export const DocumentIndexService = {
         const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : format(new Date(), 'yyyy-MM');
         const mmpFileName = mmp.filename || mmp.original_filename || mmp.name || 'Untitled MMP';
 
-        // Index MMP file itself
-        if (mmp.file_url && !seenUrls.has(mmp.file_url)) {
-          seenUrls.add(mmp.file_url);
-          const exists = await this.documentExists('mmp_files', mmp.id, mmp.file_url);
+        // Index MMP file itself - index even without file_url for tracking
+        const mmpFileUrl = mmp.file_url || '';
+        const mmpKey = mmp.id; // Use ID as key to avoid duplicates
+        
+        if (!seenUrls.has(mmpKey)) {
+          seenUrls.add(mmpKey);
+          const exists = await this.documentExists('mmp_files', mmp.id, mmpFileUrl);
+          console.log(`[DocumentIndexService] MMP ${mmp.id} exists check: ${exists}`);
           if (!exists) {
             const result = await this.recordDocument({
               fileName: mmpFileName,
@@ -869,8 +879,13 @@ export const DocumentIndexService = {
               sourceTable: 'mmp_files',
               sourceId: mmp.id
             });
-            if (result.success) indexed++;
-            else errors++;
+            if (result.success) {
+              indexed++;
+              console.log(`[DocumentIndexService] Successfully indexed MMP: ${mmpFileName}`);
+            } else {
+              errors++;
+              console.error(`[DocumentIndexService] Failed to index MMP: ${mmpFileName}`, result.error);
+            }
           }
         }
 
