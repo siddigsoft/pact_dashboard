@@ -16,7 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import MMPCPVerification from './MMPCPVerification';
 import MMPPermitVerification from './MMPPermitVerification';
-import { useAppContext } from '@/context/AppContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 interface MMPComprehensiveVerificationProps {
   mmpFile: MMPFile;
@@ -30,8 +30,8 @@ export const MMPComprehensiveVerificationComponent: React.FC<MMPComprehensiveVer
   onVerificationComplete
 }) => {
   const { toast } = useToast();
-  const { roles } = useAppContext();
-  const isFOM = (roles?.includes('fom' as any) || roles?.includes('fieldOpManager' as any)) ?? false;
+  const { hasAnyRole, isSuperAdmin } = useAuthorization();
+  const isFOM = hasAnyRole(['fom', 'fieldOpManager']) && !isSuperAdmin() && !hasAnyRole(['admin', 'superAdmin']);
   const [comprehensiveVerification, setComprehensiveVerification] = useState<MMPComprehensiveVerification>(
     mmpFile.comprehensiveVerification || {
       overallStatus: 'pending',
