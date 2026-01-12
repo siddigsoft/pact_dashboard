@@ -1111,7 +1111,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                                     );
                                   });
                                 })()}
-                                ))}
                               </>
                             )}
                           </div>
