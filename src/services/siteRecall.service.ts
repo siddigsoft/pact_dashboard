@@ -99,6 +99,29 @@ function normalizeStatus(status: string): SiteStatus {
   return statusMap[normalized] || 'new';
 }
 
+function getStatusIndex(status: string): number {
+  const normalized = normalizeStatus(status);
+  return SITE_STATUS_ORDER.indexOf(normalized);
+}
+
+function getDisplayStatus(targetStatus: SiteStatus): string {
+  const displayMap: Record<SiteStatus, string> = {
+    new: 'New',
+    pending: 'Pending',
+    forwarded: 'Forwarded',
+    permits_attached: 'Permits Attached',
+    cp_verification: 'CP Verification',
+    locality_permit_verified: 'Locality Permit Verified',
+    verified: 'Verified',
+    approved: 'Approved',
+    approved_and_costed: 'Approved and Costed',
+    dispatched: 'Dispatched',
+    completed: 'Completed',
+    rejected: 'Rejected'
+  };
+  return displayMap[targetStatus] || targetStatus;
+}
+
 export async function recallSites(request: SiteRecallRequest): Promise<SiteRecallResult> {
   const { siteEntryIds, targetStatus, reason, recalledBy, recalledByEmail, recalledByName } = request;
   
@@ -108,6 +131,28 @@ export async function recallSites(request: SiteRecallRequest): Promise<SiteRecal
     failedCount: 0,
     errors: []
   };
+
+  if (!recalledBy) {
+    result.errors.push('User ID is required for recall');
+    return result;
+  }
+
+  const { data: userProfile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', recalledBy)
+    .single();
+
+  if (profileError || !userProfile) {
+    result.errors.push('Failed to verify user permissions');
+    return result;
+  }
+
+  const verifiedRole = userProfile.role || '';
+  if (!canRecallSites(verifiedRole)) {
+    result.errors.push('You do not have permission to recall sites. Only Admin, FOM, ICT, and Super Admin can recall sites.');
+    return result;
+  }
 
   if (!siteEntryIds.length) {
     result.errors.push('No sites selected for recall');
@@ -176,13 +221,19 @@ export async function recallSites(request: SiteRecallRequest): Promise<SiteRecal
         delete updatedData.cp_verification_by;
       }
 
+      const currentStatusIndex = getStatusIndex(currentSite.status);
+      const targetStatusIndex = getStatusIndex(targetStatus);
+      
+      if (targetStatusIndex >= currentStatusIndex) {
+        result.failedCount++;
+        result.errors.push(`Cannot recall site ${currentSite.site_name || siteId}: target status must be earlier than current status`);
+        continue;
+      }
+
       const { error: updateError } = await supabase
         .from('mmp_site_entries')
         .update({
-          status: targetStatus === 'new' ? 'Pending' : 
-                  targetStatus === 'verified' ? 'Verified' :
-                  targetStatus === 'approved' ? 'Approved' :
-                  targetStatus.charAt(0).toUpperCase() + targetStatus.slice(1).replace(/_/g, ' '),
+          status: getDisplayStatus(targetStatus),
           additional_data: updatedData
         })
         .eq('id', siteId);
