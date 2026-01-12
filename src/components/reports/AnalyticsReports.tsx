@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -31,6 +32,8 @@ import {
   Activity,
   BarChart3,
   Target,
+  Calendar,
+  FolderOpen,
 } from 'lucide-react';
 import { ReportingService } from '@/services/reporting.service';
 import { 
@@ -43,8 +46,20 @@ import type { ProductivityMetrics, OperationalEfficiency, CoverageEntry } from '
 import { useToast } from '@/components/ui/use-toast';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
-import { subDays } from 'date-fns';
+import { subDays, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subMonths, subQuarters, subYears } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+
+interface MMPOption {
+  id: string;
+  name: string;
+}
+
+interface ProjectOption {
+  id: string;
+  name: string;
+}
+
+type TimePeriodPreset = 'custom' | 'this_month' | 'last_month' | 'this_quarter' | 'last_quarter' | 'this_half' | 'last_half' | 'this_year' | 'last_year';
 
 interface LocalityCoverage {
   locality: string;
@@ -78,7 +93,87 @@ export function AnalyticsReports() {
     from: subDays(new Date(), 30),
     to: new Date(),
   });
+  
+  const [mmpOptions, setMmpOptions] = useState<MMPOption[]>([]);
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
+  const [selectedMmp, setSelectedMmp] = useState<string>('all');
+  const [selectedProject, setSelectedProject] = useState<string>('all');
+  const [timePeriodPreset, setTimePeriodPreset] = useState<TimePeriodPreset>('custom');
+  
   const { toast } = useToast();
+
+  const getDateRangeFromPreset = (preset: TimePeriodPreset): DateRange | undefined => {
+    const now = new Date();
+    switch (preset) {
+      case 'this_month':
+        return { from: startOfMonth(now), to: endOfMonth(now) };
+      case 'last_month':
+        const lastMonth = subMonths(now, 1);
+        return { from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) };
+      case 'this_quarter':
+        return { from: startOfQuarter(now), to: endOfQuarter(now) };
+      case 'last_quarter':
+        const lastQuarter = subQuarters(now, 1);
+        return { from: startOfQuarter(lastQuarter), to: endOfQuarter(lastQuarter) };
+      case 'this_half':
+        const currentMonth = now.getMonth();
+        if (currentMonth < 6) {
+          return { from: new Date(now.getFullYear(), 0, 1), to: new Date(now.getFullYear(), 5, 30) };
+        } else {
+          return { from: new Date(now.getFullYear(), 6, 1), to: new Date(now.getFullYear(), 11, 31) };
+        }
+      case 'last_half':
+        const prevHalfYear = subMonths(now, 6);
+        const prevMonth = prevHalfYear.getMonth();
+        if (prevMonth < 6) {
+          return { from: new Date(prevHalfYear.getFullYear(), 0, 1), to: new Date(prevHalfYear.getFullYear(), 5, 30) };
+        } else {
+          return { from: new Date(prevHalfYear.getFullYear(), 6, 1), to: new Date(prevHalfYear.getFullYear(), 11, 31) };
+        }
+      case 'this_year':
+        return { from: startOfYear(now), to: endOfYear(now) };
+      case 'last_year':
+        const lastYear = subYears(now, 1);
+        return { from: startOfYear(lastYear), to: endOfYear(lastYear) };
+      default:
+        return dateRange;
+    }
+  };
+
+  const handleTimePeriodChange = (preset: TimePeriodPreset) => {
+    setTimePeriodPreset(preset);
+    if (preset !== 'custom') {
+      const newRange = getDateRangeFromPreset(preset);
+      setDateRange(newRange);
+    }
+  };
+
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    setDateRange(range);
+    setTimePeriodPreset('custom');
+  };
+
+  const fetchFilterOptions = async () => {
+    try {
+      const [mmpRes, projectRes] = await Promise.all([
+        supabase.from('mmp_files').select('id, name').order('created_at', { ascending: false }),
+        supabase.from('projects').select('id, name').order('name')
+      ]);
+      
+      if (mmpRes.data) {
+        setMmpOptions(mmpRes.data.map(m => ({ id: m.id, name: m.name || 'Untitled MMP' })));
+      }
+      if (projectRes.data) {
+        setProjectOptions(projectRes.data.map(p => ({ id: p.id, name: p.name })));
+      }
+    } catch (error) {
+      console.error('Error fetching filter options:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchFilterOptions();
+  }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -87,9 +182,12 @@ export function AnalyticsReports() {
         ? { from: dateRange.from, to: dateRange.to }
         : undefined;
       
+      const projectIdsFilter = selectedProject && selectedProject !== 'all' ? [selectedProject] : undefined;
+      const mmpIdFilter = selectedMmp && selectedMmp !== 'all' ? selectedMmp : undefined;
+      
       const [productivity, efficiency] = await Promise.all([
-        ReportingService.getProductivityMetrics(range),
-        ReportingService.getOperationalEfficiency(range),
+        ReportingService.getProductivityMetrics(range, projectIdsFilter, mmpIdFilter),
+        ReportingService.getOperationalEfficiency(range, projectIdsFilter, mmpIdFilter),
       ]);
       
       setProductivityData(productivity);
@@ -97,13 +195,21 @@ export function AnalyticsReports() {
 
       let siteEntriesQuery = supabase
         .from('mmp_site_entries')
-        .select('id, state, locality, activity_at_site, hub_office, status, created_at');
+        .select('id, state, locality, activity_at_site, hub_office, status, created_at, mmp_file_id, project_id');
       
       if (range?.from) {
         siteEntriesQuery = siteEntriesQuery.gte('created_at', range.from.toISOString());
       }
       if (range?.to) {
         siteEntriesQuery = siteEntriesQuery.lte('created_at', range.to.toISOString());
+      }
+      
+      if (selectedMmp && selectedMmp !== 'all') {
+        siteEntriesQuery = siteEntriesQuery.eq('mmp_file_id', selectedMmp);
+      }
+      
+      if (selectedProject && selectedProject !== 'all') {
+        siteEntriesQuery = siteEntriesQuery.eq('project_id', selectedProject);
       }
       
       const { data: siteEntries } = await siteEntriesQuery;
@@ -183,7 +289,7 @@ export function AnalyticsReports() {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange]);
+  }, [dateRange, selectedMmp, selectedProject]);
 
   const handleExportProductivityPDF = async () => {
     setExporting(true);
@@ -321,11 +427,64 @@ export function AnalyticsReports() {
             <p className="text-muted-foreground mt-1">Comprehensive field operations analytics and coverage reports</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <DatePickerWithRange dateRange={dateRange} onDateRangeChange={setDateRange} />
-            <Button variant="outline" size="sm" onClick={fetchData} data-testid="button-refresh-analytics">
+            <Button variant="outline" size="sm" onClick={() => fetchData()} data-testid="button-refresh-analytics">
               <RefreshCw className="w-4 h-4 mr-2" />Refresh
             </Button>
           </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="w-4 h-4 text-muted-foreground" />
+            <Select value={selectedProject} onValueChange={setSelectedProject}>
+              <SelectTrigger className="w-[180px]" data-testid="select-project-filter">
+                <SelectValue placeholder="All Projects" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {projectOptions.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-muted-foreground" />
+            <Select value={selectedMmp} onValueChange={setSelectedMmp}>
+              <SelectTrigger className="w-[200px]" data-testid="select-mmp-filter">
+                <SelectValue placeholder="All MMPs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All MMPs</SelectItem>
+                {mmpOptions.map(m => (
+                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+            <Select value={timePeriodPreset} onValueChange={(val) => handleTimePeriodChange(val as TimePeriodPreset)}>
+              <SelectTrigger className="w-[150px]" data-testid="select-period-filter">
+                <SelectValue placeholder="Time Period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="custom">Custom Range</SelectItem>
+                <SelectItem value="this_month">This Month</SelectItem>
+                <SelectItem value="last_month">Last Month</SelectItem>
+                <SelectItem value="this_quarter">This Quarter</SelectItem>
+                <SelectItem value="last_quarter">Last Quarter</SelectItem>
+                <SelectItem value="this_half">This Half Year</SelectItem>
+                <SelectItem value="last_half">Last Half Year</SelectItem>
+                <SelectItem value="this_year">This Year</SelectItem>
+                <SelectItem value="last_year">Last Year</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <DatePickerWithRange dateRange={dateRange} onDateRangeChange={handleDateRangeChange} />
         </div>
       </div>
 

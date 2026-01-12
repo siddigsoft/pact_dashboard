@@ -199,7 +199,8 @@ export class ReportingService {
 
   static async getProductivityMetrics(
     dateRange?: { from: Date; to: Date },
-    projectIds?: string[]
+    projectIds?: string[],
+    mmpId?: string
   ): Promise<ProductivityMetrics[]> {
     try {
       let siteEntriesQuery = supabase.from('mmp_site_entries').select('*');
@@ -211,6 +212,12 @@ export class ReportingService {
       }
       if (dateRange?.to) {
         siteEntriesQuery = siteEntriesQuery.lte('visit_date', dateRange.to.toISOString());
+      }
+      if (projectIds?.length) {
+        siteEntriesQuery = siteEntriesQuery.in('project_id', projectIds);
+      }
+      if (mmpId) {
+        siteEntriesQuery = siteEntriesQuery.eq('mmp_file_id', mmpId);
       }
 
       const [entriesRes, profilesRes, walletsRes] = await Promise.all([
@@ -312,7 +319,8 @@ export class ReportingService {
 
   static async getOperationalEfficiency(
     dateRange?: { from: Date; to: Date },
-    projectIds?: string[]
+    projectIds?: string[],
+    mmpId?: string
   ): Promise<OperationalEfficiency> {
     try {
       let siteEntriesQuery = supabase.from('mmp_site_entries').select('*');
@@ -322,6 +330,12 @@ export class ReportingService {
       }
       if (dateRange?.to) {
         siteEntriesQuery = siteEntriesQuery.lte('created_at', dateRange.to.toISOString());
+      }
+      if (projectIds?.length) {
+        siteEntriesQuery = siteEntriesQuery.in('project_id', projectIds);
+      }
+      if (mmpId) {
+        siteEntriesQuery = siteEntriesQuery.eq('mmp_file_id', mmpId);
       }
 
       const [entriesRes, hubsRes, hubStatesRes] = await Promise.all([
