@@ -139,6 +139,8 @@ export interface RecallImpactPreview {
   sitesWithAdvances: number;
   scopeSummary: string;
   warnings: string[];
+  sitesByStatus?: Record<string, number>;
+  targetStatus?: string;
 }
 
 export interface RecallSummary {

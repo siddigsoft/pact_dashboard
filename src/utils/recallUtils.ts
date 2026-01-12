@@ -582,6 +582,26 @@ async function executeRecall(
       workflow.lastRecallReason = request.reason;
       workflow.lastRecallEventId = recallEventId;
       newStatus = 'pending'; // Changed from 'uploaded' to match "New MMPs" filter
+      
+      // Revert ALL site entries to 'New' status
+      const adminRecallSiteIds = affectedSites.map(s => s.id);
+      if (adminRecallSiteIds.length > 0) {
+        await supabase
+          .from('mmp_site_entries')
+          .update({
+            status: 'New',
+            assigned_to: null,
+            claimed_by: null,
+            assignment_status: 'recalled',
+            claim_status: null,
+            dispatch_status: null,
+            recall_status: 'recalled',
+            recall_event_id: recallEventId,
+            recalled_at: now,
+            recalled_by: recallerName
+          })
+          .in('id', adminRecallSiteIds);
+      }
       break;
 
     case 'fom_to_coordinator':
@@ -594,8 +614,12 @@ async function executeRecall(
         await supabase
           .from('mmp_site_entries')
           .update({
+            status: 'Forwarded', // Revert to forwarded status
             assigned_to: null,
+            claimed_by: null,
             assignment_status: 'recalled',
+            claim_status: null,
+            dispatch_status: null,
             recall_status: 'recalled',
             recall_event_id: recallEventId,
             recalled_at: now,
@@ -606,7 +630,7 @@ async function executeRecall(
       workflow.fomRecalledAt = now;
       workflow.fomRecalledBy = recallerName;
       workflow.lastRecallEventId = recallEventId;
-      newStatus = 'forwarded';
+      newStatus = 'forwarded_to_fom';
       break;
 
     case 'coordinator_to_collector':
@@ -615,6 +639,7 @@ async function executeRecall(
         await supabase
           .from('mmp_site_entries')
           .update({
+            status: 'Approved', // Revert to approved status (before dispatch)
             claimed_by: null,
             claim_status: 'recalled',
             dispatch_status: 'recalled',
@@ -628,6 +653,7 @@ async function executeRecall(
       
       workflow.collectorRecalledAt = new Date().toISOString();
       workflow.collectorRecalledBy = recallerName;
+      workflow.lastRecallEventId = recallEventId;
       break;
 
     case 'super_admin_approved':
@@ -651,6 +677,7 @@ async function executeRecall(
         await supabase
           .from('mmp_site_entries')
           .update({
+            status: 'New', // Revert ALL sites to New status
             assigned_to: null,
             claimed_by: null,
             assignment_status: 'recalled',
@@ -1287,25 +1314,39 @@ export async function computeRecallImpact(
   const affectedSites = sites || [];
   const affectedSiteCount = affectedSites.length;
 
-  const collectorMap = new Map<string, { id: string; name: string; email?: string }>();
+  const collectorIds = new Set<string>();
   let financialAmount = 0;
   let sitesWithAdvances = 0;
 
   for (const site of affectedSites) {
-    if (site.assigned_to || site.claimed_by) {
-      const collectorId = site.assigned_to || site.claimed_by;
-      if (!collectorMap.has(collectorId)) {
-        collectorMap.set(collectorId, {
-          id: collectorId,
-          name: site.assigned_to_name || site.claimed_by_name || 'Unknown',
-          email: site.assigned_to_email || site.claimed_by_email
-        });
-      }
-    }
+    if (site.assigned_to) collectorIds.add(site.assigned_to);
+    if (site.claimed_by) collectorIds.add(site.claimed_by);
+    if (site.accepted_by) collectorIds.add(site.accepted_by);
 
     if (site.transport_advance_paid && site.transport_advance_amount) {
       financialAmount += Number(site.transport_advance_amount) || 0;
       sitesWithAdvances++;
+    }
+  }
+
+  // Fetch actual profile names for affected collectors
+  const collectorMap = new Map<string, { id: string; name: string; email?: string }>();
+  const collectorIdsArray = Array.from(collectorIds);
+  
+  if (collectorIdsArray.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', collectorIdsArray);
+
+    if (profiles) {
+      for (const profile of profiles) {
+        collectorMap.set(profile.id, {
+          id: profile.id,
+          name: profile.full_name || profile.email || 'Unknown',
+          email: profile.email
+        });
+      }
     }
   }
 
@@ -1340,6 +1381,28 @@ export async function computeRecallImpact(
     warnings.push(`${completedSites.length} site(s) have already been completed/verified`);
   }
 
+  // Calculate site breakdown by current status
+  const sitesByStatus: Record<string, number> = {};
+  for (const site of affectedSites) {
+    const status = site.status || 'Unknown';
+    sitesByStatus[status] = (sitesByStatus[status] || 0) + 1;
+  }
+
+  // Determine target status based on recall tier
+  let targetStatus = 'New';
+  switch (request.tier) {
+    case 'admin_to_fom':
+    case 'super_admin_approved':
+      targetStatus = 'New';
+      break;
+    case 'fom_to_coordinator':
+      targetStatus = 'Forwarded';
+      break;
+    case 'coordinator_to_collector':
+      targetStatus = 'Approved';
+      break;
+  }
+
   return {
     affectedSiteCount,
     affectedCollectorCount: collectorMap.size,
@@ -1348,6 +1411,8 @@ export async function computeRecallImpact(
     financialAmount,
     sitesWithAdvances,
     scopeSummary,
-    warnings
+    warnings,
+    sitesByStatus,
+    targetStatus
   };
 }
