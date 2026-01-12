@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { sudanStates } from '@/data/sudanStates';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useNavigate } from 'react-router-dom';
+import { DocumentIndexService } from '@/services/document-index.service';
 
 interface MMPPermitVerificationProps {
   mmpFile: any;
@@ -305,6 +306,44 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       title: "Permit Uploaded",
       description: `${newPermit.fileName} has been uploaded successfully.`,
     });
+
+    // Record document to persistent index
+    (async () => {
+      const mmpId = mmpFile?.id || mmpFile?.mmpId;
+      const category = newPermit.permitType === 'federal' ? 'federal_permit' 
+        : newPermit.permitType === 'state' ? 'state_permit' 
+        : newPermit.permitType === 'local' ? 'local_permit' 
+        : 'attachment';
+      
+      await DocumentIndexService.recordDocument({
+        fileName: newPermit.fileName,
+        fileUrl: newPermit.fileUrl,
+        category: category as any,
+        uploadedAt: newPermit.uploadedAt || new Date().toISOString(),
+        uploadedBy: currentUser?.id,
+        uploadedByName: currentUser?.fullName || currentUser?.username || currentUser?.email,
+        projectId: mmpFile?.project_id || mmpFile?.projectId,
+        projectName: mmpFile?.projectName || mmpFile?.projects?.name,
+        hubId: mmpFile?.hub_id || mmpFile?.hubId,
+        hubName: mmpFile?.hubName || mmpFile?.hubs?.name,
+        state: newPermit.state,
+        locality: newPermit.locality,
+        mmpId: mmpId,
+        mmpName: mmpFile?.filename || mmpFile?.name,
+        issueDate: newPermit.issueDate,
+        expiryDate: newPermit.expiryDate,
+        status: 'pending',
+        verified: false,
+        sourceType: 'permit',
+        sourceTable: 'mmp_files',
+        sourceId: newPermit.id,
+        metadata: {
+          permitType: newPermit.permitType,
+          comments: newPermit.comments
+        }
+      });
+      console.log('[MMPPermitVerification] Document indexed:', newPermit.fileName);
+    })();
 
     // Notify stakeholders and share entries to coordinators
     (async () => {
