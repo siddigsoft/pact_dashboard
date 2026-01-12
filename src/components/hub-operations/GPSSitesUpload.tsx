@@ -772,18 +772,12 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       for (const site of sitesToUpload) {
         if (site.existsInRegistry && site.registrySiteId) {
           const updateData: Record<string, any> = {
-            gps_captured_by: currentUser?.id,
-            gps_captured_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
           if (site.latitude !== null) updateData.gps_latitude = site.latitude;
           if (site.longitude !== null) updateData.gps_longitude = site.longitude;
-          if (site.altitude !== null) updateData.gps_altitude = site.altitude;
-          if (site.precision !== null) updateData.gps_precision = site.precision;
           if (site.residenceLatitude !== null) updateData.residence_latitude = site.residenceLatitude;
           if (site.residenceLongitude !== null) updateData.residence_longitude = site.residenceLongitude;
-          if (site.residenceAltitude !== null) updateData.residence_altitude = site.residenceAltitude;
-          if (site.residencePrecision !== null) updateData.residence_precision = site.residencePrecision;
           
           preparedSites.push({ site, isUpdate: true, data: updateData });
         } else {
@@ -820,14 +814,18 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             state_name: stateName,
             locality_id: localityId || site.locality,
             locality_name: localityName,
-            hub_id: hubId || site.hub || '',
             hub_name: hubName || site.hub || '',
             activity_type: site.activity || 'GFA',
+            cp_name: site.cp || '',
             status: 'active',
             mmp_count: 0,
             created_by: currentUser?.id || 'system',
             created_at: new Date().toISOString(),
           };
+          // Only set hub_id if we have a valid hub ID (not empty string)
+          if (hubId && hubId.length > 0) {
+            insertData.hub_id = hubId;
+          }
           
           const lat = site.residenceLatitude ?? site.latitude;
           const lng = site.residenceLongitude ?? site.longitude;
