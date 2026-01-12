@@ -778,6 +778,31 @@ export function RecallDialog({
               </div>
             )}
 
+            {impactPreview?.sitesByStatus && Object.keys(impactPreview.sitesByStatus).length > 0 && (
+              <div className="space-y-2">
+                <Label>Current Site Status Breakdown</Label>
+                <div className="border rounded-md p-3 bg-muted/20">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {Object.entries(impactPreview.sitesByStatus).map(([status, count]) => (
+                      <div key={status} className="flex justify-between items-center">
+                        <span className="text-muted-foreground">{status}:</span>
+                        <Badge variant="outline">{count}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                  {impactPreview.targetStatus && (
+                    <div className="mt-3 pt-2 border-t flex items-center gap-2">
+                      <RotateCcw className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">All will be reverted to:</span>
+                      <Badge variant="secondary" className="bg-green-100 dark:bg-green-900">
+                        {impactPreview.targetStatus}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <Separator />
 
             <div className="space-y-3">
