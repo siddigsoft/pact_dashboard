@@ -121,12 +121,14 @@ const ACTIVITY_PATTERNS = [
   /kind\s*of\s*process\s*monitoring/i, /process\s*monitoring/i,
   /1\.11/i, /what\s*kind\s*of\s*process\s*monitoring/i,
   /SECTION.*1\.11/i, /going\s*to\s*conduct/i,
+  /1\.10a/i, /confirm\s*the\s*activity/i, /activity\s*of\s*the\s*site/i,
 ];
 
 const CP_PATTERNS = [
   /^cp$/i, /^cp\s*name$/i, /cooperating.*partner/i, /cp_name/i, /cpname/i,
   /SECTION_A\/A08$/i, /A08$/i,
   /_cp$/i, /partner$/i,
+  /implementing\s*partner/i, /1\.10c/i, /name\s*of\s*implementing/i,
 ];
 
 const TOOL_PATTERNS = [
@@ -144,6 +146,15 @@ const WAREHOUSE_MONITORING_PATTERNS = [
 const MONITORING_CYCLE_PATTERNS = [
   /^monitoring[_\s]*cycle$/i, /^cycle[_\s]*month$/i, /^cycle$/i, 
   /^month$/i, /^mmp[_\s]*cycle$/i, /^reporting[_\s]*month$/i,
+];
+
+// Separate patterns for year/month when cycle is split across two columns
+const MONITORING_CYCLE_YEAR_PATTERNS = [
+  /cycle[_\s]*year/i, /1\.0a.*cycle.*year/i, /monitoring.*year/i,
+];
+
+const MONITORING_CYCLE_MONTH_PATTERNS = [
+  /cycle[_\s]*month/i, /1\.0b.*cycle.*month/i, /monitoring.*month/i,
 ];
 
 const GPS_COLUMN_PATTERNS = {
@@ -275,6 +286,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     useMarketDiversion: string | null;
     useWarehouseMonitoring: string | null;
     monitoringCycle: string | null;
+    monitoringCycleYear: string | null;
+    monitoringCycleMonthName: string | null;
     latitude: string | null;
     longitude: string | null;
     altitude: string | null;
@@ -297,6 +310,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     useMarketDiversion: null,
     useWarehouseMonitoring: null,
     monitoringCycle: null,
+    monitoringCycleYear: null,
+    monitoringCycleMonthName: null,
     latitude: null,
     longitude: null,
     altitude: null,
@@ -399,6 +414,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       const marketDiversionCol = findColumn(fileHeaders, MARKET_DIVERSION_PATTERNS);
       const warehouseMonitoringCol = findColumn(fileHeaders, WAREHOUSE_MONITORING_PATTERNS);
       const monitoringCycleCol = findColumn(fileHeaders, MONITORING_CYCLE_PATTERNS);
+      const monitoringCycleYearCol = findColumn(fileHeaders, MONITORING_CYCLE_YEAR_PATTERNS);
+      const monitoringCycleMonthNameCol = findColumn(fileHeaders, MONITORING_CYCLE_MONTH_PATTERNS);
       const latCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.latitude);
       
       console.log('[GPS Upload] File headers:', fileHeaders.slice(0, 20));
@@ -445,6 +462,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         useMarketDiversion: marketDiversionCol,
         useWarehouseMonitoring: warehouseMonitoringCol,
         monitoringCycle: monitoringCycleCol,
+        monitoringCycleYear: monitoringCycleYearCol,
+        monitoringCycleMonthName: monitoringCycleMonthNameCol,
         latitude: latCol,
         longitude: lngCol,
         altitude: altCol,
@@ -480,7 +499,25 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         const tool = toolCol ? row[toolCol] || '' : '';
         const useMarketDiversion = marketDiversionCol ? row[marketDiversionCol] || '' : '';
         const useWarehouseMonitoring = warehouseMonitoringCol ? row[warehouseMonitoringCol] || '' : '';
-        const rowMonitoringCycle = monitoringCycleCol ? row[monitoringCycleCol] || '' : '';
+        
+        // Handle monitoring cycle - either from combined column or separate year/month columns
+        let rowMonitoringCycle = monitoringCycleCol ? row[monitoringCycleCol] || '' : '';
+        if (!rowMonitoringCycle && monitoringCycleYearCol && monitoringCycleMonthNameCol) {
+          const year = row[monitoringCycleYearCol] || '';
+          const monthName = row[monitoringCycleMonthNameCol] || '';
+          if (year && monthName) {
+            // Convert month name to number (January=01, February=02, etc.)
+            const monthMap: Record<string, string> = {
+              'january': '01', 'february': '02', 'march': '03', 'april': '04',
+              'may': '05', 'june': '06', 'july': '07', 'august': '08',
+              'september': '09', 'october': '10', 'november': '11', 'december': '12',
+              'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+              'jun': '06', 'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12',
+            };
+            const monthNum = monthMap[monthName.toLowerCase().trim()] || monthName;
+            rowMonitoringCycle = `${year}-${monthNum.padStart(2, '0')}`;
+          }
+        }
         
         const normalizedStateId = normalizeStateId(rawState);
         const state = normalizedStateId || rawState;
