@@ -966,11 +966,19 @@ const ReviewAssignCoordinators: React.FC = () => {
                                 const { forwarded, unforwarded } = allSitesByLocality[localityName];
                                 const totalSites = forwarded.length + unforwarded.length;
                                 const sudanState = sudanStates.find(s => s.id === stateId);
-                                const localityData = sudanState?.localities.find(l => 
-                                  l.name.toLowerCase() === localityName.toLowerCase() ||
-                                  l.id.toLowerCase().includes(localityName.toLowerCase().replace(/\s+/g, '-'))
-                                );
+                                const normalizedLocalityName = localityName.toLowerCase().replace(/\s+/g, '');
+                                const localityData = sudanState?.localities.find(l => {
+                                  const normalizedDbName = l.name.toLowerCase().replace(/\s+/g, '');
+                                  return normalizedDbName === normalizedLocalityName ||
+                                    l.name.toLowerCase() === localityName.toLowerCase() ||
+                                    l.id.toLowerCase().includes(localityName.toLowerCase().replace(/\s+/g, '-'));
+                                });
                                 const localityArabic = localityData?.nameAr;
+                                
+                                const allLocalityUnforwardedIds = unforwarded.map((s: any) => s.id);
+                                const selectedInLocality = allLocalityUnforwardedIds.filter((id: string) => selectedSites[groupKey]?.has(id));
+                                const allLocalitySelected = unforwarded.length > 0 && selectedInLocality.length === unforwarded.length;
+                                const someLocalitySelected = selectedInLocality.length > 0 && selectedInLocality.length < unforwarded.length;
                                 const localityKey = `${groupKey}::${localityName}`;
                                 const isLocalityExpanded = expandedLocalities[localityKey] || false;
                                 
@@ -978,30 +986,53 @@ const ReviewAssignCoordinators: React.FC = () => {
                                   <div key={localityName} className="border rounded-md bg-gray-50">
                                     <div 
                                       className="flex items-center gap-2 p-2 cursor-pointer hover:bg-gray-100 rounded-t-md"
-                                      onClick={() => setExpandedLocalities(prev => ({ ...prev, [localityKey]: !prev[localityKey] }))}
                                       data-testid={`locality-header-${localityName.replace(/\s+/g, '-').toLowerCase()}`}
                                     >
-                                      {isLocalityExpanded ? <ChevronDown className="w-4 h-4 text-blue-600" /> : <ChevronRight className="w-4 h-4 text-blue-600" />}
-                                      <div className="flex-1">
-                                        <span className="font-medium text-sm text-blue-800">
-                                          {localityName}
-                                        </span>
-                                        {localityArabic && <span className="text-blue-600 text-sm ml-1">({localityArabic})</span>}
-                                      </div>
-                                      <div className="flex items-center gap-2 text-xs">
-                                        <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                                          {totalSites} {totalSites === 1 ? 'site' : 'sites'}
-                                        </span>
-                                        {forwarded.length > 0 && (
-                                          <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                                            {forwarded.length} forwarded
+                                      {unforwarded.length > 0 && (
+                                        <Checkbox
+                                          checked={allLocalitySelected}
+                                          className={someLocalitySelected ? "data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-blue-200" : ""}
+                                          onCheckedChange={(checked) => {
+                                            setSelectedSites(s => {
+                                              const set = new Set(s[groupKey] || []);
+                                              if (checked) {
+                                                allLocalityUnforwardedIds.forEach((id: string) => set.add(id));
+                                              } else {
+                                                allLocalityUnforwardedIds.forEach((id: string) => set.delete(id));
+                                              }
+                                              return { ...s, [groupKey]: set };
+                                            });
+                                          }}
+                                          onClick={(e) => e.stopPropagation()}
+                                          data-testid={`checkbox-locality-${localityName.replace(/\s+/g, '-').toLowerCase()}`}
+                                        />
+                                      )}
+                                      <div 
+                                        className="flex items-center gap-2 flex-1 cursor-pointer"
+                                        onClick={() => setExpandedLocalities(prev => ({ ...prev, [localityKey]: !prev[localityKey] }))}
+                                      >
+                                        {isLocalityExpanded ? <ChevronDown className="w-4 h-4 text-blue-600" /> : <ChevronRight className="w-4 h-4 text-blue-600" />}
+                                        <div className="flex-1">
+                                          <span className="font-medium text-sm text-blue-800">
+                                            {localityName}
                                           </span>
-                                        )}
-                                        {unforwarded.length > 0 && (
-                                          <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
-                                            {unforwarded.length} available
+                                          {localityArabic && <span className="text-blue-600 text-sm ml-1">({localityArabic})</span>}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs">
+                                          <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                                            {totalSites} {totalSites === 1 ? 'site' : 'sites'}
                                           </span>
-                                        )}
+                                          {forwarded.length > 0 && (
+                                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                                              {forwarded.length} forwarded
+                                            </span>
+                                          )}
+                                          {unforwarded.length > 0 && (
+                                            <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
+                                              {unforwarded.length} available
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                     
