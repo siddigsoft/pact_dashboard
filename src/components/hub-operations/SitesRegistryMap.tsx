@@ -10,6 +10,8 @@ interface SiteWithGPS {
   site_name: string;
   state_name: string;
   locality_name: string | null;
+  hub_name?: string | null;
+  cp_name?: string | null;
   gps_latitude: number;
   gps_longitude: number;
   gps_altitude?: number | null;

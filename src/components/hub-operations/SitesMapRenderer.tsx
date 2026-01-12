@@ -18,6 +18,8 @@ interface SiteWithGPS {
   site_name: string;
   state_name: string;
   locality_name: string | null;
+  hub_name?: string | null;
+  cp_name?: string | null;
   gps_latitude: number;
   gps_longitude: number;
   gps_altitude?: number | null;
@@ -35,29 +37,30 @@ interface SitesMapRendererProps {
   height?: string;
 }
 
+// PACT brand colors: Primary blue #0077B6, accent teal #00B4D8
 const siteIcon = L.divIcon({
   className: 'custom-site-marker',
   html: `
     <div style="
-      background-color: hsl(222, 47%, 50%);
-      width: 24px;
-      height: 24px;
+      background: linear-gradient(135deg, #0077B6 0%, #00B4D8 100%);
+      width: 28px;
+      height: 28px;
       border-radius: 50% 50% 50% 0;
       transform: rotate(-45deg);
       border: 2px solid white;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 3px 10px rgba(0,119,182,0.4);
       display: flex;
       align-items: center;
       justify-content: center;
     ">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);" xmlns="http://www.w3.org/2000/svg">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="white" style="transform: rotate(45deg);" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
       </svg>
     </div>
   `,
-  iconSize: [24, 24],
-  iconAnchor: [12, 24],
-  popupAnchor: [0, -20],
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+  popupAnchor: [0, -24],
 });
 
 const residenceIcon = L.divIcon({
@@ -135,47 +138,68 @@ export default function SitesMapRenderer({ sites, height = '400px' }: SitesMapRe
           position={[site.gps_latitude, site.gps_longitude]}
           icon={siteIcon}
         >
-          <Popup className="site-popup" minWidth={220} maxWidth={280}>
-            <div className="p-1">
-              <div className="font-semibold text-sm mb-2 flex items-start gap-2">
-                <Building2 className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
-                <span>{site.site_name}</span>
+          <Popup className="site-popup" minWidth={240} maxWidth={300}>
+            <div className="p-0">
+              {/* PACT Header */}
+              <div className="px-3 py-2 rounded-t" style={{ background: 'linear-gradient(135deg, #0077B6 0%, #00B4D8 100%)' }}>
+                <div className="font-semibold text-sm flex items-start gap-2 text-white">
+                  <Building2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>{site.site_name}</span>
+                </div>
+                {site.site_code && (
+                  <div className="text-xs text-white/80 mt-0.5 ml-6 font-mono">{site.site_code}</div>
+                )}
               </div>
               
-              <div className="space-y-1.5 text-xs">
-                {site.site_code && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground w-16">Code:</span>
-                    <Badge variant="outline" className="text-xs font-mono">
-                      {site.site_code}
-                    </Badge>
+              <div className="p-3 space-y-2 text-xs">
+                {/* Hub & CP Info */}
+                {(site.hub_name || site.cp_name) && (
+                  <div className="space-y-1.5 pb-2 border-b border-border/50">
+                    {site.hub_name && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground w-14">Hub:</span>
+                        <span className="font-medium" style={{ color: '#0077B6' }}>{site.hub_name}</span>
+                      </div>
+                    )}
+                    {site.cp_name && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground w-14">CP:</span>
+                        <Badge variant="outline" className="text-xs" style={{ borderColor: '#00B4D8', color: '#0077B6' }}>
+                          {site.cp_name}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                 )}
                 
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground w-16">State:</span>
-                  <span className="font-medium">{site.state_name}</span>
+                {/* Location Info */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground w-14">State:</span>
+                    <span className="font-medium">{site.state_name}</span>
+                  </div>
+                  
+                  {site.locality_name && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground w-14">Locality:</span>
+                      <span>{site.locality_name}</span>
+                    </div>
+                  )}
+                  
+                  {site.activity_type && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground w-14">Activity:</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {site.activity_type}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 
-                {site.locality_name && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground w-16">Locality:</span>
-                    <span>{site.locality_name}</span>
-                  </div>
-                )}
-                
-                {site.activity_type && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground w-16">Activity:</span>
-                    <Badge variant="secondary" className="text-xs">
-                      {site.activity_type}
-                    </Badge>
-                  </div>
-                )}
-                
-                <div className="pt-1.5 mt-1.5 border-t border-border/50">
+                {/* GPS Info */}
+                <div className="pt-2 mt-2 border-t border-border/50">
                   <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Navigation className="h-3 w-3" />
+                    <Navigation className="h-3 w-3" style={{ color: '#00B4D8' }} />
                     <span className="font-mono text-[10px]">
                       {site.gps_latitude.toFixed(5)}, {site.gps_longitude.toFixed(5)}
                     </span>
