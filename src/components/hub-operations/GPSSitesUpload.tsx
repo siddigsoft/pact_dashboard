@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getHubForState, getHubNameForState, hubs, sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
+import { getHubNameForState, hubs, sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import { siteRegistryService, SiteMatchResult } from '@/services/siteRegistry.service';
 import * as XLSX from 'xlsx';
@@ -527,21 +527,24 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         
         let hub = hubCol ? row[hubCol] || '' : '';
         if (!hub && normalizedStateId) {
-          const derivedHub = getHubForState(normalizedStateId);
-          if (derivedHub) {
-            hub = derivedHub;
+          // Derive hub name from state (for display purposes)
+          const derivedHubName = getHubNameForState(normalizedStateId);
+          if (derivedHubName) {
+            hub = derivedHubName;
           }
         }
         
-        if (hub && !hubs.find(h => h.id === hub)) {
+        // Normalize hub name if it doesn't match a known hub name
+        if (hub && !hubs.find(h => h.name === hub)) {
           const normalizedHub = hub.toLowerCase().trim().replace(/\s+/g, '-');
           const matchedHub = hubs.find(h => 
             h.id === normalizedHub || 
             h.name.toLowerCase().includes(normalizedHub) ||
-            normalizedHub.includes(h.id.replace('-hub', ''))
+            normalizedHub.includes(h.id.replace('-hub', '')) ||
+            h.name.toLowerCase() === normalizedHub
           );
           if (matchedHub) {
-            hub = matchedHub.id;
+            hub = matchedHub.name; // Use name for display, not id
           }
         }
         
@@ -802,8 +805,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           }
           
           const siteCode = site.siteId || `SITE-${Date.now()}-${preparedSites.length}`;
-          // Only use hub ID from lookup (valid UUID), never fall back to text from file
-          const hubId = normalizedStateId ? getHubForState(normalizedStateId) : '';
+          // Get hub name for display (hub_id is not set as it requires UUID matching database hubs table)
           const hubName = normalizedStateId ? getHubNameForState(normalizedStateId) : (site.hub || '');
           const newSiteId = uuidv4();
           
@@ -823,10 +825,8 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
             created_by: currentUser?.id || 'system',
             created_at: new Date().toISOString(),
           };
-          // Only set hub_id if we have a valid hub ID (not empty string)
-          if (hubId && hubId.length > 0) {
-            insertData.hub_id = hubId;
-          }
+          // Note: hub_id is intentionally not set - it requires a UUID from the database hubs table
+          // The hub_name text field is used for display purposes
           
           const lat = site.residenceLatitude ?? site.latitude;
           const lng = site.residenceLongitude ?? site.longitude;
