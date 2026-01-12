@@ -7,6 +7,8 @@ import { validateSitesAgainstRegistry, SiteMatchResult, RegistryLinkage } from '
 import { insertNotifications } from '@/services/mmpActions';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { parseBoolean } from '@/utils/siteNormalization';
+import { DocumentIndexService } from '@/services/document-index.service';
+import { format } from 'date-fns';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
@@ -1317,6 +1319,31 @@ export async function uploadMMPFile(
 
     // Fire notifications (best-effort)
     await notifyStakeholdersOnUpload({ id: mmpData.id, name: mmpData.name, hub: mmpData.hub });
+    
+    // Index the document in the Document Registry (best-effort, don't fail upload)
+    try {
+      const monthBucket = format(new Date(), 'yyyy-MM');
+      await DocumentIndexService.recordDocument({
+        fileName: mmpData.originalFilename || mmpData.name || 'Untitled MMP',
+        fileUrl: mmpData.fileUrl || '',
+        category: 'mmp_file',
+        uploadedAt: mmpData.uploadedAt || new Date().toISOString(),
+        uploadedBy: mmpData.uploadedBy,
+        projectId: mmpData.projectId,
+        projectName: mmpData.projectName,
+        mmpId: mmpData.id,
+        mmpName: mmpData.name,
+        monthBucket,
+        status: 'pending',
+        verified: false,
+        sourceType: 'mmp',
+        sourceTable: 'mmp_files',
+        sourceId: mmpData.id
+      });
+      console.log('[MMP Upload] Document indexed successfully');
+    } catch (indexError) {
+      console.warn('[MMP Upload] Failed to index document (non-critical):', indexError);
+    }
 
     return {
       success: true,

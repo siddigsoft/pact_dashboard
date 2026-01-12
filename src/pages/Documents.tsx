@@ -716,7 +716,10 @@ const DocumentsPage = () => {
     // Clear stale cache on mount and force fresh fetch
     clearCache();
     // Fetch filter options and documents in parallel for speed
-    Promise.all([fetchFilterOptions(), fetchDocuments(true)]);
+    Promise.all([fetchFilterOptions(), fetchDocuments(true)])
+      .catch(err => {
+        console.error('Error during initial fetch:', err);
+      });
   }, []);
 
   // Reset all filters
