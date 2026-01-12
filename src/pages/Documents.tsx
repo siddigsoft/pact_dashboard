@@ -228,11 +228,12 @@ const DocumentsPage = () => {
       let indexCounter = 1;
       const monthsSet = new Set<string>();
       const statesSet = new Set<string>();
+      const seenIds = new Set<string>();
 
       // Fetch all documents without date filter to ensure nothing is missed
       // Parallel fetch all document sources with limits for improved speed
       // Wrap each query in try-catch to handle missing tables gracefully
-      const [mmpResult, costResult, photoResult] = await Promise.all([
+      const [mmpResult, costResult, photoResult, indexedDocsResult] = await Promise.all([
         supabase
           .from('mmp_files')
           .select('id, name, original_filename, file_url, created_at, uploaded_at, updated_at, permits, project_id, project_name, status, uploaded_by')
@@ -259,6 +260,17 @@ const DocumentsPage = () => {
           } catch {
             return { data: null, error: { message: 'report_photos table may not exist' } };
           }
+        })(),
+        (async () => {
+          try {
+            return await supabase
+              .from('document_index')
+              .select('*')
+              .order('uploaded_at', { ascending: false })
+              .limit(500);
+          } catch {
+            return { data: null, error: { message: 'document_index table may not exist' } };
+          }
         })()
       ]);
 
@@ -268,6 +280,8 @@ const DocumentsPage = () => {
       const costError = costResult.error;
       const reportPhotos = photoResult.data;
       const photoError = photoResult.error;
+      const indexedDocs = indexedDocsResult.data;
+      const indexedError = indexedDocsResult.error;
 
       // Debug logging
       console.log('Documents fetch results:', {
@@ -276,8 +290,60 @@ const DocumentsPage = () => {
         costSubmissions: costSubmissions?.length || 0,
         costError,
         reportPhotos: reportPhotos?.length || 0,
-        photoError
+        photoError,
+        indexedDocs: indexedDocs?.length || 0,
+        indexedError
       });
+
+      // Process indexed documents first (persistent index takes priority)
+      try {
+        if (indexedError) {
+          console.warn('Document index fetch error:', indexedError);
+        }
+
+        (indexedDocs || []).forEach((doc: any) => {
+          if (!doc) return;
+          const docId = `indexed-${doc.id}`;
+          if (seenIds.has(docId)) return;
+          seenIds.add(docId);
+          
+          const monthBucket = safeFormatDate(doc.uploaded_at, 'yyyy-MM');
+          if (monthBucket) monthsSet.add(monthBucket);
+          if (doc.state) statesSet.add(doc.state);
+
+          docs.push({
+            id: docId,
+            indexNo: indexCounter++,
+            fileName: doc.file_name || 'Unknown Document',
+            fileUrl: doc.file_url || '',
+            fileSize: doc.file_size?.toString(),
+            fileType: doc.file_type,
+            category: doc.category || 'other',
+            uploadedAt: doc.uploaded_at || new Date().toISOString(),
+            uploadedBy: doc.uploaded_by_name || doc.uploaded_by,
+            projectId: doc.project_id,
+            projectName: doc.project_name,
+            hubId: doc.hub_id,
+            hubName: doc.hub_name,
+            state: doc.state,
+            locality: doc.locality,
+            mmpName: doc.mmp_name,
+            siteVisitId: doc.site_visit_id,
+            issueDate: doc.issue_date,
+            expiryDate: doc.expiry_date,
+            monthBucket,
+            status: doc.status || 'pending',
+            verified: doc.verified || false,
+            signatureId: doc.signature_id,
+            signedAt: doc.signed_at,
+            sourceType: doc.source_type || 'other'
+          });
+        });
+        
+        console.log(`Processed ${indexedDocs?.length || 0} documents from persistent index`);
+      } catch (e) {
+        console.error('Error processing indexed documents:', e);
+      }
       
       // Detailed MMP debug
       if (mmpFiles && mmpFiles.length > 0) {
