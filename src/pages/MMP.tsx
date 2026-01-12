@@ -1919,11 +1919,16 @@ const MMP = () => {
       totalSiteEntries += entries.length;
       const hasVerified = entries.some(site => {
         const siteStatus = (site.status || '').toLowerCase();
+        // Include all verified status variations
         return siteStatus === 'verified' || 
+               siteStatus === 'cp_verified' ||
+               siteStatus === 'permits_verified' ||
+               siteStatus === 'locality_permit_verified' ||
                siteStatus === 'dispatched' || 
                siteStatus === 'accepted' || 
                siteStatus === 'assigned' ||
                siteStatus === 'completed' ||
+               siteStatus === 'approved' ||
                (siteStatus.includes('approved') && siteStatus.includes('costed'));
       });
       if (hasVerified) {
@@ -2778,11 +2783,17 @@ const MMP = () => {
     }
     
     // Use buildSiteRowsFromMMPs with same filters as verifiedCategorySiteRows
-    // "New Sites" shows ONLY sites with status 'verified' (not pending - those go to Forwarded MMPs)
+    // "New Sites" shows verified sites that haven't progressed to costed/dispatched/accepted stages
+    // Include multiple verified status variations: verified, cp_verified, permits_verified, locality_permit_verified
     const newSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
       const status = row.status?.toLowerCase() || '';
-      // Only include sites that have been verified (status === 'verified')
-      return status === 'verified';
+      // Include sites with various verified statuses (before costing/dispatch)
+      const isVerified = status === 'verified' || 
+                         status === 'cp_verified' || 
+                         status === 'permits_verified' || 
+                         status === 'locality_permit_verified' ||
+                         (status === 'approved' && !status.includes('costed'));
+      return isVerified;
     });
     
     const dispatched = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
