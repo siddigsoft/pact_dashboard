@@ -22,6 +22,7 @@ import {
 } from '@/services/mmpActions';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
+import { sudanStates } from '@/data/sudanStates';
 
 const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -789,7 +790,12 @@ const ReviewAssignCoordinators: React.FC = () => {
                     <div className="flex items-center flex-wrap gap-1 mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
                       {expandedGroups[groupKey] ? <ChevronDown className="w-4 h-4 mr-2" /> : <ChevronRight className="w-4 h-4 mr-2" />}
                       {groupSites.length} site(s) in <span className={isUnassigned ? "text-orange-600 ml-1" : "text-blue-700 ml-1"}>
-                        {isUnassigned ? 'Unassigned State' : `${states.find(s => s.id === stateId)?.name || stateId}`}
+                        {isUnassigned ? 'Unassigned State' : (() => {
+                          const sudanState = sudanStates.find(s => s.id === stateId);
+                          const displayName = sudanState?.name || states.find(s => s.id === stateId)?.name || stateId;
+                          const arabicName = sudanState?.nameAr;
+                          return arabicName ? `${displayName} (${arabicName})` : displayName;
+                        })()}
                       </span>
                       {isUnassigned && rawStateNames.length > 0 && (
                         <span className="text-orange-500 text-sm ml-1">
@@ -891,7 +897,12 @@ const ReviewAssignCoordinators: React.FC = () => {
                                 Attach State Permit
                               </Label>
                               <p className="text-xs text-blue-700 mt-1">
-                                Upload a state permit for {isUnassigned ? 'unassigned sites' : (states.find(s => s.id === stateId)?.name || stateId)} before forwarding sites to coordinators
+                                Upload a state permit for {isUnassigned ? 'unassigned sites' : (() => {
+                                  const sudanState = sudanStates.find(s => s.id === stateId);
+                                  const displayName = sudanState?.name || states.find(s => s.id === stateId)?.name || stateId;
+                                  const arabicName = sudanState?.nameAr;
+                                  return arabicName ? `${displayName} (${arabicName})` : displayName;
+                                })()} before forwarding sites to coordinators
                               </p>
                             </div>
                             {attachStatePermitMap[groupKey] && (
