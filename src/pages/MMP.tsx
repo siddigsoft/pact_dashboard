@@ -219,9 +219,17 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
       if (mmpIds.includes(mmp.id) && Array.isArray(mmp.siteEntries)) {
         mmp.siteEntries
           .filter((entry: any) => {
-            // Filter for verified sites (case-insensitive)
-            const status = String(entry.status || '').toLowerCase();
-            return status === 'verified';
+            // Filter for verified sites (case-insensitive) - handles both "verified" and "Verified"
+            const status = String(entry.status || '').toLowerCase().trim();
+            const isVerified = status === 'verified';
+            console.log(`🔍 [MMP DEBUG] VerifiedSitesDisplay - Checking entry:`, {
+              entryId: entry.id,
+              siteName: entry.site_name || entry.siteName,
+              originalStatus: entry.status,
+              statusLowercase: status,
+              isVerified
+            });
+            return isVerified;
           })
           .forEach((entry: any) => {
             entries.push({
@@ -2731,37 +2739,46 @@ const MMP = () => {
 
   // Calculate total verified sites count across all verified MMPs (for "Verified Sites" tab badge)
   const totalVerifiedSitesCount = useMemo(() => {
-    const allVerifiedMMPs = categorizedMMPs.verified || [];
+    // Check ALL MMPs to catch all verified sites (case-insensitive)
+    const allMMPs = mmpFiles || [];
     
-    if (allVerifiedMMPs.length === 0) return 0;
-    
-    // Filter to only count verified sites from any MMP
-    const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+    // Filter to only count verified sites from any MMP (case-insensitive - handles both "verified" and "Verified")
+    const verifiedSites = buildSiteRowsFromMMPs(allMMPs, (row) => {
       // Show sites that are verified (from mmp_site_entries)
-      // Check both lowercase and capitalized versions
-      const status = row.status?.toLowerCase() || '';
+      // Case-insensitive check for both "verified" and "Verified"
+      const status = String(row.status || '').toLowerCase().trim();
       return status === 'verified';
     });
     
+    console.log('🔍 [MMP DEBUG] totalVerifiedSitesCount:', {
+      allMMPsCount: allMMPs.length,
+      verifiedSitesCount: verifiedSites.length,
+      verifiedSites: verifiedSites.map(s => ({ id: s.id, mmpId: s.mmpId, status: s.status, siteName: s.siteName }))
+    });
+    
     return verifiedSites.length;
-  }, [categorizedMMPs.verified, siteVisitRows]);
+  }, [mmpFiles, siteVisitRows]);
 
   // Always calculate verified sites count for "newSites" subcategory (for badge display)
   const newSitesVerifiedCount = useMemo(() => {
-    const allVerifiedMMPs = categorizedMMPs.verified || [];
+    // Check ALL MMPs to catch all verified sites (case-insensitive)
+    const allMMPs = mmpFiles || [];
     
-    if (allVerifiedMMPs.length === 0) return 0;
-    
-    // Filter to only count verified sites from any MMP
-    const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+    // Filter to only count verified sites from any MMP (case-insensitive - handles both "verified" and "Verified")
+    const verifiedSites = buildSiteRowsFromMMPs(allMMPs, (row) => {
       // Show sites that are verified (from mmp_site_entries)
-      // Check both lowercase and capitalized versions
-      const status = row.status?.toLowerCase() || '';
+      // Case-insensitive check for both "verified" and "Verified"
+      const status = String(row.status || '').toLowerCase().trim();
       return status === 'verified';
     });
     
+    console.log('🔍 [MMP DEBUG] newSitesVerifiedCount:', {
+      allMMPsCount: allMMPs.length,
+      verifiedSitesCount: verifiedSites.length
+    });
+    
     return verifiedSites.length;
-  }, [categorizedMMPs.verified, siteVisitRows]);
+  }, [mmpFiles, siteVisitRows]);
 
   // Verified site rows per subcategory (all roles seeing Verified tab)
   const verifiedCategorySiteRows = useMemo(() => {
@@ -3003,10 +3020,13 @@ const MMP = () => {
     // For other sub-tabs, exclude completed sites since tables are editable
     const filterFn = verifiedSubTab === 'newSites' 
       ? (row: SiteVisitRow) => {
-          const status = row.status?.toLowerCase() || '';
+          // Case-insensitive check for both "verified" and "Verified"
+          const status = String(row.status || '').toLowerCase().trim();
           const isVerified = status === 'verified';
           if (!isVerified) {
             console.log('🔍 [MMP DEBUG] Row filtered out (not verified):', { rowId: row.id, status: row.status, mmpId: row.mmpId });
+          } else {
+            console.log('✅ [MMP DEBUG] Row INCLUDED (verified):', { rowId: row.id, status: row.status, mmpId: row.mmpId, siteName: row.siteName });
           }
           return isVerified;
         }
