@@ -53,12 +53,20 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
   const [stateFilter, setStateFilter] = useState<string>('all');
   const [activityFilter, setActivityFilter] = useState<string>('all');
   
-  const sitesWithGPS = sites.filter(s => 
-    s.gps_latitude !== null && 
-    s.gps_longitude !== null &&
-    !isNaN(s.gps_latitude) &&
-    !isNaN(s.gps_longitude)
-  );
+  const sitesWithGPS = sites.filter(s => {
+    const lat = Number(s.gps_latitude);
+    const lng = Number(s.gps_longitude);
+    return (
+      s.gps_latitude !== null && 
+      s.gps_longitude !== null &&
+      !isNaN(lat) &&
+      !isNaN(lng) &&
+      lat !== 0 &&
+      lng !== 0 &&
+      lat >= -90 && lat <= 90 &&
+      lng >= -180 && lng <= 180
+    );
+  });
 
   // Get unique states and activity types for filters
   const uniqueStates = useMemo(() => {
@@ -159,7 +167,7 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
         setIsFullscreen(open);
         if (!open) resetFilters();
       }}>
-        <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] p-0 overflow-hidden flex flex-col">
+        <DialogContent className="!max-w-[100vw] !w-[100vw] !h-[100vh] !max-h-[100vh] !rounded-none p-0 overflow-hidden flex flex-col fixed inset-0 m-0">
           <DialogHeader className="sr-only">
             <DialogTitle>PACT Sites Map</DialogTitle>
           </DialogHeader>
@@ -254,8 +262,8 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
             </div>
           </div>
 
-          {/* Map Container - use fixed height instead of flex-1 */}
-          <div className="flex-grow overflow-hidden" style={{ minHeight: '300px' }}>
+          {/* Map Container - fills remaining space */}
+          <div className="flex-1 overflow-hidden">
             {isClient && isFullscreen && (
               <Suspense fallback={<MapPlaceholder />}>
                 <LazySitesMap 
