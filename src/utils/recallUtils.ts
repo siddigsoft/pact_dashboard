@@ -611,94 +611,140 @@ async function executeRecall(
       break;
 
     case 'fom_to_coordinator':
-      // Clear coordinator-related workflow fields to prevent MMP from appearing in Verified tabs
+      // For full MMP recalls, clear all coordinator forwarding fields
+      // For partial recalls, keep coordinator assignments for unaffected sites
       if (request.scopeType === 'full_mmp') {
         workflow.forwardedToCoordinatorIds = [];
         workflow.forwardedToCoordinatorNames = [];
         delete workflow.forwardedToCoordinators;
         delete workflow.forwardedToCoordinatorAt;
         delete workflow.forwardedToCoordinatorsAt;
-        // Clear coordinator verification data
+        // Clear coordinator verification data only for full recalls
         delete workflow.coordinatorVerified;
         delete workflow.coordinatorVerifiedAt;
         delete workflow.coordinatorVerifiedBy;
         delete workflow.currentStage;
-        // Clear verification progress data to prevent sites from appearing in "New Sites"
+        // Clear ALL verification progress data
         delete workflow.verificationProgress;
         delete workflow.coordinatorAssignments;
         delete workflow.stateAssignments;
         delete workflow.cpVerifiedCount;
         delete workflow.cpVerifiedAt;
         delete workflow.cpVerifiedBy;
+        // Clear comprehensiveVerification including nested permitVerification and cpVerification
         delete workflow.comprehensiveVerification;
+        delete workflow.permitVerification;
+        delete workflow.cpVerification;
+        delete workflow.verificationStatus;
+        delete workflow.verifierAssignments;
+        delete workflow.locked;
       }
       
       const fomSiteIds = affectedSites.map(s => s.id);
       if (fomSiteIds.length > 0) {
-        // Reset sites to pre-coordinator state with cleared verification data
-        // First, get current additional_data for each site to preserve recall history
-        const { data: currentSites } = await supabase
+        // Batch update all sites at once - reset to pre-coordinator state
+        // Use Supabase batch update for efficiency and consistency
+        const { error: siteUpdateError } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            status: 'Forwarded', // Revert to forwarded status (pre-verification)
+            assigned_to: null,
+            claimed_by: null,
+            assignment_status: 'recalled',
+            claim_status: null,
+            dispatch_status: null,
+            recall_status: 'recalled',
+            recall_event_id: recallEventId,
+            recalled_at: now,
+            recalled_by: recallerName,
+            verified_at: null,
+            verified_by: null
+          })
+          .in('id', fomSiteIds);
+        
+        if (siteUpdateError) {
+          console.error('[FOM Recall] Error updating site statuses:', siteUpdateError);
+          throw new Error(`Failed to update site statuses: ${siteUpdateError.message}`);
+        }
+        
+        // Clear verification data from additional_data
+        // Fetch current additional_data to preserve non-verification fields
+        const { data: sitesToClear, error: fetchError } = await supabase
           .from('mmp_site_entries')
           .select('id, additional_data')
           .in('id', fomSiteIds);
         
-        // Update each site individually to properly clear verification fields from additional_data
-        for (const site of currentSites || []) {
-          const existingData = (site.additional_data as Record<string, unknown>) || {};
-          const recallHistory = Array.isArray(existingData.recall_history) 
-            ? existingData.recall_history 
-            : [];
+        if (fetchError) {
+          console.error('[FOM Recall] Error fetching sites for additional_data cleanup:', fetchError);
+        }
+        
+        if (sitesToClear && sitesToClear.length > 0) {
+          // Prepare batch updates with cleared additional_data
+          // These are the keys that UI filters check to classify sites as "verified":
+          // - permitVerification (object with status field)
+          // - cpVerification (object with verificationStatus field)
+          // - coordinatorAssignments, stateAssignments, verificationProgress (objects)
+          // - Scalar flags: cp_verified, locality_permit_verified, state_permit_verified, etc.
+          const verificationKeysToRemove = [
+            // Nested verification objects
+            'permitVerification',
+            'cpVerification',
+            'coordinatorAssignments',
+            'stateAssignments',
+            'verificationProgress',
+            'comprehensiveVerification',
+            'verifierAssignments',
+            // Scalar verification flags
+            'verified_at', 'verified_by', 'verification_notes', 'verification_status',
+            'cp_verified', 'cp_verification_date', 'cp_verification_by',
+            'locality_permit_verified', 'locality_permit_verified_at', 'locality_permit_verified_by',
+            'state_permit_verified', 'state_permit_verified_at', 'state_permit_verified_by',
+            'federal_permit_verified', 'federal_permit_verified_at', 'federal_permit_verified_by',
+            'coordinatorVerified', 'coordinatorVerifiedAt', 'coordinatorVerifiedBy'
+          ];
           
-          // Add current recall to history
-          recallHistory.push({
-            from_status: 'coordinator_verification',
-            to_status: 'forwarded',
-            reason: request.reason,
-            recalled_at: now,
-            recalled_by: recallerName
-          });
-          
-          // Clear verification-related fields from additional_data
-          const updatedData: Record<string, unknown> = {
-            ...existingData,
-            recall_history: recallHistory,
-            last_recalled_at: now,
-            last_recalled_by: recallerName,
-            // Clear all verification flags
-            verified_at: null,
-            verified_by: null,
-            verification_notes: null,
-            cp_verified: null,
-            cp_verification_date: null,
-            cp_verification_by: null,
-            locality_permit_verified: null,
-            locality_permit_verified_at: null,
-            locality_permit_verified_by: null,
-            state_permit_verified: null,
-            state_permit_verified_at: null,
-            federal_permit_verified: null,
-            federal_permit_verified_at: null
-          };
-          
-          await supabase
-            .from('mmp_site_entries')
-            .update({
-              status: 'Forwarded', // Revert to forwarded status (pre-verification)
-              assigned_to: null,
-              claimed_by: null,
-              assignment_status: 'recalled',
-              claim_status: null,
-              dispatch_status: null,
-              recall_status: 'recalled',
-              recall_event_id: recallEventId,
+          const batchUpdates = sitesToClear.map(site => {
+            const existing = (site.additional_data as Record<string, unknown>) || {};
+            
+            // Remove all verification-related keys
+            const cleaned: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(existing)) {
+              if (!verificationKeysToRemove.includes(key)) {
+                cleaned[key] = value;
+              }
+            }
+            
+            // Add recall tracking
+            const recallHistory = Array.isArray(cleaned.recall_history) ? cleaned.recall_history : [];
+            recallHistory.push({
+              tier: 'fom_to_coordinator',
+              reason: request.reason,
               recalled_at: now,
               recalled_by: recallerName,
-              // Clear verification columns if they exist
-              verified_at: null,
-              verified_by: null,
-              additional_data: updatedData
-            })
-            .eq('id', site.id);
+              recall_event_id: recallEventId
+            });
+            cleaned.recall_history = recallHistory;
+            cleaned.last_recalled_at = now;
+            cleaned.last_recalled_by = recallerName;
+            
+            return { id: site.id, additional_data: cleaned };
+          });
+          
+          // Execute batch updates with error handling
+          const updateResults = await Promise.allSettled(
+            batchUpdates.map(update =>
+              supabase
+                .from('mmp_site_entries')
+                .update({ additional_data: update.additional_data })
+                .eq('id', update.id)
+            )
+          );
+          
+          // Log any failures
+          const failures = updateResults.filter(r => r.status === 'rejected');
+          if (failures.length > 0) {
+            console.error(`[FOM Recall] ${failures.length} additional_data updates failed`);
+          }
         }
       }
       
