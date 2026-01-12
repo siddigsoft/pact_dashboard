@@ -226,19 +226,17 @@ const ReviewAssignCoordinators: React.FC = () => {
       return;
     }
     
-    // Recompute groupMap using normalized state/locality IDs
-    // This ensures variations like "River Nile", "River Nile State", "river nile" all map to the same group
+    // Recompute groupMap grouped by STATE only (not locality)
+    // This ensures all sites in a state are forwarded together
     const groupMap: Record<string, any[]> = {};
     entries.forEach((e: any) => {
       const rawState = String(e.state || '').trim();
-      const rawLocality = String(e.locality || '').trim();
       
       // Use comprehensive normalization that handles aliases
       const stateId = normalizeStateId(rawState);
-      const localityId = stateId ? normalizeLocalityId(rawLocality, stateId) : null;
       
-      // Create group key using normalized IDs
-      const key = stateId ? `${stateId}|${localityId || ''}` : 'unassigned|unassigned';
+      // Create group key using state ID only
+      const key = stateId || 'unassigned';
       if (!groupMap[key]) groupMap[key] = [];
       groupMap[key].push(e);
     });
@@ -343,26 +341,24 @@ const ReviewAssignCoordinators: React.FC = () => {
   const selectedStateObj = hubStateOptions.find(s => s.state_id === selectedState);
   const localityOptions = selectedStateObj ? localities.filter(loc => loc.state_id === selectedStateObj.state_id) : [];
 
-  // Create group map from entries using normalized state/locality IDs
-  // This ensures variations like "River Nile", "River Nile State", "river nile" all map to the same group
+  // Create group map from entries grouped by STATE only (not locality)
+  // This ensures all sites in a state are forwarded together
   const groupMap: Record<string, any[]> = {};
   entries.forEach((e: any) => {
     const rawState = String(e.state || '').trim();
-    const rawLocality = String(e.locality || '').trim();
     
     // Use comprehensive normalization that handles aliases
     const stateId = normalizeStateId(rawState);
-    const localityId = stateId ? normalizeLocalityId(rawLocality, stateId) : null;
     
-    // Create group key using normalized IDs
-    const key = stateId ? `${stateId}|${localityId || ''}` : 'unassigned|unassigned';
+    // Create group key using state ID only
+    const key = stateId || 'unassigned';
     if (!groupMap[key]) groupMap[key] = [];
     groupMap[key].push(e);
   });
 
   // Filter groups based on selected filters
   const filteredGroupMap = Object.entries(groupMap).reduce((acc, [groupKey, groupSites]) => {
-    const [stateId, localityId] = groupKey.split('|');
+    const stateId = groupKey; // groupKey is now just the stateId
     
     // If no filters selected, show all
     // Note: apply state-permit filter after basic filters
@@ -390,7 +386,17 @@ const ReviewAssignCoordinators: React.FC = () => {
     }
     
     if (matches && selectedLocality) {
-      if (localityId !== selectedLocality) matches = false;
+      // Filter sites within the state group by locality
+      const filteredSites = groupSites.filter((site: any) => {
+        const siteLocalityId = normalizeLocalityId(String(site.locality || '').trim(), stateId);
+        return siteLocalityId === selectedLocality;
+      });
+      if (filteredSites.length === 0) matches = false;
+      else {
+        // Replace groupSites with filtered sites for this locality
+        acc[groupKey] = filteredSites;
+        return acc;
+      }
     }
     
     if (matches && withStatePermitOnly) {
@@ -424,7 +430,7 @@ const ReviewAssignCoordinators: React.FC = () => {
       const coordinatorId = assignmentMap[groupKey];
       const supervisorId = supervisorMap[groupKey];
       const siteIds = Array.from(selectedSites[groupKey] || []);
-      const [stateId] = groupKey.split('|');
+      const stateId = groupKey; // groupKey is now just the stateId
       if (!coordinatorId || siteIds.length === 0) {
         toast({ title: 'Select sites and coordinator', description: 'Please select at least one site and a coordinator.', variant: 'destructive' });
         setBatchLoading(b => ({ ...b, [groupKey]: false }));
@@ -497,11 +503,9 @@ const ReviewAssignCoordinators: React.FC = () => {
             .filter((site: any) => siteIds.includes(site.id))
             .map((site: any) => site.siteName || site.siteCode || `Site ${site.id}`);
           
-          // Get location info
-          const stateName = states.find(s => s.id === stateId)?.name || '';
-          const [_, localityId] = groupKey.split('|');
-          const localityName = localityId && localityId !== 'unassigned' ? localities.find(l => l.id === localityId)?.name : '';
-          const locationInfo = `${stateName}${localityName ? ` - ${localityName}` : ''}`;
+          // Get location info (state only now, as MMP is sent by state)
+          const stateName = states.find(s => s.id === stateId)?.name || stateId || 'Unknown State';
+          const locationInfo = stateName;
           
           // Get forwarder name
           const forwarderName = currentUser?.fullName || currentUser?.name || currentUser?.email || 'Field Operations Manager';
@@ -544,11 +548,9 @@ const ReviewAssignCoordinators: React.FC = () => {
                                    allCoordinators.find(c => c.id === coordinatorId)?.name || 
                                    'Coordinator';
             
-            // Get location info
-            const stateName = states.find(s => s.id === stateId)?.name || '';
-            const [_, localityId] = groupKey.split('|');
-            const localityName = localityId && localityId !== 'unassigned' ? localities.find(l => l.id === localityId)?.name : '';
-            const locationInfo = `${stateName}${localityName ? ` - ${localityName}` : ''}`;
+            // Get location info (state only now, as MMP is sent by state)
+            const stateName = states.find(s => s.id === stateId)?.name || stateId || 'Unknown State';
+            const locationInfo = stateName;
             
             // Get forwarder name
             const forwarderName = currentUser?.fullName || currentUser?.name || currentUser?.email || 'Field Operations Manager';
@@ -763,16 +765,19 @@ const ReviewAssignCoordinators: React.FC = () => {
               </div>
             ) : (
               Object.entries(filteredGroupMap).map(([groupKey, groupSites]) => {
-                const [stateId, localityId] = groupKey.split('|');
+                const stateId = groupKey; // groupKey is now just the stateId
                 const isUnassigned = stateId === 'unassigned';
-                const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, localityId);
-                const selectedId = assignmentMap[groupKey] || '';  // Removed: recommended?.id || ''
+                const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, '');
+                const selectedId = assignmentMap[groupKey] || '';
                 
                 // Separate forwarded and unforwarded sites
                 const forwardedSites = groupSites.filter((site: any) => forwardedSiteIds.has(site.id));
                 const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
                 const hasUnforwardedSites = unforwardedSites.length > 0;
                 const hasForwardedSites = forwardedSites.length > 0;
+                
+                // Get unique localities within this state group for display
+                const localitiesInGroup = [...new Set(groupSites.map((s: any) => String(s.locality || '').trim()).filter(Boolean))];
                 
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
@@ -781,12 +786,9 @@ const ReviewAssignCoordinators: React.FC = () => {
                       {groupSites.length} site(s) in <span className="text-blue-700 ml-1">
                         {isUnassigned ? 'Unassigned State' : `${states.find(s => s.id === stateId)?.name || stateId}`}
                       </span>
-                      {!isUnassigned && (
-                        <span className="text-muted-foreground mx-1">/</span>
-                      )}
-                      {!isUnassigned && (
-                        <span className={localityId ? "text-green-700" : "text-orange-500 italic"}>
-                          {localityId ? (localities.find(l => l.id === localityId)?.name || localityId) : 'No locality'}
+                      {!isUnassigned && localitiesInGroup.length > 0 && (
+                        <span className="text-muted-foreground text-sm ml-2">
+                          ({localitiesInGroup.length} {localitiesInGroup.length === 1 ? 'locality' : 'localities'})
                         </span>
                       )}
                       {hasForwardedSites && (
