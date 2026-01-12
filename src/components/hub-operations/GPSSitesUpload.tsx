@@ -260,6 +260,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [parsingProgress, setParsingProgress] = useState({ current: 0, total: 0, phase: '' });
   const [uploading, setUploading] = useState(false);
   const [parsedSites, setParsedSites] = useState<ParsedSite[]>([]);
   const [columnMapping, setColumnMapping] = useState<{
@@ -457,14 +458,19 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       });
       
       // Clear cache and load fresh site data for matching
+      setParsingProgress({ current: 0, total: rows.length, phase: 'Loading site registry...' });
       siteRegistryService.clearCache();
       await siteRegistryService.loadAllSites();
       
-      // Parse rows and match against registry
+      // Parse rows and match against registry in batches for better performance
       const parsed: ParsedSite[] = [];
+      const BATCH_SIZE = 50;
+      const totalRows = rows.length;
       
-      for (let idx = 0; idx < rows.length; idx++) {
-        const row = rows[idx];
+      setParsingProgress({ current: 0, total: totalRows, phase: 'Processing sites...' });
+      
+      // Process a single row
+      const processRow = async (row: Record<string, string>, idx: number): Promise<ParsedSite> => {
         const siteId = siteIdCol ? row[siteIdCol] || '' : '';
         const siteName = siteNameCol ? row[siteNameCol] || '' : '';
         const rawState = stateCol ? row[stateCol] || '' : '';
@@ -600,7 +606,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         const existingHasResidenceGps = existingSite?.gps_latitude != null && existingSite?.gps_longitude != null;
         const willUpdateResidenceGps = hasResidenceGps && existingSite && !existingHasResidenceGps;
         
-        parsed.push({
+        return {
           rowIndex: idx + 2,
           siteId,
           siteName,
@@ -630,9 +636,33 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           matchConfidence: matchResult.confidence,
           willUpdate: matchResult.matched && (willUpdateSiteGps || willUpdateResidenceGps || hasSiteGps || hasResidenceGps),
           monitoringCycle: rowMonitoringCycle || undefined,
+        };
+      };
+      
+      // Process rows in batches for better performance and UI responsiveness
+      for (let batchStart = 0; batchStart < totalRows; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, totalRows);
+        const batchRows = rows.slice(batchStart, batchEnd);
+        
+        // Process batch in parallel
+        const batchResults = await Promise.all(
+          batchRows.map((row, i) => processRow(row, batchStart + i))
+        );
+        
+        parsed.push(...batchResults);
+        
+        // Update progress
+        setParsingProgress({ 
+          current: batchEnd, 
+          total: totalRows, 
+          phase: `Processing sites... (${batchEnd}/${totalRows})`
         });
+        
+        // Yield to UI thread between batches
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
       
+      setParsingProgress({ current: totalRows, total: totalRows, phase: 'Complete!' });
       setParsedSites(parsed);
       setSelectedRows(new Set(parsed.filter(p => p.isValid).map(p => p.rowIndex)));
       setPreviewOpen(true);
@@ -926,9 +956,22 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               </div>
               
               {parsing && (
-                <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Parsing file...
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm font-medium">{parsingProgress.phase || 'Preparing...'}</span>
+                  </div>
+                  {parsingProgress.total > 0 && (
+                    <div className="w-full max-w-xs mx-auto">
+                      <Progress 
+                        value={(parsingProgress.current / parsingProgress.total) * 100} 
+                        className="h-2"
+                      />
+                      <p className="text-xs text-center text-muted-foreground mt-1">
+                        {parsingProgress.current} of {parsingProgress.total} rows
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               
