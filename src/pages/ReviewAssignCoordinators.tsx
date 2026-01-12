@@ -788,10 +788,15 @@ const ReviewAssignCoordinators: React.FC = () => {
                     <div className="flex items-center mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
                       {expandedGroups[groupKey] ? <ChevronDown className="w-4 h-4 mr-2" /> : <ChevronRight className="w-4 h-4 mr-2" />}
                       {groupSites.length} site(s) in <span className="text-blue-700 ml-1">
-                        {isUnassigned ? 'Unassigned Locations' : `${states.find(s => s.id === stateId)?.name || stateId}`}
+                        {isUnassigned ? 'Unassigned State' : `${states.find(s => s.id === stateId)?.name || stateId}`}
                       </span>
-                      {!isUnassigned && localityId && (
-                        <span> / <span className="text-green-700">{localities.find(l => l.id === localityId)?.name || localityId}</span></span>
+                      {!isUnassigned && (
+                        <span className="text-muted-foreground mx-1">/</span>
+                      )}
+                      {!isUnassigned && (
+                        <span className={localityId ? "text-green-700" : "text-orange-500 italic"}>
+                          {localityId ? (localities.find(l => l.id === localityId)?.name || localityId) : 'No locality'}
+                        </span>
                       )}
                       {hasForwardedSites && (
                         <span className="ml-2 text-sm text-green-700 font-normal">
@@ -807,7 +812,11 @@ const ReviewAssignCoordinators: React.FC = () => {
                     {hasUnforwardedSites && (
                       <>
                         <div className="mb-3 text-sm text-muted-foreground">
-                          Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
+                          Recommended: {recommended ? (
+                            <span className="text-green-700 font-medium">{recommended.fullName || recommended.name || recommended.email}</span>
+                          ) : (
+                            <span className="text-orange-500 italic">No coordinator assigned to this state</span>
+                          )}
                         </div>
                         <div className="flex flex-col gap-3 mb-3">
                           <div className="flex items-center gap-3">
@@ -879,7 +888,7 @@ const ReviewAssignCoordinators: React.FC = () => {
                                 Attach State Permit
                               </Label>
                               <p className="text-xs text-blue-700 mt-1">
-                                Upload a state permit for {states.find(s => s.id === stateId)?.name || stateId} before forwarding sites to coordinators
+                                Upload a state permit for {isUnassigned ? 'unassigned sites' : (states.find(s => s.id === stateId)?.name || stateId)} before forwarding sites to coordinators
                               </p>
                             </div>
                             {attachStatePermitMap[groupKey] && (
