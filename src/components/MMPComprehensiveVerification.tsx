@@ -343,14 +343,18 @@ export const MMPComprehensiveVerificationComponent: React.FC<MMPComprehensiveVer
               <div className="flex justify-between items-center">
                 <div className="flex gap-2 items-center">
                   {getStatusIcon(comprehensiveVerification.permitVerification?.status || 'pending')}
-                  <span className="font-medium">Step 4: Permit Verification</span>
+                  <span className="font-medium">
+                    {isFOM ? 'Upload Federal Permit' : 'Step 4: Permit Verification'}
+                  </span>
                 </div>
                 <Badge className={getStatusColor(comprehensiveVerification.permitVerification?.status || 'pending')}>
                   {comprehensiveVerification.permitVerification?.status || 'pending'}
                 </Badge>
               </div>
               <p className="text-sm mt-2">
-                Verify all required permits and documentation.
+                {isFOM 
+                  ? 'Upload the Federal Permit for this MMP.' 
+                  : 'Verify all required permits and documentation.'}
               </p>
             </div>
           </div>
@@ -374,7 +378,9 @@ export const MMPComprehensiveVerificationComponent: React.FC<MMPComprehensiveVer
       <Tabs defaultValue={isFOM ? 'permit-verification' : 'cp-verification'} className="w-full">
         <TabsList className={`grid ${isFOM ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {!isFOM && (<TabsTrigger value="cp-verification">CP Verification</TabsTrigger>)}
-          <TabsTrigger value="permit-verification">Permit Verification</TabsTrigger>
+          <TabsTrigger value="permit-verification">
+            {isFOM ? 'Federal Permit Upload' : 'Permit Verification'}
+          </TabsTrigger>
         </TabsList>
 
         {!isFOM && (
