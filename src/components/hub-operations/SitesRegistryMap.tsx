@@ -251,10 +251,15 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
           </div>
 
           {/* Map Container */}
-          <div className="flex-1 h-[calc(95vh-140px)]">
-            {isClient && (
+          <div className="flex-1" style={{ height: 'calc(95vh - 180px)', minHeight: '400px' }}>
+            {isClient && isFullscreen && (
               <Suspense fallback={<MapPlaceholder />}>
-                <LazySitesMap sites={filteredSites} height="100%" isVisible={isFullscreen} />
+                <LazySitesMap 
+                  key={`fullscreen-map-${isFullscreen}`} 
+                  sites={filteredSites} 
+                  height="100%" 
+                  isVisible={isFullscreen} 
+                />
               </Suspense>
             )}
           </div>
