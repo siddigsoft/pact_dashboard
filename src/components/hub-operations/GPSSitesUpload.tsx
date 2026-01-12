@@ -802,8 +802,9 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           }
           
           const siteCode = site.siteId || `SITE-${Date.now()}-${preparedSites.length}`;
-          const hubId = normalizedStateId ? getHubForState(normalizedStateId) : site.hub;
-          const hubName = normalizedStateId ? getHubNameForState(normalizedStateId) : site.hub;
+          // Only use hub ID from lookup (valid UUID), never fall back to text from file
+          const hubId = normalizedStateId ? getHubForState(normalizedStateId) : '';
+          const hubName = normalizedStateId ? getHubNameForState(normalizedStateId) : (site.hub || '');
           const newSiteId = uuidv4();
           
           const insertData: Record<string, any> = {
