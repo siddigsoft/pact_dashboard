@@ -254,7 +254,7 @@ export default function SitesRegistryMap({ sites, height = '400px' }: SitesRegis
           <div className="flex-1 h-[calc(95vh-140px)]">
             {isClient && (
               <Suspense fallback={<MapPlaceholder />}>
-                <LazySitesMap sites={filteredSites} height="100%" />
+                <LazySitesMap sites={filteredSites} height="100%" isVisible={isFullscreen} />
               </Suspense>
             )}
           </div>

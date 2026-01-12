@@ -38,6 +38,7 @@ interface SiteWithGPS {
 interface SitesMapRendererProps {
   sites: SiteWithGPS[];
   height?: string;
+  isVisible?: boolean;
 }
 
 // PACT brand colors: Primary blue #0077B6, accent teal #00B4D8
@@ -91,8 +92,39 @@ const residenceIcon = L.divIcon({
   popupAnchor: [0, -16],
 });
 
-function MapBoundsHandler({ sites }: { sites: SiteWithGPS[] }) {
+function MapBoundsHandler({ sites, isVisible }: { sites: SiteWithGPS[], isVisible?: boolean }) {
   const map = useMap();
+  
+  // Invalidate size when visibility changes (e.g., dialog opens)
+  useEffect(() => {
+    if (isVisible) {
+      // Small delay to ensure container is fully rendered
+      const timer = setTimeout(() => {
+        map.invalidateSize();
+        
+        // Re-fit bounds after invalidation
+        if (sites.length === 0) {
+          map.setView([15.5, 32.5], 6);
+        } else {
+          const points: [number, number][] = [];
+          sites.forEach(s => {
+            points.push([s.gps_latitude, s.gps_longitude]);
+            if (s.residence_latitude && s.residence_longitude) {
+              points.push([s.residence_latitude, s.residence_longitude]);
+            }
+          });
+          
+          if (points.length === 1) {
+            map.setView(points[0], 12);
+          } else {
+            const bounds = L.latLngBounds(points);
+            map.fitBounds(bounds, { padding: [40, 40] });
+          }
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [map, isVisible]);
   
   useEffect(() => {
     if (sites.length === 0) {
@@ -119,7 +151,7 @@ function MapBoundsHandler({ sites }: { sites: SiteWithGPS[] }) {
   return null;
 }
 
-export default function SitesMapRenderer({ sites, height = '400px' }: SitesMapRendererProps) {
+export default function SitesMapRenderer({ sites, height = '400px', isVisible = true }: SitesMapRendererProps) {
   const defaultCenter: [number, number] = [15.5, 32.5];
   
   return (
@@ -133,7 +165,7 @@ export default function SitesMapRenderer({ sites, height = '400px' }: SitesMapRe
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <MapBoundsHandler sites={sites} />
+      <MapBoundsHandler sites={sites} isVisible={isVisible} />
       
       {sites.map((site) => (
         <Marker
