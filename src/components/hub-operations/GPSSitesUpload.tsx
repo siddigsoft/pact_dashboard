@@ -52,6 +52,7 @@ interface ParsedSite {
   matchType: MatchType;
   matchConfidence: number;
   willUpdate: boolean;
+  monitoringCycle?: string;
 }
 
 interface UploadResult {
@@ -135,6 +136,11 @@ const MARKET_DIVERSION_PATTERNS = [
 
 const WAREHOUSE_MONITORING_PATTERNS = [
   /use\s*warehouse\s*monitoring/i, /warehouse\s*monitoring/i,
+];
+
+const MONITORING_CYCLE_PATTERNS = [
+  /^monitoring[_\s]*cycle$/i, /^cycle[_\s]*month$/i, /^cycle$/i, 
+  /^month$/i, /^mmp[_\s]*cycle$/i, /^reporting[_\s]*month$/i,
 ];
 
 const GPS_COLUMN_PATTERNS = {
@@ -278,6 +284,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     tool: string | null;
     useMarketDiversion: string | null;
     useWarehouseMonitoring: string | null;
+    monitoringCycle: string | null;
     latitude: string | null;
     longitude: string | null;
     altitude: string | null;
@@ -299,6 +306,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
     tool: null,
     useMarketDiversion: null,
     useWarehouseMonitoring: null,
+    monitoringCycle: null,
     latitude: null,
     longitude: null,
     altitude: null,
@@ -400,6 +408,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       const toolCol = findColumn(fileHeaders, TOOL_PATTERNS);
       const marketDiversionCol = findColumn(fileHeaders, MARKET_DIVERSION_PATTERNS);
       const warehouseMonitoringCol = findColumn(fileHeaders, WAREHOUSE_MONITORING_PATTERNS);
+      const monitoringCycleCol = findColumn(fileHeaders, MONITORING_CYCLE_PATTERNS);
       const latCol = findColumn(fileHeaders, GPS_COLUMN_PATTERNS.latitude);
       
       console.log('[GPS Upload] File headers:', fileHeaders.slice(0, 20));
@@ -445,6 +454,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         tool: toolCol,
         useMarketDiversion: marketDiversionCol,
         useWarehouseMonitoring: warehouseMonitoringCol,
+        monitoringCycle: monitoringCycleCol,
         latitude: latCol,
         longitude: lngCol,
         altitude: altCol,
@@ -475,6 +485,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         const tool = toolCol ? row[toolCol] || '' : '';
         const useMarketDiversion = marketDiversionCol ? row[marketDiversionCol] || '' : '';
         const useWarehouseMonitoring = warehouseMonitoringCol ? row[warehouseMonitoringCol] || '' : '';
+        const rowMonitoringCycle = monitoringCycleCol ? row[monitoringCycleCol] || '' : '';
         
         const normalizedStateId = normalizeStateId(rawState);
         const state = normalizedStateId || rawState;
@@ -630,6 +641,7 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           matchType: matchResult.matchType,
           matchConfidence: matchResult.confidence,
           willUpdate: matchResult.matched && (willUpdateSiteGps || willUpdateResidenceGps || hasSiteGps || hasResidenceGps),
+          monitoringCycle: rowMonitoringCycle || undefined,
         });
       }
       
@@ -650,17 +662,20 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   };
 
   const handleUpload = async () => {
-    // Validate monitoring cycle month is selected
-    if (!monitoringCycleMonth) {
+    const sitesToUpload = parsedSites.filter(s => selectedRows.has(s.rowIndex) && s.isValid);
+    
+    // Check if any sites are missing a monitoring cycle (either from row or UI selector)
+    const sitesWithoutCycle = sitesToUpload.filter(s => !s.monitoringCycle && !monitoringCycleMonth);
+    if (sitesWithoutCycle.length > 0) {
       toast({
         title: 'Monitoring cycle required',
-        description: 'Please select the monitoring cycle month before uploading',
+        description: sitesWithoutCycle.length === sitesToUpload.length 
+          ? 'Please select the monitoring cycle month before uploading, or add a "cycle" column to your file'
+          : `${sitesWithoutCycle.length} site(s) are missing a monitoring cycle. Add a "cycle" column or select a default cycle above.`,
         variant: 'destructive',
       });
       return;
     }
-    
-    const sitesToUpload = parsedSites.filter(s => selectedRows.has(s.rowIndex) && s.isValid);
     
     if (sitesToUpload.length === 0) {
       toast({
@@ -712,12 +727,13 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               result.errors.push(`Row ${site.rowIndex}: ${error.message}`);
             } else {
               result.updated++;
-              // Record monitoring cycle for existing site
+              // Record monitoring cycle for existing site (prefer row-level, fallback to UI selector)
+              const effectiveCycle = site.monitoringCycle || monitoringCycleMonth;
               const { error: cycleError } = await supabase
                 .from('site_monitoring_cycles')
                 .upsert({
                   site_registry_id: site.registrySiteId,
-                  cycle_month: monitoringCycleMonth,
+                  cycle_month: effectiveCycle,
                   created_by: currentUser?.id || 'system',
                 }, { onConflict: 'site_registry_id,cycle_month' });
               if (cycleError) {
@@ -789,12 +805,13 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               }
             } else {
               result.created++;
-              // Record monitoring cycle for new site
+              // Record monitoring cycle for new site (prefer row-level, fallback to UI selector)
+              const effectiveCycle = site.monitoringCycle || monitoringCycleMonth;
               const { error: cycleError } = await supabase
                 .from('site_monitoring_cycles')
                 .insert({
                   site_registry_id: newSiteId,
-                  cycle_month: monitoringCycleMonth,
+                  cycle_month: effectiveCycle,
                   created_by: currentUser?.id || 'system',
                 });
               if (cycleError) {
@@ -893,10 +910,10 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Monitoring Cycle Month Selector */}
-        <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-md">
+        <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-md flex-wrap">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <Label htmlFor="cycle-month" className="text-sm font-medium">Monitoring Cycle:</Label>
+            <Label htmlFor="cycle-month" className="text-sm font-medium">Default Monitoring Cycle:</Label>
           </div>
           <Select value={monitoringCycleMonth} onValueChange={setMonitoringCycleMonth}>
             <SelectTrigger className="w-[200px]" data-testid="select-cycle-month">
@@ -908,9 +925,14 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               ))}
             </SelectContent>
           </Select>
-          {!monitoringCycleMonth && (
-            <span className="text-xs text-amber-600">Required for upload</span>
-          )}
+          {columnMapping.monitoringCycle ? (
+            <Badge variant="secondary" className="gap-1">
+              <CheckCircle2 className="h-3 w-3" />
+              Cycle column detected in file
+            </Badge>
+          ) : !monitoringCycleMonth ? (
+            <span className="text-xs text-amber-600">Required (or add "cycle" column to file)</span>
+          ) : null}
         </div>
         
         <div className="border-2 border-dashed rounded-md p-6 text-center">
