@@ -301,7 +301,7 @@ const getStateCoordinates = (stateId: string): [number, number] | null => {
     'gezira': [14.4, 33.5],
     'red-sea': [19.6, 37.2],
     'kassala': [15.45, 36.4],
-    'gedaref': [14.0, 35.4],
+    'gedarif': [14.0, 35.4],
     'white-nile': [13.2, 32.5],
     'blue-nile': [11.8, 34.2],
     'sennar': [13.5, 33.6],

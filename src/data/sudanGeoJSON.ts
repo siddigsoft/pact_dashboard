@@ -47,7 +47,7 @@ export const sudanStateBoundaries = {
     },
     {
       type: "Feature",
-      properties: { id: "gedaref", name: "Gedaref", code: "GD", nameAr: "القضارف" },
+      properties: { id: "gedarif", name: "Gedarif", code: "GD", nameAr: "القضارف" },
       geometry: {
         type: "Polygon",
         coordinates: [[
@@ -229,7 +229,7 @@ export const hubLocations = [
     name: 'Kassala Hub',
     coordinates: [15.4507, 36.4048] as [number, number],
     color: '#22C55E',
-    states: ['kassala', 'gedaref', 'gezira', 'sennar', 'blue-nile']
+    states: ['kassala', 'gedarif', 'gezira', 'sennar', 'blue-nile']
   },
   {
     id: 'kosti-hub',
@@ -245,7 +245,7 @@ export const stateColors: Record<string, string> = {
   'gezira': '#10B981',
   'red-sea': '#EF4444',
   'kassala': '#F59E0B',
-  'gedaref': '#6366F1',
+  'gedarif': '#6366F1',
   'white-nile': '#06B6D4',
   'blue-nile': '#3B82F6',
   'sennar': '#EC4899',
