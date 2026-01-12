@@ -158,16 +158,16 @@ const MONITORING_CYCLE_MONTH_PATTERNS = [
 ];
 
 const GPS_COLUMN_PATTERNS = {
-  latitude: [/[/_]A06[/_]latitude$/i, /A06.*latitude/i, /site.*latitude/i, /_latitude$/i, /^latitude$/i, /^lat$/i, /_lat$/i, /:latitude$/i],
-  longitude: [/[/_]A06[/_]longitude$/i, /A06.*longitude/i, /site.*longitude/i, /_longitude$/i, /^longitude$/i, /^lng$/i, /^lon$/i, /_lon$/i, /_lng$/i, /:longitude$/i],
-  altitude: [/[/_]A06[/_]altitude$/i, /A06.*altitude/i, /site.*altitude/i, /_altitude$/i, /^altitude$/i, /^alt$/i, /_alt$/i, /:altitude$/i],
-  precision: [/[/_]A06[/_]precision$/i, /A06.*precision/i, /site.*precision/i, /_precision$/i, /^precision$/i, /^accuracy$/i, /_accuracy$/i, /:precision$/i, /:accuracy$/i],
-  combined: [/gps.*coordinates.*site/i, /site.*gps/i, /gps.*coordinates/i, /^gps$/i, /coordinates/i, /geopoint/i],
-  residenceLatitude: [/[/_]A05[/_]latitude$/i, /A05.*latitude/i, /residence.*latitude/i],
-  residenceLongitude: [/[/_]A05[/_]longitude$/i, /A05.*longitude/i, /residence.*longitude/i],
-  residenceAltitude: [/[/_]A05[/_]altitude$/i, /A05.*altitude/i, /residence.*altitude/i],
-  residencePrecision: [/[/_]A05[/_]precision$/i, /A05.*precision/i, /residence.*precision/i],
-  residenceCombined: [/gps.*coordinates.*residence/i, /residence.*gps/i, /residence.*coordinates/i],
+  latitude: [/[/_]A06[/_]latitude$/i, /A06.*latitude/i, /site.*latitude/i, /_latitude$/i, /^latitude$/i, /^lat$/i, /_lat$/i, /:latitude$/i, /_a_gps_latitude$/i, /a_gps_latitude/i],
+  longitude: [/[/_]A06[/_]longitude$/i, /A06.*longitude/i, /site.*longitude/i, /_longitude$/i, /^longitude$/i, /^lng$/i, /^lon$/i, /_lon$/i, /_lng$/i, /:longitude$/i, /_a_gps_longitude$/i, /a_gps_longitude/i],
+  altitude: [/[/_]A06[/_]altitude$/i, /A06.*altitude/i, /site.*altitude/i, /_altitude$/i, /^altitude$/i, /^alt$/i, /_alt$/i, /:altitude$/i, /_a_gps_altitude$/i, /a_gps_altitude/i],
+  precision: [/[/_]A06[/_]precision$/i, /A06.*precision/i, /site.*precision/i, /_precision$/i, /^precision$/i, /^accuracy$/i, /_accuracy$/i, /:precision$/i, /:accuracy$/i, /_a_gps_precision$/i, /a_gps_precision/i],
+  combined: [/gps.*coordinates.*site/i, /site.*gps/i, /gps.*coordinates/i, /^gps$/i, /coordinates/i, /geopoint/i, /geographic\s*coordinates/i],
+  residenceLatitude: [/[/_]A05[/_]latitude$/i, /A05.*latitude/i, /residence.*latitude/i, /_A05_latitude$/i],
+  residenceLongitude: [/[/_]A05[/_]longitude$/i, /A05.*longitude/i, /residence.*longitude/i, /_A05_longitude$/i],
+  residenceAltitude: [/[/_]A05[/_]altitude$/i, /A05.*altitude/i, /residence.*altitude/i, /_A05_altitude$/i],
+  residencePrecision: [/[/_]A05[/_]precision$/i, /A05.*precision/i, /residence.*precision/i, /_A05_precision$/i],
+  residenceCombined: [/gps.*coordinates.*residence/i, /residence.*gps/i, /residence.*coordinates/i, /gps\s*coordinates\s*\(residence\)/i],
 };
 
 function isA05Column(header: string): boolean {
