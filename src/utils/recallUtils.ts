@@ -611,31 +611,102 @@ async function executeRecall(
       break;
 
     case 'fom_to_coordinator':
+      // Clear coordinator-related workflow fields to prevent MMP from appearing in Verified tabs
       if (request.scopeType === 'full_mmp') {
         workflow.forwardedToCoordinatorIds = [];
+        workflow.forwardedToCoordinatorNames = [];
         delete workflow.forwardedToCoordinators;
+        delete workflow.forwardedToCoordinatorAt;
+        delete workflow.forwardedToCoordinatorsAt;
+        // Clear coordinator verification data
+        delete workflow.coordinatorVerified;
+        delete workflow.coordinatorVerifiedAt;
+        delete workflow.coordinatorVerifiedBy;
+        delete workflow.currentStage;
+        // Clear verification progress data to prevent sites from appearing in "New Sites"
+        delete workflow.verificationProgress;
+        delete workflow.coordinatorAssignments;
+        delete workflow.stateAssignments;
+        delete workflow.cpVerifiedCount;
+        delete workflow.cpVerifiedAt;
+        delete workflow.cpVerifiedBy;
+        delete workflow.comprehensiveVerification;
       }
+      
       const fomSiteIds = affectedSites.map(s => s.id);
       if (fomSiteIds.length > 0) {
-        await supabase
+        // Reset sites to pre-coordinator state with cleared verification data
+        // First, get current additional_data for each site to preserve recall history
+        const { data: currentSites } = await supabase
           .from('mmp_site_entries')
-          .update({
-            status: 'Forwarded', // Revert to forwarded status
-            assigned_to: null,
-            claimed_by: null,
-            assignment_status: 'recalled',
-            claim_status: null,
-            dispatch_status: null,
-            recall_status: 'recalled',
-            recall_event_id: recallEventId,
+          .select('id, additional_data')
+          .in('id', fomSiteIds);
+        
+        // Update each site individually to properly clear verification fields from additional_data
+        for (const site of currentSites || []) {
+          const existingData = (site.additional_data as Record<string, unknown>) || {};
+          const recallHistory = Array.isArray(existingData.recall_history) 
+            ? existingData.recall_history 
+            : [];
+          
+          // Add current recall to history
+          recallHistory.push({
+            from_status: 'coordinator_verification',
+            to_status: 'forwarded',
+            reason: request.reason,
             recalled_at: now,
             recalled_by: recallerName
-          })
-          .in('id', fomSiteIds);
+          });
+          
+          // Clear verification-related fields from additional_data
+          const updatedData: Record<string, unknown> = {
+            ...existingData,
+            recall_history: recallHistory,
+            last_recalled_at: now,
+            last_recalled_by: recallerName,
+            // Clear all verification flags
+            verified_at: null,
+            verified_by: null,
+            verification_notes: null,
+            cp_verified: null,
+            cp_verification_date: null,
+            cp_verification_by: null,
+            locality_permit_verified: null,
+            locality_permit_verified_at: null,
+            locality_permit_verified_by: null,
+            state_permit_verified: null,
+            state_permit_verified_at: null,
+            federal_permit_verified: null,
+            federal_permit_verified_at: null
+          };
+          
+          await supabase
+            .from('mmp_site_entries')
+            .update({
+              status: 'Forwarded', // Revert to forwarded status (pre-verification)
+              assigned_to: null,
+              claimed_by: null,
+              assignment_status: 'recalled',
+              claim_status: null,
+              dispatch_status: null,
+              recall_status: 'recalled',
+              recall_event_id: recallEventId,
+              recalled_at: now,
+              recalled_by: recallerName,
+              // Clear verification columns if they exist
+              verified_at: null,
+              verified_by: null,
+              additional_data: updatedData
+            })
+            .eq('id', site.id);
+        }
       }
+      
       workflow.fomRecalledAt = now;
       workflow.fomRecalledBy = recallerName;
       workflow.lastRecallEventId = recallEventId;
+      workflow.lastRecallReason = request.reason;
+      workflow.isRecalled = true;
       newStatus = 'forwarded_to_fom';
       break;
 
