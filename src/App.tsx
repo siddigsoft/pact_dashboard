@@ -110,6 +110,7 @@ import { useFCM } from './hooks/useFCM';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 import SessionManager from './components/layout/SessionManager';
+import { ActivityTrackingProvider } from './context/activity/ActivityTrackingContext';
 
 
 // Loading component for Suspense fallback
@@ -363,8 +364,9 @@ function App() {
               <NavigationProvider>
                 <AppProviders>
                   <NotificationProvider>
-                    <Suspense fallback={<PageLoader />}>
-                      <LiveDashboardProvider>
+                    <ActivityTrackingProvider>
+                      <Suspense fallback={<PageLoader />}>
+                        <LiveDashboardProvider>
                         <FCMInitializer />
                         <SessionManager>
                           <AuthGuard>
@@ -373,9 +375,10 @@ function App() {
                             </MobilePermissionGuard>
                           </AuthGuard>
                         </SessionManager>
-                      </LiveDashboardProvider>
-                    </Suspense>
-                    <AppNotifications />
+                        </LiveDashboardProvider>
+                      </Suspense>
+                      <AppNotifications />
+                    </ActivityTrackingProvider>
                     <Toaster />
                     <SonnerToaster />
                     <HotToaster

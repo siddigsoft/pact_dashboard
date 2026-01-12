@@ -65,11 +65,12 @@ import {
   TrendingUp,
   History,
   ChevronLeft,
-  Calendar
+  MousePointer
 } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO, subDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/integrations/supabase/client';
+import activityTracker, { ActivityEntry, ActivityType, ActivityCategory } from '@/services/activity-tracking.service';
 
 interface UserProfile {
   id: string;
@@ -110,6 +111,9 @@ const AuditLogs = () => {
   
   const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
+  const [liveActivities, setLiveActivities] = useState<ActivityEntry[]>([]);
+  const [activityFilter, setActivityFilter] = useState<ActivityType | 'all'>('all');
+  const [activityCategoryFilter, setActivityCategoryFilter] = useState<ActivityCategory | 'all'>('all');
 
   // Fetch all user profiles
   useEffect(() => {
@@ -141,6 +145,34 @@ const AuditLogs = () => {
     };
     fetchProfiles();
   }, []);
+
+  // Refresh live activities periodically
+  useEffect(() => {
+    const refreshActivities = () => {
+      const activities = activityTracker.getActivities({ limit: 500 });
+      setLiveActivities(activities);
+    };
+    
+    refreshActivities();
+    const interval = setInterval(refreshActivities, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Filtered live activities
+  const filteredActivities = useMemo(() => {
+    let result = [...liveActivities];
+    
+    if (activityFilter !== 'all') {
+      result = result.filter(a => a.activityType === activityFilter);
+    }
+    if (activityCategoryFilter !== 'all') {
+      result = result.filter(a => a.category === activityCategoryFilter);
+    }
+    
+    return result;
+  }, [liveActivities, activityFilter, activityCategoryFilter]);
+
+  const activityStats = useMemo(() => activityTracker.getActivityStats(), [liveActivities]);
 
   // Auto-refresh in live mode
   useEffect(() => {
@@ -1026,6 +1058,10 @@ const AuditLogs = () => {
             <Activity className="h-4 w-4 mr-2" />
             Statistics
           </TabsTrigger>
+          <TabsTrigger value="activity-tracking" data-testid="tab-activity-tracking">
+            <Zap className="h-4 w-4 mr-2" />
+            Live Activity
+          </TabsTrigger>
         </TabsList>
 
         {/* Timeline Tab */}
@@ -1836,6 +1872,239 @@ const AuditLogs = () => {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        {/* Live Activity Tracking Tab */}
+        <TabsContent value="activity-tracking" className="mt-4">
+          <div className="grid gap-4">
+            {/* Activity Stats Summary */}
+            <div className="grid gap-4 md:grid-cols-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Activities</p>
+                      <p className="text-2xl font-bold">{activityStats.totalActivities}</p>
+                    </div>
+                    <Activity className="h-8 w-8 text-primary" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Success Rate</p>
+                      <p className="text-2xl font-bold text-green-600">{activityStats.successRate.toFixed(1)}%</p>
+                    </div>
+                    <CheckCircle className="h-8 w-8 text-green-500" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Categories</p>
+                      <p className="text-2xl font-bold">{Object.keys(activityStats.byCategory).length}</p>
+                    </div>
+                    <GitBranch className="h-8 w-8 text-blue-500" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Active Users</p>
+                      <p className="text-2xl font-bold">{Object.keys(activityStats.byUser).length}</p>
+                    </div>
+                    <Users className="h-8 w-8 text-purple-500" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Filters */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  Live Activity Feed
+                </CardTitle>
+                <CardDescription>
+                  Real-time tracking of all user interactions, button clicks, navigation, form submissions, and more
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4 mb-4 flex-wrap">
+                  <Select value={activityCategoryFilter} onValueChange={(v) => setActivityCategoryFilter(v as ActivityCategory | 'all')}>
+                    <SelectTrigger className="w-40" data-testid="select-activity-category">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      <SelectItem value="interaction">Interactions</SelectItem>
+                      <SelectItem value="navigation">Navigation</SelectItem>
+                      <SelectItem value="data">Data Operations</SelectItem>
+                      <SelectItem value="authentication">Authentication</SelectItem>
+                      <SelectItem value="workflow">Workflow</SelectItem>
+                      <SelectItem value="communication">Communication</SelectItem>
+                      <SelectItem value="system">System</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={activityFilter} onValueChange={(v) => setActivityFilter(v as ActivityType | 'all')}>
+                    <SelectTrigger className="w-40" data-testid="select-activity-type">
+                      <SelectValue placeholder="Activity Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="button_click">Button Clicks</SelectItem>
+                      <SelectItem value="navigation">Navigation</SelectItem>
+                      <SelectItem value="page_view">Page Views</SelectItem>
+                      <SelectItem value="form_submit">Form Submissions</SelectItem>
+                      <SelectItem value="form_input">Form Inputs</SelectItem>
+                      <SelectItem value="modal_open">Modal Opens</SelectItem>
+                      <SelectItem value="modal_close">Modal Closes</SelectItem>
+                      <SelectItem value="tab_switch">Tab Switches</SelectItem>
+                      <SelectItem value="filter_change">Filter Changes</SelectItem>
+                      <SelectItem value="search">Searches</SelectItem>
+                      <SelectItem value="file_upload">File Uploads</SelectItem>
+                      <SelectItem value="file_download">File Downloads</SelectItem>
+                      <SelectItem value="data_create">Data Creates</SelectItem>
+                      <SelectItem value="data_update">Data Updates</SelectItem>
+                      <SelectItem value="data_delete">Data Deletes</SelectItem>
+                      <SelectItem value="data_view">Data Views</SelectItem>
+                      <SelectItem value="approval">Approvals</SelectItem>
+                      <SelectItem value="rejection">Rejections</SelectItem>
+                      <SelectItem value="login">Logins</SelectItem>
+                      <SelectItem value="logout">Logouts</SelectItem>
+                      <SelectItem value="error">Errors</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Badge variant="outline" className="ml-auto">
+                    {filteredActivities.length} activities
+                  </Badge>
+                </div>
+
+                <ScrollArea className="h-[500px]">
+                  {filteredActivities.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                      <MousePointer className="h-12 w-12 mb-4" />
+                      <p>No activities recorded yet</p>
+                      <p className="text-sm">Activities will appear here as users interact with the system</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredActivities.slice(0, 200).map((activity) => (
+                        <div 
+                          key={activity.id} 
+                          className="flex items-start gap-3 p-3 rounded-md bg-muted/30 hover-elevate"
+                          data-testid={`activity-item-${activity.id}`}
+                        >
+                          <div className="flex-shrink-0">
+                            {activity.activityType === 'button_click' && <MousePointer className="h-4 w-4 text-blue-500" />}
+                            {activity.activityType === 'navigation' && <ArrowRight className="h-4 w-4 text-green-500" />}
+                            {activity.activityType === 'page_view' && <Eye className="h-4 w-4 text-purple-500" />}
+                            {activity.activityType === 'form_submit' && <FileText className="h-4 w-4 text-orange-500" />}
+                            {activity.activityType === 'form_input' && <FileText className="h-4 w-4 text-yellow-500" />}
+                            {activity.activityType === 'search' && <Search className="h-4 w-4 text-cyan-500" />}
+                            {activity.activityType === 'modal_open' && <Eye className="h-4 w-4 text-indigo-500" />}
+                            {activity.activityType === 'modal_close' && <X className="h-4 w-4 text-gray-500" />}
+                            {activity.activityType === 'tab_switch' && <ArrowRight className="h-4 w-4 text-teal-500" />}
+                            {activity.activityType === 'filter_change' && <Filter className="h-4 w-4 text-pink-500" />}
+                            {activity.activityType === 'file_upload' && <Download className="h-4 w-4 text-green-600" />}
+                            {activity.activityType === 'file_download' && <Download className="h-4 w-4 text-blue-600" />}
+                            {activity.activityType === 'data_create' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                            {activity.activityType === 'data_update' && <RefreshCw className="h-4 w-4 text-blue-500" />}
+                            {activity.activityType === 'data_delete' && <XCircle className="h-4 w-4 text-red-500" />}
+                            {activity.activityType === 'data_view' && <Eye className="h-4 w-4 text-gray-500" />}
+                            {activity.activityType === 'approval' && <CheckCircle className="h-4 w-4 text-green-600" />}
+                            {activity.activityType === 'rejection' && <XCircle className="h-4 w-4 text-red-600" />}
+                            {activity.activityType === 'login' && <User className="h-4 w-4 text-green-500" />}
+                            {activity.activityType === 'logout' && <User className="h-4 w-4 text-gray-500" />}
+                            {activity.activityType === 'error' && <AlertTriangle className="h-4 w-4 text-red-500" />}
+                            {activity.activityType === 'toggle' && <RefreshCw className="h-4 w-4 text-blue-400" />}
+                            {activity.activityType === 'selection' && <CheckCircle className="h-4 w-4 text-blue-400" />}
+                            {!['button_click', 'navigation', 'page_view', 'form_submit', 'form_input', 'search', 'modal_open', 'modal_close', 'tab_switch', 'filter_change', 'file_upload', 'file_download', 'data_create', 'data_update', 'data_delete', 'data_view', 'approval', 'rejection', 'login', 'logout', 'error', 'toggle', 'selection'].includes(activity.activityType) && <Zap className="h-4 w-4 text-gray-400" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium">{activity.description}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {activity.activityType.replace(/_/g, ' ')}
+                              </Badge>
+                              <Badge variant="secondary" className="text-xs">
+                                {activity.category}
+                              </Badge>
+                              {!activity.success && (
+                                <Badge variant="destructive" className="text-xs">Failed</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                {activity.userName}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {format(parseISO(activity.timestamp), 'MMM d, HH:mm:ss')}
+                              </span>
+                              <span className="text-muted-foreground/70">
+                                {activity.component} | {activity.path}
+                              </span>
+                            </div>
+                            {activity.errorMessage && (
+                              <p className="text-xs text-destructive mt-1">{activity.errorMessage}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            {/* Activity Breakdown */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Activity by Type</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {Object.entries(activityStats.byType)
+                      .sort(([,a], [,b]) => b - a)
+                      .slice(0, 10)
+                      .map(([type, count]) => (
+                        <div key={type} className="flex items-center justify-between">
+                          <span className="text-sm capitalize">{type.replace(/_/g, ' ')}</span>
+                          <Badge variant="secondary">{count}</Badge>
+                        </div>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Activity by Category</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {Object.entries(activityStats.byCategory)
+                      .sort(([,a], [,b]) => b - a)
+                      .map(([category, count]) => (
+                        <div key={category} className="flex items-center justify-between">
+                          <span className="text-sm capitalize">{category}</span>
+                          <Badge variant="secondary">{count}</Badge>
+                        </div>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
       </Tabs>
