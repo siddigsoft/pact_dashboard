@@ -16,8 +16,11 @@ import { useAppContext } from '@/context/AppContext';
 import { Upload, FileSpreadsheet, MapPin, AlertCircle, CheckCircle2, XCircle, Download, Eye, Loader2 } from 'lucide-react';
 import { getHubForState, getHubNameForState, hubs, sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
+import { siteRegistryService, SiteMatchResult } from '@/services/siteRegistry.service';
 import * as XLSX from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
+
+type MatchType = 'site_code' | 'name_state_locality' | 'name_state' | 'gps_proximity' | 'none';
 
 interface ParsedSite {
   rowIndex: number;
@@ -45,6 +48,8 @@ interface ParsedSite {
   validationErrors: string[];
   existsInRegistry: boolean;
   registrySiteId?: string;
+  matchType: MatchType;
+  matchConfidence: number;
   willUpdate: boolean;
 }
 
@@ -437,20 +442,15 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         residenceCombinedGps: resCombinedCol,
       });
       
-      const { data: existingSites } = await supabase
-        .from('sites_registry')
-        .select('id, site_code, site_name, state_name, locality_name, gps_latitude, gps_longitude, residence_latitude, residence_longitude');
+      // Clear cache and load fresh site data for matching
+      siteRegistryService.clearCache();
+      await siteRegistryService.loadAllSites();
       
-      const siteMap = new Map<string, any>();
-      (existingSites || []).forEach(site => {
-        const key = `${(site.site_code || '').toLowerCase()}_${(site.site_name || '').toLowerCase()}_${(site.state_name || '').toLowerCase()}`;
-        siteMap.set(key, site);
-        if (site.site_code) {
-          siteMap.set(site.site_code.toLowerCase(), site);
-        }
-      });
+      // Parse rows and match against registry
+      const parsed: ParsedSite[] = [];
       
-      const parsed: ParsedSite[] = rows.map((row, idx) => {
+      for (let idx = 0; idx < rows.length; idx++) {
+        const row = rows[idx];
         const siteId = siteIdCol ? row[siteIdCol] || '' : '';
         const siteName = siteNameCol ? row[siteNameCol] || '' : '';
         const rawState = stateCol ? row[stateCol] || '' : '';
@@ -568,13 +568,25 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
         if (residenceLatitude !== null && (residenceLatitude < -90 || residenceLatitude > 90)) validationErrors.push('Residence latitude out of range');
         if (residenceLongitude !== null && (residenceLongitude < -180 || residenceLongitude > 180)) validationErrors.push('Residence longitude out of range');
         
-        const lookupKey = `${siteId.toLowerCase()}_${siteName.toLowerCase()}_${state.toLowerCase()}`;
-        const existingSite = siteMap.get(siteId.toLowerCase()) || siteMap.get(lookupKey);
+        // Use SiteRegistryService for improved matching
+        const matchResult = await siteRegistryService.matchSite({
+          siteId,
+          siteCode: siteId,
+          siteName,
+          state,
+          locality,
+          latitude: residenceLatitude ?? latitude,
+          longitude: residenceLongitude ?? longitude,
+        });
         
-        const willUpdateSiteGps = hasSiteGps && (!existingSite?.gps_latitude || !existingSite?.gps_longitude);
-        const willUpdateResidenceGps = hasResidenceGps && (!existingSite?.residence_latitude || !existingSite?.residence_longitude);
+        const existingSite = matchResult.existingSite;
+        // Only mark as "will update" if we have GPS that the existing site is missing
+        const willUpdateSiteGps = hasSiteGps && existingSite && (!existingSite.gps_latitude || !existingSite.gps_longitude);
+        // Check if residence GPS will be updated (existing site missing residence coords)
+        const existingHasResidenceGps = existingSite?.gps_latitude != null && existingSite?.gps_longitude != null;
+        const willUpdateResidenceGps = hasResidenceGps && existingSite && !existingHasResidenceGps;
         
-        return {
+        parsed.push({
           rowIndex: idx + 2,
           siteId,
           siteName,
@@ -598,11 +610,13 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
           rawResidenceGpsString,
           isValid: validationErrors.length === 0,
           validationErrors,
-          existsInRegistry: !!existingSite,
+          existsInRegistry: matchResult.matched,
           registrySiteId: existingSite?.id,
-          willUpdate: !!existingSite && (willUpdateSiteGps || willUpdateResidenceGps || hasSiteGps || hasResidenceGps),
-        };
-      });
+          matchType: matchResult.matchType,
+          matchConfidence: matchResult.confidence,
+          willUpdate: matchResult.matched && (willUpdateSiteGps || willUpdateResidenceGps || hasSiteGps || hasResidenceGps),
+        });
+      }
       
       setParsedSites(parsed);
       setSelectedRows(new Set(parsed.filter(p => p.isValid).map(p => p.rowIndex)));
@@ -772,6 +786,11 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
   const invalidCount = parsedSites.filter(s => !s.isValid).length;
   const existingCount = parsedSites.filter(s => s.existsInRegistry).length;
   const newCount = parsedSites.filter(s => !s.existsInRegistry && s.isValid).length;
+  const matchedBySiteCode = parsedSites.filter(s => s.matchType === 'site_code').length;
+  const matchedByNameStateLocality = parsedSites.filter(s => s.matchType === 'name_state_locality').length;
+  const matchedByNameState = parsedSites.filter(s => s.matchType === 'name_state').length;
+  const matchedByGps = parsedSites.filter(s => s.matchType === 'gps_proximity').length;
+  const willUpdateCount = parsedSites.filter(s => s.willUpdate).length;
 
   const toggleRowSelection = (rowIndex: number) => {
     const newSelected = new Set(selectedRows);
@@ -983,6 +1002,33 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
               </DialogDescription>
             </DialogHeader>
             
+            {/* Summary Stats */}
+            <div className="flex-shrink-0 flex flex-wrap gap-3 py-2 px-1 bg-muted/50 rounded-md text-sm">
+              <div className="flex items-center gap-1">
+                <Badge variant="default">{newCount} New</Badge>
+              </div>
+              <div className="flex items-center gap-1">
+                <Badge variant="secondary">{existingCount} Matched</Badge>
+                {existingCount > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    ({matchedBySiteCode > 0 && `${matchedBySiteCode} by ID`}
+                    {matchedBySiteCode > 0 && matchedByNameStateLocality > 0 && ', '}
+                    {matchedByNameStateLocality > 0 && `${matchedByNameStateLocality} by name`}
+                    {(matchedBySiteCode > 0 || matchedByNameStateLocality > 0) && matchedByGps > 0 && ', '}
+                    {matchedByGps > 0 && `${matchedByGps} by GPS`})
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                <Badge variant="outline">{willUpdateCount} Will Update</Badge>
+              </div>
+              {invalidCount > 0 && (
+                <div className="flex items-center gap-1">
+                  <Badge variant="destructive">{invalidCount} Invalid</Badge>
+                </div>
+              )}
+            </div>
+            
             <div className="flex-1 overflow-auto border rounded-md">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
@@ -1043,9 +1089,17 @@ export default function GPSSitesUpload({ onUploadComplete }: { onUploadComplete?
                             {site.validationErrors[0]}
                           </Badge>
                         ) : site.existsInRegistry ? (
-                          <Badge variant="secondary" className="text-xs">
-                            {site.willUpdate ? 'Will Update' : 'Exists'}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {site.willUpdate ? 'Will Update' : 'Matched'}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">
+                              {site.matchType === 'site_code' && 'by Site ID'}
+                              {site.matchType === 'name_state_locality' && 'by Name+State+Locality'}
+                              {site.matchType === 'name_state' && 'by Name+State'}
+                              {site.matchType === 'gps_proximity' && 'by GPS (~500m)'}
+                            </span>
+                          </div>
                         ) : (
                           <Badge variant="default" className="text-xs">
                             New
