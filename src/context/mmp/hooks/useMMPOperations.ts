@@ -4,6 +4,7 @@ import { MMPFile } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { uploadMMPFile } from '@/utils/mmpFileUpload';
+import { logDeletionAudit } from '@/services/mmpAudit.service';
 
 export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatch<React.SetStateAction<MMPFile[]>>) => {
   const [currentMMP, setCurrentMMP] = useState<MMPFile | null>(null);
@@ -95,6 +96,14 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
 
   const deleteMMPFile = async (id: string): Promise<boolean> => {
     try {
+      // Get MMP details before deletion for audit logging
+      const mmpToDelete = mmpFiles.find(m => m.id === id);
+      const mmpName = mmpToDelete?.name || 'Unknown MMP';
+
+      // Get current user for audit
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentUser = sessionData?.session?.user;
+
       // First, reverse wallet transactions for all site entries in this MMP
       const { data: siteEntries, error: sitesError } = await supabase
         .from('mmp_site_entries')
@@ -148,6 +157,27 @@ export const useMMPOperations = (mmpFiles: MMPFile[], setMMPFiles: React.Dispatc
         console.error('Supabase delete error:', error);
         toast.error('Database delete failed. Check permissions/RLS and try again.');
         return false;
+      }
+
+      // Log deletion audit with timestamp
+      try {
+        await logDeletionAudit(
+          'mmp',
+          id,
+          mmpName,
+          currentUser?.id || 'unknown',
+          currentUser?.user_metadata?.full_name || currentUser?.email,
+          currentUser?.email,
+          'MMP file deleted',
+          undefined,
+          {
+            siteEntriesReversed: siteEntries?.length || 0,
+            mmpStatus: mmpToDelete?.status,
+            deletedAt: new Date().toISOString()
+          }
+        );
+      } catch (auditError) {
+        console.warn('[MMP Delete] Audit log failed:', auditError);
       }
 
       // Only update local state after successful DB delete

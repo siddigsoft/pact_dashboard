@@ -13,6 +13,7 @@ import type {
   RecallImpactPreview
 } from '@/types/recall';
 import { RECALL_SCOPE_LABELS, RECALL_TIER_LABELS } from '@/types/recall';
+import { logRecallAudit } from '@/services/mmpAudit.service';
 
 export interface LegacyRecallCheckResult {
   canRecall: boolean;
@@ -445,6 +446,25 @@ export async function performTieredRecall(
       });
     } catch (auditError) {
       console.warn('[TIERED_RECALL] Audit log failed:', auditError);
+    }
+
+    // Log using centralized MMP audit service with proper timestamps
+    try {
+      await logRecallAudit(
+        request.mmpId,
+        mmpName,
+        request.tier,
+        request.reason,
+        recallerUserId,
+        recallerName,
+        recallerEmail,
+        affectedSites.length,
+        affectedUserIds,
+        request.isForceRecall,
+        mmpData.status
+      );
+    } catch (mmpAuditError) {
+      console.warn('[TIERED_RECALL] MMP audit service log failed:', mmpAuditError);
     }
 
     await sendRecallNotifications(

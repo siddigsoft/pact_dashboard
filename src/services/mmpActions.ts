@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logForwardingAudit, logStatusChangeAudit } from '@/services/mmpAudit.service';
 
 // Fetch FOM users (role = 'fom')
 export async function fetchFomUsers() {
@@ -30,7 +31,7 @@ export async function appendForwardedToFom(mmpId: string, userIds: string[]) {
 
   const { data: row, error: fetchError } = await supabase
     .from('mmp_files')
-    .select('workflow')
+    .select('workflow, name, status')
     .eq('id', mmpId)
     .single();
   if (fetchError) throw fetchError;
@@ -46,6 +47,24 @@ export async function appendForwardedToFom(mmpId: string, userIds: string[]) {
     .update({ workflow: next })
     .eq('id', mmpId);
   if (updateError) throw updateError;
+
+  // Log forwarding audit with timestamp
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const currentUser = sessionData?.session?.user;
+    
+    await logForwardingAudit(
+      mmpId,
+      row?.name || 'Unknown MMP',
+      'to_fom',
+      userIds,
+      currentUser?.id || 'unknown',
+      currentUser?.user_metadata?.full_name || currentUser?.email,
+      currentUser?.email
+    );
+  } catch (auditError) {
+    console.warn('[MMP Actions] Forward to FOM audit log failed:', auditError);
+  }
 }
 
 // Clear forwarded workflow fields

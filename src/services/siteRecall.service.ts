@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logSiteAudit } from '@/services/mmpAudit.service';
 
 export type SiteStatus = 
   | 'new' 
@@ -256,9 +257,32 @@ export async function recallSites(request: SiteRecallRequest): Promise<SiteRecal
           site_name: currentSite.site_name,
           mmp_file_id: currentSite.mmp_file_id,
           recalled_by_email: recalledByEmail,
-          recalled_by_name: recalledByName
+          recalled_by_name: recalledByName,
+          recalled_at: recallTimestamp
         }
       });
+
+      // Enhanced audit logging via centralized service
+      try {
+        await logSiteAudit({
+          siteId,
+          siteName: currentSite.site_name || 'Unknown Site',
+          mmpId: currentSite.mmp_file_id,
+          action: 'site_recalled',
+          performedBy: recalledBy,
+          performedByEmail: recalledByEmail,
+          performedByName: recalledByName,
+          previousStatus: currentSite.status,
+          newStatus: targetStatus,
+          reason,
+          metadata: {
+            recalledAt: recallTimestamp,
+            targetStatus
+          }
+        });
+      } catch (auditError) {
+        console.warn('[Site Recall] Enhanced audit log failed:', auditError);
+      }
 
       result.successCount++;
     } catch (error: any) {
