@@ -571,16 +571,25 @@ async function executeRecall(
 
   switch (request.tier) {
     case 'admin_to_fom':
+      // Clear ALL forwarding-related fields to ensure MMP appears only in "New MMPs"
       workflow.forwardedToFomIds = [];
+      workflow.forwardedToFomNames = [];
       delete workflow.forwardedAt;
+      delete workflow.forwardedBy;
       delete workflow.forwardedToCoordinators;
       delete workflow.forwardedToCoordinatorIds;
+      delete workflow.forwardedToCoordinatorNames;
+      delete workflow.forwardedToCoordinatorAt;
+      delete workflow.forwardedToCoordinatorsAt;
       delete workflow.coordinatorVerified;
+      delete workflow.coordinatorVerifiedAt;
       delete workflow.locked;
+      delete workflow.currentStage;
       workflow.recalledAt = now;
       workflow.recalledBy = recallerName;
       workflow.lastRecallReason = request.reason;
       workflow.lastRecallEventId = recallEventId;
+      workflow.isRecalled = true;
       newStatus = 'pending'; // Changed from 'uploaded' to match "New MMPs" filter
       
       // Revert ALL site entries to 'New' status
@@ -657,12 +666,20 @@ async function executeRecall(
       break;
 
     case 'super_admin_approved':
+      // Clear ALL forwarding-related fields to ensure MMP appears only in "New MMPs"
       workflow.forwardedToFomIds = [];
+      workflow.forwardedToFomNames = [];
       workflow.forwardedToCoordinatorIds = [];
+      workflow.forwardedToCoordinatorNames = [];
       delete workflow.forwardedAt;
+      delete workflow.forwardedBy;
       delete workflow.forwardedToCoordinators;
+      delete workflow.forwardedToCoordinatorAt;
+      delete workflow.forwardedToCoordinatorsAt;
       delete workflow.coordinatorVerified;
+      delete workflow.coordinatorVerifiedAt;
       delete workflow.locked;
+      delete workflow.currentStage;
       delete workflow.approvedAt;
       delete workflow.approvedBy;
       workflow.recalledAt = now;
@@ -670,6 +687,7 @@ async function executeRecall(
       workflow.lastRecallReason = request.reason;
       workflow.lastRecallEventId = recallEventId;
       workflow.recalledFromApproved = true;
+      workflow.isRecalled = true;
       newStatus = 'pending'; // Changed from 'uploaded' to match "New MMPs" filter
       
       const allSiteIds = affectedSites.map(s => s.id);

@@ -2014,9 +2014,20 @@ const MMP = () => {
     });
     
     const forwardedMMPs = filteredMMPs.filter(mmp => {
+      const workflow = mmp.workflow as any;
+      
+      // CRITICAL: Recalled MMPs with pending status should NEVER appear in "Forwarded MMPs"
+      // They should only appear in "New MMPs"
+      const isRecalledToPending = mmp.status === 'pending' && 
+        (workflow?.isRecalled === true || workflow?.recalledAt) &&
+        (!workflow?.forwardedToFomIds || workflow?.forwardedToFomIds.length === 0);
+      
+      if (isRecalledToPending) {
+        return false; // Exclude from Forwarded - should be in New MMPs only
+      }
+      
       if (isFOM || isSupervisor) {
         // For FOM/Supervisor: Forwarded means MMPs they've processed and sent to coordinators
-        const workflow = mmp.workflow as any;
         return workflow?.forwardedToCoordinators === true ||
                workflow?.currentStage === 'coordinatorReview';
       } else if (isCoordinator) {
@@ -2024,11 +2035,10 @@ const MMP = () => {
         return false;
       } else if (isAdmin || isICT) {
         // For admin/ICT: Forwarded means MMPs that have been forwarded to FOMs or coordinators
-        const workflow = mmp.workflow as any;
         const hasForwardedToFomIds = workflow?.forwardedToFomIds && workflow?.forwardedToFomIds.length > 0;
         const hasForwardedToCoordinators = workflow?.forwardedToCoordinators === true || 
-                                           workflow?.forwardedToCoordinatorAt ||
-                                           workflow?.currentStage === 'forwarded_to_coordinator';
+                                           (workflow?.forwardedToCoordinatorAt && !workflow?.isRecalled) ||
+                                           (workflow?.currentStage === 'forwarded_to_coordinator' && !workflow?.isRecalled);
         // Include if forwarded to FOMs OR coordinators (workflow has progressed)
         return hasForwardedToFomIds || hasForwardedToCoordinators;
       }
@@ -2036,6 +2046,18 @@ const MMP = () => {
     });
     
     const verifiedMMPs = filteredMMPs.filter(mmp => {
+      const workflow = mmp.workflow as any;
+      
+      // CRITICAL: Recalled MMPs with pending status should NEVER appear in "Verified Sites"
+      // They should only appear in "New MMPs"
+      const isRecalledToPending = mmp.status === 'pending' && 
+        (workflow?.isRecalled === true || workflow?.recalledAt) &&
+        (!workflow?.forwardedToFomIds || workflow?.forwardedToFomIds.length === 0);
+      
+      if (isRecalledToPending) {
+        return false; // Exclude from Verified - should be in New MMPs only
+      }
+      
       // Normalize status for case-insensitive comparison (production data may have mixed casing)
       const normalizedStatus = (mmp.status || '').toLowerCase();
       
@@ -2045,21 +2067,21 @@ const MMP = () => {
       
       if (isCoordinator) {
         // For Coordinator: Show MMPs that have been forwarded to coordinators
-        return (mmp.workflow as any)?.forwardedToCoordinators === true;
+        return workflow?.forwardedToCoordinators === true;
       } else if (isFOM || isSupervisor) {
         // For FOM/Supervisor: Verified means MMPs with sites available for verification
         return mmp.type === 'verified-template' || 
                normalizedStatus === 'verified' ||
                normalizedStatus === 'approved' ||
                hasVerifiedSites ||
-               ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
+               (workflow?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes(workflow?.currentStage));
       } else {
         // For admin/other roles: Include verified, approved, specific workflow stages, OR MMPs with verified sites
         return normalizedStatus === 'verified' ||
                normalizedStatus === 'approved' || 
                mmp.type === 'verified-template' ||
                hasVerifiedSites ||
-               ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
+               (workflow?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes(workflow?.currentStage));
       }
     });
 
