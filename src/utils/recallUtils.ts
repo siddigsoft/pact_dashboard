@@ -366,19 +366,7 @@ export async function performTieredRecall(
       request.tier === 'admin_to_fom' || 
       request.tier === 'super_admin_approved';
 
-    if (shouldExecuteImmediately) {
-      await executeRecall(request, mmpData, workflow, affectedSites, recallerName, recallEventId);
-      
-      if (hasFinancialImpact && request.recoveryMethod) {
-        await createRecoveryRecords(
-          recallEventId,
-          request.mmpId,
-          affectedSites,
-          request.recoveryMethod
-        );
-      }
-    }
-
+    // Create recallLog BEFORE executeRecall so it gets persisted with the workflow
     const recallLog: RecallAuditLog = {
       action: shouldExecuteImmediately ? 'recall_completed' : 'recall_initiated',
       recallEventId,
@@ -397,7 +385,27 @@ export async function performTieredRecall(
       isForceRecall: request.isForceRecall
     } as any;
 
+    // Add recallHistory to workflow BEFORE executeRecall so it gets saved
     workflow.recallHistory = [...existingLogs, recallLog];
+
+    if (shouldExecuteImmediately) {
+      await executeRecall(request, mmpData, workflow, affectedSites, recallerName, recallEventId);
+      
+      if (hasFinancialImpact && request.recoveryMethod) {
+        await createRecoveryRecords(
+          recallEventId,
+          request.mmpId,
+          affectedSites,
+          request.recoveryMethod
+        );
+      }
+    } else {
+      // For non-immediate recalls, persist the workflow with recallHistory
+      await supabase
+        .from('mmp_files')
+        .update({ workflow })
+        .eq('id', request.mmpId);
+    }
 
     // Log to audit_logs table for comprehensive tracking
     try {
@@ -553,7 +561,7 @@ async function executeRecall(
       workflow.recalledBy = recallerName;
       workflow.lastRecallReason = request.reason;
       workflow.lastRecallEventId = recallEventId;
-      newStatus = 'uploaded';
+      newStatus = 'pending'; // Changed from 'uploaded' to match "New MMPs" filter
       break;
 
     case 'fom_to_coordinator':
@@ -616,7 +624,7 @@ async function executeRecall(
       workflow.lastRecallReason = request.reason;
       workflow.lastRecallEventId = recallEventId;
       workflow.recalledFromApproved = true;
-      newStatus = 'uploaded';
+      newStatus = 'pending'; // Changed from 'uploaded' to match "New MMPs" filter
       
       const allSiteIds = affectedSites.map(s => s.id);
       if (allSiteIds.length > 0) {
