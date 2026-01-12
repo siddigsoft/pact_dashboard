@@ -324,10 +324,30 @@ export class ReportingService {
         siteEntriesQuery = siteEntriesQuery.lte('created_at', dateRange.to.toISOString());
       }
 
-      const { data: entries, error } = await siteEntriesQuery;
-      if (error) throw error;
+      const [entriesRes, hubsRes, hubStatesRes] = await Promise.all([
+        siteEntriesQuery,
+        supabase.from('hubs').select('id, name'),
+        supabase.from('hub_states').select('hub_id, state_id, state_name'),
+      ]);
 
-      const allEntries = entries || [];
+      if (entriesRes.error) throw entriesRes.error;
+
+      const allEntries = entriesRes.data || [];
+      const hubs = hubsRes.data || [];
+      const hubStates = hubStatesRes.data || [];
+
+      const stateToHubMap = new Map<string, string>();
+      hubStates.forEach(hs => {
+        const hub = hubs.find(h => h.id === hs.hub_id);
+        if (hub) {
+          if (hs.state_name) {
+            stateToHubMap.set(hs.state_name.toLowerCase().trim(), hub.name);
+          }
+          if (hs.state_id) {
+            stateToHubMap.set(hs.state_id, hub.name);
+          }
+        }
+      });
 
       const totalVisits = allEntries.length;
       const completedVisits = allEntries.filter(e => e.status === 'completed').length;
@@ -379,9 +399,14 @@ export class ReportingService {
       const coverageByState = new Map<string, { total: number; visited: number; pending: number }>();
       const coverageByHub = new Map<string, { total: number; visited: number; pending: number }>();
 
+      hubs.forEach(hub => {
+        coverageByHub.set(hub.name, { total: 0, visited: 0, pending: 0 });
+      });
+
       allEntries.forEach(entry => {
         const state = entry.state || 'Unknown';
-        const hub = entry.hub || 'Unknown';
+        const stateKey = state.toLowerCase().trim();
+        const hubName = stateToHubMap.get(stateKey) || stateToHubMap.get(state) || entry.hub_office || entry.hub || 'Unassigned';
 
         const stateData = coverageByState.get(state) || { total: 0, visited: 0, pending: 0 };
         stateData.total++;
@@ -389,11 +414,11 @@ export class ReportingService {
         else stateData.pending++;
         coverageByState.set(state, stateData);
 
-        const hubData = coverageByHub.get(hub) || { total: 0, visited: 0, pending: 0 };
+        const hubData = coverageByHub.get(hubName) || { total: 0, visited: 0, pending: 0 };
         hubData.total++;
         if (entry.status === 'completed') hubData.visited++;
         else hubData.pending++;
-        coverageByHub.set(hub, hubData);
+        coverageByHub.set(hubName, hubData);
       });
 
       const coverageByStateArr: CoverageEntry[] = Array.from(coverageByState.entries()).map(([name, data]) => ({
@@ -404,13 +429,15 @@ export class ReportingService {
         pendingSites: data.pending,
       }));
 
-      const coverageByHubArr: CoverageEntry[] = Array.from(coverageByHub.entries()).map(([name, data]) => ({
-        name,
-        totalSites: data.total,
-        visitedSites: data.visited,
-        coveragePercentage: data.total > 0 ? (data.visited / data.total) * 100 : 0,
-        pendingSites: data.pending,
-      }));
+      const coverageByHubArr: CoverageEntry[] = Array.from(coverageByHub.entries())
+        .filter(([_, data]) => data.total > 0)
+        .map(([name, data]) => ({
+          name,
+          totalSites: data.total,
+          visitedSites: data.visited,
+          coveragePercentage: data.total > 0 ? (data.visited / data.total) * 100 : 0,
+          pendingSites: data.pending,
+        }));
 
       return {
         totalVisits,
@@ -421,8 +448,8 @@ export class ReportingService {
         firstPassAcceptance,
         reworkRate,
         assignmentLatency,
-        coverageByState: coverageByStateArr.sort((a, b) => b.coveragePercentage - a.coveragePercentage),
-        coverageByHub: coverageByHubArr.sort((a, b) => b.coveragePercentage - a.coveragePercentage),
+        coverageByState: coverageByStateArr.sort((a, b) => b.totalSites - a.totalSites),
+        coverageByHub: coverageByHubArr.sort((a, b) => b.totalSites - a.totalSites),
       };
     } catch (error) {
       console.error('Error generating operational efficiency:', error);
