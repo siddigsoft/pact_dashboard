@@ -381,7 +381,7 @@ export default function HubOperations() {
       
       // Run queries in parallel for better performance
       // Only select columns that exist in the sites_registry table
-      const registryColumns = 'id, site_code, site_name, state_id, state_name, locality_id, locality_name, hub_id, hub_name, cp_name, gps_latitude, gps_longitude, activity_type, status, mmp_count, created_at, created_by, updated_at';
+      const registryColumns = 'id, site_code, site_name, state_id, state_name, locality_id, locality_name, hub_id, hub_name, cp_name, gps_latitude, gps_longitude, activity_type, status, mmp_count, last_mmp_date, created_at, created_by, updated_at';
       const mmpColumns = 'id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, visit_date, status';
       
       // Run queries in parallel
@@ -1976,6 +1976,8 @@ export default function HubOperations() {
               residence_precision: s.residence_precision,
               source: s.source,
               activity_type: s.activity_type,
+              last_visit_date: s.last_mmp_date || s.visit_date || null,
+              mmp_count: s.mmp_count,
             }))}
             height="400px"
           />

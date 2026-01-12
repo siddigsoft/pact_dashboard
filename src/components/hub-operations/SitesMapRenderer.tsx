@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Building2, Navigation, Crosshair } from 'lucide-react';
+import { MapPin, Building2, Navigation, Crosshair, Calendar } from 'lucide-react';
+import { format } from 'date-fns';
 import 'leaflet/dist/leaflet.css';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -30,6 +31,8 @@ interface SiteWithGPS {
   residence_precision?: number | null;
   source?: string;
   activity_type?: string | null;
+  last_visit_date?: string | null;
+  mmp_count?: number | null;
 }
 
 interface SitesMapRendererProps {
@@ -192,6 +195,16 @@ export default function SitesMapRenderer({ sites, height = '400px' }: SitesMapRe
                       <Badge variant="secondary" className="text-xs">
                         {site.activity_type}
                       </Badge>
+                    </div>
+                  )}
+                  
+                  {site.last_visit_date && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground w-14">Last Visit:</span>
+                      <span className="flex items-center gap-1 font-medium" style={{ color: '#0077B6' }}>
+                        <Calendar className="h-3 w-3" />
+                        {format(new Date(site.last_visit_date), 'dd MMM yyyy')}
+                      </span>
                     </div>
                   )}
                 </div>
