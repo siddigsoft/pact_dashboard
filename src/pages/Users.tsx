@@ -326,6 +326,13 @@ const Users = () => {
     setDeletingUserId(confirmDialog.userId);
     try {
       if (confirmDialog.action === 'delete') {
+        // Delete related records first to avoid foreign key constraint violations
+        // Delete notifications where user is the recipient
+        await supabase.from('notifications').delete().eq('recipient_id', confirmDialog.userId);
+        // Delete notifications triggered by the user
+        await supabase.from('notifications').delete().eq('triggered_by', confirmDialog.userId);
+        
+        // Now delete the profile
         const { error } = await supabase.from('profiles').delete().eq('id', confirmDialog.userId);
         if (error) throw error;
         toast({ title: "User deleted", description: "User has been permanently deleted" });
