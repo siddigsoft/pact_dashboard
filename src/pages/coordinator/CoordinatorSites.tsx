@@ -1672,6 +1672,7 @@ const CoordinatorSites: React.FC = () => {
       ? bulkSitesForPermitVerification
       : siteForPermitVerification ? [siteForPermitVerification] : [];
     
+    console.log('[PERMIT_VERIFY] Sites to verify:', sitesToVerify.length, 'Mode:', bulkVerificationMode);
     if (sitesToVerify.length === 0) return;
     
     try {
@@ -1697,6 +1698,7 @@ const CoordinatorSites: React.FC = () => {
       const shouldVerifyNow = hasPermitsAttached || (!statePermitJustUploaded && !statePermitNotRequired);
       
       // Update all sites with permit decision
+      console.log('[PERMIT_VERIFY] hasPermitsAttached:', hasPermitsAttached, 'shouldVerifyNow:', shouldVerifyNow);
       for (const site of sitesToVerify) {
         const additionalData = {
           ...(site.additional_data || {}),
@@ -1712,6 +1714,10 @@ const CoordinatorSites: React.FC = () => {
         // 2. OR state permit is not being uploaded for the first time AND is not marked as not required
         const siteHasPermitsAttached = site.status?.toLowerCase() === 'permits_attached';
         const shouldVerifyThisSite = siteHasPermitsAttached || (!statePermitJustUploaded && !statePermitNotRequired);
+        
+        console.log('[PERMIT_VERIFY] Site', site.id, 'status:', site.status, 
+          'siteHasPermitsAttached:', siteHasPermitsAttached, 
+          'shouldVerifyThisSite:', shouldVerifyThisSite);
         
         const updateData: any = shouldVerifyThisSite ? {
           // Sites are being verified (both state and locality permits are done)
@@ -2139,6 +2145,7 @@ const CoordinatorSites: React.FC = () => {
       const verifiedBy = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
 
       // Batch update all sites in parallel for speed
+      console.log('[VERIFY] Starting bulk locality verify for', localitySites.length, 'sites');
       const updatePromises = localitySites.map(async (site) => {
         const a = `${(site as any)?.main_activity || ''} ${(site as any)?.activity || ''}`.toUpperCase();
         const isDM = a.includes('GFA') || a.includes('CBT') || a.includes('EBSFP');
@@ -2146,7 +2153,8 @@ const CoordinatorSites: React.FC = () => {
           ? { type: 'range', start_date: startStr, end_date: endStr, expected_date: visitDateString }
           : { type: 'single', expected_date: visitDateString };
 
-        return supabase
+        console.log('[VERIFY] Updating site', site.id, 'to verified status');
+        const result = await supabase
           .from('mmp_site_entries')
           .update({
             status: 'verified',
@@ -2155,11 +2163,16 @@ const CoordinatorSites: React.FC = () => {
             visit_date: visitDateString,
             additional_data: { ...((site as any)?.additional_data || {}), expected_visit }
           })
-          .eq('id', site.id);
+          .eq('id', site.id)
+          .select();
+        
+        console.log('[VERIFY] Update result for site', site.id, ':', result.data, result.error);
+        return result;
       });
 
       const results = await Promise.all(updatePromises);
       const firstError = results.find(r => r.error)?.error;
+      console.log('[VERIFY] All updates completed. First error:', firstError);
       if (firstError) throw firstError;
 
       // Mark MMP as coordinator-verified when first site is verified
