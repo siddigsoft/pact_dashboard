@@ -1049,6 +1049,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const rejectUser = async (userId: string): Promise<boolean> => {
     try {
+      // Delete related notifications first to avoid foreign key constraint violations
+      await supabase.from('notifications').delete().eq('recipient_id', userId);
+      await supabase.from('notifications').delete().eq('triggered_by', userId);
+      
       const { data, error } = await supabase
         .from('profiles')
         .delete()
