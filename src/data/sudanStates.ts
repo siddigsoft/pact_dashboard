@@ -89,12 +89,12 @@ export const sudanStates: SudanState[] = [
 
   // 5. Gedaref (Al Qadarif) State - 12 localities
   { 
-    id: 'gedaref', 
-    name: 'Gedaref', 
+    id: 'gedarif', 
+    name: 'Gedarif', 
     code: 'GD', 
     localities: [
-      { id: 'gd-madeinat-al-gedaref', name: 'Madeinat Al Gedaref', nameAr: 'مدينة القضارف' },
-      { id: 'gd-wasat-al-gedaref', name: 'Wasat Al Gedaref', nameAr: 'وسط القضارف' },
+      { id: 'gd-madeinat-al-gedarif', name: 'Madeinat Al Gedarif', nameAr: 'مدينة القضارف' },
+      { id: 'gd-wasat-al-gedaref', name: 'Wasat Al Gedarif', nameAr: 'وسط القضارف' },
       { id: 'gd-al-butanah', name: 'Al Butanah', nameAr: 'البطانة' },
       { id: 'gd-al-fao', name: 'Al Fao', nameAr: 'الفاو' },
       { id: 'gd-al-fashaga', name: 'Al Fashaga', nameAr: 'الفشقة' },
