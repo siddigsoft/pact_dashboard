@@ -87,14 +87,14 @@ export const sudanStates: SudanState[] = [
     ]
   },
 
-  // 5. Gedaref (Al Qadarif) State - 12 localities
+  // 5. Gedarif (Al Qadarif) State - 12 localities
   { 
     id: 'gedarif', 
     name: 'Gedarif', 
     code: 'GD', 
     localities: [
       { id: 'gd-madeinat-al-gedarif', name: 'Madeinat Al Gedarif', nameAr: 'مدينة القضارف' },
-      { id: 'gd-wasat-al-gedaref', name: 'Wasat Al Gedarif', nameAr: 'وسط القضارف' },
+      { id: 'gd-wasat-al-gedarif', name: 'Wasat Al Gedarif', nameAr: 'وسط القضارف' },
       { id: 'gd-al-butanah', name: 'Al Butanah', nameAr: 'البطانة' },
       { id: 'gd-al-fao', name: 'Al Fao', nameAr: 'الفاو' },
       { id: 'gd-al-fashaga', name: 'Al Fashaga', nameAr: 'الفشقة' },
@@ -403,7 +403,7 @@ export const hubs: Hub[] = [
   {
     id: 'kassala-hub',
     name: 'Kassala Hub',
-    states: ['kassala', 'gedaref', 'gezira', 'sennar', 'blue-nile'],
+    states: ['kassala', 'gedarif', 'gezira', 'sennar', 'blue-nile'],
     coordinates: { latitude: 15.45, longitude: 36.4 }
   },
   {
@@ -546,8 +546,8 @@ const hubAliases: Record<string, string> = {
   'kassala': 'kassala-hub',
   'kassala hub': 'kassala-hub',
   'kassala-hub': 'kassala-hub',
-  'gedaref': 'kassala-hub',
-  'al gadaref': 'kassala-hub',
+  'gedarif': 'kassala-hub',
+  'al gadarif': 'kassala-hub',
   'gadarif': 'kassala-hub',
   'gezira': 'kassala-hub',
   'al-gezira': 'kassala-hub',
