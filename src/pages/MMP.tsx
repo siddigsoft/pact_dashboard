@@ -1275,13 +1275,15 @@ const MMP = () => {
         report = savedReport;
         console.log('✅ Report saved with ID:', report.id);
 
-        // Link photos to report via report_photos table
+        // Link photos to site visit via report_photos table
         if (photoUrls.length > 0) {
-          console.log('📎 Linking photos to report...');
+          console.log('📎 Linking photos to site visit...');
           const reportPhotos = photoUrls.map((photoUrl, index) => ({
-            report_id: report.id,
+            site_visit_id: site.id,
             photo_url: photoUrl,
-            storage_path: null // Can be added if we track the storage path
+            caption: `Site Visit Photo ${index + 1}`,
+            photo_type: 'site_visit',
+            created_at: now
           }));
 
           const { error: photosError } = await supabase
@@ -1289,10 +1291,10 @@ const MMP = () => {
             .insert(reportPhotos);
 
           if (photosError) {
-            console.error('❌ Error linking photos to report:', photosError);
+            console.error('❌ Error linking photos to site visit:', photosError);
             // Don't throw - report is already created, just log the error
           } else {
-            console.log('✅ Photos linked to report');
+            console.log('✅ Photos linked to site visit:', photoUrls.length);
           }
         }
 
