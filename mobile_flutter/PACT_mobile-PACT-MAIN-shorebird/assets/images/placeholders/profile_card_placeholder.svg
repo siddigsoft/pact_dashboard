@@ -1,0 +1,22 @@
+<svg width="400" height="200" viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="200" fill="#E8EDF1"/>
+  
+  <!-- Profile Card -->
+  <rect x="50" y="30" width="300" height="140" rx="10" ry="10" fill="white" stroke="#C5D1DC" stroke-width="1"/>
+  
+  <!-- Avatar Circle -->
+  <circle cx="110" cy="80" r="40" fill="#A3B1C2"/>
+  
+  <!-- Profile Info Lines -->
+  <g fill="#C5D1DC">
+    <rect x="170" y="50" width="160" height="10" rx="2" ry="2"/>
+    <rect x="170" y="70" width="120" height="8" rx="2" ry="2"/>
+    <rect x="170" y="90" width="140" height="8" rx="2" ry="2"/>
+    <rect x="170" y="110" width="100" height="8" rx="2" ry="2"/>
+    <rect x="170" y="130" width="130" height="8" rx="2" ry="2"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="200" y="180" text-anchor="middle" font-family="Arial" font-size="14" fill="#5F6B7A">User Profile Card Placeholder</text>
+</svg>

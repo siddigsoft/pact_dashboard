@@ -1,0 +1,39 @@
+<svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="300" fill="#E8EDF1"/>
+  
+  <!-- Graph Container -->
+  <rect x="40" y="40" width="320" height="200" fill="white" stroke="#C5D1DC" stroke-width="1"/>
+  
+  <!-- Graph Grid -->
+  <g stroke="#E8EDF1" stroke-width="1">
+    <line x1="40" y1="90" x2="360" y2="90"/>
+    <line x1="40" y1="140" x2="360" y2="140"/>
+    <line x1="40" y1="190" x2="360" y2="190"/>
+    
+    <line x1="90" y1="40" x2="90" y2="240"/>
+    <line x1="140" y1="40" x2="140" y2="240"/>
+    <line x1="190" y1="40" x2="190" y2="240"/>
+    <line x1="240" y1="40" x2="240" y2="240"/>
+    <line x1="290" y1="40" x2="290" y2="240"/>
+  </g>
+  
+  <!-- Chart Bars -->
+  <g>
+    <rect x="70" y="180" width="30" height="60" fill="#4285F4"/>
+    <rect x="120" y="150" width="30" height="90" fill="#4285F4"/>
+    <rect x="170" y="100" width="30" height="140" fill="#4285F4"/>
+    <rect x="220" y="130" width="30" height="110" fill="#4285F4"/>
+    <rect x="270" y="160" width="30" height="80" fill="#4285F4"/>
+    <rect x="320" y="120" width="30" height="120" fill="#4285F4"/>
+  </g>
+  
+  <!-- Axes -->
+  <g stroke="#5F6B7A" stroke-width="2">
+    <line x1="40" y1="240" x2="360" y2="240"/>
+    <line x1="40" y1="40" x2="40" y2="240"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="200" y="275" text-anchor="middle" font-family="Arial" font-size="14" fill="#5F6B7A">Data Chart Placeholder</text>
+</svg>
