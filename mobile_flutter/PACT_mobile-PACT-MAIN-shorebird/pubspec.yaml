@@ -1,0 +1,179 @@
+name: pact_mobile
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.4+6
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: ">=3.0.0"
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.10.2
+  # google_maps_flutter: ^2.5.0  # Removed - replaced with flutter_map
+  location: ^5.0.3
+  geolocator: ^11.0.0        # For location services
+  latlong2: ^0.9.0           # For coordinates in flutter_map
+  http: ^1.2.1               # For HTTP requests (OSRM API)
+  workmanager: ^0.9.0+3        # For background tasks
+  hive: ^2.2.3               # For local storage
+  hive_flutter: ^1.1.0       # Hive Flutter integration
+  shared_preferences: ^2.2.2  # For local storage
+  flutter_secure_storage: ^9.0.0 # For storing encryption keys
+  local_auth: ^2.3.0         # For biometric authentication
+  local_auth_android: ^1.0.48 # Platform-specific Android authentication
+  local_auth_darwin: ^1.4.1   # Platform-specific iOS/macOS authentication
+  flutter_local_notifications: ^19.4.2 # For local notifications
+  connectivity_plus: ^7.0.0  # For network connectivity
+  uuid: ^4.4.0              # For generating unique IDs
+  encrypt: ^5.0.3           # For encryption
+  dio: ^5.4.1              # For HTTP client
+  dio_smart_retry: ^6.0.0   # For smart request retrying
+  crypto: ^3.0.3            # For cryptographic functions
+  path_provider: ^2.1.4     # For working with paths
+  geocoding: ^2.1.0         # For reverse geocoding
+  permission_handler: ^11.3.0 # For location permissions
+  image_picker: ^1.0.7      # For camera integration
+  intl: ^0.20.2             # For date formatting
+  flutter_localizations:     # For internationalization
+    sdk: flutter
+  flutter_map: ^6.1.0       # Alternative map provider
+  # Using flutter_map_marker_cluster for clustering with flutter_map
+  flutter_map_marker_cluster: ^1.3.1 # For marker clustering
+  url_launcher: ^6.3.2      # For launching URLs and emails
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  
+  # Modern UI packages
+  flutter_svg: ^2.2.1         # For SVG support
+  google_fonts: ^6.3.1        # For modern typography
+  flutter_animate: ^4.5.2     # For modern animations
+  cached_network_image: ^3.4.1 # For efficient image loading and caching
+  pinput: ^5.0.1              # For PIN/OTP input fields
+  open_file: ^3.5.10
+  file_picker: ^10.3.3
+  rxdart: ^0.28.0
+  background_fetch: ^1.4.0
+  sqflite: ^2.4.2
+  path: ^1.9.1
+  provider: ^6.1.1           # For state management
+  flutter_map_tile_caching: ^9.0.1 # For offline map tile caching
+  flutter_map_marker_popup: ^6.1.2  # For marker popups
+  syncfusion_flutter_xlsio: ^28.1.36 # For Excel file handling
+  syncfusion_flutter_pdf: ^28.1.36 # For PDF viewing
+  webview_flutter: ^4.10.0 # For in-app document viewing
+  shorebird_code_push: ^1.1.0 # For Shorebird OTA updates
+  firebase_messaging: ^15.1.6 # For push notifications (optional, for FCM)
+  flutter_webrtc: ^1.2.1 # For WebRTC audio/video calls
+  excel: ^4.0.2 # For reading Excel (.xlsx) files offline
+  share_plus: ^10.0.2 # For sharing exported CSV or original Excel files
+  pdf: ^3.10.7 # For PDF generation
+  printing: ^5.12.0 # For printing and saving PDFs
+  flutter_email_sender: ^6.0.3 # For sending emails with attachments
+  json_annotation: ^4.9.0 # For JSON serialization
+  flutter_riverpod: ^2.4.9 # For state management
+  csv: ^5.0.2 # For CSV export
+  audioplayers: ^6.1.0 # For playing call sounds
+  freezed_annotation: ^2.4.1 # For code generation
+  json_serializable: ^6.7.1 # For JSON serialization
+  package_info_plus: ^8.0.0 # For app version info
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  mocktail: ^1.0.3
+  build_runner: ^2.4.8
+  json_serializable: ^6.7.1 # For JSON serialization
+  freezed: ^2.4.1 # For code generation
+  flutter_launcher_icons: ^0.14.4
+  test: ^1.24.9
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# App icon configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/pact_consultancy_pact_cover.jpg"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/pact_consultancy_pact_cover.jpg"
+  web:
+    generate: true
+    image_path: "assets/images/pact_consultancy_pact_cover.jpg"
+  windows:
+    generate: true
+    image_path: "assets/images/pact_consultancy_pact_cover.jpg"
+  macos:
+    generate: true
+    image_path: "assets/images/pact_consultancy_pact_cover.jpg"
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # Assets for the application
+  assets:
+    - assets/images/
+    - assets/images/pact_consultancy_pact_cover.jpg
+    - assets/images/placeholders/
+    - assets/icons/
+    - assets/sounds/
+    - shorebird.yaml
+    - lib/l10n/
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+
+  # Internationalization
+  generate: true
+  # see https://flutter.dev/to/font-from-package

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Pact Consultancy Mobile App">
+
+  <!-- Security headers -->
+  <meta http-equiv="Content-Security-Policy" 
+        content="default-src 'self' https: 'unsafe-inline' 'unsafe-eval'; 
+           connect-src 'self' wss: https: http://localhost:* blob: https://*.supabase.co https://accounts.google.com https://*.mapbox.com https://api.mapbox.com;
+                 img-src 'self' data: https: http: blob: https://*.mapbox.com https://api.mapbox.com;
+                 frame-src 'self' https: http://localhost:* https://*.google.com https://*.supabase.co;
+                 frame-ancestors 'self';
+                 form-action 'self' https://accounts.google.com https://*.supabase.co;
+                 style-src 'self' 'unsafe-inline' https:;">
+  
+  <!-- Additional security headers -->
+  <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+  <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="pact_mobile">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  
+  <!-- Custom styles for map rendering -->
+  <link rel="stylesheet" href="styles.css">
+
+  <title>Pact Consultancy</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- This script installs service_worker.js to provide PWA functionality to
+       application. For more information, see:
+       https://developers.google.com/web/fundamentals/primers/service-workers -->
+  <script src="flutter.js" defer></script>
+  <script>
+    window.addEventListener('load', function(ev) {
+      // Initialize Flutter Web
+      _flutter = {
+        loader: {
+          loadEntrypoint: function(options) {
+            return new Promise(function(resolve, reject) {
+              try {
+                const scriptTag = document.createElement('script');
+                scriptTag.src = 'main.dart.js';
+                scriptTag.type = 'application/javascript';
+                document.body.append(scriptTag);
+
+                scriptTag.addEventListener('load', function() {
+                  if (options.onEntrypointLoaded) {
+                    options.onEntrypointLoaded({
+                      initializeEngine: async function() {
+                        return {
+                          runApp: function() {
+                            // Remove loading indicator when app is ready
+                            const loading = document.querySelector('#loading');
+                            if (loading) {
+                              loading.remove();
+                            }
+                          }
+                        };
+                      }
+                    });
+                  }
+                });
+              } catch (err) {
+                reject(err);
+              }
+            });
+          }
+        }
+      };
+    });
+  </script>
+</head>
+<body>
+  <!-- Loading indicator (optional) -->
+  <div id="loading">
+    <style>
+      #loading {
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: white;
+        z-index: 9999;
+      }
+      
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #3498db;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+    <div class="spinner"></div>
+  </div>
+
+  <script>
+    window.addEventListener('load', function(ev) {
+      // Download main.dart.js
+      var loading = document.querySelector('#loading');
+      
+      // Initialize the Flutter engine
+      _flutter = {};
+      window._flutter = _flutter;
+      
+      let scriptLoaded = false;
+      function scriptLoadCallback() {
+        if (!scriptLoaded) {
+          scriptLoaded = true;
+          window.flutter_inappwebview = {
+            // this fake implementation is required by the InAppWebView plugin
+            callHandler: function() {
+              console.log("InAppWebView callHandler called with: ", arguments);
+              return Promise.resolve({});
+            }
+          };
+          
+          let flutter = document.createElement('script');
+          flutter.src = 'main.dart.js';
+          document.body.appendChild(flutter);
+          
+          flutter.addEventListener('load', function() {
+            if (loading) loading.remove();
+          });
+        }
+      }
+      
+      if ('serviceWorker' in navigator) {
+        // Service worker URL is injected by flutter build, do not touch.
+        // See: https://flutter.dev/docs/development/platform-integration/web/service-worker
+        window.addEventListener('flutter-first-frame', function () {
+          navigator.serviceWorker.register('flutter_service_worker.js?v=' + serviceWorkerVersion);
+        });
+      }
+      
+      scriptLoadCallback();
+    });
+  </script>
+</body>
+</html>

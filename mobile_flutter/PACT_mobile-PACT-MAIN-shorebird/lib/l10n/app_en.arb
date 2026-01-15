@@ -1,0 +1,1049 @@
+{
+  "@@locale": "en",
+  "appTitle": "PACT Mobile",
+  "@appTitle": {
+    "description": "The title of the application"
+  },
+  "availableTasks": "Available Tasks",
+  "@availableTasks": {
+    "description": "Title for the available tasks screen"
+  },
+  "fieldOperations": "Field Operations",
+  "@fieldOperations": {
+    "description": "Title for the field operations screen"
+  },
+  "tasksInArea": "{count} tasks in your area",
+  "@tasksInArea": {
+    "description": "Subtitle showing number of tasks in area",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "accept": "Accept",
+  "@accept": {
+    "description": "Button text for accepting a task"
+  },
+  "decline": "Decline",
+  "@decline": {
+    "description": "Button text for declining a task"
+  },
+  "noTasksAvailable": "No tasks available",
+  "@noTasksAvailable": {
+    "description": "Message when no tasks are available"
+  },
+  "checkBackLater": "Check back later for new tasks in your area",
+  "@checkBackLater": {
+    "description": "Message encouraging user to check back later"
+  },
+  "login": "Login",
+  "@login": {
+    "description": "Login button text"
+  },
+  "register": "Register",
+  "@register": {
+    "description": "Register button text"
+  },
+  "email": "Email",
+  "@email": {
+    "description": "Email field label"
+  },
+  "password": "Password",
+  "@password": {
+    "description": "Password field label"
+  },
+  "confirmPassword": "Confirm Password",
+  "@confirmPassword": {
+    "description": "Confirm password field label"
+  },
+  "fullName": "Full Name",
+  "@fullName": {
+    "description": "Full name field label"
+  },
+  "phoneNumber": "Phone Number",
+  "@phoneNumber": {
+    "description": "Phone number field label"
+  },
+  "welcome": "Welcome",
+  "@welcome": {
+    "description": "Welcome message"
+  },
+  "welcomeBack": "Welcome Back",
+  "@welcomeBack": {
+    "description": "Welcome back message"
+  },
+  "signInToContinue": "Sign in to continue",
+  "@signInToContinue": {
+    "description": "Sign in prompt"
+  },
+  "createAccount": "Create Account",
+  "@createAccount": {
+    "description": "Create account prompt"
+  },
+  "showMap": "Show Map",
+  "@showMap": {
+    "description": "Button to show map view"
+  },
+  "showTasks": "Show Tasks",
+  "@showTasks": {
+    "description": "Button to show tasks view"
+  },
+  "refresh": "Refresh",
+  "@refresh": {
+    "description": "Refresh button text"
+  },
+  "menu": "Menu",
+  "@menu": {
+    "description": "Menu button text"
+  },
+  "logout": "Logout",
+  "@logout": {
+    "description": "Logout button text"
+  },
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings menu item"
+  },
+  "language": "Language",
+  "@language": {
+    "description": "Language setting"
+  },
+  "english": "English",
+  "@english": {
+    "description": "English language name"
+  },
+  "arabic": "العربية",
+  "@arabic": {
+    "description": "Arabic language name"
+  },
+  "high": "HIGH",
+  "@high": {
+    "description": "High priority label"
+  },
+  "medium": "MEDIUM",
+  "@medium": {
+    "description": "Medium priority label"
+  },
+  "low": "LOW",
+  "@low": {
+    "description": "Low priority label"
+  },
+  "due": "Due",
+  "@due": {
+    "description": "Due date prefix"
+  },
+  "kmAway": "km away",
+  "@kmAway": {
+    "description": "Distance suffix"
+  },
+  "home": "Home",
+  "@home": {
+    "description": "Home navigation tab"
+  },
+  "forms": "Forms",
+  "@forms": {
+    "description": "Forms navigation tab"
+  },
+  "equipment": "Equipment",
+  "@equipment": {
+    "description": "Equipment navigation tab"
+  },
+  "safety": "Safety",
+  "@safety": {
+    "description": "Safety navigation tab"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Chat navigation tab"
+  },
+  "forgotPassword": "Forgot Password?",
+  "@forgotPassword": {
+    "description": "Forgot password link text"
+  },
+  "dontHaveAccount": "Don't have an account?",
+  "@dontHaveAccount": {
+    "description": "Prompt to register"
+  },
+  "alreadyHaveAccount": "Already have an account?",
+  "@alreadyHaveAccount": {
+    "description": "Prompt to login"
+  },
+  "signIn": "Sign In",
+  "@signIn": {
+    "description": "Sign in button text"
+  },
+  "signUp": "Sign Up",
+  "@signUp": {
+    "description": "Sign up button text"
+  },
+  "signInToAccount": "Sign in to your Pact Consultancy account",
+  "@signInToAccount": {
+    "description": "Login screen subtitle"
+  },
+  "signInCaps": "SIGN IN",
+  "@signInCaps": {
+    "description": "Sign in button text in caps"
+  },
+  "createAccountCaps": "CREATE ACCOUNT",
+  "@createAccountCaps": {
+    "description": "Create account button text in caps"
+  },
+  "mmpFiles": "MMP Files",
+  "@mmpFiles": {
+    "description": "Section title for MMP files"
+  },
+  "pleaseLogInToViewMMPFiles": "Please log in to view MMP files",
+  "@pleaseLogInToViewMMPFiles": {
+    "description": "Message when user needs to log in to view MMP files"
+  },
+  "logIn": "Log In",
+  "@logIn": {
+    "description": "Log in button text"
+  },
+  "noMMPFilesAvailable": "No MMP files available",
+  "@noMMPFilesAvailable": {
+    "description": "Message when no MMP files are available"
+  },
+  "noFileUrlAvailable": "No file URL available",
+  "@noFileUrlAvailable": {
+    "description": "Error message when file URL is not available"
+  },
+  "couldNotOpenFile": "Could not open file",
+  "@couldNotOpenFile": {
+    "description": "Error message when file cannot be opened"
+  },
+  "invalidFileUrlFormat": "Invalid file URL format",
+  "@invalidFileUrlFormat": {
+    "description": "Error message for invalid URL format"
+  },
+  "errorAccessingFileUrl": "Error accessing file URL",
+  "@errorAccessingFileUrl": {
+    "description": "Error message when accessing file URL fails"
+  },
+  "dismiss": "Dismiss",
+  "@dismiss": {
+    "description": "Dismiss button text for snackbar"
+  },
+  "addNewEquipment": "Add New Equipment",
+  "@addNewEquipment": {
+    "description": "Dialog title for adding new equipment"
+  },
+  "equipmentName": "Equipment Name",
+  "@equipmentName": {
+    "description": "Equipment name field label"
+  },
+  "enterEquipmentName": "Enter equipment name",
+  "@enterEquipmentName": {
+    "description": "Equipment name field hint"
+  },
+  "status": "Status",
+  "@status": {
+    "description": "Status field label"
+  },
+  "nextMaintenanceDate": "Next Maintenance Date",
+  "@nextMaintenanceDate": {
+    "description": "Next maintenance date field label"
+  },
+  "yyyyMmDd": "YYYY-MM-DD",
+  "@yyyyMmDd": {
+    "description": "Date format hint"
+  },
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Cancel button text"
+  },
+  "add": "Add",
+  "@add": {
+    "description": "Add button text"
+  },
+  "inspectionForm": "Inspection Form",
+  "@inspectionForm": {
+    "description": "Inspection form dialog title"
+  },
+  "condition": "Condition",
+  "@condition": {
+    "description": "Condition field label"
+  },
+  "enterCurrentCondition": "Enter current condition",
+  "@enterCurrentCondition": {
+    "description": "Condition field hint"
+  },
+  "concerns": "Concerns",
+  "@concerns": {
+    "description": "Concerns field label"
+  },
+  "enterAnyConcerns": "Enter any concerns",
+  "@enterAnyConcerns": {
+    "description": "Concerns field hint"
+  },
+  "recommendations": "Recommendations",
+  "@recommendations": {
+    "description": "Recommendations field label"
+  },
+  "enterRecommendations": "Enter recommendations",
+  "@enterRecommendations": {
+    "description": "Recommendations field hint"
+  },
+  "submit": "Submit",
+  "@submit": {
+    "description": "Submit button text"
+  },
+  "filterEquipment": "Filter Equipment",
+  "@filterEquipment": {
+    "description": "Filter equipment bottom sheet title"
+  },
+  "searchEquipment": "Search Equipment",
+  "@searchEquipment": {
+    "description": "Search equipment dialog title"
+  },
+  "enterEquipmentNameSearch": "Enter equipment name",
+  "@enterEquipmentNameSearch": {
+    "description": "Search equipment field hint"
+  },
+  "close": "Close",
+  "@close": {
+    "description": "Close button text"
+  },
+  "all": "All",
+  "@all": {
+    "description": "All filter option"
+  },
+  "available": "Available",
+  "@available": {
+    "description": "Available filter option"
+  },
+  "inUse": "In Use",
+  "@inUse": {
+    "description": "In Use filter option"
+  },
+  "needsMaintenance": "Needs Maintenance",
+  "@needsMaintenance": {
+    "description": "Needs Maintenance filter option"
+  },
+  "noEquipmentFound": "No equipment found",
+  "@noEquipmentFound": {
+    "description": "Empty state message for no equipment"
+  },
+  "tapPlusButtonToAddEquipment": "Tap the + button to add equipment",
+  "@tapPlusButtonToAddEquipment": {
+    "description": "Empty state instruction for adding equipment"
+  },
+  "next": "Next",
+  "@next": {
+    "description": "Next prefix for maintenance date"
+  },
+  "checkedIn": "Checked-in",
+  "@checkedIn": {
+    "description": "Checked-in status text"
+  },
+  "checkedOut": "Checked-out",
+  "@checkedOut": {
+    "description": "Checked-out status text"
+  },
+  "nextMaintenance": "Next Maintenance",
+  "@nextMaintenance": {
+    "description": "Next maintenance label"
+  },
+  "safetyHub": "Safety Hub",
+  "@safetyHub": {
+    "description": "Safety hub screen title"
+  },
+  "information": "Information",
+  "@information": {
+    "description": "Information tooltip"
+  },
+  "quickAccess": "Quick Access",
+  "@quickAccess": {
+    "description": "Quick access section title"
+  },
+  "safetyChecklist": "Safety Checklist",
+  "@safetyChecklist": {
+    "description": "Safety checklist item title"
+  },
+  "incidentReport": "Incident Report",
+  "@incidentReport": {
+    "description": "Incident report item title"
+  },
+  "reportIncident": "Report Incident",
+  "@reportIncident": {
+    "description": "Report incident screen title"
+  },
+  "regionalHelplines": "Regional Helplines",
+  "@regionalHelplines": {
+    "description": "Regional helplines item title"
+  },
+  "safetyTipOfTheDay": "Safety Tip of the Day",
+  "@safetyTipOfTheDay": {
+    "description": "Safety tip of the day title"
+  },
+  "ladderInspectionTip": "Always inspect your ladder before use. Check for damage, missing parts, and proper functioning of all components.",
+  "@ladderInspectionTip": {
+    "description": "Safety tip content about ladder inspection"
+  },
+  "viewMoreTips": "View More Tips",
+  "@viewMoreTips": {
+    "description": "View more tips button text"
+  },
+  "localPolice": "Local Police:999",
+  "@localPolice": {
+    "description": "Local police emergency contact"
+  },
+  "pactEmergency": "PACT Emergency:+256700000000",
+  "@pactEmergency": {
+    "description": "PACT emergency contact"
+  },
+  "medicalEmergency": "Medical Emergency:911",
+  "@medicalEmergency": {
+    "description": "Medical emergency contact"
+  },
+  "hiHowCanIHelp": "Hi there! How can I help you today?",
+  "@hiHowCanIHelp": {
+    "description": "Chat greeting message"
+  },
+  "pactSupport": "PACT Support",
+  "@pactSupport": {
+    "description": "Support sender name"
+  },
+  "needEquipmentInfo": "I need information about equipment maintenance.",
+  "@needEquipmentInfo": {
+    "description": "Sample chat message about equipment"
+  },
+  "sureWhatEquipment": "Sure! I can help with that. What specific equipment are you asking about?",
+  "@sureWhatEquipment": {
+    "description": "Support response asking for equipment details"
+  },
+  "excavatorSiteB": "The excavator on site B.",
+  "@excavatorSiteB": {
+    "description": "Sample message specifying equipment"
+  },
+  "maintenanceScheduleResponse": "I've pulled up the maintenance schedule for that excavator. Its next maintenance is due on September 20. Would you like me to send you the full maintenance details?",
+  "@maintenanceScheduleResponse": {
+    "description": "Support response with maintenance information"
+  },
+  "safetyAlert": "Safety Alert",
+  "@safetyAlert": {
+    "description": "Safety alert title"
+  },
+  "weatherWarningSiteA": "Severe weather warning for Site A. All personnel should follow safety protocols and stay informed of updates.",
+  "@weatherWarningSiteA": {
+    "description": "Weather warning alert content"
+  },
+  "typeAMessage": "Type a message...",
+  "@typeAMessage": {
+    "description": "Message input hint text"
+  },
+  "wallet": "Wallet",
+  "@wallet": {
+    "description": "Wallet navigation tab"
+  },
+  "helpAndSupport": "Help & Support",
+  "@helpAndSupport": {
+    "description": "Help and support menu item"
+  },
+  "sendFeedback": "Send Feedback",
+  "@sendFeedback": {
+    "description": "Send feedback menu item"
+  },
+  "aboutPact": "About PACT",
+  "@aboutPact": {
+    "description": "About PACT menu item"
+  },
+  "syncData": "Sync Data",
+  "@syncData": {
+    "description": "Sync data menu item"
+  },
+  "signOut": "Sign Out",
+  "@signOut": {
+    "description": "Sign out button text"
+  },
+  "draft": "Draft",
+  "@draft": {
+    "description": "Draft status label"
+  },
+  "complete": "Complete",
+  "@complete": {
+    "description": "Complete button text"
+  },
+  "saveAsDraft": "Save as Draft",
+  "@saveAsDraft": {
+    "description": "Save as draft button"
+  },
+  "submitNow": "Submit Now",
+  "@submitNow": {
+    "description": "Submit now button"
+  },
+  "pendingSync": "Pending Sync",
+  "@pendingSync": {
+    "description": "Pending sync status"
+  },
+  "synced": "Synced",
+  "@synced": {
+    "description": "Synced status"
+  },
+  "offline": "Offline",
+  "@offline": {
+    "description": "Offline status"
+  },
+  "online": "Online",
+  "@online": {
+    "description": "Online status"
+  },
+  "offlineMode": "Offline Mode",
+  "@offlineMode": {
+    "description": "Offline mode label"
+  },
+  "siteVisit": "Site Visit",
+  "@siteVisit": {
+    "description": "Site visit label"
+  },
+  "siteVisitHub": "Site Visit Hub",
+  "@siteVisitHub": {
+    "description": "Site visit hub title"
+  },
+  "completedSites": "Completed Sites",
+  "@completedSites": {
+    "description": "Completed sites counter label"
+  },
+  "pendingPayments": "Pending Payments",
+  "@pendingPayments": {
+    "description": "Pending payments label"
+  },
+  "totalEarnings": "Total Earnings",
+  "@totalEarnings": {
+    "description": "Total earnings label"
+  },
+  "paymentMethods": "Payment Methods",
+  "@paymentMethods": {
+    "description": "Payment methods section"
+  },
+  "costSubmissions": "Cost Submissions",
+  "@costSubmissions": {
+    "description": "Cost submissions tab"
+  },
+  "transactions": "Transactions",
+  "@transactions": {
+    "description": "Transactions tab"
+  },
+  "havingTroubleSigningIn": "Having trouble signing in?",
+  "@havingTroubleSigningIn": {
+    "description": "Login help link"
+  },
+  "loginTroubleshooting": "Login Troubleshooting",
+  "@loginTroubleshooting": {
+    "description": "Login troubleshooting dialog title"
+  },
+  "contactSupport": "Contact Support",
+  "@contactSupport": {
+    "description": "Contact support section"
+  },
+  "reportBug": "Report a Bug",
+  "@reportBug": {
+    "description": "Report bug option"
+  },
+  "commonErrors": "Common Errors",
+  "@commonErrors": {
+    "description": "Common errors section"
+  },
+  "searchHelp": "Search help articles...",
+  "@searchHelp": {
+    "description": "Help search placeholder"
+  },
+  "noResultsFound": "No results found",
+  "@noResultsFound": {
+    "description": "No search results message"
+  },
+  "getHelpAndFindAnswers": "Get help and find answers",
+  "@getHelpAndFindAnswers": {
+    "description": "Help subtitle"
+  },
+  "shareYourThoughts": "Share your thoughts",
+  "@shareYourThoughts": {
+    "description": "Feedback subtitle"
+  },
+  "learnMoreAboutUs": "Learn more about us",
+  "@learnMoreAboutUs": {
+    "description": "About PACT subtitle"
+  },
+  "updateLocalData": "Update local data",
+  "@updateLocalData": {
+    "description": "Sync data subtitle"
+  },
+  "pactDashboard": "PACT Dashboard",
+  "@pactDashboard": {
+    "description": "PACT Dashboard menu item"
+  },
+  "viewOnWeb": "View on web",
+  "@viewOnWeb": {
+    "description": "PACT Dashboard subtitle"
+  },
+  "version": "Version",
+  "@version": {
+    "description": "Version label"
+  },
+  "build": "Build",
+  "@build": {
+    "description": "Build label"
+  },
+  "voiceCall": "Voice Call",
+  "@voiceCall": {
+    "description": "Voice call button"
+  },
+  "videoCall": "Video Call",
+  "@videoCall": {
+    "description": "Video call button"
+  },
+  "endCall": "End Call",
+  "@endCall": {
+    "description": "End call button"
+  },
+  "incomingCall": "Incoming Call",
+  "@incomingCall": {
+    "description": "Incoming call notification"
+  },
+  "calling": "Calling...",
+  "@calling": {
+    "description": "Calling status"
+  },
+  "ringing": "Ringing...",
+  "@ringing": {
+    "description": "Ringing status"
+  },
+  "connected": "Connected",
+  "@connected": {
+    "description": "Call connected status"
+  },
+  "callEnded": "Call ended",
+  "@callEnded": {
+    "description": "Call ended status"
+  },
+  "mute": "Mute",
+  "@mute": {
+    "description": "Mute button"
+  },
+  "unmute": "Unmute",
+  "@unmute": {
+    "description": "Unmute button"
+  },
+  "speaker": "Speaker",
+  "@speaker": {
+    "description": "Speaker button"
+  },
+  "camera": "Camera",
+  "@camera": {
+    "description": "Camera button"
+  },
+  "notifications": "Notifications",
+  "@notifications": {
+    "description": "Notifications screen title"
+  },
+  "markAllAsRead": "Mark all as read",
+  "@markAllAsRead": {
+    "description": "Mark all notifications as read"
+  },
+  "noNotifications": "No notifications",
+  "@noNotifications": {
+    "description": "No notifications message"
+  },
+  "today": "Today",
+  "@today": {
+    "description": "Today label"
+  },
+  "yesterday": "Yesterday",
+  "@yesterday": {
+    "description": "Yesterday label"
+  },
+  "earlier": "Earlier",
+  "@earlier": {
+    "description": "Earlier label"
+  },
+  "reports": "Reports",
+  "@reports": {
+    "description": "Reports screen title"
+  },
+  "visitReports": "Visit Reports",
+  "@visitReports": {
+    "description": "Visit reports section"
+  },
+  "filterByDate": "Filter by Date",
+  "@filterByDate": {
+    "description": "Filter by date option"
+  },
+  "filterByMonth": "Filter by Month",
+  "@filterByMonth": {
+    "description": "Filter by month option"
+  },
+  "filterByYear": "Filter by Year",
+  "@filterByYear": {
+    "description": "Filter by year option"
+  },
+  "date": "Date",
+  "@date": {
+    "description": "Date label"
+  },
+  "month": "Month",
+  "@month": {
+    "description": "Month label"
+  },
+  "year": "Year",
+  "@year": {
+    "description": "Year label"
+  },
+  "noReportsFound": "No reports found",
+  "@noReportsFound": {
+    "description": "No reports message"
+  },
+  "downloadReport": "Download Report",
+  "@downloadReport": {
+    "description": "Download report button"
+  },
+  "shareReport": "Share Report",
+  "@shareReport": {
+    "description": "Share report button"
+  },
+  "duration": "Duration",
+  "@duration": {
+    "description": "Duration label"
+  },
+  "minutes": "minutes",
+  "@minutes": {
+    "description": "Minutes unit"
+  },
+  "finalLocation": "Final Location",
+  "@finalLocation": {
+    "description": "Final location label"
+  },
+  "coordinates": "Coordinates",
+  "@coordinates": {
+    "description": "Coordinates label"
+  },
+  "accuracy": "Accuracy",
+  "@accuracy": {
+    "description": "Accuracy label"
+  },
+  "notes": "Notes",
+  "@notes": {
+    "description": "Notes label"
+  },
+  "noNotes": "No notes",
+  "@noNotes": {
+    "description": "No notes message"
+  },
+  "activities": "Activities",
+  "@activities": {
+    "description": "Activities label"
+  },
+  "photos": "Photos",
+  "@photos": {
+    "description": "Photos label"
+  },
+  "generatedByPact": "Generated by PACT Mobile",
+  "@generatedByPact": {
+    "description": "Report footer"
+  },
+  "errorLoadingVisits": "Error loading visits",
+  "@errorLoadingVisits": {
+    "description": "Error loading visits message"
+  },
+  "errorDownloadingReport": "Error downloading report",
+  "@errorDownloadingReport": {
+    "description": "Error downloading report message"
+  },
+  "visitsThisMonth": "Visits this month",
+  "@visitsThisMonth": {
+    "description": "Visits this month summary"
+  },
+  "visitsThisYear": "Visits this year",
+  "@visitsThisYear": {
+    "description": "Visits this year summary"
+  },
+  "totalVisits": "Total visits",
+  "@totalVisits": {
+    "description": "Total visits summary"
+  },
+  "viewDetails": "View Details",
+  "@viewDetails": {
+    "description": "View details button"
+  },
+  "completed": "Completed",
+  "@completed": {
+    "description": "Completed status"
+  },
+  "pending": "Pending",
+  "@pending": {
+    "description": "Pending status"
+  },
+  "approved": "Approved",
+  "@approved": {
+    "description": "Approved status"
+  },
+  "rejected": "Rejected",
+  "@rejected": {
+    "description": "Rejected status"
+  },
+  "cancelled": "Cancelled",
+  "@cancelled": {
+    "description": "Cancelled status"
+  },
+  "underReview": "Under Review",
+  "@underReview": {
+    "description": "Under review status"
+  },
+  "paid": "Paid",
+  "@paid": {
+    "description": "Paid status"
+  },
+  "balance": "Balance",
+  "@balance": {
+    "description": "Balance label"
+  },
+  "earnings": "Earnings",
+  "@earnings": {
+    "description": "Earnings label"
+  },
+  "withdrawals": "Withdrawals",
+  "@withdrawals": {
+    "description": "Withdrawals label"
+  },
+  "withdrawFunds": "Withdraw Funds",
+  "@withdrawFunds": {
+    "description": "Withdraw funds button"
+  },
+  "requestWithdrawal": "Request Withdrawal",
+  "@requestWithdrawal": {
+    "description": "Request withdrawal button"
+  },
+  "amount": "Amount",
+  "@amount": {
+    "description": "Amount label"
+  },
+  "enterAmount": "Enter amount",
+  "@enterAmount": {
+    "description": "Enter amount hint"
+  },
+  "reason": "Reason",
+  "@reason": {
+    "description": "Reason label"
+  },
+  "enterReason": "Enter reason",
+  "@enterReason": {
+    "description": "Enter reason hint"
+  },
+  "selectPaymentMethod": "Select payment method",
+  "@selectPaymentMethod": {
+    "description": "Select payment method prompt"
+  },
+  "addPaymentMethod": "Add Payment Method",
+  "@addPaymentMethod": {
+    "description": "Add payment method button"
+  },
+  "noPaymentMethods": "No payment methods",
+  "@noPaymentMethods": {
+    "description": "No payment methods message"
+  },
+  "bankAccount": "Bank Account",
+  "@bankAccount": {
+    "description": "Bank account option"
+  },
+  "mobileMoney": "Mobile Money",
+  "@mobileMoney": {
+    "description": "Mobile money option"
+  },
+  "debitCard": "Debit/Credit Card",
+  "@debitCard": {
+    "description": "Debit card option"
+  },
+  "accountNumber": "Account Number",
+  "@accountNumber": {
+    "description": "Account number label"
+  },
+  "bankName": "Bank Name",
+  "@bankName": {
+    "description": "Bank name label"
+  },
+  "phoneNumberForMoney": "Phone Number",
+  "@phoneNumberForMoney": {
+    "description": "Phone number for mobile money"
+  },
+  "providerName": "Provider Name",
+  "@providerName": {
+    "description": "Provider name label"
+  },
+  "cardholderName": "Cardholder Name",
+  "@cardholderName": {
+    "description": "Cardholder name label"
+  },
+  "cardNumber": "Card Number",
+  "@cardNumber": {
+    "description": "Card number label"
+  },
+  "setAsDefault": "Set as Default",
+  "@setAsDefault": {
+    "description": "Set as default button"
+  },
+  "defaultPayment": "Default",
+  "@defaultPayment": {
+    "description": "Default payment indicator"
+  },
+  "remove": "Remove",
+  "@remove": {
+    "description": "Remove button"
+  },
+  "unknown": "Unknown",
+  "@unknown": {
+    "description": "Unknown label"
+  },
+  "confirmDelete": "Confirm Delete",
+  "@confirmDelete": {
+    "description": "Confirm delete dialog title"
+  },
+  "areYouSure": "Are you sure?",
+  "@areYouSure": {
+    "description": "Are you sure prompt"
+  },
+  "delete": "Delete",
+  "@delete": {
+    "description": "Delete button"
+  },
+  "save": "Save",
+  "@save": {
+    "description": "Save button"
+  },
+  "edit": "Edit",
+  "@edit": {
+    "description": "Edit button"
+  },
+  "search": "Search",
+  "@search": {
+    "description": "Search button/label"
+  },
+  "filter": "Filter",
+  "@filter": {
+    "description": "Filter button"
+  },
+  "sort": "Sort",
+  "@sort": {
+    "description": "Sort button"
+  },
+  "loading": "Loading...",
+  "@loading": {
+    "description": "Loading message"
+  },
+  "retry": "Retry",
+  "@retry": {
+    "description": "Retry button"
+  },
+  "error": "Error",
+  "@error": {
+    "description": "Error label"
+  },
+  "success": "Success",
+  "@success": {
+    "description": "Success label"
+  },
+  "warning": "Warning",
+  "@warning": {
+    "description": "Warning label"
+  },
+  "info": "Info",
+  "@info": {
+    "description": "Info label"
+  },
+  "ok": "OK",
+  "@ok": {
+    "description": "OK button"
+  },
+  "yes": "Yes",
+  "@yes": {
+    "description": "Yes button"
+  },
+  "no": "No",
+  "@no": {
+    "description": "No button"
+  },
+  "confirm": "Confirm",
+  "@confirm": {
+    "description": "Confirm button"
+  },
+  "back": "Back",
+  "@back": {
+    "description": "Back button"
+  },
+  "done": "Done",
+  "@done": {
+    "description": "Done button"
+  },
+  "continueText": "Continue",
+  "@continueText": {
+    "description": "Continue button"
+  },
+  "skip": "Skip",
+  "@skip": {
+    "description": "Skip button"
+  },
+  "siteCode": "Site Code",
+  "@siteCode": {
+    "description": "Site code label"
+  },
+  "siteName": "Site Name",
+  "@siteName": {
+    "description": "Site name label"
+  },
+  "village": "Village",
+  "@village": {
+    "description": "Village label"
+  },
+  "district": "District",
+  "@district": {
+    "description": "District label"
+  },
+  "region": "Region",
+  "@region": {
+    "description": "Region label"
+  },
+  "household": "Household",
+  "@household": {
+    "description": "Household label"
+  },
+  "mmpCode": "MMP Code",
+  "@mmpCode": {
+    "description": "MMP code label"
+  },
+  "startVisit": "Start Visit",
+  "@startVisit": {
+    "description": "Start visit button"
+  },
+  "continueVisit": "Continue Visit",
+  "@continueVisit": {
+    "description": "Continue visit button"
+  },
+  "endVisit": "End Visit",
+  "@endVisit": {
+    "description": "End visit button"
+  },
+  "gpsAccuracy": "GPS Accuracy",
+  "@gpsAccuracy": {
+    "description": "GPS accuracy label"
+  },
+  "meters": "meters",
+  "@meters": {
+    "description": "Meters unit"
+  },
+  "requiredField": "This field is required",
+  "@requiredField": {
+    "description": "Required field validation message"
+  },
+  "invalidEmail": "Invalid email address",
+  "@invalidEmail": {
+    "description": "Invalid email validation message"
+  },
+  "passwordTooShort": "Password must be at least 8 characters",
+  "@passwordTooShort": {
+    "description": "Password too short validation message"
+  },
+  "passwordsDoNotMatch": "Passwords do not match",
+  "@passwordsDoNotMatch": {
+    "description": "Passwords do not match validation message"
+  }
+}
