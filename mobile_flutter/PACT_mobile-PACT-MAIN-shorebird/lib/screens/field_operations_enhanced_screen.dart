@@ -2828,7 +2828,8 @@ class _MMPScreenState extends State<MMPScreen> {
     final status = site['status'] ?? 'Pending';
     final enumeratorFee = site['enumerator_fee'] ?? 0;
     final transportFee = site['transport_fee'] ?? 0;
-    final cost = site['cost'] ?? (enumeratorFee + transportFee);
+    // Always calculate total as transport + enumerator fee (not just site['cost'])
+    final cost = (transportFee is num ? transportFee : 0) + (enumeratorFee is num ? enumeratorFee : 0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -3266,7 +3267,8 @@ class _CostAcknowledgmentDialogState extends State<_CostAcknowledgmentDialog> {
     final site = widget.site;
     final enumeratorFee = site['enumerator_fee'] ?? 0;
     final transportFee = site['transport_fee'] ?? 0;
-    final totalCost = site['cost'] ?? (enumeratorFee + transportFee);
+    // Always calculate total as transport + enumerator fee (not just site['cost'])
+    final totalCost = (transportFee is num ? transportFee : 0) + (enumeratorFee is num ? enumeratorFee : 0);
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
