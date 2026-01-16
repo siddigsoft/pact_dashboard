@@ -18,6 +18,7 @@ import '../services/photo_upload_service.dart';
 import '../services/advance_request_service.dart';
 import '../services/offline_data_service.dart';
 import '../services/offline/sync_manager.dart';
+import '../services/offline/offline_db.dart';
 import '../models/visit_report.dart';
 import '../models/visit_report_data.dart';
 import '../widgets/request_advance_dialog.dart';
