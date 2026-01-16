@@ -1,5 +1,6 @@
 import 'package:hive/hive.dart';
 import 'models.dart';
+import 'hive_adapters.dart';
 
 /// Offline database service using Hive for local storage.
 /// Manages:
@@ -49,23 +50,11 @@ class OfflineDb {
   late Box<dynamic> _metadata;
 
   /// Initialize all Hive boxes
+  /// Hive adapters are registered here to ensure they're available for all entry points
   Future<void> init() async {
-    // Register adapters - TODO: Implement proper Hive adapters
-    // if (!Hive.isAdapterRegistered(0)) {
-    //   Hive.registerAdapter(PendingSyncActionAdapter());
-    // }
-    // if (!Hive.isAdapterRegistered(1)) {
-    //   Hive.registerAdapter(OfflineSiteVisitAdapter());
-    // }
-    // if (!Hive.isAdapterRegistered(2)) {
-    //   Hive.registerAdapter(CachedLocationAdapter());
-    // }
-    // if (!Hive.isAdapterRegistered(3)) {
-    //   Hive.registerAdapter(QueuedRequestAdapter());
-    // }
-    // if (!Hive.isAdapterRegistered(4)) {
-    //   Hive.registerAdapter(CachedItemAdapter());
-    // }
+    // Register adapters (idempotent - checks if already registered)
+    // This ensures adapters are available regardless of entry point (main, background, tests)
+    registerHiveAdapters();
 
     // Open boxes
     _pendingSync = await Hive.openBox<PendingSyncAction>(pendingSyncBox);

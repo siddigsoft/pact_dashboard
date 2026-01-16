@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:uuid/uuid.dart';
+import 'package:path_provider/path_provider.dart' as path_provider;
 import '../theme/app_colors.dart';
 import '../theme/app_design_system.dart';
 import '../widgets/app_widgets.dart';
@@ -94,17 +95,30 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
 
       if (drafts.isNotEmpty) {
         final draft = drafts.first;
-        setState(() {
-          if (draft.notes != null && draft.notes!.isNotEmpty) {
-            _notesController.text = draft.notes!;
-          }
-          // Photos will be restored from draft.photos if needed
-        });
-
+        
+        // Parse combined notes and activities
+        final parsed = _parseNotesAndActivities(draft.notes);
+        
+        // Restore notes
+        if (parsed['notes']!.isNotEmpty) {
+          _notesController.text = parsed['notes']!;
+        }
+        
+        // Restore activities
+        if (parsed['activities']!.isNotEmpty) {
+          _activitiesController.text = parsed['activities']!;
+        }
+        
+        // Restore photos from base64 strings
+        if (draft.photos != null && draft.photos!.isNotEmpty) {
+          await _restorePhotosFromDraft(draft.photos!);
+        }
+        
         if (mounted) {
+          setState(() {});
           AppSnackBar.show(
             context,
-            message: 'Draft loaded. Continue where you left off!',
+            message: 'Draft loaded with ${_photos.length} photos. Continue where you left off!',
             type: SnackBarType.info,
           );
         }
@@ -112,6 +126,100 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
     } catch (e) {
       debugPrint('Error loading draft: $e');
     }
+  }
+  
+  /// Restore photos from base64 encoded strings saved in draft
+  Future<void> _restorePhotosFromDraft(List<String> photoData) async {
+    if (kIsWeb) {
+      debugPrint('Photo restoration not supported on web platform');
+      return;
+    }
+    
+    try {
+      // Use app-specific cache directory that persists across restarts
+      final cacheDir = await path_provider.getApplicationCacheDirectory();
+      final draftsDir = Directory('${cacheDir.path}/draft_photos');
+      
+      // Create drafts directory if it doesn't exist
+      if (!await draftsDir.exists()) {
+        await draftsDir.create(recursive: true);
+      }
+      
+      for (int i = 0; i < photoData.length; i++) {
+        try {
+          final data = photoData[i];
+          
+          // Check if it's a file path that still exists
+          if (!data.startsWith('data:') && !data.contains('base64') && File(data).existsSync()) {
+            _photos.add(XFile(data));
+            continue;
+          }
+          
+          // Check if it's base64 encoded
+          if (data.startsWith('data:image') || data.contains('base64') || _isBase64(data)) {
+            // Extract base64 content
+            String base64Str = data;
+            if (data.contains(',')) {
+              base64Str = data.split(',').last;
+            }
+            
+            // Decode base64 to bytes
+            final bytes = base64Decode(base64Str);
+            
+            // Save to persistent cache directory with unique name based on site visit
+            final fileName = 'draft_${widget.visit.id}_photo_$i.jpg';
+            final photoFile = File('${draftsDir.path}/$fileName');
+            await photoFile.writeAsBytes(bytes);
+            
+            // Add to photos list
+            _photos.add(XFile(photoFile.path));
+          }
+        } catch (e) {
+          debugPrint('Error restoring photo $i: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error restoring photos from draft: $e');
+    }
+  }
+  
+  /// Check if a string is valid base64
+  bool _isBase64(String str) {
+    try {
+      if (str.length % 4 != 0) return false;
+      base64Decode(str);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  
+  /// Separator used to combine notes and activities in draft storage
+  static const String _draftSeparator = '|||ACTIVITIES|||';
+  
+  /// Combine notes and activities into a single string for storage
+  String _combineNotesAndActivities(String notes, String activities) {
+    if (activities.isEmpty) {
+      return notes;
+    }
+    return '$notes$_draftSeparator$activities';
+  }
+  
+  /// Parse combined notes string into separate notes and activities
+  Map<String, String> _parseNotesAndActivities(String? combined) {
+    if (combined == null || combined.isEmpty) {
+      return {'notes': '', 'activities': ''};
+    }
+    
+    if (combined.contains(_draftSeparator)) {
+      final parts = combined.split(_draftSeparator);
+      return {
+        'notes': parts[0],
+        'activities': parts.length > 1 ? parts[1] : '',
+      };
+    }
+    
+    return {'notes': combined, 'activities': ''};
   }
 
   Future<void> _getCurrentLocation() async {
@@ -636,6 +744,13 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
           ? activeVisitState.locationHistory.first
           : null;
 
+      // Combine notes and activities with separator for storage
+      // Format: notes|||activities (can be parsed later on load)
+      final combinedNotes = _combineNotesAndActivities(
+        _notesController.text.trim(),
+        _activitiesController.text.trim(),
+      );
+      
       // Create draft record
       final draftVisit = OfflineSiteVisit(
         id: draftId,
@@ -662,7 +777,7 @@ class _CompleteVisitScreenState extends ConsumerState<CompleteVisitScreen> {
               }
             : null,
         photos: photoDataList,
-        notes: _notesController.text.trim(),
+        notes: combinedNotes,
         synced: false,
       );
 
