@@ -43,6 +43,7 @@ import { SiteVisitCostDialog } from "@/components/wallet/SiteVisitCostDialog";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisitCostsUnified } from "@/components/site-visit/SiteVisitCostsUnified";
 import { SiteVisitAuditTrail } from "@/components/site-visit/SiteVisitAuditTrail";
+import { CompletedVisitReportCard } from "@/components/site-visit/CompletedVisitReportCard";
 import { NearestEnumeratorsCard } from "@/components/site-visit/NearestEnumeratorsCard";
 import { ConfirmationAcknowledgment } from "@/components/site-visit/ConfirmationAcknowledgment";
 import { useWallet } from "@/context/wallet/WalletContext";
@@ -503,6 +504,14 @@ const SiteVisitDetail = () => {
         )}
 
         <Separator />
+
+        {/* Visit Report for Completed Visits - Admin/FOM only */}
+        {siteVisit.status === "completed" && hasAnyRole(['admin', 'fom', 'ict']) && (
+          <CompletedVisitReportCard 
+            siteVisitId={siteVisit.id}
+            siteCode={siteVisit.siteCode}
+          />
+        )}
 
         {/* Desktop: Two Column Layout for Costs & Audit */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
