@@ -16,7 +16,8 @@ import '../theme/app_colors.dart';
 import '../services/location_service.dart';
 import '../services/photo_upload_service.dart';
 import '../services/advance_request_service.dart';
-import '../services/offline/offline_db.dart';
+import '../services/offline_data_service.dart';
+import '../services/offline/sync_manager.dart';
 import '../models/visit_report.dart';
 import '../models/visit_report_data.dart';
 import '../widgets/request_advance_dialog.dart';
@@ -1646,48 +1647,11 @@ class _MMPScreenState extends State<MMPScreen> {
     final supabase = Supabase.instance.client;
 
     try {
-      // Validate and refresh session before starting operation
-      final session = supabase.auth.currentSession;
-
-      debugPrint(
-        '[_startVisit] Session check - valid: ${session != null}, expired: ${session?.isExpired ?? true}',
-      );
-
-      if (session == null || session.isExpired) {
-        debugPrint(
-          '[_startVisit] Session expired or missing, attempting refresh...',
-        );
-        try {
-          await supabase.auth.refreshSession();
-          debugPrint('[_startVisit] Session refreshed successfully');
-        } catch (refreshError) {
-          debugPrint('[_startVisit] Session refresh failed: $refreshError');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Session expired. Please log in again.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
-      }
-
-      // Re-check user ID after potential refresh
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null) {
-        debugPrint('[_startVisit] User ID is null after session check');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication error. Please log in again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
+      // Check connectivity first
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOffline = connectivity.contains(ConnectivityResult.none);
+      
+      debugPrint('[_startVisit] Connectivity check - offline: $isOffline');
 
       // Check location permissions
       final hasPermission = await LocationService.checkPermissions();
@@ -1713,7 +1677,7 @@ class _MMPScreenState extends State<MMPScreen> {
 
       if (confirmed != true) return;
 
-      // Get current location
+      // Get current location (works offline - uses device GPS)
       final position = await LocationService.getCurrentLocation();
       if (position == null) {
         if (mounted) {
@@ -1732,6 +1696,11 @@ class _MMPScreenState extends State<MMPScreen> {
       final siteStatus = (site['status'] as String? ?? '').toLowerCase();
       final isAssigned =
           siteStatus == 'assigned' && site['accepted_by'] == null;
+
+      // Calculate fees from cached data (works offline)
+      final enumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
+      final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
+      final calculatedCost = enumeratorFee + transportFee;
 
       // Build update data
       final updateData = <String, dynamic>{
@@ -1758,25 +1727,6 @@ class _MMPScreenState extends State<MMPScreen> {
       if (isAssigned) {
         updateData['accepted_by'] = _userId;
         updateData['accepted_at'] = now;
-
-        // Fetch fresh site data to get latest fees
-        final freshSite = await Supabase.instance.client
-            .from('mmp_site_entries')
-            .select('enumerator_fee, transport_fee, cost')
-            .eq('id', site['id'])
-            .maybeSingle();
-
-        // Calculate fees if missing
-        var enumeratorFee =
-            (freshSite?['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
-        final transportFee =
-            (freshSite?['transport_fee'] as num?)?.toDouble() ??
-            (site['transport_fee'] as num?)?.toDouble() ??
-            0.0;
-
-        // Calculate total cost
-        final calculatedCost = enumeratorFee + transportFee;
-
         if (enumeratorFee > 0 || calculatedCost > 0) {
           updateData['enumerator_fee'] = enumeratorFee;
           updateData['transport_fee'] = transportFee;
@@ -1784,20 +1734,110 @@ class _MMPScreenState extends State<MMPScreen> {
         }
       }
 
-      // Verify session is still valid before database operation
-      final currentSession = supabase.auth.currentSession;
-      if (currentSession == null || currentSession.isExpired) {
+      // OFFLINE MODE: Queue for sync and update local cache
+      if (isOffline) {
+        debugPrint('[_startVisit] Offline mode - saving locally');
+        
+        // Build start location from GPS
+        final startLocation = position != null
+            ? {
+                'latitude': position.latitude,
+                'longitude': position.longitude,
+                'accuracy': position.accuracy,
+              }
+            : <String, dynamic>{};
+        
+        // Queue using OfflineDataService
+        final offlineDataService = OfflineDataService();
+        await offlineDataService.queueStartVisit(
+          visitId: site['id'].toString(),
+          userId: _userId ?? '',
+          startLocation: startLocation,
+        );
+        
+        // Note: Don't call forceSync while offline - SyncManager will pick up pending actions
+        // when connectivity is restored via auto-sync
+        
+        // Update local cache
+        final updatedSite = Map<String, dynamic>.from(site);
+        updatedSite.addAll(updateData);
+        updatedSite['_offline_modified'] = true;
+        updatedSite['_synced'] = false;
+        
+        // Update in _mySites list
+        final siteIndex = _mySites.indexWhere((s) => s['id'] == site['id']);
+        if (siteIndex != -1) {
+          _mySites[siteIndex] = updatedSite;
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Visit started (offline). Will sync when online.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          setState(() {});
+        }
+        return;
+      }
+
+      // ONLINE MODE: Validate session and update database
+      final session = supabase.auth.currentSession;
+      debugPrint(
+        '[_startVisit] Session check - valid: ${session != null}, expired: ${session?.isExpired ?? true}',
+      );
+
+      if (session == null || session.isExpired) {
         debugPrint(
-          '[_startVisit] Session expired during operation, refreshing...',
+          '[_startVisit] Session expired or missing, attempting refresh...',
         );
         try {
           await supabase.auth.refreshSession();
+          debugPrint('[_startVisit] Session refreshed successfully');
         } catch (refreshError) {
-          debugPrint(
-            '[_startVisit] Session refresh failed during operation: $refreshError',
+          debugPrint('[_startVisit] Session refresh failed: $refreshError');
+          // Fall back to offline mode
+          debugPrint('[_startVisit] Falling back to offline mode');
+          final startLocation = position != null
+              ? {
+                  'latitude': position.latitude,
+                  'longitude': position.longitude,
+                  'accuracy': position.accuracy,
+                }
+              : <String, dynamic>{};
+          final offlineDataService = OfflineDataService();
+          await offlineDataService.queueStartVisit(
+            visitId: site['id'].toString(),
+            userId: _userId ?? '',
+            startLocation: startLocation,
           );
-          throw Exception('Session expired. Please try again.');
+          // SyncManager will pick up pending actions when online
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Visit started (will sync when online).'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
         }
+      }
+
+      // Re-check user ID after potential refresh
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) {
+        debugPrint('[_startVisit] User ID is null after session check');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Authentication error. Please log in again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
       }
 
       // Update database
@@ -1809,8 +1849,38 @@ class _MMPScreenState extends State<MMPScreen> {
         debugPrint('[_startVisit] Database update successful');
       } catch (dbError) {
         debugPrint('[_startVisit] Database error: $dbError');
-        // Check if it's an auth-related error
+        // Check if it's a network error - queue offline
         final errorStr = dbError.toString().toLowerCase();
+        if (errorStr.contains('socket') ||
+            errorStr.contains('network') ||
+            errorStr.contains('host lookup') ||
+            errorStr.contains('connection')) {
+          debugPrint('[_startVisit] Network error - queueing offline');
+          final startLocation = position != null
+              ? {
+                  'latitude': position.latitude,
+                  'longitude': position.longitude,
+                  'accuracy': position.accuracy,
+                }
+              : <String, dynamic>{};
+          final offlineDataService = OfflineDataService();
+          await offlineDataService.queueStartVisit(
+            visitId: site['id'].toString(),
+            userId: _userId ?? '',
+            startLocation: startLocation,
+          );
+          // SyncManager will pick up pending actions when online
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Visit started (will sync when online).'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+        // Check if it's an auth-related error
         if (errorStr.contains('auth') ||
             errorStr.contains('unauthorized') ||
             errorStr.contains('jwt') ||
@@ -1877,7 +1947,103 @@ class _MMPScreenState extends State<MMPScreen> {
         '[_completeVisit] Starting completion for site: ${site['id']}',
       );
 
-      // Validate and refresh session before starting operation
+      // Check connectivity first
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOffline = connectivity.contains(ConnectivityResult.none);
+      
+      debugPrint('[_completeVisit] Connectivity check - offline: $isOffline');
+
+      // Show visit report dialog first (works offline)
+      final reportData = await showDialog<VisitReportData>(
+        context: context,
+        builder: (context) => VisitReportDialog(site: site),
+      );
+
+      if (reportData == null) return;
+
+      // Get final location (works offline - uses device GPS)
+      final position =
+          reportData.coordinates ?? await LocationService.getCurrentLocation();
+
+      final now = DateTime.now().toIso8601String();
+
+      // Build coordinates JSON
+      final coordinates = position != null
+          ? {
+              'latitude': position.latitude,
+              'longitude': position.longitude,
+              'accuracy': position.accuracy,
+            }
+          : <String, dynamic>{};
+
+      // Calculate fees from cached data (works offline)
+      final enumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
+      final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
+      final totalCost = enumeratorFee + transportFee;
+
+      // OFFLINE MODE: Save locally and queue for sync
+      if (isOffline) {
+        debugPrint('[_completeVisit] Offline mode - saving locally');
+        
+        // Build end location map
+        final endLocation = coordinates.isNotEmpty ? coordinates : <String, dynamic>{};
+        
+        // Convert photos to base64 for offline storage
+        final List<String> photoBase64Urls = [];
+        for (final file in reportData.photos) {
+          try {
+            final bytes = await file.readAsBytes();
+            final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+            photoBase64Urls.add(base64String);
+          } catch (e) {
+            debugPrint('[_completeVisit] Error converting photo to base64: $e');
+          }
+        }
+        
+        // Queue using OfflineDataService
+        final offlineDataService = OfflineDataService();
+        await offlineDataService.queueCompleteVisit(
+          visitId: site['id'].toString(),
+          userId: _userId ?? '',
+          endLocation: endLocation,
+          notes: reportData.notes,
+          activities: reportData.activities,
+          durationMinutes: reportData.durationMinutes,
+          photoDataUrls: photoBase64Urls,
+        );
+        
+        // Note: Don't call forceSync while offline - SyncManager will pick up pending actions
+        // when connectivity is restored via auto-sync
+        
+        // Update local cache
+        final updatedSite = Map<String, dynamic>.from(site);
+        updatedSite['status'] = 'Completed';
+        updatedSite['visit_completed_at'] = now;
+        updatedSite['_offline_modified'] = true;
+        updatedSite['_synced'] = false;
+        
+        // Update in _mySites list
+        final siteIndex = _mySites.indexWhere((s) => s['id'] == site['id']);
+        if (siteIndex != -1) {
+          _mySites[siteIndex] = updatedSite;
+        }
+        
+        // Add to unsynced list for Outbox display
+        _unsyncedCompletedVisits.add(updatedSite);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Visit completed (offline). Will sync when online.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          setState(() {});
+        }
+        return;
+      }
+
+      // ONLINE MODE: Validate session
       final session = supabase.auth.currentSession;
       debugPrint(
         '[_completeVisit] Session check - valid: ${session != null}, expired: ${session?.isExpired ?? true}',
@@ -1892,13 +2058,44 @@ class _MMPScreenState extends State<MMPScreen> {
           debugPrint('[_completeVisit] Session refreshed successfully');
         } catch (refreshError) {
           debugPrint('[_completeVisit] Session refresh failed: $refreshError');
+          // Fall back to offline mode
+          debugPrint('[_completeVisit] Falling back to offline mode');
+          final endLocation = coordinates.isNotEmpty ? coordinates : <String, dynamic>{};
+          
+          // Convert photos to base64
+          final List<String> photoBase64Urls = [];
+          for (final file in reportData.photos) {
+            try {
+              final bytes = await file.readAsBytes();
+              final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+              photoBase64Urls.add(base64String);
+            } catch (e) {
+              debugPrint('[_completeVisit] Error converting photo to base64: $e');
+            }
+          }
+          
+          final offlineDataService = OfflineDataService();
+          await offlineDataService.queueCompleteVisit(
+            visitId: site['id'].toString(),
+            userId: _userId ?? '',
+            endLocation: endLocation,
+            notes: reportData.notes,
+            activities: reportData.activities,
+            durationMinutes: reportData.durationMinutes,
+            photoDataUrls: photoBase64Urls,
+          );
+          
+          // SyncManager will pick up pending actions when online
+          _unsyncedCompletedVisits.add({...site, 'status': 'Completed', '_offline_modified': true});
+          
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Session expired. Please log in again.'),
-                backgroundColor: Colors.red,
+                content: Text('Visit completed (will sync when online).'),
+                backgroundColor: Colors.orange,
               ),
             );
+            setState(() {});
           }
           return;
         }
@@ -1919,36 +2116,22 @@ class _MMPScreenState extends State<MMPScreen> {
         return;
       }
 
-      // Show visit report dialog
-      final reportData = await showDialog<VisitReportData>(
-        context: context,
-        builder: (context) => VisitReportDialog(site: site),
-      );
-
-      if (reportData == null) return;
-
-      // Verify session is still valid after dialog (user may have been idle)
+      // Verify session is still valid after session validation
       var currentSession = supabase.auth.currentSession;
       if (currentSession == null || currentSession.isExpired) {
         debugPrint(
-          '[_completeVisit] Session expired after dialog, refreshing...',
+          '[_completeVisit] Session expired, refreshing...',
         );
         try {
           await supabase.auth.refreshSession();
           currentSession = supabase.auth.currentSession;
         } catch (refreshError) {
           debugPrint(
-            '[_completeVisit] Session refresh failed after dialog: $refreshError',
+            '[_completeVisit] Session refresh failed: $refreshError',
           );
           throw Exception('Session expired. Please try again.');
         }
       }
-
-      // Get final location
-      final position =
-          reportData.coordinates ?? await LocationService.getCurrentLocation();
-
-      final now = DateTime.now().toIso8601String();
 
       // Upload photos with session refresh during long operation
       List<String> photoUrls = [];
@@ -2034,16 +2217,7 @@ class _MMPScreenState extends State<MMPScreen> {
         }
       }
 
-      // Build coordinates JSON to match existing reports schema
-      final coordinates = position != null
-          ? {
-              'latitude': position.latitude,
-              'longitude': position.longitude,
-              'accuracy': position.accuracy,
-            }
-          : <String, dynamic>{};
-
-      // Prepare insert payload to match existing reports table schema
+      // Prepare insert payload to match existing reports table schema (coordinates already defined above)
       final reportInsert = <String, dynamic>{
         'site_visit_id': site['id'],
         'notes': reportData.notes.trim(),
