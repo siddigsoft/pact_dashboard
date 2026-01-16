@@ -31,6 +31,7 @@ import 'services/notification_service.dart';
 import 'services/update_service.dart';
 import 'services/map_tile_cache_service.dart'
     if (dart.library.html) 'services/map_tile_cache_service_web.dart';
+import 'services/offline/hive_adapters.dart';
 
 // Conditionally import web plugins only when needed
 // This prevents errors on non-web platforms
@@ -75,6 +76,11 @@ void main() async {
 
   // Initialize Hive for local storage
   await Hive.initFlutter();
+  
+  // Register Hive type adapters for offline data models
+  // CRITICAL: Must be done BEFORE opening typed boxes
+  registerHiveAdapters();
+  
   // Open boxes for offline data storage
   await Hive.openBox('tasks');
   await Hive.openBox('equipments');
