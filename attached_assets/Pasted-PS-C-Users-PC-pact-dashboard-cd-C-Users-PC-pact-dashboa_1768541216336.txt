@@ -1,0 +1,66 @@
+PS C:\Users\PC\pact_dashboard> cd C:\Users\PC\pact_dashboard
+>> dir
+
+    Directory: C:\Users\PC\pact_dashboard
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d----          12/11/2025  3:27 PM                .github
+d----          11/27/2025  5:12 PM                .vite
+d----          11/22/2025  5:10 PM                .vscode
+d----          12/22/2025  5:26 PM                android
+d----            1/9/2026  7:48 PM                attached_assets
+d----           12/3/2025  6:31 PM                database
+d----            1/9/2026 11:34 AM                dist
+d----            1/9/2026  7:48 PM                docs
+d----          12/22/2025 10:58 PM                node_modules
+d----            1/9/2026  7:47 PM                pact_dashboard
+d----            1/5/2026  7:26 PM                public
+d----            1/5/2026  7:26 PM                scripts
+d----            1/9/2026  7:48 PM                src
+d----           12/9/2025  5:43 PM                supabase
+d----            1/9/2026 11:34 AM                supabase_migrations
+d----          11/23/2025  6:47 PM                tests
+-a---          12/12/2025  7:56 PM            630 .dockerignore
+-a---          12/11/2025  3:33 PM           1234 .env
+-a---          12/11/2025  3:27 PM           1250 .env.example
+-a---          11/21/2025 11:00 AM            327 .gitignore
+-a---          12/16/2025  2:54 PM           1089 .replit
+-a---          11/21/2025 11:00 AM         192280 bun.lock
+-a---            1/9/2026 11:34 AM           3557 capacitor.config.ts
+-a---          12/11/2025  3:27 PM            589 check-server-status.sh
+-a---          11/21/2025 11:00 AM            432 components.json
+-a---          12/16/2025  2:54 PM          11089 CONTEXT_EXPLANATION.md
+-a---            1/9/2026  7:48 PM          10531 Cost_Prediction_Proposal.docx
+-a---          11/25/2025 10:55 PM              0 create_table.js
+-a---          12/11/2025  3:27 PM           1348 Dockerfile
+-a---          12/16/2025  8:26 PM           8009 ERROR_ANALYSIS_AND_SOLUTIONS.md
+-a---          11/21/2025 11:00 AM            818 eslint.config.js
+-a---           12/4/2025  9:09 PM          14751 IMPLEMENTATION_SUMMARY.md
+-a---           12/7/2025  6:51 PM           2375 index.html
+-a---          12/16/2025  2:54 PM              0 master
+-a---           12/4/2025  9:09 PM           9456 MOBILE_DEVELOPER_GUIDE.md
+-a---           12/4/2025  9:09 PM           7625 MOBILE_RESPONSIVE_DESIGN.md
+-a---           12/4/2025  9:09 PM           8800 NOTIFICATION_INTEGRATION_STATUS.md
+-a---           12/4/2025  9:09 PM           4649 NOTIFICATIONS_QUICK_REFERENCE.md
+-a---            1/9/2026 11:34 AM         396607 package-lock.json
+-a---            1/9/2026 11:34 AM           4971 package.json
+-a---           12/1/2025 11:47 AM        1814857 pact-android-project.tar.gz
+-a---            1/5/2026  7:26 PM          14983 PERMIT_VERIFICATION_SCENARIOS.md
+-a---          11/21/2025 11:00 AM             86 postcss.config.js
+-a---          11/23/2025 10:05 PM           3688 push-payment-guide.sh
+-a---          11/21/2025 11:00 AM           3812 push-to-github.sh
+-a---          11/21/2025 11:00 AM           2222 README.md
+-a---            1/9/2026  7:48 PM          10899 replit.md
+-a---           12/4/2025  9:09 PM          26314 SYSTEM_STATUS.txt
+-a---           12/7/2025 10:41 PM           8710 tailwind.config.ts
+-a---          11/21/2025 11:00 AM            682 tsconfig.app.json
+-a---          11/21/2025 11:00 AM            400 tsconfig.json
+-a---          11/21/2025 11:00 AM            503 tsconfig.node.json
+-a---          11/21/2025 11:00 AM           2056 update-github-repo.sh
+-a---          11/21/2025 11:00 AM            675 upload-to-github.sh
+-a---            1/9/2026  7:48 PM         217149 usermanual.md
+-a---          12/22/2025  5:26 PM           5778 vite.config.ts
+-a---          12/16/2025  8:26 PM           6031 VPS_DEPLOYMENT_GUIDE.md
+
+PS C:\Users\PC\pact_dashboard> 
