@@ -168,13 +168,48 @@ class _StartVisitButtonState extends ConsumerState<StartVisitButton> {
       }
     } catch (e) {
       debugPrint('Error starting visit: $e');
+      
+      // Check if this is a network error - if so, try offline fallback
+      final errorStr = e.toString().toLowerCase();
+      final isNetworkError = errorStr.contains('socket') ||
+          errorStr.contains('host lookup') ||
+          errorStr.contains('network') ||
+          errorStr.contains('connection') ||
+          errorStr.contains('timeout') ||
+          errorStr.contains('unreachable');
+      
+      if (isNetworkError) {
+        debugPrint('Network error detected, attempting offline start...');
+        try {
+          // Get the locked GPS that was already captured
+          final lockedGPS = ref.read(lockedGPSProvider);
+          await _startVisitOffline(lockedGPS);
+          
+          widget.onStartSuccess?.call();
+          
+          if (mounted) {
+            AppSnackBar.show(
+              context,
+              message: 'Visit started offline - will sync when online',
+              type: SnackBarType.success,
+            );
+          }
+          return; // Exit early - success!
+        } catch (offlineError) {
+          debugPrint('Offline fallback also failed: $offlineError');
+        }
+      }
 
       widget.onStartError?.call();
 
       if (mounted) {
+        // Show a more user-friendly message for network errors
+        final message = isNetworkError
+            ? 'No internet connection. Please check your network and try again.'
+            : 'Failed to start visit: ${e.toString()}';
         AppSnackBar.show(
           context,
-          message: 'Failed to start visit: ${e.toString()}',
+          message: message,
           type: SnackBarType.error,
         );
       }

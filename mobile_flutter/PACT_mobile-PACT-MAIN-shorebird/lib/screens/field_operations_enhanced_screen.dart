@@ -2828,8 +2828,11 @@ class _MMPScreenState extends State<MMPScreen> {
     final status = site['status'] ?? 'Pending';
     final enumeratorFee = site['enumerator_fee'] ?? 0;
     final transportFee = site['transport_fee'] ?? 0;
-    // Always calculate total as transport + enumerator fee (not just site['cost'])
-    final cost = (transportFee is num ? transportFee : 0) + (enumeratorFee is num ? enumeratorFee : 0);
+    final storedCost = (site['cost'] as num?)?.toDouble() ?? 0.0;
+    // Calculate total from fees, but use stored cost if it's higher (more accurate)
+    final calculatedCost = ((transportFee is num ? transportFee : 0) + (enumeratorFee is num ? enumeratorFee : 0)).toDouble();
+    // Use whichever is higher: stored cost or calculated cost
+    final cost = storedCost > calculatedCost ? storedCost : calculatedCost;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
