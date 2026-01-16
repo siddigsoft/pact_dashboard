@@ -619,12 +619,11 @@ class _MMPScreenState extends State<MMPScreen> {
   Future<void> _cacheAvailableSites(List<Map<String, dynamic>> sites) async {
     try {
       final offlineDb = OfflineDb();
-      final jsonData = jsonEncode(sites);
-      await offlineDb.setCachedItem(
+      await offlineDb.cacheItem(
         OfflineDb.siteCacheBox,
         'available_sites_$_userId',
-        jsonData,
-        ttlMinutes: 60 * 24, // Cache for 24 hours
+        data: {'sites': sites},
+        ttl: const Duration(hours: 24),
       );
       debugPrint('[_cacheAvailableSites] Cached ${sites.length} available sites');
     } catch (e) {
@@ -641,9 +640,14 @@ class _MMPScreenState extends State<MMPScreen> {
       );
       
       if (cachedItem != null && cachedItem.data != null) {
-        final List<dynamic> decoded = jsonDecode(cachedItem.data as String);
-        _availableSites = decoded.map((e) => e as Map<String, dynamic>).toList();
-        debugPrint('[_loadAvailableSitesFromCache] Loaded ${_availableSites.length} sites from cache');
+        final data = cachedItem.data as Map<String, dynamic>;
+        final sites = data['sites'] as List?;
+        if (sites != null) {
+          _availableSites = sites.map((e) => e as Map<String, dynamic>).toList();
+          debugPrint('[_loadAvailableSitesFromCache] Loaded ${_availableSites.length} sites from cache');
+        } else {
+          _availableSites = [];
+        }
       } else {
         debugPrint('[_loadAvailableSitesFromCache] No cached sites found');
         _availableSites = [];
@@ -771,12 +775,11 @@ class _MMPScreenState extends State<MMPScreen> {
   Future<void> _cacheSmartAssignedSites(List<Map<String, dynamic>> sites) async {
     try {
       final offlineDb = OfflineDb();
-      final jsonData = jsonEncode(sites);
-      await offlineDb.setCachedItem(
+      await offlineDb.cacheItem(
         OfflineDb.siteCacheBox,
         'smart_assigned_sites_$_userId',
-        jsonData,
-        ttlMinutes: 60 * 24,
+        data: {'sites': sites},
+        ttl: const Duration(hours: 24),
       );
       debugPrint('[_cacheSmartAssignedSites] Cached ${sites.length} assigned sites');
     } catch (e) {
@@ -793,9 +796,14 @@ class _MMPScreenState extends State<MMPScreen> {
       );
       
       if (cachedItem != null && cachedItem.data != null) {
-        final List<dynamic> decoded = jsonDecode(cachedItem.data as String);
-        _smartAssignedSites = decoded.map((e) => e as Map<String, dynamic>).toList();
-        debugPrint('[_loadSmartAssignedSitesFromCache] Loaded ${_smartAssignedSites.length} sites from cache');
+        final data = cachedItem.data as Map<String, dynamic>;
+        final sites = data['sites'] as List?;
+        if (sites != null) {
+          _smartAssignedSites = sites.map((e) => e as Map<String, dynamic>).toList();
+          debugPrint('[_loadSmartAssignedSitesFromCache] Loaded ${_smartAssignedSites.length} sites from cache');
+        } else {
+          _smartAssignedSites = [];
+        }
       } else {
         debugPrint('[_loadSmartAssignedSitesFromCache] No cached sites found');
         _smartAssignedSites = [];
@@ -906,12 +914,11 @@ class _MMPScreenState extends State<MMPScreen> {
   Future<void> _cacheMySites(List<Map<String, dynamic>> sites) async {
     try {
       final offlineDb = OfflineDb();
-      final jsonData = jsonEncode(sites);
-      await offlineDb.setCachedItem(
+      await offlineDb.cacheItem(
         OfflineDb.siteCacheBox,
         'my_sites_$_userId',
-        jsonData,
-        ttlMinutes: 60 * 24,
+        data: {'sites': sites},
+        ttl: const Duration(hours: 24),
       );
       debugPrint('[_cacheMySites] Cached ${sites.length} my sites');
     } catch (e) {
@@ -928,9 +935,14 @@ class _MMPScreenState extends State<MMPScreen> {
       );
       
       if (cachedItem != null && cachedItem.data != null) {
-        final List<dynamic> decoded = jsonDecode(cachedItem.data as String);
-        _mySites = decoded.map((e) => e as Map<String, dynamic>).toList();
-        debugPrint('[_loadMySitesFromCache] Loaded ${_mySites.length} sites from cache');
+        final data = cachedItem.data as Map<String, dynamic>;
+        final sites = data['sites'] as List?;
+        if (sites != null) {
+          _mySites = sites.map((e) => e as Map<String, dynamic>).toList();
+          debugPrint('[_loadMySitesFromCache] Loaded ${_mySites.length} sites from cache');
+        } else {
+          _mySites = [];
+        }
       } else {
         debugPrint('[_loadMySitesFromCache] No cached sites found');
         _mySites = [];
@@ -3428,6 +3440,14 @@ class _MMPScreenState extends State<MMPScreen> {
       state: site['state']?.toString() ?? '',
       locality: site['locality']?.toString() ?? '',
       status: site['status']?.toString() ?? '',
+      activity: site['activity']?.toString() ?? site['main_activity']?.toString() ?? '',
+      priority: site['priority']?.toString() ?? 'medium',
+      notes: site['notes']?.toString() ?? '',
+      mainActivity: site['main_activity']?.toString() ?? site['activity']?.toString() ?? '',
+      assignedTo: site['accepted_by']?.toString() ?? site['assigned_to']?.toString() ?? '',
+      createdAt: site['created_at'] != null 
+          ? DateTime.tryParse(site['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
       transportFee: (site['transport_fee'] as num?)?.toDouble() ?? 0,
       enumeratorFee: (site['enumerator_fee'] as num?)?.toDouble() ?? 0,
       dueDate: site['due_date'] != null ? DateTime.tryParse(site['due_date'].toString()) : null,

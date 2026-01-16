@@ -297,7 +297,7 @@ class _VisitReportDetailScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text('Visit Report'),
-        backgroundColor: AppColors.primaryGreen,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           if (_report != null)
@@ -418,7 +418,7 @@ class _VisitReportDetailScreenState
           children: [
             Row(
               children: [
-                Icon(Icons.description, color: AppColors.primaryGreen),
+                Icon(Icons.description, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
