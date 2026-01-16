@@ -208,24 +208,27 @@ class CachedItemAdapter extends TypeAdapter<CachedItem> {
     };
     return CachedItem(
       key: fields[0] as String,
-      data: fields[1] as String,
-      expiresAt: fields[2] as DateTime,
-      createdAt: fields[3] as DateTime,
+      data: (fields[1] as Map).cast<String, dynamic>(),
+      cachedAt: fields[2] as int,
+      expiresAt: fields[3] as int?,
+      version: fields[4] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CachedItem obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.key)
       ..writeByte(1)
       ..write(obj.data)
       ..writeByte(2)
-      ..write(obj.expiresAt)
+      ..write(obj.cachedAt)
       ..writeByte(3)
-      ..write(obj.createdAt);
+      ..write(obj.expiresAt)
+      ..writeByte(4)
+      ..write(obj.version);
   }
 }
 
