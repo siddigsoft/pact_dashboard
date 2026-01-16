@@ -185,51 +185,55 @@ class WalletTransaction {
 class WithdrawalRequest {
   final String id;
   @JsonKey(name: 'wallet_id')
-  final String walletId;
+  final String? walletId;
   @JsonKey(name: 'user_id')
   final String userId;
   final double amount;
   @JsonKey(defaultValue: 'SDG')
   final String currency;
   @JsonKey(defaultValue: 'pending')
-  final String status; // pending, processing, approved, rejected, cancelled
-  @JsonKey(name: 'requested_at')
-  final DateTime requestedAt;
-  @JsonKey(name: 'processed_at')
-  final DateTime? processedAt;
-  final String? reason;
-  final String? notes;
-
-  // Offline deduplication
-  @JsonKey(name: 'reference_id')
-  final String? referenceId;
+  final String status; // pending, supervisor_approved, approved, rejected, cancelled
+  @JsonKey(name: 'created_at')
+  final DateTime createdAt;
+  @JsonKey(name: 'approved_at')
+  final DateTime? approvedAt;
+  @JsonKey(name: 'request_reason')
+  final String? requestReason;
+  @JsonKey(name: 'supervisor_notes')
+  final String? supervisorNotes;
+  @JsonKey(name: 'admin_notes')
+  final String? adminNotes;
+  @JsonKey(name: 'payment_method')
+  final String? paymentMethod;
 
   WithdrawalRequest({
     required this.id,
-    required this.walletId,
+    this.walletId,
     required this.userId,
     required this.amount,
     this.currency = 'SDG',
     this.status = 'pending',
-    required this.requestedAt,
-    this.processedAt,
-    this.reason,
-    this.notes,
-    this.referenceId,
+    required this.createdAt,
+    this.approvedAt,
+    this.requestReason,
+    this.supervisorNotes,
+    this.adminNotes,
+    this.paymentMethod,
   });
 
   factory WithdrawalRequest.fromJson(Map<String, dynamic> json) => WithdrawalRequest(
     id: json['id'] is String ? json['id'] as String : 'unknown',
-    walletId: json['wallet_id'] is String ? json['wallet_id'] as String : 'unknown',
+    walletId: json['wallet_id'] as String?,
     userId: json['user_id'] is String ? json['user_id'] as String : 'unknown',
     amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
     currency: json['currency'] is String ? json['currency'] as String : 'SDG',
     status: json['status'] is String ? json['status'] as String : 'pending',
-    requestedAt: json['requested_at'] is String ? DateTime.parse(json['requested_at'] as String) : DateTime.now(),
-    processedAt: json['processed_at'] is String ? DateTime.parse(json['processed_at'] as String) : null,
-    reason: json['reason'] as String?,
-    notes: json['notes'] as String?,
-    referenceId: json['reference_id'] as String?,
+    createdAt: json['created_at'] is String ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
+    approvedAt: json['approved_at'] is String ? DateTime.parse(json['approved_at'] as String) : null,
+    requestReason: json['request_reason'] as String?,
+    supervisorNotes: json['supervisor_notes'] as String?,
+    adminNotes: json['admin_notes'] as String?,
+    paymentMethod: json['payment_method'] as String?,
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -238,20 +242,21 @@ class WithdrawalRequest {
     'amount': amount,
     'currency': currency,
     'status': status,
-    'requested_at': requestedAt.toIso8601String(),
-    'processed_at': processedAt?.toIso8601String(),
-    'reason': reason,
-    'notes': notes,
-    'reference_id': referenceId,
+    'created_at': createdAt.toIso8601String(),
+    'approved_at': approvedAt?.toIso8601String(),
+    'request_reason': requestReason,
+    'supervisor_notes': supervisorNotes,
+    'admin_notes': adminNotes,
+    'payment_method': paymentMethod,
   };
 
   // Helper getters
   String get statusLabel {
     switch (status) {
       case 'pending':
-        return 'Pending';
-      case 'processing':
-        return 'Processing';
+        return 'Pending Supervisor';
+      case 'supervisor_approved':
+        return 'Pending Finance';
       case 'approved':
         return 'Approved';
       case 'rejected':
@@ -265,6 +270,9 @@ class WithdrawalRequest {
 
   bool get canCancel => status == 'pending';
   bool get isSettled => ['approved', 'rejected', 'cancelled'].contains(status);
+  
+  // Getter for reason (uses requestReason internally)
+  String? get reason => requestReason;
 }
 
 @JsonSerializable()

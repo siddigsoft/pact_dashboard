@@ -339,11 +339,13 @@ class WalletRepository {
           .from('withdrawal_requests')
           .insert({
             'user_id': userId,
+            'wallet_id': wallet.id,
             'amount': amount,
             'currency': currency,
-            'reason': reason,
+            'request_reason': reason, // Web uses request_reason, not reason
             'payment_method': paymentMethod,
             'status': 'pending',
+            'created_at': DateTime.now().toIso8601String(),
           })
           .select()
           .single();
