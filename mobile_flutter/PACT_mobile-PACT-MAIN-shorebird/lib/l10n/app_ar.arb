@@ -1045,5 +1045,297 @@
   "passwordsDoNotMatch": "كلمات المرور غير متطابقة",
   "@passwordsDoNotMatch": {
     "description": "Passwords do not match validation message"
+  },
+  "statePermit": "تصريح الولاية",
+  "@statePermit": {
+    "description": "State permit label"
+  },
+  "localityPermit": "تصريح المحلية",
+  "@localityPermit": {
+    "description": "Locality permit label"
+  },
+  "federalPermit": "التصريح الفيدرالي",
+  "@federalPermit": {
+    "description": "Federal permit label"
+  },
+  "permitRequired": "التصريح مطلوب",
+  "@permitRequired": {
+    "description": "Permit required message"
+  },
+  "permitNotRequired": "التصريح غير مطلوب",
+  "@permitNotRequired": {
+    "description": "Permit not required message"
+  },
+  "uploadStatePermit": "رفع تصريح الولاية",
+  "@uploadStatePermit": {
+    "description": "Upload state permit button"
+  },
+  "uploadLocalityPermit": "رفع تصريح المحلية",
+  "@uploadLocalityPermit": {
+    "description": "Upload locality permit button"
+  },
+  "statePermitRequired": "تصريح الولاية مطلوب",
+  "@statePermitRequired": {
+    "description": "State permit required title"
+  },
+  "statePermitDescription": "تم رفع التصريح الفيدرالي فقط. يرجى رفع تصريح ولاية {state} للمتابعة.",
+  "@statePermitDescription": {
+    "description": "State permit required description",
+    "placeholders": {
+      "state": {
+        "type": "String",
+        "example": "Khartoum"
+      }
+    }
+  },
+  "localityPermitRequired": "تصريح المحلية مطلوب",
+  "@localityPermitRequired": {
+    "description": "Locality permit required title"
+  },
+  "localityPermitDescription": "يرجى رفع تصريح المحلية لـ {locality} للمتابعة.",
+  "@localityPermitDescription": {
+    "description": "Locality permit required description",
+    "placeholders": {
+      "locality": {
+        "type": "String",
+        "example": "Al-Jazirah"
+      }
+    }
+  },
+  "selectFile": "اختر ملف",
+  "@selectFile": {
+    "description": "Select file button"
+  },
+  "permitFile": "ملف التصريح",
+  "@permitFile": {
+    "description": "Permit file label"
+  },
+  "issueDate": "تاريخ الإصدار",
+  "@issueDate": {
+    "description": "Issue date label"
+  },
+  "expiryDate": "تاريخ الانتهاء",
+  "@expiryDate": {
+    "description": "Expiry date label"
+  },
+  "comments": "ملاحظات",
+  "@comments": {
+    "description": "Comments label"
+  },
+  "addCommentsOptional": "أضف ملاحظات (اختياري)",
+  "@addCommentsOptional": {
+    "description": "Add comments optional placeholder"
+  },
+  "uploadPermit": "رفع التصريح",
+  "@uploadPermit": {
+    "description": "Upload permit button"
+  },
+  "uploading": "جاري الرفع...",
+  "@uploading": {
+    "description": "Uploading status"
+  },
+  "permitUploadSuccess": "تم رفع التصريح بنجاح",
+  "@permitUploadSuccess": {
+    "description": "Permit upload success message"
+  },
+  "permitUploadError": "فشل رفع التصريح",
+  "@permitUploadError": {
+    "description": "Permit upload error message"
+  },
+  "invalidFileType": "نوع ملف غير صالح",
+  "@invalidFileType": {
+    "description": "Invalid file type error"
+  },
+  "fileTooLarge": "الملف كبير جداً",
+  "@fileTooLarge": {
+    "description": "File too large error"
+  },
+  "selectPdfOrImage": "يرجى اختيار ملف PDF أو صورة (JPG، PNG)",
+  "@selectPdfOrImage": {
+    "description": "Select PDF or image instruction"
+  },
+  "maxFileSize": "الحد الأقصى لحجم الملف: {size} ميجابايت",
+  "@maxFileSize": {
+    "description": "Max file size message",
+    "placeholders": {
+      "size": {
+        "type": "int",
+        "example": "10"
+      }
+    }
+  },
+  "datesRequired": "تاريخ الإصدار والانتهاء مطلوبان",
+  "@datesRequired": {
+    "description": "Dates required error"
+  },
+  "expiryAfterIssue": "يجب أن يكون تاريخ الانتهاء بعد تاريخ الإصدار",
+  "@expiryAfterIssue": {
+    "description": "Expiry after issue date error"
+  },
+  "showPreview": "عرض المعاينة",
+  "@showPreview": {
+    "description": "Show preview button"
+  },
+  "hidePreview": "إخفاء المعاينة",
+  "@hidePreview": {
+    "description": "Hide preview button"
+  },
+  "clearFile": "مسح الملف",
+  "@clearFile": {
+    "description": "Clear file button"
+  },
+  "permitVerification": "التحقق من التصريح",
+  "@permitVerification": {
+    "description": "Permit verification title"
+  },
+  "verifyPermits": "التحقق من التصاريح",
+  "@verifyPermits": {
+    "description": "Verify permits button"
+  },
+  "permitsAttached": "التصاريح مرفقة",
+  "@permitsAttached": {
+    "description": "Permits attached status"
+  },
+  "pendingVerification": "في انتظار التحقق",
+  "@pendingVerification": {
+    "description": "Pending verification status"
+  },
+  "verified": "تم التحقق",
+  "@verified": {
+    "description": "Verified status"
+  },
+  "statePermitAttached": "تصريح الولاية مرفق",
+  "@statePermitAttached": {
+    "description": "State permit attached status"
+  },
+  "localityPermitAttached": "تصريح المحلية مرفق",
+  "@localityPermitAttached": {
+    "description": "Locality permit attached status"
+  },
+  "doYouHaveStatePermit": "هل لديك تصريح الولاية لـ {state}؟",
+  "@doYouHaveStatePermit": {
+    "description": "Do you have state permit question",
+    "placeholders": {
+      "state": {
+        "type": "String",
+        "example": "Khartoum"
+      }
+    }
+  },
+  "doYouHaveLocalityPermit": "هل لديك تصريح المحلية لـ {locality}؟",
+  "@doYouHaveLocalityPermit": {
+    "description": "Do you have locality permit question",
+    "placeholders": {
+      "locality": {
+        "type": "String",
+        "example": "Al-Jazirah"
+      }
+    }
+  },
+  "yesHaveIt": "نعم، لدي التصريح",
+  "@yesHaveIt": {
+    "description": "Yes I have the permit option"
+  },
+  "noRequiredDontHave": "مطلوب ولكن ليس لدي",
+  "@noRequiredDontHave": {
+    "description": "Required but don't have option"
+  },
+  "notRequiredInLocality": "غير مطلوب في هذه المحلية",
+  "@notRequiredInLocality": {
+    "description": "Not required in this locality option"
+  },
+  "canProceedWithout": "هل يمكنك المتابعة بدون التصريح؟",
+  "@canProceedWithout": {
+    "description": "Can proceed without permit question"
+  },
+  "yesProceedWithout": "نعم، يمكنني المتابعة",
+  "@yesProceedWithout": {
+    "description": "Yes can proceed without option"
+  },
+  "noCannotProceed": "لا، أحتاج التصريح",
+  "@noCannotProceed": {
+    "description": "No cannot proceed without option"
+  },
+  "sendBackToFom": "إرسال إلى مدير العمليات",
+  "@sendBackToFom": {
+    "description": "Send back to FOM button"
+  },
+  "siteVerification": "التحقق من الموقع",
+  "@siteVerification": {
+    "description": "Site verification title"
+  },
+  "verifySite": "التحقق من الموقع",
+  "@verifySite": {
+    "description": "Verify site button"
+  },
+  "returnToFom": "إعادة إلى مدير العمليات",
+  "@returnToFom": {
+    "description": "Return to FOM button"
+  },
+  "pendingSites": "المواقع المعلقة",
+  "@pendingSites": {
+    "description": "Pending sites tab"
+  },
+  "cpVerification": "التحقق من التصاريح",
+  "@cpVerification": {
+    "description": "CP Verification tab"
+  },
+  "verifiedSites": "المواقع المتحقق منها",
+  "@verifiedSites": {
+    "description": "Verified sites tab"
+  },
+  "sitesNeedStatePermit": "{count} مواقع تحتاج تصريح الولاية",
+  "@sitesNeedStatePermit": {
+    "description": "Sites needing state permit count",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "sitesNeedLocalityPermit": "{count} مواقع تحتاج تصريح المحلية",
+  "@sitesNeedLocalityPermit": {
+    "description": "Sites needing locality permit count",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "step1SelectFile": "الخطوة 1: اختر الملف",
+  "@step1SelectFile": {
+    "description": "Step 1 select file"
+  },
+  "step2EnterDates": "الخطوة 2: أدخل التواريخ",
+  "@step2EnterDates": {
+    "description": "Step 2 enter dates"
+  },
+  "step3AddComments": "الخطوة 3: أضف ملاحظات (اختياري)",
+  "@step3AddComments": {
+    "description": "Step 3 add comments"
+  },
+  "step4Upload": "الخطوة 4: رفع التصريح",
+  "@step4Upload": {
+    "description": "Step 4 upload"
+  },
+  "tapToSelectFile": "اضغط لاختيار ملف",
+  "@tapToSelectFile": {
+    "description": "Tap to select file instruction"
+  },
+  "supportedFormats": "الصيغ المدعومة: PDF، JPG، PNG",
+  "@supportedFormats": {
+    "description": "Supported formats list"
+  },
+  "fileSelected": "تم اختيار الملف: {fileName}",
+  "@fileSelected": {
+    "description": "File selected message",
+    "placeholders": {
+      "fileName": {
+        "type": "String",
+        "example": "permit.pdf"
+      }
+    }
   }
 }
