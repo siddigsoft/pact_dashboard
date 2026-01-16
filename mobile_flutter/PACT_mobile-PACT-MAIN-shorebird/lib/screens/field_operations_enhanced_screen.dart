@@ -66,6 +66,9 @@ class _MMPScreenState extends State<MMPScreen> {
   Map<String, Map<String, dynamic>> _advanceRequests = {};
   bool _loadingAdvanceRequests = false;
 
+  // User's enumerator fee based on classification
+  double _userEnumeratorFee = 50.0; // Default fee if no classification
+
   // Grouped data
   Map<String, List<Map<String, dynamic>>> _groupedByStateLocality = {};
 
@@ -188,6 +191,55 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
+  /// Fetch user's enumerator fee based on classification
+  Future<void> _loadUserEnumeratorFee() async {
+    if (_userId == null) return;
+    
+    final supabase = Supabase.instance.client;
+    
+    try {
+      // Get user's classification
+      final classificationResult = await supabase
+          .from('user_classifications')
+          .select('classification_level, role_scope, is_active')
+          .eq('user_id', _userId!)
+          .eq('is_active', true)
+          .order('effective_from', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      
+      if (classificationResult == null) {
+        debugPrint('[_loadUserEnumeratorFee] No classification found, using default fee');
+        return;
+      }
+      
+      final classificationLevel = classificationResult['classification_level'];
+      final roleScope = classificationResult['role_scope'];
+      
+      // Get fee structure for this classification
+      final feeResult = await supabase
+          .from('classification_fee_structures')
+          .select('site_visit_base_fee_cents, complexity_multiplier, is_active')
+          .eq('classification_level', classificationLevel)
+          .eq('role_scope', roleScope)
+          .eq('is_active', true)
+          .order('effective_from', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      
+      if (feeResult != null) {
+        final baseFee = (feeResult['site_visit_base_fee_cents'] as num?)?.toDouble() ?? 0;
+        final multiplier = (feeResult['complexity_multiplier'] as num?)?.toDouble() ?? 1.0;
+        _userEnumeratorFee = (baseFee * multiplier * 100).roundToDouble() / 100;
+        debugPrint('[_loadUserEnumeratorFee] Calculated fee: $_userEnumeratorFee SDG (level: $classificationLevel)');
+      } else {
+        debugPrint('[_loadUserEnumeratorFee] No fee structure found, using default');
+      }
+    } catch (e) {
+      debugPrint('[_loadUserEnumeratorFee] Error: $e');
+    }
+  }
+
   Future<void> _loadDataCollectorData({
     bool preserveExistingData = false,
   }) async {
@@ -238,6 +290,9 @@ class _MMPScreenState extends State<MMPScreen> {
       if (!preserveExistingData) {
         // Only clear if this is a fresh load, not a background refresh
       }
+
+      // Load user's enumerator fee based on classification
+      await _loadUserEnumeratorFee();
 
       // Load available sites (Dispatched, not accepted, in collector's area)
       await _loadAvailableSites();
@@ -3251,9 +3306,12 @@ class _MMPScreenState extends State<MMPScreen> {
     final state = site['state'] ?? '';
     final locality = site['locality'] ?? '';
     final status = site['status'] ?? 'Pending';
-    final enumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
+    final storedEnumeratorFee = (site['enumerator_fee'] as num?)?.toDouble() ?? 0.0;
     final transportFee = (site['transport_fee'] as num?)?.toDouble() ?? 0.0;
-    // Always calculate total as enumerator_fee + transport_fee (ignore stored cost)
+    // For claimable sites (Dispatched), use user's classification-based fee if site has no enumerator_fee
+    final isClaimableSite = status.toLowerCase() == 'dispatched';
+    final enumeratorFee = (storedEnumeratorFee > 0) ? storedEnumeratorFee : (isClaimableSite ? _userEnumeratorFee : 0.0);
+    // Calculate total as enumerator_fee + transport_fee
     final cost = enumeratorFee + transportFee;
 
     return Container(
@@ -3327,7 +3385,7 @@ class _MMPScreenState extends State<MMPScreen> {
             ],
           ),
 
-          if (cost > 0) ...[
+          if (cost > 0 || transportFee > 0 || enumeratorFee > 0) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -3335,28 +3393,84 @@ class _MMPScreenState extends State<MMPScreen> {
                 color: AppColors.backgroundGray,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              child: Column(
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  // Transport Fee row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Total (Transport + Fees)',
+                        'Transport',
                         style: GoogleFonts.poppins(
-                          fontSize: 10,
+                          fontSize: 12,
                           color: AppColors.textLight,
                         ),
                       ),
                       Text(
-                        '${cost.toStringAsFixed(0)} SDG',
+                        '${transportFee.toStringAsFixed(0)} SDG',
                         style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryBlue,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textDark,
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Enumerator Fee row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Enumerator Fee',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: AppColors.textLight,
+                        ),
+                      ),
+                      Text(
+                        '${enumeratorFee.toStringAsFixed(0)} SDG',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Total row with divider
+                  Container(
+                    padding: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(
+                          color: Colors.grey.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Total',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        Text(
+                          '${cost.toStringAsFixed(0)} SDG',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
