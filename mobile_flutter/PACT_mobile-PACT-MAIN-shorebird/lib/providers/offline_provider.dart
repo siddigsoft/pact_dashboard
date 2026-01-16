@@ -162,16 +162,29 @@ class SyncNotifier extends StateNotifier<AsyncValue<SyncResult>> {
 // OFFLINE ACTIONS
 // ============================================================================
 
-/// Start a site visit offline
+/// Start a site visit offline (with optional locked GPS location)
 final startSiteVisitOfflineProvider = FutureProvider.autoDispose
-    .family<String, ({String siteEntryId, String siteName, String siteCode, String state, String locality})>((ref, params) async {
+    .family<String, ({String siteEntryId, String siteName, String siteCode, String state, String locality, Map<String, dynamic>? startLocation})>((ref, params) async {
   final db = ref.watch(offlineDbProvider);
   final syncManager = ref.watch(syncManagerProvider);
 
   final visitId = const Uuid().v4();
   final now = DateTime.now();
 
-  // Save visit locally
+  // Build start location map from locked GPS
+  Map<String, dynamic>? startLocation;
+  if (params.startLocation != null) {
+    startLocation = {
+      'latitude': params.startLocation!['latitude'],
+      'longitude': params.startLocation!['longitude'],
+      'accuracy': params.startLocation!['accuracy'],
+      'timestamp': params.startLocation!['timestamp'] ?? now.toIso8601String(),
+      'locked': true, // Mark as locked - should never be modified
+      'captured_at': now.toIso8601String(),
+    };
+  }
+
+  // Save visit locally with locked GPS
   final visit = OfflineSiteVisit(
     id: visitId,
     siteEntryId: params.siteEntryId,
@@ -181,10 +194,11 @@ final startSiteVisitOfflineProvider = FutureProvider.autoDispose
     locality: params.locality,
     status: 'started',
     startedAt: now,
+    startLocation: startLocation, // Store the locked GPS
   );
   await db.saveSiteVisitOffline(visit);
 
-  // Add pending sync action
+  // Add pending sync action with locked GPS
   await db.addPendingSync(PendingSyncAction(
     id: const Uuid().v4(),
     type: 'site_visit_start',
@@ -192,6 +206,7 @@ final startSiteVisitOfflineProvider = FutureProvider.autoDispose
       'siteEntryId': params.siteEntryId,
       'userId': Supabase.instance.client.auth.currentUser?.id ?? '',
       'startedAt': now.toIso8601String(),
+      'startLocation': startLocation, // Include locked GPS in sync payload
     },
     timestamp: DateTime.now().millisecondsSinceEpoch,
   ));
