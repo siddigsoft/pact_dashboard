@@ -20,6 +20,8 @@ import '../services/offline/offline_db.dart';
 import '../models/visit_report.dart';
 import '../models/visit_report_data.dart';
 import '../widgets/request_advance_dialog.dart';
+import '../models/site_visit.dart';
+import 'visit_report_detail_screen.dart';
 
 class FieldOperationsEnhancedScreen extends StatefulWidget {
   const FieldOperationsEnhancedScreen({super.key});
@@ -1539,6 +1541,30 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
           ),
         );
+      }
+
+      // View Report Button for completed visits (Admin/FOM/ICT only)
+      if ((status.toString().toLowerCase() == 'completed' ||
+              status.toString().toLowerCase() == 'complete')) {
+        final canViewReport = _isAdminOrSuperUser || 
+                              _userRole == 'fom' ||
+                              _userRole == 'ict';
+        if (canViewReport) {
+          buttons.add(
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _viewVisitReport(site),
+                icon: const Icon(Icons.visibility, size: 18),
+                label: const Text('View Report'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          );
+        }
       }
     }
 
@@ -3305,6 +3331,8 @@ class _MMPScreenState extends State<MMPScreen> {
     final state = site['state'] ?? '';
     final locality = site['locality'] ?? '';
     final status = site['status'] ?? 'Pending';
+    final isCompleted = status.toString().toLowerCase() == 'completed' || 
+                        status.toString().toLowerCase() == 'complete';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -3368,7 +3396,47 @@ class _MMPScreenState extends State<MMPScreen> {
               ),
             ],
           ),
+          if (isCompleted && (_isAdminOrSuperUser || _userRole == 'fom')) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _viewVisitReport(site),
+                icon: const Icon(Icons.visibility, size: 18),
+                label: const Text('View Visit Report'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  void _viewVisitReport(Map<String, dynamic> site) {
+    final siteVisit = SiteVisit(
+      id: site['id']?.toString() ?? '',
+      siteName: site['site_name']?.toString() ?? site['siteName']?.toString() ?? 'Unknown',
+      siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString() ?? '',
+      state: site['state']?.toString() ?? '',
+      locality: site['locality']?.toString() ?? '',
+      status: site['status']?.toString() ?? '',
+      transportFee: (site['transport_fee'] as num?)?.toDouble() ?? 0,
+      enumeratorFee: (site['enumerator_fee'] as num?)?.toDouble() ?? 0,
+      dueDate: site['due_date'] != null ? DateTime.tryParse(site['due_date'].toString()) : null,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => VisitReportDetailScreen(visit: siteVisit),
       ),
     );
   }
