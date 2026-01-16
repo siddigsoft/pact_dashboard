@@ -1,0 +1,98 @@
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\WINDOWS\system32> shorebird --version
+Shorebird 1.6.76 • git@github.com:shorebirdtech/shorebird.git
+Flutter 3.38.6 • revision 55c197eb61ef2219a709002c39ffa445b05600f8
+Engine • revision 6062c68600c53ff4e1fecf3ce79157ef4ce33000
+PS C:\WINDOWS\system32> cd C:\Users\PC\PACT_mobile
+>> shorebird login
+>> shorebird patch android --release-version=1.0.4+6
+You are already logged in as <siddigsoft123@gmail.com>.
+Run shorebird logout to log out and try again.
+Instance of '_WrappedYamlException'
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1768559153807_shorebird.log
+
+PS C:\Users\PC\PACT_mobile> cd C:\Users\PC\PACT_mobile
+>> cat shorebird.yaml
+# This file is used to configure the Shorebird updater used by your app.
+# Learn more at https://docs.shorebird.dev
+# This file does not contain any sensitive information and should be checked into version control.
+
+# Your app_id is the unique identifier assigned to your app.
+# It is used to identify your app when requesting patches from Shorebird's servers.
+# It is not a secret and can be shared publicly.
+app_id: 99d7ec28-46d2-4eb2-bd70-cca43c71d88f
+
+# auto_update controls if Shorebird should automatically update in the background on launch.
+# If auto_update: false, you will need to use package:shorebird_code_push to trigger updates.
+# https://pub.dev/packages/shorebird_code_push
+# Uncomment the following line to disable automatic updates.
+# auto_update: false
+app_id: 99d7ec28-46d2-4eb2-bd70-cca43c71d88f
+PS C:\Users\PC\PACT_mobile> shorebird patch android --release-version=1.0.4+6 --verbose
+Instance of '_WrappedYamlException'
+#0      checkedYamlDecode (package:checked_yaml/checked_yaml.dart:32:5)
+#1      ShorebirdEnv.getShorebirdYaml (package:shorebird_cli/src/shorebird_env.dart:188:12)
+#2      ShorebirdEnv.hasShorebirdYaml (package:shorebird_cli/src/shorebird_env.dart:207:32)
+#3      ShorebirdValidator.validatePreconditions (package:shorebird_cli/src/shorebird_validator.dart:92:25)
+#4      AndroidPatcher.assertPreconditions (package:shorebird_cli/src/commands/patch/android_patcher.dart:72:32)
+#5      PatchCommand.createPatch (package:shorebird_cli/src/commands/patch/patch_command.dart:288:19)
+#6      MappedListIterable.elementAt (dart:_internal/iterable.dart:442:31)
+#7      ListIterator.moveNext (dart:_internal/iterable.dart:371:26)
+#8      PatchCommand.run (package:shorebird_cli/src/commands/patch/patch_command.dart:219:33)
+#9      CommandRunner.runCommand (package:args/command_runner.dart:212:27)
+#10     CompletionCommandRunner.runCommand (package:cli_completion/src/command_runner/completion_command_runner.dart:89:18)
+#11     ShorebirdCliCommandRunner.runCommand (package:shorebird_cli/src/shorebird_cli_command_runner.dart:205:32)
+#12     ShorebirdCliCommandRunner.run.<anonymous closure> (package:shorebird_cli/src/shorebird_cli_command_runner.dart:132:19)
+#13     _rootRun (dart:async/zone.dart:1525:13)
+#14     _CustomZone.run (dart:async/zone.dart:1422:19)
+#15     _runZoned (dart:async/zone.dart:2034:6)
+#16     runZoned (dart:async/zone.dart:1960:10)
+#17     runScoped (package:scoped_deps/src/scoped_deps.dart:57:10)
+#18     ShorebirdCliCommandRunner.run (package:shorebird_cli/src/shorebird_cli_command_runner.dart:131:20)
+#19     main.<anonymous closure>.<anonymous closure> (file:///C:/Users/PC/.shorebird/packages/shorebird_cli/bin/shorebird.dart:49:49)
+#20     _rootRun (dart:async/zone.dart:1525:13)
+#21     _CustomZone.run (dart:async/zone.dart:1422:19)
+#22     _runZoned (dart:async/zone.dart:2034:6)
+#23     runZoned (dart:async/zone.dart:1960:10)
+#24     runScoped (package:scoped_deps/src/scoped_deps.dart:57:10)
+#25     main.<anonymous closure> (file:///C:/Users/PC/.shorebird/packages/shorebird_cli/bin/shorebird.dart:48:13)
+#26     _rootRun (dart:async/zone.dart:1525:13)
+#27     _CustomZone.run (dart:async/zone.dart:1422:19)
+#28     _runZoned (dart:async/zone.dart:2034:6)
+#29     runZoned (dart:async/zone.dart:1960:10)
+#30     IOOverrides.runZoned (dart:io/overrides.dart:166:23)
+#31     main (file:///C:/Users/PC/.shorebird/packages/shorebird_cli/bin/shorebird.dart:46:21)
+#32     _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:312:33)
+#33     _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:193:12)
+
+[Process.run] git symbolic-ref HEAD (in C:\Users\PC\.shorebird\bin\cache)
+Exited with code 0
+
+stdout:
+refs/heads/stable
+
+[Process.run] git rev-parse --verify HEAD (in C:\Users\PC\.shorebird\bin\cache)
+Exited with code 0
+
+stdout:
+30c3f3e73b9db8fbf8d9dd57724171d4194c4915
+
+[Process.run] git remote prune origin (in C:\Users\PC\.shorebird\bin\cache)
+Exited with code 0
+[Process.run] git fetch --tags (in C:\Users\PC\.shorebird\bin\cache)
+Exited with code 0
+[Process.run] git rev-parse --verify @{upstream} (in C:\Users\PC\.shorebird\bin\cache)
+Exited with code 0
+
+stdout:
+30c3f3e73b9db8fbf8d9dd57724171d4194c4915
+
+PS C:\Users\PC\PACT_mobile>
