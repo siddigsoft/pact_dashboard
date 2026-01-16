@@ -580,23 +580,22 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
     debugPrint('User Hub: $_userHub');
     debugPrint('User Locality: $_userLocality');
 
-    // Check 1: Must be forwarded to this coordinator
-    if (forwardedTo != _userId) {
-      // Also check additional_data->>'assigned_to'
-      final additionalData =
-          site['additional_data'] as Map<String, dynamic>? ?? {};
-      final assignedTo = additionalData['assigned_to']?.toString();
-      if (assignedTo != _userId) {
-        debugPrint(
-          'Site not assigned to user (forwarded_to: $forwardedTo, assigned_to: $assignedTo)',
-        );
-        return 'This site is not assigned to you';
-      }
+    // Check if site is explicitly forwarded or assigned to this user
+    // If so, bypass hub/state checks - the assignment is the authorization
+    final additionalData = site['additional_data'] as Map<String, dynamic>? ?? {};
+    final assignedTo = additionalData['assigned_to']?.toString();
+    final isExplicitlyAssigned = forwardedTo == _userId || assignedTo == _userId;
+
+    if (isExplicitlyAssigned) {
+      debugPrint('Site is explicitly forwarded/assigned to user - bypassing regional checks');
+      return null; // Explicitly assigned sites can always be verified
     }
 
-    // Check 2: Must be in coordinator's state (normalized comparison)
+    // FALLBACK: Regional authorization for coordinators without explicit assignment
+    // Check if user has access through state/hub membership
+    
+    // Check state match (normalized comparison)
     if (_userState != null && _userState!.isNotEmpty) {
-      // Normalize: lowercase, remove dashes/underscores/spaces
       final userStateNorm = _userState!.toLowerCase().replaceAll(
         RegExp(r'[-_\s]'),
         '',
@@ -615,49 +614,11 @@ class _SiteVerificationScreenState extends State<SiteVerificationScreen>
       }
     }
 
-    // Check 3: Must be in coordinator's hub (normalized comparison)
-    if (_userHub != null && _userHub!.isNotEmpty) {
-      final userHubNorm = _userHub!.toLowerCase().replaceAll(
-        RegExp(r'[-_\s]'),
-        '',
-      );
-      final siteHubNorm = (siteHub ?? '').toLowerCase().replaceAll(
-        RegExp(r'[-_\s]'),
-        '',
-      );
-      if (userHubNorm != siteHubNorm &&
-          !siteHubNorm.contains(userHubNorm) &&
-          !userHubNorm.contains(siteHubNorm)) {
-        debugPrint(
-          'Hub mismatch: user hub "$_userHub" ($userHubNorm) vs site hub "$siteHub" ($siteHubNorm)',
-        );
-        return 'This site is not in your assigned hub ($_userHub)';
-      }
-    }
-
-    // Check 4: If coordinator assigned to specific locality, normally we'd enforce match,
-    // but coordinators should be able to verify any site within their state regardless
-    // of locality. We'll log a mismatch but not block verification based on locality.
-    if (_userLocality != null && _userLocality!.isNotEmpty) {
-      final userLocalityNorm = _userLocality!.toLowerCase().replaceAll(
-        RegExp(r'[-_\s]'),
-        '',
-      );
-      final siteLocalityNorm = (siteLocality ?? '').toLowerCase().replaceAll(
-        RegExp(r'[-_\s]'),
-        '',
-      );
-      if (userLocalityNorm != siteLocalityNorm &&
-          !siteLocalityNorm.contains(userLocalityNorm) &&
-          !userLocalityNorm.contains(siteLocalityNorm)) {
-        debugPrint(
-          'Locality mismatch (ignored): user locality "$_userLocality" ($userLocalityNorm) vs site locality "$siteLocality" ($siteLocalityNorm)',
-        );
-        // Do NOT return here; coordinators are allowed to verify sites anywhere in their state.
-      }
-    }
-
-    debugPrint('Regional access validation passed');
+    // NOTE: Hub check is now bypassed to avoid false negatives from spelling mismatches
+    // (e.g., "forchana-hub" vs "Farchana Hub"). State-level access is sufficient
+    // for coordinators, and explicit forwarding covers specific assignments.
+    
+    debugPrint('Regional access validation passed (via state membership)');
     return null; // All checks passed
   }
 
