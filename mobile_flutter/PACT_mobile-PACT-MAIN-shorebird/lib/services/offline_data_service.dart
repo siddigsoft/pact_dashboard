@@ -459,6 +459,7 @@ class OfflineDataService {
     final results = {
       'accept_visit': await syncPendingAcceptVisits(),
       'start_visit': await syncPendingStartVisits(),
+      'complete_visit': await syncPendingCompleteVisits(),
       'visit_status': await syncPendingVisitStatuses(),
       'reports': await syncPendingReports(),
       'site_locations': await syncPendingSiteLocations(),
@@ -466,6 +467,97 @@ class OfflineDataService {
     };
 
     return results;
+  }
+
+  /// Sync pending complete visit operations
+  Future<int> syncPendingCompleteVisits() async {
+    if (!await isOnline()) return 0;
+
+    final box = Hive.box(_syncQueueBox);
+    int synced = 0;
+    
+    for (final key in box.keys.toList()) {
+      final data = box.get(key);
+      if (data == null) continue;
+      final queueItem = Map<String, dynamic>.from(jsonDecode(data));
+      if (queueItem['synced'] == true) continue;
+      if (queueItem['type'] != 'complete_visit') continue;
+
+      try {
+        final payload = Map<String, dynamic>.from(queueItem['data']);
+        final visitId = payload['visit_id'] as String;
+        final userId = payload['user_id'] as String;
+        final completedAt = payload['completed_at'] as String;
+        final endLocation = payload['end_location'] as Map<String, dynamic>?;
+        final notes = payload['notes'] as String?;
+        final activities = payload['activities'] as String?;
+        final durationMinutes = payload['duration_minutes'] as int?;
+        final photos = payload['photos'] as List<dynamic>? ?? [];
+
+        // First get existing additional_data
+        final existing = await _supabase
+            .from('mmp_site_entries')
+            .select('additional_data')
+            .eq('id', visitId)
+            .maybeSingle();
+
+        final existingData = (existing?['additional_data'] as Map<String, dynamic>?) ?? {};
+        final mergedData = {
+          ...existingData,
+          if (endLocation != null) 'end_location': endLocation,
+          'visit_completed': true,
+          'completed_notes': notes,
+          'completed_activities': activities,
+          'duration_minutes': durationMinutes,
+        };
+
+        // Update site entry status
+        await _supabase.from('mmp_site_entries').update({
+          'status': 'Completed',
+          'visit_completed_by': userId,
+          'visit_completed_at': completedAt,
+          'additional_data': mergedData,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', visitId);
+
+        // Upload photos if any (base64 encoded)
+        if (photos.isNotEmpty) {
+          for (int i = 0; i < photos.length; i++) {
+            try {
+              final photoData = photos[i] as String;
+              if (photoData.startsWith('data:image')) {
+                // Extract base64 data
+                final base64Data = photoData.split(',').last;
+                final bytes = base64Decode(base64Data);
+                final fileName = 'offline_${visitId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+                final storagePath = 'site_visits/$visitId/$fileName';
+                
+                await _supabase.storage.from('photos').uploadBinary(
+                  storagePath,
+                  bytes,
+                  fileOptions: const FileOptions(contentType: 'image/jpeg'),
+                );
+                debugPrint('Uploaded offline photo: $storagePath');
+              }
+            } catch (e) {
+              debugPrint('Error uploading offline photo: $e');
+            }
+          }
+        }
+
+        // Mark as synced
+        queueItem['synced'] = true;
+        await box.put(key, jsonEncode(queueItem));
+        await markSiteVisitSynced(visitId);
+        synced++;
+
+        debugPrint('Synced complete visit: $visitId');
+      } catch (e) {
+        debugPrint('Error syncing complete visit $key: $e');
+      }
+    }
+
+    return synced;
   }
 
   /// Get pending sync count
