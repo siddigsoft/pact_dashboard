@@ -1991,8 +1991,9 @@ class _MMPScreenState extends State<MMPScreen> {
         
         // Convert photos to base64 for offline storage
         final List<String> photoBase64Urls = [];
-        for (final file in reportData.photos) {
+        for (final photoPath in reportData.photos) {
           try {
+            final file = File(photoPath);
             final bytes = await file.readAsBytes();
             final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
             photoBase64Urls.add(base64String);
@@ -2065,8 +2066,9 @@ class _MMPScreenState extends State<MMPScreen> {
           
           // Convert photos to base64
           final List<String> photoBase64Urls = [];
-          for (final file in reportData.photos) {
+          for (final photoPath in reportData.photos) {
             try {
+              final file = File(photoPath);
               final bytes = await file.readAsBytes();
               final base64String = 'data:image/jpeg;base64,${base64Encode(bytes)}';
               photoBase64Urls.add(base64String);
