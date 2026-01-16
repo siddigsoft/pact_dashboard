@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
@@ -30,6 +31,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _locationSharing = false;
   bool _notificationsEnabled = true;
   bool _darkMode = false;
+  
+  // App version
+  String _appVersion = '';
+  String _buildNumber = '';
 
   // Password change
   final bool _showChangePassword = false;
@@ -45,6 +50,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadAppVersion();
+  }
+  
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      setState(() {
+        _appVersion = packageInfo.version;
+        _buildNumber = packageInfo.buildNumber;
+      });
+    } catch (e) {
+      debugPrint('Error loading app version: $e');
+    }
   }
 
   @override
@@ -663,6 +681,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
 
                           const SizedBox(height: 24),
+                          
+                          // App Version Display
+                          if (_appVersion.isNotEmpty) ...[
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppColors.backgroundGray,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 18,
+                                      color: AppColors.textLight,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Version $_appVersion (Build $_buildNumber)',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        color: AppColors.textLight,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                         ],
                       ),
                     ),
