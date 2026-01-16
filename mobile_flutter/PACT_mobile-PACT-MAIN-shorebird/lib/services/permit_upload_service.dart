@@ -156,26 +156,22 @@ class PermitUploadService {
     required String mmpFileId,
     required String state,
   }) async {
-    try {
-      final sites = await _supabase
+    final sites = await _supabase
+        .from('mmp_site_entries')
+        .select('id, additional_data')
+        .eq('mmp_file_id', mmpFileId)
+        .eq('state', state);
+
+    for (final site in sites as List) {
+      final additionalData = Map<String, dynamic>.from(
+        site['additional_data'] as Map<String, dynamic>? ?? {},
+      );
+      additionalData['state_permit_attached'] = true;
+
+      await _supabase
           .from('mmp_site_entries')
-          .select('id, additional_data')
-          .eq('mmp_file_id', mmpFileId)
-          .eq('state', state);
-
-      for (final site in sites as List) {
-        final additionalData = Map<String, dynamic>.from(
-          site['additional_data'] as Map<String, dynamic>? ?? {},
-        );
-        additionalData['state_permit_attached'] = true;
-
-        await _supabase
-            .from('mmp_site_entries')
-            .update({'additional_data': additionalData})
-            .eq('id', site['id']);
-      }
-    } catch (e) {
-      debugPrint('Error updating site entries after state permit: $e');
+          .update({'additional_data': additionalData})
+          .eq('id', site['id']);
     }
   }
 
@@ -185,26 +181,22 @@ class PermitUploadService {
     required String locality,
     required List<String> siteIds,
   }) async {
-    try {
-      for (final siteId in siteIds) {
-        final site = await _supabase
-            .from('mmp_site_entries')
-            .select('id, additional_data, status')
-            .eq('id', siteId)
-            .single();
+    for (final siteId in siteIds) {
+      final site = await _supabase
+          .from('mmp_site_entries')
+          .select('id, additional_data, status')
+          .eq('id', siteId)
+          .single();
 
-        final additionalData = Map<String, dynamic>.from(
-          site['additional_data'] as Map<String, dynamic>? ?? {},
-        );
-        additionalData['locality_permit_attached'] = true;
+      final additionalData = Map<String, dynamic>.from(
+        site['additional_data'] as Map<String, dynamic>? ?? {},
+      );
+      additionalData['locality_permit_attached'] = true;
 
-        await _supabase.from('mmp_site_entries').update({
-          'status': 'permits_attached',
-          'additional_data': additionalData,
-        }).eq('id', siteId);
-      }
-    } catch (e) {
-      debugPrint('Error updating site entries after locality permit: $e');
+      await _supabase.from('mmp_site_entries').update({
+        'status': 'permits_attached',
+        'additional_data': additionalData,
+      }).eq('id', siteId);
     }
   }
 

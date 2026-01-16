@@ -121,7 +121,7 @@ class _LocalityRequirementTriageDialogState
                   ),
                 ),
                 Text(
-                  '${widget.siteCount} ${widget.siteCount == 1 ? 'site' : 'sites'}',
+                  '${widget.siteCount} ${widget.siteCount == 1 ? (l10n?.translate('site') ?? 'site') : (l10n?.translate('sites') ?? 'sites')}',
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: Colors.grey.shade500,
@@ -171,7 +171,7 @@ class _LocalityRequirementTriageDialogState
         const SizedBox(height: 20),
         _buildOptionTile(
           title: l10n?.translate('yesHaveIt') ?? 'Yes, I have the permit',
-          subtitle: 'I will upload the permit document',
+          subtitle: l10n?.translate('willUploadPermit') ?? 'I will upload the permit document',
           icon: Icons.check_circle_outline,
           color: Colors.green,
           isSelected: _selectedRequirement == LocalityRequirement.yesHaveIt,
@@ -182,7 +182,7 @@ class _LocalityRequirementTriageDialogState
         const SizedBox(height: 12),
         _buildOptionTile(
           title: l10n?.translate('noRequiredDontHave') ?? 'Required but I don\'t have it',
-          subtitle: 'The permit is required but I cannot provide it now',
+          subtitle: l10n?.translate('cannotProvideNow') ?? 'The permit is required but I cannot provide it now',
           icon: Icons.warning_amber_outlined,
           color: Colors.orange,
           isSelected: _selectedRequirement == LocalityRequirement.requiredDontHave,
@@ -193,7 +193,7 @@ class _LocalityRequirementTriageDialogState
         const SizedBox(height: 12),
         _buildOptionTile(
           title: l10n?.translate('notRequiredInLocality') ?? 'Not required in this locality',
-          subtitle: 'No locality permit is needed for operations here',
+          subtitle: l10n?.translate('noPermitNeeded') ?? 'No locality permit is needed for operations here',
           icon: Icons.not_interested,
           color: Colors.grey,
           isSelected: _selectedRequirement == LocalityRequirement.notRequired,
@@ -272,13 +272,19 @@ class _LocalityRequirementTriageDialogState
         ),
         const SizedBox(height: 16),
         Text(
-          'Choose how to proceed for ${widget.siteCount} ${widget.siteCount == 1 ? 'site' : 'sites'} in ${widget.locality}:',
+          l10n?.chooseHowToProceed(
+            widget.siteCount,
+            widget.siteCount == 1 
+                ? (l10n.translate('site') ?? 'site') 
+                : (l10n.translate('sites') ?? 'sites'),
+            widget.locality,
+          ) ?? 'Choose how to proceed for ${widget.siteCount} ${widget.siteCount == 1 ? 'site' : 'sites'} in ${widget.locality}:',
           style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 16),
         _buildOptionTile(
           title: l10n?.translate('yesProceedWithout') ?? 'Yes, I can proceed',
-          subtitle: 'Continue without the locality permit',
+          subtitle: l10n?.translate('continueWithoutPermit') ?? 'Continue without the locality permit',
           icon: Icons.check_circle_outline,
           color: Colors.green,
           isSelected: _followUpChoice == FollowUpChoice.canProceed,
@@ -289,7 +295,7 @@ class _LocalityRequirementTriageDialogState
         const SizedBox(height: 12),
         _buildOptionTile(
           title: l10n?.translate('noCannotProceed') ?? 'No, I need the permit',
-          subtitle: 'Send back to Field Operations Manager',
+          subtitle: l10n?.translate('sendBackToManager') ?? 'Send back to Field Operations Manager',
           icon: Icons.arrow_back,
           color: Colors.red,
           isSelected: _followUpChoice == FollowUpChoice.cannotProceed,
