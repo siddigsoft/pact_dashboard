@@ -95,7 +95,7 @@ class _LocalityPermitUploadDialogState extends State<LocalityPermitUploadDialog>
             ),
             ListTile(
               leading: const Icon(Icons.picture_as_pdf),
-              title: const Text('PDF Document'),
+              title: Text(AppLocalizations.of(context)?.translate('pdfDocument') ?? 'PDF Document'),
               onTap: () async {
                 Navigator.pop(context);
                 final result = await FilePicker.platform.pickFiles(

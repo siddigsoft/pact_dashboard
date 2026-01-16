@@ -1337,5 +1337,79 @@
         "example": "permit.pdf"
       }
     }
+  },
+  "gallery": "Gallery",
+  "@gallery": {
+    "description": "Gallery option for file picker"
+  },
+  "camera": "Camera",
+  "@camera": {
+    "description": "Camera option for file picker"
+  },
+  "pdfDocument": "PDF Document",
+  "@pdfDocument": {
+    "description": "PDF document option"
+  },
+  "willUploadPermit": "I will upload the permit document",
+  "@willUploadPermit": {
+    "description": "Subtitle for yes have permit option"
+  },
+  "cannotProvideNow": "The permit is required but I cannot provide it now",
+  "@cannotProvideNow": {
+    "description": "Subtitle for required but don't have option"
+  },
+  "noPermitNeeded": "No locality permit is needed for operations here",
+  "@noPermitNeeded": {
+    "description": "Subtitle for not required option"
+  },
+  "continueWithoutPermit": "Continue without the locality permit",
+  "@continueWithoutPermit": {
+    "description": "Subtitle for yes proceed option"
+  },
+  "sendBackToManager": "Send back to Field Operations Manager",
+  "@sendBackToManager": {
+    "description": "Subtitle for no cannot proceed option"
+  },
+  "chooseHowToProceed": "Choose how to proceed for {count} {sitesLabel} in {locality}:",
+  "@chooseHowToProceed": {
+    "description": "Follow up question description",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      },
+      "sitesLabel": {
+        "type": "String",
+        "example": "sites"
+      },
+      "locality": {
+        "type": "String",
+        "example": "Al-Jazirah"
+      }
+    }
+  },
+  "site": "site",
+  "@site": {
+    "description": "Single site label"
+  },
+  "sites": "sites",
+  "@sites": {
+    "description": "Multiple sites label"
+  },
+  "back": "Back",
+  "@back": {
+    "description": "Back button"
+  },
+  "uploadFailed": "Upload failed",
+  "@uploadFailed": {
+    "description": "Upload failed message"
+  },
+  "databaseUpdateFailed": "Database update failed. Please try again.",
+  "@databaseUpdateFailed": {
+    "description": "Database update failed message"
+  },
+  "selectDate": "Select date",
+  "@selectDate": {
+    "description": "Select date placeholder"
   }
 }

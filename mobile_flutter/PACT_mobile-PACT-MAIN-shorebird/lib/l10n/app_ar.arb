@@ -1337,5 +1337,79 @@
         "example": "permit.pdf"
       }
     }
+  },
+  "gallery": "المعرض",
+  "@gallery": {
+    "description": "Gallery option for file picker"
+  },
+  "camera": "الكاميرا",
+  "@camera": {
+    "description": "Camera option for file picker"
+  },
+  "pdfDocument": "مستند PDF",
+  "@pdfDocument": {
+    "description": "PDF document option"
+  },
+  "willUploadPermit": "سأقوم برفع مستند التصريح",
+  "@willUploadPermit": {
+    "description": "Subtitle for yes have permit option"
+  },
+  "cannotProvideNow": "التصريح مطلوب لكن لا أستطيع توفيره الآن",
+  "@cannotProvideNow": {
+    "description": "Subtitle for required but don't have option"
+  },
+  "noPermitNeeded": "لا يلزم تصريح محلية للعمليات هنا",
+  "@noPermitNeeded": {
+    "description": "Subtitle for not required option"
+  },
+  "continueWithoutPermit": "المتابعة بدون تصريح المحلية",
+  "@continueWithoutPermit": {
+    "description": "Subtitle for yes proceed option"
+  },
+  "sendBackToManager": "إرسال إلى مدير العمليات الميدانية",
+  "@sendBackToManager": {
+    "description": "Subtitle for no cannot proceed option"
+  },
+  "chooseHowToProceed": "اختر كيفية المتابعة لـ {count} {sitesLabel} في {locality}:",
+  "@chooseHowToProceed": {
+    "description": "Follow up question description",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      },
+      "sitesLabel": {
+        "type": "String",
+        "example": "مواقع"
+      },
+      "locality": {
+        "type": "String",
+        "example": "الجزيرة"
+      }
+    }
+  },
+  "site": "موقع",
+  "@site": {
+    "description": "Single site label"
+  },
+  "sites": "مواقع",
+  "@sites": {
+    "description": "Multiple sites label"
+  },
+  "back": "رجوع",
+  "@back": {
+    "description": "Back button"
+  },
+  "uploadFailed": "فشل الرفع",
+  "@uploadFailed": {
+    "description": "Upload failed message"
+  },
+  "databaseUpdateFailed": "فشل تحديث قاعدة البيانات. يرجى المحاولة مرة أخرى.",
+  "@databaseUpdateFailed": {
+    "description": "Database update failed message"
+  },
+  "selectDate": "اختر التاريخ",
+  "@selectDate": {
+    "description": "Select date placeholder"
   }
 }
