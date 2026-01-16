@@ -3335,29 +3335,92 @@ class _MMPScreenState extends State<MMPScreen> {
                 color: AppColors.backgroundGray,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              child: Column(
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Total',
-                        style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          color: AppColors.textLight,
+                  // Enumerator Fee row
+                  if (enumeratorFee > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Enumerator Fee',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppColors.textLight,
+                            ),
+                          ),
+                          Text(
+                            '${enumeratorFee.toStringAsFixed(0)} SDG',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Transport Fee row
+                  if (transportFee > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Transport Fee',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: AppColors.textLight,
+                            ),
+                          ),
+                          Text(
+                            '${transportFee.toStringAsFixed(0)} SDG',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Total row with divider
+                  if (enumeratorFee > 0 || transportFee > 0)
+                    Container(
+                      padding: const EdgeInsets.only(top: 6),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          top: BorderSide(
+                            color: Colors.grey.withOpacity(0.3),
+                            width: 1,
+                          ),
                         ),
                       ),
-                      Text(
-                        '${cost.toStringAsFixed(0)} SDG',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryBlue,
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                          Text(
+                            '${cost.toStringAsFixed(0)} SDG',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryBlue,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
                 ],
               ),
             ),
