@@ -164,6 +164,11 @@ class OfflineDb {
     return _siteVisits.values.where((v) => v.status == 'draft').toList();
   }
 
+  /// Get all pending site visits (not yet synced - includes drafts and completed)
+  List<OfflineSiteVisit> getPendingSiteVisits() {
+    return _siteVisits.values.where((v) => !v.synced).toList();
+  }
+
   /// Get draft for a specific site entry
   OfflineSiteVisit? getDraftForSite(String siteEntryId) {
     try {

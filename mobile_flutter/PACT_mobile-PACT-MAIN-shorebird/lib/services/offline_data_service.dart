@@ -820,22 +820,27 @@ class OfflineDataService {
     required String visitId,
     required String userId,
     required Map<String, dynamic> startLocation,
+    String? siteName,
+    String? siteCode,
+    String? state,
+    String? locality,
   }) async {
     final box = Hive.box(_syncQueueBox);
     final id = 'start_visit_${DateTime.now().millisecondsSinceEpoch}';
+    final now = DateTime.now();
 
     final payload = {
       'visit_id': visitId,
       'user_id': userId,
       'start_location': startLocation,
-      'started_at': DateTime.now().toIso8601String(),
+      'started_at': now.toIso8601String(),
     };
 
     final queueItem = {
       'id': id,
       'type': 'start_visit',
       'data': payload,
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': now.toIso8601String(),
       'synced': false,
     };
     await box.put(id, jsonEncode(queueItem));
@@ -844,9 +849,30 @@ class OfflineDataService {
     await updateCachedSiteVisit(visitId, {
       'status': 'Ongoing',
       'visit_started_by': userId,
-      'visit_started_at': DateTime.now().toIso8601String(),
+      'visit_started_at': now.toIso8601String(),
       '_category': 'ongoing',
     });
+
+    // Save to OfflineDb for persistent draft storage
+    try {
+      final offlineDb = OfflineDb();
+      final offlineVisit = OfflineSiteVisit(
+        id: id,
+        siteEntryId: visitId,
+        siteName: siteName ?? 'Unknown Site',
+        siteCode: siteCode ?? '',
+        state: state ?? '',
+        locality: locality ?? '',
+        status: 'draft',
+        startedAt: now,
+        startLocation: startLocation.isNotEmpty ? startLocation : null,
+        synced: false,
+      );
+      await offlineDb.saveSiteVisitOffline(offlineVisit);
+      debugPrint('[queueStartVisit] Saved offline visit draft: $visitId');
+    } catch (e) {
+      debugPrint('[queueStartVisit] Error saving offline visit: $e');
+    }
 
     return id;
   }
@@ -918,9 +944,15 @@ class OfflineDataService {
     String? activities,
     int? durationMinutes,
     List<String>? photoDataUrls, // base64 encoded photos
+    String? siteName,
+    String? siteCode,
+    String? state,
+    String? locality,
+    Map<String, dynamic>? startLocation,
   }) async {
     final box = Hive.box(_syncQueueBox);
     final id = 'complete_visit_${DateTime.now().millisecondsSinceEpoch}';
+    final now = DateTime.now();
 
     final payload = {
       'visit_id': visitId,
@@ -929,7 +961,7 @@ class OfflineDataService {
       'notes': notes,
       'activities': activities,
       'duration_minutes': durationMinutes,
-      'completed_at': DateTime.now().toIso8601String(),
+      'completed_at': now.toIso8601String(),
       'photos': photoDataUrls ?? [],
     };
 
@@ -937,7 +969,7 @@ class OfflineDataService {
       'id': id,
       'type': 'complete_visit',
       'data': payload,
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': now.toIso8601String(),
       'synced': false,
     };
     await box.put(id, jsonEncode(queueItem));
@@ -946,9 +978,51 @@ class OfflineDataService {
     await updateCachedSiteVisit(visitId, {
       'status': 'Completed',
       'visit_completed_by': userId,
-      'visit_completed_at': DateTime.now().toIso8601String(),
+      'visit_completed_at': now.toIso8601String(),
       '_category': 'completed',
     });
+
+    // Update or create OfflineDb entry for persistent storage
+    try {
+      final offlineDb = OfflineDb();
+      // Check if we have an existing draft for this site
+      final existingDraft = offlineDb.getDraftForSite(visitId);
+      
+      if (existingDraft != null) {
+        // Update existing draft to completed
+        await offlineDb.updateSiteVisitOffline(
+          existingDraft.id,
+          status: 'completed',
+          completedAt: now,
+          endLocation: endLocation.isNotEmpty ? endLocation : null,
+          photos: photoDataUrls,
+          notes: notes,
+        );
+        debugPrint('[queueCompleteVisit] Updated draft to completed: $visitId');
+      } else {
+        // Create new completed visit entry
+        final offlineVisit = OfflineSiteVisit(
+          id: id,
+          siteEntryId: visitId,
+          siteName: siteName ?? 'Unknown Site',
+          siteCode: siteCode ?? '',
+          state: state ?? '',
+          locality: locality ?? '',
+          status: 'completed',
+          startedAt: now.subtract(Duration(minutes: durationMinutes ?? 0)),
+          completedAt: now,
+          startLocation: startLocation,
+          endLocation: endLocation.isNotEmpty ? endLocation : null,
+          photos: photoDataUrls,
+          notes: notes,
+          synced: false,
+        );
+        await offlineDb.saveSiteVisitOffline(offlineVisit);
+        debugPrint('[queueCompleteVisit] Created new completed visit: $visitId');
+      }
+    } catch (e) {
+      debugPrint('[queueCompleteVisit] Error saving offline visit: $e');
+    }
 
     return id;
   }
