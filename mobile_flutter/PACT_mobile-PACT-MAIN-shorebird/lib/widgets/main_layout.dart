@@ -138,8 +138,8 @@ class _MainLayoutState extends State<MainLayout> {
       body: Stack(
         children: [
           widget.child,
-          // Movable Online/Offline toggle (only for data collectors)
-          MovableOnlineOfflineToggle(variant: ToggleVariant.uber),
+          // Movable Online/Offline toggle (only for data collectors) - pill variant for smaller size
+          MovableOnlineOfflineToggle(variant: ToggleVariant.pill),
         ],
       ),
       bottomNavigationBar: _isLoadingRole

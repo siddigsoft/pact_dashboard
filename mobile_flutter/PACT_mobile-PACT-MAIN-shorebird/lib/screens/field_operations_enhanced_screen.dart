@@ -3570,91 +3570,32 @@ class _MMPScreenState extends State<MMPScreen> {
             ],
           ),
 
-          if (cost > 0 || transportFee > 0 || enumeratorFee > 0) ...[
+          // Show only Total (no Transport/Enumerator breakdown)
+          if (cost > 0) ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: AppColors.backgroundGray,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Column(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Transport Fee row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Transport',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
-                        ),
-                      ),
-                      Text(
-                        '${transportFee.toStringAsFixed(0)} SDG',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  // Enumerator Fee row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Enumerator Fee',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: AppColors.textLight,
-                        ),
-                      ),
-                      Text(
-                        '${enumeratorFee.toStringAsFixed(0)} SDG',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Total row with divider
-                  Container(
-                    padding: const EdgeInsets.only(top: 8),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: Colors.grey.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
+                  Text(
+                    'Total',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textDark,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Total',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textDark,
-                          ),
-                        ),
-                        Text(
-                          '${cost.toStringAsFixed(0)} SDG',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryBlue,
-                          ),
-                        ),
-                      ],
+                  ),
+                  Text(
+                    '${cost.toStringAsFixed(0)} SDG',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryBlue,
                     ),
                   ),
                 ],
