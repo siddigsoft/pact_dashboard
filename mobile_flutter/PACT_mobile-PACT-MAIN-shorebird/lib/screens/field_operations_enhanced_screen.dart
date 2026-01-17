@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/notifications_panel.dart';
@@ -103,57 +104,119 @@ class _MMPScreenState extends State<MMPScreen> {
 
       _userId = user.id;
 
-      // Get user profile to determine role
-      final profileResponse = await Supabase.instance.client
-          .from('profiles')
-          .select('role, state_id, locality_id')
-          .eq('id', user.id)
-          .maybeSingle();
+      // Check connectivity first
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOffline = connectivityResult.contains(ConnectivityResult.none);
+      
+      if (isOffline) {
+        // OFFLINE MODE: Load everything from cache
+        debugPrint('[_initializeMMP] Offline - loading from cache');
+        await _initializeFromCache(user.id);
+        return;
+      }
 
-      if (profileResponse != null) {
-        _userRole = (profileResponse['role'] as String?)?.toLowerCase() ?? '';
-        _isCoordinator =
-            _userRole == 'coordinator' ||
-            _userRole == 'field_coordinator' ||
-            _userRole == 'state_coordinator';
-        _isDataCollector =
-            _userRole == 'datacollector' ||
-            _userRole == 'enumerator' ||
-            _userRole == 'data_collector';
+      // ONLINE MODE: Fetch from Supabase and cache
+      try {
+        // Get user profile to determine role
+        final profileResponse = await Supabase.instance.client
+            .from('profiles')
+            .select('role, state_id, locality_id')
+            .eq('id', user.id)
+            .maybeSingle();
 
-        _userStateId = profileResponse['state_id'] as String?;
-        _userLocalityId = profileResponse['locality_id'] as String?;
+        if (profileResponse != null) {
+          // Cache profile for offline use
+          final offlineService = OfflineDataService();
+          await offlineService.cacheUserProfile(user.id, profileResponse);
+          
+          _applyProfileData(profileResponse);
 
-        // Check if user is admin or supervisor (can see all projects)
-        _isAdminOrSuperUser =
-            _userRole == 'admin' ||
-            _userRole == 'super_admin' ||
-            _userRole == 'supervisor' ||
-            _userRole == 'fom';
+          // Fetch user's project memberships (for non-admin users)
+          if (!_isAdminOrSuperUser) {
+            await _fetchUserProjectMemberships();
+          }
 
-        // Fetch user's project memberships (for non-admin users)
-        if (!_isAdminOrSuperUser) {
-          await _fetchUserProjectMemberships();
+          // Query actual state and locality names from database
+          await _loadLocationNames();
         }
 
-        // Query actual state and locality names from database
-        await _loadLocationNames();
-      }
+        // Load data based on role
+        // Coordinators should see the same MMP experience as data collectors
+        if (_isDataCollector || _isCoordinator) {
+          await _loadDataCollectorData();
+          _setupRealtimeSubscription();
+        }
 
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+      } catch (e) {
+        // Network error while online - fall back to cache
+        debugPrint('[_initializeMMP] Network error, falling back to cache: $e');
+        await _initializeFromCache(user.id);
+      }
+    } catch (e) {
+      debugPrint('Error initializing MMP: $e');
+      // Last resort - try cache
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await _initializeFromCache(user.id);
+      } else {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+  
+  /// Initialize from cached data when offline
+  Future<void> _initializeFromCache(String userId) async {
+    try {
+      debugPrint('[_initializeFromCache] Loading cached profile and data');
+      final offlineService = OfflineDataService();
+      
+      // Load cached profile
+      final cachedProfile = await offlineService.getCachedUserProfile(userId);
+      if (cachedProfile != null) {
+        _applyProfileData(cachedProfile);
+        debugPrint('[_initializeFromCache] Loaded cached profile: $_userRole');
+      } else {
+        debugPrint('[_initializeFromCache] No cached profile found');
+      }
+      
       // Load data based on role
-      // Coordinators should see the same MMP experience as data collectors
       if (_isDataCollector || _isCoordinator) {
         await _loadDataCollectorData();
-        _setupRealtimeSubscription();
       }
-
+      
       if (!mounted) return;
       setState(() => _isLoading = false);
     } catch (e) {
-      debugPrint('Error initializing MMP: $e');
+      debugPrint('[_initializeFromCache] Error: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
+  }
+  
+  /// Apply profile data to instance variables
+  void _applyProfileData(Map<String, dynamic> profileResponse) {
+    _userRole = (profileResponse['role'] as String?)?.toLowerCase() ?? '';
+    _isCoordinator =
+        _userRole == 'coordinator' ||
+        _userRole == 'field_coordinator' ||
+        _userRole == 'state_coordinator';
+    _isDataCollector =
+        _userRole == 'datacollector' ||
+        _userRole == 'enumerator' ||
+        _userRole == 'data_collector';
+
+    _userStateId = profileResponse['state_id'] as String?;
+    _userLocalityId = profileResponse['locality_id'] as String?;
+
+    // Check if user is admin or supervisor (can see all projects)
+    _isAdminOrSuperUser =
+        _userRole == 'admin' ||
+        _userRole == 'super_admin' ||
+        _userRole == 'supervisor' ||
+        _userRole == 'fom';
   }
 
   void _setupRealtimeSubscription() {
@@ -1775,6 +1838,178 @@ class _MMPScreenState extends State<MMPScreen> {
 
     // Use Row with Expanded widgets - they'll share space equally
     return Row(children: buttons);
+  }
+
+  // ==================== CALL AND MESSAGE FUNCTIONALITY ====================
+
+  /// Make a phone call to a contact
+  Future<void> _makeCall(String phoneNumber) async {
+    final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    final uri = Uri.parse('tel:$cleanPhone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cannot make phone calls on this device'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[_makeCall] Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to make call: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Send an SMS message to a contact
+  Future<void> _sendSMS(String phoneNumber, {String? message}) async {
+    final cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    final uri = message != null 
+        ? Uri.parse('sms:$cleanPhone?body=${Uri.encodeComponent(message)}')
+        : Uri.parse('sms:$cleanPhone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cannot send SMS on this device'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[_sendSMS] Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send SMS: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Open WhatsApp chat with a contact
+  Future<void> _openWhatsApp(String phoneNumber, {String? message}) async {
+    // Remove any non-digit characters except +
+    String cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    // Remove leading + and add country code if needed
+    if (cleanPhone.startsWith('+')) {
+      cleanPhone = cleanPhone.substring(1);
+    } else if (cleanPhone.startsWith('0')) {
+      // Assume Sudan country code (249) if starts with 0
+      cleanPhone = '249${cleanPhone.substring(1)}';
+    }
+    
+    final uri = message != null
+        ? Uri.parse('https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}')
+        : Uri.parse('https://wa.me/$cleanPhone');
+    
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('WhatsApp is not installed'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[_openWhatsApp] Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open WhatsApp: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Build contact buttons row for a site
+  Widget _buildContactButtons(Map<String, dynamic> site) {
+    // Try to get phone number from various possible fields
+    final phone = site['contact_phone'] ?? 
+                  site['phone'] ?? 
+                  site['phone_number'] ??
+                  site['enumerator_phone'] ??
+                  site['assigned_phone'];
+    
+    if (phone == null || phone.toString().isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    final phoneStr = phone.toString();
+    final siteName = site['site_name'] ?? site['siteName'] ?? 'Site';
+    
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          // Call Button
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _makeCall(phoneStr),
+              icon: const Icon(Icons.phone, size: 16),
+              label: const Text('Call'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green,
+                side: const BorderSide(color: Colors.green),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // SMS Button
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _sendSMS(phoneStr, message: 'Regarding site visit: $siteName'),
+              icon: const Icon(Icons.message, size: 16),
+              label: const Text('SMS'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue,
+                side: const BorderSide(color: Colors.blue),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // WhatsApp Button
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _openWhatsApp(phoneStr, message: 'Hello, regarding site visit: $siteName'),
+              icon: const Icon(Icons.chat, size: 16),
+              label: const Text('WhatsApp'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF25D366),
+                side: const BorderSide(color: Color(0xFF25D366)),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _acknowledgeCost(Map<String, dynamic> site) async {
@@ -3641,6 +3876,8 @@ class _MMPScreenState extends State<MMPScreen> {
             showAcknowledgeButton: showAcknowledgeButton,
             showVisitActions: showVisitActions,
           ),
+          // Contact buttons (Call, SMS, WhatsApp) if contact info is available
+          _buildContactButtons(site),
         ],
       ),
     );
