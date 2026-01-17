@@ -182,9 +182,18 @@ class _MMPScreenState extends State<MMPScreen> {
         debugPrint('[_initializeFromCache] No cached profile found');
       }
       
-      // Load data based on role
+      // Load data based on role - mirror the online path
       if (_isDataCollector || _isCoordinator) {
         await _loadDataCollectorData();
+        // Group sites after loading
+        _groupAvailableSites();
+        // Load advance requests from cache if available
+        await _loadAdvanceRequests();
+      }
+      
+      // Coordinators also need coordinator data
+      if (_isCoordinator) {
+        await _loadCoordinatorData();
       }
       
       if (!mounted) return;
@@ -1908,13 +1917,19 @@ class _MMPScreenState extends State<MMPScreen> {
   Future<void> _openWhatsApp(String phoneNumber, {String? message}) async {
     // Remove any non-digit characters except +
     String cleanPhone = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
-    // Remove leading + and add country code if needed
+    
+    // Handle country codes properly
     if (cleanPhone.startsWith('+')) {
+      // Already has country code, just remove the +
       cleanPhone = cleanPhone.substring(1);
+    } else if (cleanPhone.startsWith('00')) {
+      // International format with 00 prefix
+      cleanPhone = cleanPhone.substring(2);
     } else if (cleanPhone.startsWith('0')) {
-      // Assume Sudan country code (249) if starts with 0
+      // Local number - assume Sudan country code (249)
       cleanPhone = '249${cleanPhone.substring(1)}';
     }
+    // If it's just digits without any prefix and has 9+ digits, assume it already has country code
     
     final uri = message != null
         ? Uri.parse('https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}')
