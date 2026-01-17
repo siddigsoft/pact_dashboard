@@ -40,11 +40,11 @@ class _MovableOnlineOfflineToggleState
   Offset _getDefaultPosition(Size screenSize) {
     // Calculate a good default position based on screen size
     const double padding = 20.0;
-    const double toggleWidth = 200.0;
+    const double toggleWidth = 140.0; // Pill variant is smaller
 
-    // Position it in the top-right area, but ensure it's not too close to edges
-    final defaultX = screenSize.width - toggleWidth - padding;
-    final defaultY = padding + 80.0; // Below typical status bar area
+    // Position it in the bottom-left area, above the bottom navigation
+    final defaultX = padding;
+    final defaultY = screenSize.height - 180.0; // Above bottom nav bar
 
     return Offset(defaultX, defaultY);
   }
