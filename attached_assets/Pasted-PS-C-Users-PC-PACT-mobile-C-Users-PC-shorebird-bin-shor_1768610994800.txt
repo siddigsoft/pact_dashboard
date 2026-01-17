@@ -1,0 +1,181 @@
+PS C:\Users\PC\PACT_mobile> & "C:\Users\PC\.shorebird\bin\shorebird.bat" patch android
+✓ Fetching apps (0.9s)
+✓ Fetching releases (0.4s)
+Which release would you like to patch? 1.0.5+8
+✓ Fetching aab artifact (0.7s)
+✗ Downloading aab failed: ClientException: Connection closed while receiving data, uri=https://storage.googleapis.com/shorebird_release_artifacts/79d24dae-3d77-4f40-9828-3f6246291417%2Fandroid%2Faab%2F452036%2Fapp-release.aab?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=patch-artifacts-storage-bucket%40code-push-prod.iam.gserviceaccount.com%2F20260117%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260117T003127Z&X-Goog-Expires=3600&X-Goog-SignedHeaders=host&X-Goog-Signature=71d2ff2d1db4ca0d460d1b2b43a18aa92609df439cf2ef79c7190bdd83214e12605f6fb71512445b8de00281ce3df6b98c59da955a8aa4e38c73e0ff00c90620acbae63f5775b949811fc0168412ba68b7aeeba37d90965152be479519950792a6efb5d4ba12cfcc067e1430316e247d444b773a69291f78d0caeab0e665d0ef38f25899cccb354e80a44a347a3f3ae7b90b8e1456d2a72c590d64ab8e675df6ed5e081594497708a450e3c9d46da76f6eaec04f7fdd3a88eb8f412fb78fd548175dc52c7e05269c87a5260ee641862b70cf8550de403154a64e3a7959e54ada7e8e7f0fbaddaff5116db64cfa7e60a3ce7f6cf7a79f0d50b554d10a4eb67cbc (347.8s)
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1768609864998_shorebird.log
+
+PS C:\Users\PC\PACT_mobile> & "C:\Users\PC\.shorebird\bin\shorebird.bat" upgrade
+✓ Checked for updates (3.9s)
+Shorebird is already at the latest version.
+PS C:\Users\PC\PACT_mobile> & "C:\Users\PC\.shorebird\bin\shorebird.bat" patch android
+✓ Fetching apps (1.0s)
+✓ Fetching releases (0.7s)
+Which release would you like to patch?
+❯ ◉  1.0.5+8
+  ◯  1.0.5+7
+Which release would you like to patch? 1.0.5+8
+✓ Fetching aab artifact (0.5s)
+✓ Downloading aab (100%) (280.0s)
+Building patch with Flutter 3.38.6 (55c197eb61)
+
+Resolving dependencies... 
+Downloading packages... 
+  _fe_analyzer_shared 85.0.0 (93.0.0 available)
+  _flutterfire_internals 1.3.59 (1.3.65 available)
+  analyzer 7.7.1 (10.0.0 available)
+  app_links 6.4.1 (7.0.0 available)
+  archive 3.6.1 (4.0.7 available)
+  background_fetch 1.4.0 (1.5.0 available)
+  build 2.5.4 (4.0.4 available)
+  build_config 1.1.2 (1.2.0 available)
+  build_daemon 4.0.4 (4.1.1 available)
+  build_resolvers 2.5.4 (3.0.4 available)
+  build_runner 2.5.4 (2.10.5 available)
+  build_runner_core 9.1.2 (9.3.2 available)
+  built_value 8.12.0 (8.12.3 available)
+  characters 1.4.0 (1.4.1 available)
+  code_builder 4.11.0 (4.11.1 available)
+  cross_file 0.3.4+2 (0.3.5+1 available)
+  crypto 3.0.6 (3.0.7 available)
+  csv 5.1.1 (6.0.0 available)
+  dart_style 3.1.1 (3.1.4 available)
+  dio_smart_retry 6.0.0 (7.0.1 available)
+  equatable 2.0.7 (2.0.8 available)
+  ffi 2.1.4 (2.1.5 available)
+  file_picker 10.3.3 (10.3.8 available)
+  file_selector_linux 0.9.3+2 (0.9.4 available)
+  file_selector_macos 0.9.4+4 (0.9.5 available)
+  file_selector_platform_interface 2.6.2 (2.7.0 available)
+  file_selector_windows 0.9.3+4 (0.9.3+5 available)
+  firebase_core 3.15.2 (4.3.0 available)
+  firebase_core_web 2.24.1 (3.3.1 available)
+  firebase_messaging 15.2.10 (16.1.0 available)
+  firebase_messaging_platform_interface 4.6.10 (4.7.5 available)
+  firebase_messaging_web 3.10.10 (4.1.1 available)
+  flat_buffers 23.5.26 (25.9.23 available)
+  flutter_email_sender 6.0.3 (8.0.0 available)
+  flutter_lints 5.0.0 (6.0.0 available)
+  flutter_local_notifications 19.4.2 (19.5.0 available)
+  flutter_map 6.2.1 (8.2.2 available)
+  flutter_map_marker_cluster 1.3.6 (8.2.2 available)
+  flutter_map_marker_popup 6.1.2 (8.1.0 available)
+  flutter_map_tile_caching 9.0.1 (10.1.1 available)
+  flutter_plugin_android_lifecycle 2.0.30 (2.0.33 available)
+  flutter_riverpod 2.6.1 (3.1.0 available)
+  flutter_secure_storage 9.2.4 (10.0.0 available)
+  flutter_secure_storage_linux 1.2.3 (3.0.0 available)
+  flutter_secure_storage_macos 3.1.3 (4.0.0 available)
+  flutter_secure_storage_platform_interface 1.1.2 (2.0.1 available)
+  flutter_secure_storage_web 1.2.1 (2.1.0 available)
+  flutter_secure_storage_windows 3.1.2 (4.1.0 available)
+  flutter_svg 2.2.1 (2.2.3 available)
+  freezed 2.5.8 (3.2.4 available)
+  freezed_annotation 2.4.4 (3.1.0 available)
+  functions_client 2.4.4 (2.5.0 available)
+  geocoding 2.2.2 (4.0.0 available)
+  geocoding_android 3.3.1 (4.0.1 available)
+  geocoding_ios 2.3.0 (3.1.0 available)
+  geocoding_platform_interface 3.2.0 (5.0.0 available)
+  geolocator 11.1.0 (14.0.2 available)
+  geolocator_android 4.6.2 (5.0.2 available)
+  geolocator_web 3.0.0 (4.1.3 available)
+  google_fonts 6.3.1 (7.0.2 available)
+  gotrue 2.15.0 (2.18.0 available)
+  http 1.5.0 (1.6.0 available)
+  image 4.3.0 (4.7.2 available)
+  image_picker 1.2.0 (1.2.1 available)
+  image_picker_android 0.8.13+1 (0.8.13+10 available)
+  image_picker_for_web 3.1.0 (3.1.1 available)
+  image_picker_ios 0.8.13 (0.8.13+3 available)
+  image_picker_macos 0.2.2 (0.2.2+1 available)
+  image_picker_platform_interface 2.11.0 (2.11.1 available)
+  jiffy 6.4.3 (6.4.4 available)
+  js 0.6.7 (0.7.2 available)
+  json_serializable 6.9.5 (6.11.4 available)
+  lints 5.1.1 (6.0.0 available)
+  local_auth 2.3.0 (3.0.0 available)
+  local_auth_android 1.0.52 (2.0.4 available)
+  local_auth_darwin 1.6.0 (2.0.1 available)
+  local_auth_windows 1.0.11 (2.0.1 available)
+  location 5.0.3 (8.0.1 available)
+  location_platform_interface 3.1.2 (6.0.1 available)
+  location_web 4.2.0 (6.0.1 available)
+  logger 2.6.1 (2.6.2 available)
+  matcher 0.12.17 (0.12.18 available)
+  material_color_utilities 0.11.1 (0.13.0 available)
+  mgrs_dart 2.0.0 (3.0.0 available)
+  objectbox 2.5.1 (5.1.0 available)
+  objectbox_flutter_libs 2.5.1 (5.1.0 available)
+  open_file 3.5.10 (3.5.11 available)
+  open_file_ios 1.0.3 (1.0.4 available)
+  open_file_mac 1.0.3 (1.0.4 available)
+  package_info_plus 8.3.1 (9.0.0 available)
+  path_provider_android 2.2.18 (2.2.22 available)
+  path_provider_foundation 2.4.2 (2.6.0 available)
+  permission_handler 11.4.0 (12.0.1 available)
+  permission_handler_android 12.1.0 (13.0.1 available)
+  pinput 5.0.2 (6.0.1 available)
+  pointycastle 3.9.1 (4.0.0 available)
+  postgrest 2.5.0 (2.6.0 available)
+  proj4dart 2.1.0 (3.0.0 available)
+  realtime_client 2.5.3 (2.7.0 available)
+  riverpod 2.6.1 (3.1.0 available)
+  share_plus 10.1.4 (12.0.1 available)
+  share_plus_platform_interface 5.0.2 (6.1.0 available)
+  shared_preferences 2.5.3 (2.5.4 available)
+  shared_preferences_android 2.4.13 (2.4.18 available)
+  shared_preferences_foundation 2.5.4 (2.5.6 available)
+  shorebird_code_push 1.1.6 (2.0.5 available)
+  source_gen 2.0.0 (4.1.2 available)
+  source_helper 1.3.7 (1.3.10 available)
+  sqflite_android 2.4.1 (2.4.2+2 available)
+  supabase 2.9.2 (2.10.2 available)
+  supabase_flutter 2.10.2 (2.12.0 available)
+  syncfusion_flutter_core 28.2.12 (32.1.23 available)
+  syncfusion_flutter_pdf 28.2.12 (32.1.23 available)
+  syncfusion_flutter_xlsio 28.2.11 (32.1.23 available)
+  syncfusion_officecore 28.2.12 (32.1.23 available)
+  test 1.26.3 (1.29.0 available)
+  test_api 0.7.7 (0.7.9 available)
+  test_core 0.6.12 (0.6.15 available)
+  timezone 0.10.1 (0.11.0 available)
+  unicode 0.3.1 (1.1.8 available)
+  url_launcher_android 6.3.20 (6.3.28 available)
+  url_launcher_ios 6.3.4 (6.3.6 available)
+  url_launcher_linux 3.2.1 (3.2.2 available)
+  url_launcher_macos 3.2.3 (3.2.5 available)
+  url_launcher_windows 3.1.4 (3.1.5 available)
+  uuid 4.5.1 (4.5.2 available)
+  vm_service 15.0.0 (15.0.2 available)
+  watcher 1.1.4 (1.2.1 available)
+  webview_flutter 4.13.0 (4.13.1 available)
+  webview_flutter_android 4.10.1 (4.10.11 available)
+  webview_flutter_wkwebview 3.23.0 (3.23.5 available)
+  win32 5.14.0 (5.15.0 available)
+Got dependencies!
+132 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 24372 bytes (98.5% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Running Gradle task 'bundleRelease'...                            213.0s
+√ Built build\app\outputs\bundle\release\app-release.aab (78.4MB)
+✓ Verifying patch can be applied to release (0.1s)
+[WARN] Your app contains asset changes, which will not be included in the patch.
+    Changed files:
+        base/assets/flutter_assets/fonts/MaterialIcons-Regular.otf
+
+If you don't know why you're seeing this error, visit our troubleshooting page at https://docs.shorebird.dev/code-push/troubleshooting#your-app-contains-asset-changes-warning-when-creating-a-patch
+Continue anyway? (y/N) No
+Instance of 'UserCancelledException'
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1768610389960_shorebird.log
+
+PS C:\Users\PC\PACT_mobile> 
