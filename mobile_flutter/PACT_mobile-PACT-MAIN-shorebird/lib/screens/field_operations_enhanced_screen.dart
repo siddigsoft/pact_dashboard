@@ -247,7 +247,22 @@ class _MMPScreenState extends State<MMPScreen> {
     final supabase = Supabase.instance.client;
 
     try {
-      // Validate session before starting reload
+      // Check connectivity first - if offline, load from cache directly
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOffline = connectivityResult.contains(ConnectivityResult.none);
+      
+      if (isOffline) {
+        debugPrint('[_loadDataCollectorData] Offline - loading all data from cache');
+        await _loadAvailableSitesFromCache();
+        await _loadSmartAssignedSitesFromCache();
+        await _loadMySitesFromCache();
+        await _loadUnsyncedCompletedVisits();
+        _groupAvailableSites();
+        debugPrint('[_loadDataCollectorData] Offline load completed');
+        return;
+      }
+      
+      // Validate session before starting reload (only when online)
       var session = supabase.auth.currentSession;
       if (session == null || session.isExpired) {
         debugPrint('[_loadDataCollectorData] Session expired, refreshing...');
@@ -256,8 +271,13 @@ class _MMPScreenState extends State<MMPScreen> {
           session = supabase.auth.currentSession;
           if (session == null) {
             debugPrint(
-              '[_loadDataCollectorData] Session refresh failed - aborting reload',
+              '[_loadDataCollectorData] Session refresh failed - loading from cache',
             );
+            await _loadAvailableSitesFromCache();
+            await _loadSmartAssignedSitesFromCache();
+            await _loadMySitesFromCache();
+            await _loadUnsyncedCompletedVisits();
+            _groupAvailableSites();
             return;
           }
           // Update _userId if it changed
@@ -267,8 +287,13 @@ class _MMPScreenState extends State<MMPScreen> {
           }
         } catch (refreshError) {
           debugPrint(
-            '[_loadDataCollectorData] Session refresh error: $refreshError',
+            '[_loadDataCollectorData] Session refresh error: $refreshError - loading from cache',
           );
+          await _loadAvailableSitesFromCache();
+          await _loadSmartAssignedSitesFromCache();
+          await _loadMySitesFromCache();
+          await _loadUnsyncedCompletedVisits();
+          _groupAvailableSites();
           return;
         }
       }
@@ -277,8 +302,13 @@ class _MMPScreenState extends State<MMPScreen> {
       final currentUserId = supabase.auth.currentUser?.id;
       if (currentUserId == null) {
         debugPrint(
-          '[_loadDataCollectorData] User ID is null - aborting reload',
+          '[_loadDataCollectorData] User ID is null - loading from cache',
         );
+        await _loadAvailableSitesFromCache();
+        await _loadSmartAssignedSitesFromCache();
+        await _loadMySitesFromCache();
+        await _loadUnsyncedCompletedVisits();
+        _groupAvailableSites();
         return;
       }
       _userId = currentUserId;
