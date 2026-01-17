@@ -1972,10 +1972,11 @@ class _MMPScreenState extends State<MMPScreen> {
   /// Initiate an in-app WebRTC call to a PACT user
   Future<void> _initiateInAppCall(String targetUserId, String targetUserName, {bool isAudioOnly = true}) async {
     try {
+      // Use existing singleton instance - already initialized at app startup in main_screen.dart
       final webrtcService = WebRTCService();
       
-      // Check if service is initialized
-      if (_userId == null || _userName == null) {
+      // Check if user is logged in
+      if (_userId == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1987,10 +1988,20 @@ class _MMPScreenState extends State<MMPScreen> {
         return;
       }
       
-      // Initialize WebRTC service if not already
-      await webrtcService.initialize(_userId!, _userName ?? 'PACT User');
+      // Check if already in a call
+      if (webrtcService.callState.isInCall) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You are already in a call'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
       
-      // Initiate the call
+      // Initiate the call (service should already be initialized at app startup)
       final success = await webrtcService.initiateCall(
         targetUserId,
         targetUserName,
