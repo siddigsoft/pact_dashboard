@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_availability.dart';
 import '../providers/profile_provider.dart';
 
@@ -12,7 +14,7 @@ class OnlineOfflineToggle extends ConsumerStatefulWidget {
 
   const OnlineOfflineToggle({
     super.key,
-    this.variant = ToggleVariant.uber,
+    this.variant = ToggleVariant.pill,  // Default to pill for smaller size
     this.mobileBottomOffset = true,
   });
 
@@ -23,6 +25,91 @@ class OnlineOfflineToggle extends ConsumerStatefulWidget {
 
 class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
   bool _isLoading = false;
+  bool _isSyncing = false;  // Guard against concurrent syncs
+  // Local override for immediate UI feedback when offline
+  UserAvailability? _localAvailabilityOverride;
+
+  static const String _pendingAvailabilityKey = 'pending_availability_change';
+  static const String _localAvailabilityKey = 'local_availability_status';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocalAvailability();
+    _syncPendingAvailabilityChanges();
+    // Listen for connectivity changes to sync when back online
+    Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
+  }
+
+  void _onConnectivityChanged(List<ConnectivityResult> results) {
+    // Check if we're now online
+    if (!results.contains(ConnectivityResult.none)) {
+      _syncPendingAvailabilityChanges();
+    }
+  }
+
+  Future<void> _loadLocalAvailability() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final localStatus = prefs.getString(_localAvailabilityKey);
+      if (localStatus != null && mounted) {
+        setState(() {
+          _localAvailabilityOverride = UserAvailability.fromString(localStatus);
+        });
+      }
+    } catch (e) {
+      debugPrint('[OnlineOfflineToggle] Error loading local availability: $e');
+    }
+  }
+
+  Future<void> _syncPendingAvailabilityChanges() async {
+    // Guard against concurrent syncs
+    if (_isSyncing) return;
+    _isSyncing = true;
+    
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOnline = !connectivityResult.contains(ConnectivityResult.none);
+      if (!isOnline) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      final pendingChange = prefs.getString(_pendingAvailabilityKey);
+      if (pendingChange == null) return;
+
+      final profile = ref.read(currentUserProfileProvider);
+      if (profile == null) return;
+
+      debugPrint('[OnlineOfflineToggle] Syncing pending availability: $pendingChange');
+
+      final supabase = Supabase.instance.client;
+      await supabase
+          .from('profiles')
+          .update({
+            'availability': pendingChange,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', profile.id);
+
+      // Clear pending change after successful sync
+      await prefs.remove(_pendingAvailabilityKey);
+      await prefs.remove(_localAvailabilityKey);
+      
+      if (mounted) {
+        setState(() {
+          _localAvailabilityOverride = null;
+        });
+      }
+      
+      // Refresh profile provider
+      ref.invalidate(currentUserProfileProvider);
+      
+      debugPrint('[OnlineOfflineToggle] Pending availability synced successfully');
+    } catch (e) {
+      debugPrint('[OnlineOfflineToggle] Error syncing pending availability: $e');
+    } finally {
+      _isSyncing = false;
+    }
+  }
 
   Future<void> _toggleAvailability() async {
     if (_isLoading) return;
@@ -35,40 +122,74 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
         throw Exception('User profile not found');
       }
 
-      final currentAvailability = UserAvailability.fromString(
-        profile.availability.name,
-      );
+      // Use local override if available, otherwise use profile
+      final currentAvailability = _localAvailabilityOverride ?? 
+          UserAvailability.fromString(profile.availability.name);
       final newAvailability = currentAvailability == UserAvailability.online
           ? UserAvailability.offline
           : UserAvailability.online;
 
-      // Update in database
-      final supabase = Supabase.instance.client;
-      final response = await supabase
-          .from('profiles')
-          .update({
-            'availability': newAvailability.value,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', profile.id)
-          .select()
-          .maybeSingle();
+      // Check connectivity
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOnline = !connectivityResult.contains(ConnectivityResult.none);
 
-      if (response == null) {
-        throw Exception('Failed to update availability');
+      if (isOnline) {
+        // Online: Update in database directly
+        final supabase = Supabase.instance.client;
+        final response = await supabase
+            .from('profiles')
+            .update({
+              'availability': newAvailability.value,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', profile.id)
+            .select()
+            .maybeSingle();
+
+        if (response == null) {
+          throw Exception('Failed to update availability');
+        }
+
+        // Clear any local override
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_pendingAvailabilityKey);
+        await prefs.remove(_localAvailabilityKey);
+        
+        if (mounted) {
+          setState(() {
+            _localAvailabilityOverride = null;
+          });
+        }
+
+        // Refresh profile provider
+        ref.invalidate(currentUserProfileProvider);
+      } else {
+        // Offline: Store locally and queue for later sync
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_pendingAvailabilityKey, newAvailability.value);
+        await prefs.setString(_localAvailabilityKey, newAvailability.value);
+        
+        if (mounted) {
+          setState(() {
+            _localAvailabilityOverride = newAvailability;
+          });
+        }
+        
+        debugPrint('[OnlineOfflineToggle] Offline - queued availability change: ${newAvailability.value}');
       }
 
-      // Refresh profile provider
-      ref.invalidate(currentUserProfileProvider);
-
       if (mounted) {
+        final message = isOnline
+            ? (newAvailability == UserAvailability.online
+                ? 'You are now Online - You can receive assignments'
+                : 'You are now Offline - You will not receive new assignments')
+            : (newAvailability == UserAvailability.online
+                ? 'You are now Online (will sync when connected)'
+                : 'You are now Offline (will sync when connected)');
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              newAvailability == UserAvailability.online
-                  ? 'You are now Online - You can receive assignments'
-                  : 'You are now Offline - You will not receive new assignments',
-            ),
+            content: Text(message),
             backgroundColor: newAvailability == UserAvailability.online
                 ? Colors.green
                 : Colors.grey[700],
@@ -96,10 +217,11 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
   Widget build(BuildContext context) {
     final profile = ref.watch(currentUserProfileProvider);
 
-    // If profile is null, show the toggle in offline state (assume offline)
-    final availability = profile != null
-        ? UserAvailability.fromString(profile.availability.name)
-        : UserAvailability.offline;
+    // Use local override if available (for offline mode), otherwise use profile
+    final availability = _localAvailabilityOverride ?? 
+        (profile != null
+            ? UserAvailability.fromString(profile.availability.name)
+            : UserAvailability.offline);
     final isOnline = availability == UserAvailability.online;
 
     // Only show for data collectors and coordinators if profile is loaded
