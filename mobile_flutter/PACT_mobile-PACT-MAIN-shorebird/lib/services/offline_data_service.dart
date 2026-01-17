@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'offline/offline_db.dart';
+import 'offline/models.dart';
 
 /// Service for managing offline data storage and synchronization
 class OfflineDataService {
