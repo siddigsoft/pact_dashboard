@@ -19,6 +19,7 @@ import '../services/advance_request_service.dart';
 import '../services/offline_data_service.dart';
 import '../services/offline/sync_manager.dart';
 import '../services/offline/offline_db.dart';
+import '../services/offline/models.dart';
 import '../models/visit_report.dart';
 import '../models/visit_report_data.dart';
 import '../widgets/request_advance_dialog.dart';
@@ -752,10 +753,10 @@ class _MMPScreenState extends State<MMPScreen> {
 
       // Filter out cost-acknowledged sites
       List<Map<String, dynamic>> costFilteredSites = allSites.where((site) {
-        final additionalData = site['additional_data'] as Map<String, dynamic>?;
+        final additionalData = _safeParseAdditionalData(site['additional_data']);
         final costAcknowledged =
             site['cost_acknowledged'] ??
-            additionalData?['cost_acknowledged'] ??
+            additionalData['cost_acknowledged'] ??
             false;
         return !costAcknowledged;
       }).toList();
@@ -926,9 +927,10 @@ class _MMPScreenState extends State<MMPScreen> {
         );
       }
 
-      _mySites = allSites;
+      // Merge with any pending offline data before setting state
+      _mySites = await _mergeWithOfflineData(allSites);
       
-      // Cache for offline use
+      // Cache for offline use (only server data, not merged)
       await _cacheMySites(allSites);
     } catch (e) {
       debugPrint('[_loadMySites] Error loading my sites: $e');
@@ -995,8 +997,10 @@ class _MMPScreenState extends State<MMPScreen> {
         final data = cachedItem.data as Map<String, dynamic>;
         final sites = data['sites'] as List?;
         if (sites != null) {
-          _mySites = sites.map((e) => e as Map<String, dynamic>).toList();
-          debugPrint('[_loadMySitesFromCache] Loaded ${_mySites.length} sites from cache');
+          final cachedSites = sites.map((e) => e as Map<String, dynamic>).toList();
+          // Merge with offline data when loading from cache
+          _mySites = await _mergeWithOfflineData(cachedSites);
+          debugPrint('[_loadMySitesFromCache] Loaded ${_mySites.length} sites from cache (merged with offline)');
         } else {
           _mySites = [];
         }
@@ -1007,6 +1011,106 @@ class _MMPScreenState extends State<MMPScreen> {
     } catch (e) {
       debugPrint('[_loadMySitesFromCache] Error loading from cache: $e');
       _mySites = [];
+    }
+  }
+
+  /// Safely parse additional_data which may be a JSON string or Map
+  Map<String, dynamic> _safeParseAdditionalData(dynamic data) {
+    if (data is String) {
+      try {
+        return Map<String, dynamic>.from(jsonDecode(data) as Map<String, dynamic>);
+      } catch (_) {
+        return {};
+      }
+    } else if (data is Map<String, dynamic>) {
+      return Map<String, dynamic>.from(data);
+    } else if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return {};
+  }
+
+  /// Merge server/cached sites with pending offline data from OfflineDb
+  Future<List<Map<String, dynamic>>> _mergeWithOfflineData(
+    List<Map<String, dynamic>> sites,
+  ) async {
+    try {
+      final offlineDb = OfflineDb();
+      final pendingVisits = offlineDb.getPendingSiteVisits();
+      
+      if (pendingVisits.isEmpty) {
+        return sites;
+      }
+      
+      debugPrint('[_mergeWithOfflineData] Found ${pendingVisits.length} pending offline visits');
+      
+      // Create a map of pending visits by siteEntryId for quick lookup
+      final pendingMap = <String, OfflineSiteVisit>{};
+      for (final visit in pendingVisits) {
+        pendingMap[visit.siteEntryId] = visit;
+      }
+      
+      // Merge offline data into sites
+      final mergedSites = sites.map((site) {
+        final siteId = site['id']?.toString();
+        if (siteId == null) return site;
+        
+        final pendingVisit = pendingMap[siteId];
+        if (pendingVisit == null) return site;
+        
+        // Merge offline data into the site
+        final mergedSite = Map<String, dynamic>.from(site);
+        mergedSite['_offline_modified'] = true;
+        mergedSite['_synced'] = false;
+        
+        // Override status/category from offline visit so local changes are visible
+        if (pendingVisit.status == 'completed') {
+          mergedSite['status'] = 'Completed';
+          mergedSite['_category'] = 'completed';
+          if (pendingVisit.completedAt != null) {
+            mergedSite['visit_completed_at'] = pendingVisit.completedAt!.toIso8601String();
+          }
+        } else if (pendingVisit.status == 'draft') {
+          // Draft means started but not completed - should show as Ongoing
+          mergedSite['status'] = 'Ongoing';
+          mergedSite['_category'] = 'ongoing';
+          if (pendingVisit.startedAt != null) {
+            mergedSite['visit_started_at'] = pendingVisit.startedAt.toIso8601String();
+          }
+        }
+        
+        // Always normalize additional_data to a Map for consistent handling
+        final additionalData = _safeParseAdditionalData(site['additional_data']);
+        
+        // Preserve GPS coordinates from offline visit
+        if (pendingVisit.startLocation != null) {
+          additionalData['start_location'] = pendingVisit.startLocation;
+        }
+        
+        // Always set the normalized additional_data
+        mergedSite['additional_data'] = additionalData;
+        
+        // Preserve completion data
+        if (pendingVisit.status == 'completed' || pendingVisit.status == 'draft') {
+          if (pendingVisit.notes != null) {
+            mergedSite['_offline_notes'] = pendingVisit.notes;
+          }
+          if (pendingVisit.photos != null && pendingVisit.photos!.isNotEmpty) {
+            mergedSite['_offline_photos'] = pendingVisit.photos;
+          }
+          if (pendingVisit.endLocation != null) {
+            mergedSite['_offline_end_location'] = pendingVisit.endLocation;
+          }
+        }
+        
+        debugPrint('[_mergeWithOfflineData] Merged offline data for site: $siteId (status: ${pendingVisit.status})');
+        return mergedSite;
+      }).toList();
+      
+      return mergedSites;
+    } catch (e) {
+      debugPrint('[_mergeWithOfflineData] Error merging offline data: $e');
+      return sites;
     }
   }
 
@@ -1090,8 +1194,8 @@ class _MMPScreenState extends State<MMPScreen> {
       // Also check additional_data for visit_report_submitted flag (backup check)
       final sitesWithReportFlag = allCompletedSites
           .where((site) {
-            final additionalData = site['additional_data'] as Map<String, dynamic>?;
-            return additionalData?['visit_report_submitted'] == true;
+            final additionalData = _safeParseAdditionalData(site['additional_data']);
+            return additionalData['visit_report_submitted'] == true;
           })
           .map((site) => site['id']?.toString())
           .where((id) => id != null && id.isNotEmpty)
@@ -1666,7 +1770,7 @@ class _MMPScreenState extends State<MMPScreen> {
             'accepted_by': _userId,
             'updated_at': now,
             'additional_data': {
-              ...(site['additional_data'] as Map<String, dynamic>? ?? {}),
+              ..._safeParseAdditionalData(site['additional_data']),
               'cost_acknowledged': true,
               'cost_acknowledged_at': now,
               'cost_acknowledged_by': _userId,
@@ -1768,8 +1872,7 @@ class _MMPScreenState extends State<MMPScreen> {
 
       // Add location to additional_data if available
       if (position != null) {
-        final additionalData =
-            site['additional_data'] as Map<String, dynamic>? ?? {};
+        final additionalData = _safeParseAdditionalData(site['additional_data']);
         additionalData['start_location'] = {
           'latitude': position.latitude,
           'longitude': position.longitude,
@@ -1803,12 +1906,16 @@ class _MMPScreenState extends State<MMPScreen> {
               }
             : <String, dynamic>{};
         
-        // Queue using OfflineDataService
+        // Queue using OfflineDataService with site metadata
         final offlineDataService = OfflineDataService();
         await offlineDataService.queueStartVisit(
           visitId: site['id'].toString(),
           userId: _userId ?? '',
           startLocation: startLocation,
+          siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
+          siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
+          state: site['state']?.toString(),
+          locality: site['locality']?.toString(),
         );
         
         // Note: Don't call forceSync while offline - SyncManager will pick up pending actions
@@ -1867,6 +1974,10 @@ class _MMPScreenState extends State<MMPScreen> {
             visitId: site['id'].toString(),
             userId: _userId ?? '',
             startLocation: startLocation,
+            siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
+            siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
+            state: site['state']?.toString(),
+            locality: site['locality']?.toString(),
           );
           // SyncManager will pick up pending actions when online
           if (mounted) {
@@ -1924,6 +2035,10 @@ class _MMPScreenState extends State<MMPScreen> {
             visitId: site['id'].toString(),
             userId: _userId ?? '',
             startLocation: startLocation,
+            siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
+            siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
+            state: site['state']?.toString(),
+            locality: site['locality']?.toString(),
           );
           // SyncManager will pick up pending actions when online
           if (mounted) {
@@ -2057,7 +2172,23 @@ class _MMPScreenState extends State<MMPScreen> {
           }
         }
         
-        // Queue using OfflineDataService
+        // Get start location from additional_data if available (safely handle JSON string or map)
+        Map<String, dynamic> additionalData;
+        final existingData = site['additional_data'];
+        if (existingData is String) {
+          try {
+            additionalData = Map<String, dynamic>.from(jsonDecode(existingData) as Map<String, dynamic>);
+          } catch (_) {
+            additionalData = {};
+          }
+        } else if (existingData is Map<String, dynamic>) {
+          additionalData = Map<String, dynamic>.from(existingData);
+        } else {
+          additionalData = {};
+        }
+        final savedStartLocation = additionalData['start_location'] as Map<String, dynamic>?;
+        
+        // Queue using OfflineDataService with site metadata
         final offlineDataService = OfflineDataService();
         await offlineDataService.queueCompleteVisit(
           visitId: site['id'].toString(),
@@ -2067,17 +2198,26 @@ class _MMPScreenState extends State<MMPScreen> {
           activities: reportData.activities,
           durationMinutes: reportData.durationMinutes,
           photoDataUrls: photoBase64Urls,
+          siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
+          siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
+          state: site['state']?.toString(),
+          locality: site['locality']?.toString(),
+          startLocation: savedStartLocation,
         );
         
         // Note: Don't call forceSync while offline - SyncManager will pick up pending actions
         // when connectivity is restored via auto-sync
         
-        // Update local cache
+        // Update local cache with all offline data preserved
         final updatedSite = Map<String, dynamic>.from(site);
         updatedSite['status'] = 'Completed';
         updatedSite['visit_completed_at'] = now;
         updatedSite['_offline_modified'] = true;
         updatedSite['_synced'] = false;
+        updatedSite['_offline_notes'] = reportData.notes;
+        updatedSite['_offline_activities'] = reportData.activities;
+        updatedSite['_offline_photos'] = photoBase64Urls;
+        updatedSite['_offline_end_location'] = endLocation;
         
         // Update in _mySites list
         final siteIndex = _mySites.indexWhere((s) => s['id'] == site['id']);
@@ -2132,6 +2272,10 @@ class _MMPScreenState extends State<MMPScreen> {
             }
           }
           
+          // Get start location from additional_data if available (safely handle JSON string or map)
+          final additionalData = _safeParseAdditionalData(site['additional_data']);
+          final savedStartLocation = additionalData['start_location'] as Map<String, dynamic>?;
+          
           final offlineDataService = OfflineDataService();
           await offlineDataService.queueCompleteVisit(
             visitId: site['id'].toString(),
@@ -2141,10 +2285,23 @@ class _MMPScreenState extends State<MMPScreen> {
             activities: reportData.activities,
             durationMinutes: reportData.durationMinutes,
             photoDataUrls: photoBase64Urls,
+            siteName: site['site_name']?.toString() ?? site['siteName']?.toString(),
+            siteCode: site['site_code']?.toString() ?? site['siteCode']?.toString(),
+            state: site['state']?.toString(),
+            locality: site['locality']?.toString(),
+            startLocation: savedStartLocation,
           );
           
           // SyncManager will pick up pending actions when online
-          _unsyncedCompletedVisits.add({...site, 'status': 'Completed', '_offline_modified': true});
+          _unsyncedCompletedVisits.add({
+            ...site, 
+            'status': 'Completed', 
+            '_offline_modified': true,
+            '_offline_notes': reportData.notes,
+            '_offline_activities': reportData.activities,
+            '_offline_photos': photoBase64Urls,
+            '_offline_end_location': endLocation,
+          });
           
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2407,7 +2564,7 @@ class _MMPScreenState extends State<MMPScreen> {
         'visit_completed_by': userId,
         'updated_at': now,
         'additional_data': {
-          ...(site['additional_data'] as Map<String, dynamic>? ?? {}),
+          ..._safeParseAdditionalData(site['additional_data']),
           'visit_report_submitted': true,
           'visit_report_id': savedReport['id'],
           'visit_report_submitted_at': now,
@@ -2627,8 +2784,8 @@ class _MMPScreenState extends State<MMPScreen> {
     if (isUnsynced) return false;
 
     // Check additional_data flag (most reliable indicator)
-    final additionalData = site['additional_data'] as Map<String, dynamic>?;
-    if (additionalData?['visit_report_submitted'] == true) {
+    final additionalData = _safeParseAdditionalData(site['additional_data']);
+    if (additionalData['visit_report_submitted'] == true) {
       return true;
     }
 
@@ -2963,7 +3120,7 @@ class _MMPScreenState extends State<MMPScreen> {
               child: Text(
                 count.toString(),
                 style: GoogleFonts.poppins(
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: isActive ? AppColors.primaryBlue : AppColors.textLight,
                 ),
@@ -2975,12 +3132,14 @@ class _MMPScreenState extends State<MMPScreen> {
     );
   }
 
-  Widget _buildSubTabButton(String tab, String label, int count) {
+  Widget _buildSubTabButton(String tab, String label, int count, {IconData? icon}) {
     final isActive = _mySitesSubTab == tab;
+    // Default icons for sub-tabs if not provided
+    final tabIcon = icon ?? _getSubTabIcon(tab);
     return InkWell(
       onTap: () => setState(() => _mySitesSubTab = tab),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
           color: isActive
               ? AppColors.primaryBlue.withOpacity(0.1)
@@ -2994,19 +3153,30 @@ class _MMPScreenState extends State<MMPScreen> {
         ),
         child: Column(
           children: [
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                color: isActive ? AppColors.primaryBlue : AppColors.textLight,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  tabIcon,
+                  size: 14,
+                  color: isActive ? AppColors.primaryBlue : AppColors.textLight,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                    color: isActive ? AppColors.primaryBlue : AppColors.textLight,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 2),
             Text(
               count.toString(),
               style: GoogleFonts.poppins(
-                fontSize: 10,
+                fontSize: 11,
                 color: isActive ? AppColors.primaryBlue : AppColors.textLight,
               ),
             ),
@@ -3014,6 +3184,21 @@ class _MMPScreenState extends State<MMPScreen> {
         ),
       ),
     );
+  }
+
+  IconData _getSubTabIcon(String tab) {
+    switch (tab) {
+      case 'pending':
+        return Icons.pending_actions;
+      case 'drafts':
+        return Icons.edit_note;
+      case 'outbox':
+        return Icons.outbox;
+      case 'sent':
+        return Icons.check_circle_outline;
+      default:
+        return Icons.folder;
+    }
   }
 
   Widget _buildDataCollectorContent() {
