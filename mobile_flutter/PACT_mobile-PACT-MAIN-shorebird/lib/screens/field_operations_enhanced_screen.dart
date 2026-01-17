@@ -8,6 +8,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/reusable_app_bar.dart';
+import '../services/webrtc_service.dart';
+import '../models/call_state.dart';
+import 'call_screen.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/notifications_panel.dart';
 import '../widgets/main_layout.dart';
@@ -44,6 +47,7 @@ class _MMPScreenState extends State<MMPScreen> {
   bool _isCoordinator = false;
   bool _isDataCollector = false;
   String? _userId;
+  String? _userName;
   String? _userStateId;
   String? _userLocalityId;
   String? _userStateName;
@@ -208,6 +212,10 @@ class _MMPScreenState extends State<MMPScreen> {
   /// Apply profile data to instance variables
   void _applyProfileData(Map<String, dynamic> profileResponse) {
     _userRole = (profileResponse['role'] as String?)?.toLowerCase() ?? '';
+    _userName = profileResponse['full_name'] as String? ?? 
+                profileResponse['name'] as String? ??
+                profileResponse['email'] as String? ?? 
+                'PACT User';
     _isCoordinator =
         _userRole == 'coordinator' ||
         _userRole == 'field_coordinator' ||
@@ -1961,6 +1969,69 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
+  /// Initiate an in-app WebRTC call to a PACT user
+  Future<void> _initiateInAppCall(String targetUserId, String targetUserName, {bool isAudioOnly = true}) async {
+    try {
+      final webrtcService = WebRTCService();
+      
+      // Check if service is initialized
+      if (_userId == null || _userName == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unable to initiate call. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Initialize WebRTC service if not already
+      await webrtcService.initialize(_userId!, _userName ?? 'PACT User');
+      
+      // Initiate the call
+      final success = await webrtcService.initiateCall(
+        targetUserId,
+        targetUserName,
+        isAudioOnly: isAudioOnly,
+      );
+      
+      if (success && mounted) {
+        // Navigate to call screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => CallScreen(
+              remoteUserName: targetUserName,
+            ),
+          ),
+        );
+      } else if (mounted) {
+        final callState = webrtcService.callState;
+        String message = 'Unable to connect call';
+        if (callState.status == CallStatus.busy) {
+          message = '$targetUserName is busy on another call';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[_initiateInAppCall] Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to start call: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   /// Build contact buttons row for a site
   Widget _buildContactButtons(Map<String, dynamic> site) {
     // Try to get phone number from various possible fields
@@ -1970,58 +2041,98 @@ class _MMPScreenState extends State<MMPScreen> {
                   site['enumerator_phone'] ??
                   site['assigned_phone'];
     
-    if (phone == null || phone.toString().isEmpty) {
+    // Check if contact is a PACT user (has user_id)
+    final contactUserId = site['accepted_by'] ?? 
+                          site['assigned_to'] ?? 
+                          site['enumerator_id'] ??
+                          site['coordinator_id'];
+    final contactName = site['enumerator_name'] ?? 
+                        site['assigned_name'] ?? 
+                        site['coordinator_name'] ??
+                        'PACT User';
+    final isPactUser = contactUserId != null && contactUserId.toString().isNotEmpty;
+    
+    // If no phone and not a PACT user, don't show buttons
+    if ((phone == null || phone.toString().isEmpty) && !isPactUser) {
       return const SizedBox.shrink();
     }
     
-    final phoneStr = phone.toString();
+    final phoneStr = phone?.toString() ?? '';
     final siteName = site['site_name'] ?? site['siteName'] ?? 'Site';
     
     return Container(
       margin: const EdgeInsets.only(top: 8),
-      child: Row(
+      child: Column(
         children: [
-          // Call Button
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _makeCall(phoneStr),
-              icon: const Icon(Icons.phone, size: 16),
-              label: const Text('Call'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.green,
-                side: const BorderSide(color: Colors.green),
-                padding: const EdgeInsets.symmetric(vertical: 8),
+          // In-App Call Button (for PACT users)
+          if (isPactUser)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _initiateInAppCall(
+                    contactUserId.toString(),
+                    contactName.toString(),
+                    isAudioOnly: true,
+                  ),
+                  icon: const Icon(Icons.phone_in_talk, size: 18),
+                  label: Text('In-App Call to $contactName'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          // SMS Button
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _sendSMS(phoneStr, message: 'Regarding site visit: $siteName'),
-              icon: const Icon(Icons.message, size: 16),
-              label: const Text('SMS'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.blue,
-                side: const BorderSide(color: Colors.blue),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
+          // External contact buttons (Phone, SMS, WhatsApp)
+          if (phoneStr.isNotEmpty)
+            Row(
+              children: [
+                // Call Button (native phone)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _makeCall(phoneStr),
+                    icon: const Icon(Icons.phone, size: 16),
+                    label: const Text('Call'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.green,
+                      side: const BorderSide(color: Colors.green),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // SMS Button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _sendSMS(phoneStr, message: 'Regarding site visit: $siteName'),
+                    icon: const Icon(Icons.message, size: 16),
+                    label: const Text('SMS'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                      side: const BorderSide(color: Colors.blue),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // WhatsApp Button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openWhatsApp(phoneStr, message: 'Hello, regarding site visit: $siteName'),
+                    icon: const Icon(Icons.chat, size: 16),
+                    label: const Text('WhatsApp'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF25D366),
+                      side: const BorderSide(color: Color(0xFF25D366)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 8),
-          // WhatsApp Button
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _openWhatsApp(phoneStr, message: 'Hello, regarding site visit: $siteName'),
-              icon: const Icon(Icons.chat, size: 16),
-              label: const Text('WhatsApp'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF25D366),
-                side: const BorderSide(color: Color(0xFF25D366)),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            ),
-          ),
         ],
       ),
     );
