@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../theme/app_colors.dart';
 import '../models/help_models.dart';
@@ -140,10 +139,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: AppColors.backgroundGray,
-      drawer: const CustomDrawerMenu(),
-      appBar: ReusableAppBar(
-        title: 'Admin Dashboard',
-        scaffoldKey: _scaffoldKey,
+      drawer: CustomDrawerMenu(
+        currentUser: _supabase.auth.currentUser,
+        onClose: () => _scaffoldKey.currentState?.closeDrawer(),
+      ),
+      appBar: AppBar(
+        backgroundColor: AppColors.primaryBlue,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.menu, color: Colors.white),
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
+        title: Text(
+          'Admin Dashboard',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -691,7 +705,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Contact ${isEditing ? 'updated' : 'added'}'),
-                      backgroundColor: AppColors.primaryGreen,
+                      backgroundColor: AppColors.accentGreen,
                     ),
                   );
                 }
