@@ -17,7 +17,8 @@ import '../screens/field_operations_enhanced_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/wallet_screen.dart';
 import '../screens/site_verification_screen.dart';
-import '../screens/chats_screen.dart';
+// Chats screen disabled - using Communications only
+// import '../screens/chats_screen.dart';
 import '../screens/help_screen.dart';
 import '../screens/support_screen.dart';
 import '../screens/help_support_screen.dart';
@@ -65,7 +66,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
       int? patchNumber;
       try {
         final codePush = ShorebirdCodePush();
-        if (codePush.isShorebirdAvailable()) {
+        final isAvailable = await codePush.isShorebirdAvailable();
+        if (isAvailable) {
           patchNumber = await codePush.currentPatchNumber();
         }
       } catch (e) {
