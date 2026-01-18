@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shorebird_code_push/shorebird_code_push.dart';
 import '../services/auth_service.dart';
 import '../providers/sync_provider.dart';
 import '../providers/profile_provider.dart';
@@ -42,6 +43,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
   String _userRole = 'Loading...';
   String _appVersion = '';
   String _buildNumber = '';
+  int? _patchNumber;
 
   @override
   void initState() {
@@ -58,10 +60,23 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
   Future<void> _fetchAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
+      
+      // Get Shorebird patch number
+      int? patchNumber;
+      try {
+        final codePush = ShorebirdCodePush();
+        if (codePush.isShorebirdAvailable()) {
+          patchNumber = await codePush.currentPatchNumber();
+        }
+      } catch (e) {
+        debugPrint('Error getting Shorebird patch number: $e');
+      }
+      
       if (mounted) {
         setState(() {
           _appVersion = packageInfo.version;
           _buildNumber = packageInfo.buildNumber;
+          _patchNumber = patchNumber;
         });
       }
     } catch (e) {
@@ -453,21 +468,22 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           widget.onClose();
                         },
                       ),
-                      _MenuItemData(
-                        icon: Icons.chat_rounded,
-                        title: 'Chats',
-                        subtitle: 'Messages and conversations',
-                        iconColor: Colors.blue,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ChatsScreen(),
-                            ),
-                          );
-                          widget.onClose();
-                        },
-                      ),
+                      // Chats screen disabled - using Communications only
+                      // _MenuItemData(
+                      //   icon: Icons.chat_rounded,
+                      //   title: 'Chats',
+                      //   subtitle: 'Messages and conversations',
+                      //   iconColor: Colors.blue,
+                      //   onTap: () {
+                      //     Navigator.push(
+                      //       context,
+                      //       MaterialPageRoute(
+                      //         builder: (context) => const ChatsScreen(),
+                      //       ),
+                      //     );
+                      //     widget.onClose();
+                      //   },
+                      // ),
                       _MenuItemData(
                         icon: Icons.help_rounded,
                         title: 'Help & Support',
@@ -716,31 +732,33 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
             ),
 
             // App Version
-            // Padding(
-            //   padding: const EdgeInsets.only(bottom: 16),
-            //   child: Column(
-            //     children: [
-            //       Text(
-            //         _appVersion.isNotEmpty
-            //             ? 'PACT Mobile v$_appVersion'
-            //             : 'PACT Mobile',
-            //         style: TextStyle(
-            //           color: Colors.grey.shade500,
-            //           fontSize: 12,
-            //           fontWeight: FontWeight.w500,
-            //         ),
-            //       ),
-            //       if (_buildNumber.isNotEmpty)
-            //         Text(
-            //           'Build $_buildNumber',
-            //           style: TextStyle(
-            //             color: Colors.grey.shade400,
-            //             fontSize: 10,
-            //           ),
-            //         ),
-            //     ],
-            //   ),
-            // ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                children: [
+                  Text(
+                    _appVersion.isNotEmpty
+                        ? 'PACT Mobile v$_appVersion'
+                        : 'PACT Mobile',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (_buildNumber.isNotEmpty)
+                    Text(
+                      _patchNumber != null
+                          ? 'Build $_buildNumber (Patch $_patchNumber)'
+                          : 'Build $_buildNumber',
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 10,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
