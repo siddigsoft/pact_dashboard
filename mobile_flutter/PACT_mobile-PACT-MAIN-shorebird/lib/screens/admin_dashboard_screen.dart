@@ -675,7 +675,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
               Navigator.pop(context);
 
-              final data = {
+              final Map<String, dynamic> data = {
                 'name': nameController.text,
                 'name_ar': nameArController.text.isEmpty ? null : nameArController.text,
                 'role': roleController.text.isEmpty ? null : roleController.text,
