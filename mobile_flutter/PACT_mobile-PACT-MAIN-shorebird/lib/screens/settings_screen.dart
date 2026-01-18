@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'dart:io';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
@@ -35,6 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // App version
   String _appVersion = '';
   String _buildNumber = '';
+  int? _patchNumber;
 
   // Password change
   final bool _showChangePassword = false;
@@ -56,9 +58,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadAppVersion() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
+      
+      // Get Shorebird patch number
+      int? patchNumber;
+      try {
+        final codePush = ShorebirdCodePush();
+        if (codePush.isShorebirdAvailable()) {
+          patchNumber = await codePush.currentPatchNumber();
+        }
+      } catch (e) {
+        debugPrint('Error getting Shorebird patch number: $e');
+      }
+      
       setState(() {
         _appVersion = packageInfo.version;
         _buildNumber = packageInfo.buildNumber;
+        _patchNumber = patchNumber;
       });
     } catch (e) {
       debugPrint('Error loading app version: $e');
@@ -707,7 +722,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Version $_appVersion (Build $_buildNumber)',
+                                      _patchNumber != null
+                                          ? 'Version $_appVersion (Build $_buildNumber, Patch $_patchNumber)'
+                                          : 'Version $_appVersion (Build $_buildNumber)',
                                       style: GoogleFonts.poppins(
                                         fontSize: 13,
                                         color: AppColors.textLight,
