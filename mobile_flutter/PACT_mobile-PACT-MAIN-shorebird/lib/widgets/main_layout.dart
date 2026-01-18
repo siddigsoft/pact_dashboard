@@ -7,8 +7,7 @@ import '../screens/dashboard_screen.dart';
 import '../screens/field_operations_enhanced_screen.dart';
 import '../screens/wallet_screen.dart';
 import '../screens/site_verification_screen.dart';
-import '../widgets/movable_online_offline_toggle.dart';
-import '../widgets/online_offline_toggle.dart';
+import '../widgets/professional_movable_toggle.dart';
 
 /// A reusable layout wrapper that automatically includes bottom navigation bar
 /// and handles all navigation logic. Just wrap your screen content with this.
@@ -138,8 +137,8 @@ class _MainLayoutState extends State<MainLayout> {
       body: Stack(
         children: [
           widget.child,
-          // Movable Online/Offline toggle (only for data collectors) - pill variant for smaller size
-          MovableOnlineOfflineToggle(variant: ToggleVariant.pill),
+          // Professional movable status toggle - can be moved to corners, minimized, or hidden
+          const ProfessionalMovableToggle(),
         ],
       ),
       bottomNavigationBar: _isLoadingRole
