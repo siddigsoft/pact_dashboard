@@ -10,6 +10,7 @@ import 'wallet_screen.dart';
 import '../widgets/network_status_indicator.dart';
 import '../widgets/incoming_call_dialog.dart';
 import '../services/webrtc_service.dart';
+import '../services/presence_service.dart';
 import '../models/call_state.dart';
 import 'dart:async';
 
@@ -80,10 +81,10 @@ class _MainScreenState extends State<MainScreen> {
         return;
       }
 
-      // Get user profile for name and avatar
+      // Get user profile for name, avatar, and role
       final response = await Supabase.instance.client
           .from('profiles')
-          .select('full_name, username, avatar_url')
+          .select('full_name, username, avatar_url, role')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -107,6 +108,16 @@ class _MainScreenState extends State<MainScreen> {
       );
 
       debugPrint('✅ WebRTC service initialized for user: $userName');
+
+      // Initialize Presence service for online status tracking
+      await PresenceService().initialize(
+        odId: user.id,
+        userName: userName,
+        userAvatar: userAvatar,
+        userRole: response?['role'] as String?,
+      );
+
+      debugPrint('✅ Presence service initialized for user: $userName');
 
       // Listen for incoming calls
       _callStateSubscription = WebRTCService().callStateStream.listen((state) {

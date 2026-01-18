@@ -1,5 +1,6 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../models/chat.dart';
 import '../models/chat_message.dart';
 import '../models/chat_participant.dart';
@@ -880,6 +881,118 @@ class ChatService {
     } catch (e) {
       print('Error deleting message: $e');
       rethrow;
+    }
+  }
+
+  /// Find or create a direct chat with another user
+  /// Returns the Chat object if found or created successfully
+  Future<Chat?> findOrCreateDirectChat(String targetUserId) async {
+    final currentUserId = getCurrentUserId();
+    if (currentUserId == null) return null;
+
+    try {
+      // First, check if a direct chat already exists between these users
+      // Build pair key for lookup (sorted UUIDs joined by underscore)
+      final sortedIds = [currentUserId, targetUserId]..sort();
+      final pairKey = sortedIds.join('_');
+
+      // Check for existing chat with this pair key
+      final existingChats = await _supabase
+          .from('chats')
+          .select('*')
+          .eq('pair_key', pairKey)
+          .eq('is_group', false)
+          .limit(1);
+
+      if (existingChats.isNotEmpty) {
+        final chatData = Map<String, dynamic>.from(existingChats.first as Map);
+        final chat = Chat.fromJson(chatData);
+        
+        // Load participants
+        final participants = await getChatParticipants(chat.id);
+        chat.participants = List.from(participants);
+        
+        // Set other participant info
+        final otherParticipant = participants.firstWhere(
+          (p) => p.userId != currentUserId,
+          orElse: () => ChatParticipant(
+            chatId: chat.id,
+            userId: targetUserId,
+            userName: null,
+            joinedAt: DateTime.now(),
+          ),
+        );
+        chat.otherParticipantId = otherParticipant.userId;
+        chat.otherParticipantName = otherParticipant.userName;
+        
+        return chat;
+      }
+
+      // No existing chat found, create a new one
+      final chatId = const Uuid().v4();
+      final now = DateTime.now().toIso8601String();
+
+      // Get target user's name
+      String? targetUserName;
+      try {
+        final profileResponse = await _supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', targetUserId)
+            .maybeSingle();
+        
+        if (profileResponse != null) {
+          targetUserName = profileResponse['full_name'] as String?;
+        }
+      } catch (e) {
+        print('Error fetching target user profile: $e');
+      }
+
+      // Create the chat
+      await _supabase.from('chats').insert({
+        'id': chatId,
+        'is_group': false,
+        'pair_key': pairKey,
+        'created_by': currentUserId,
+        'created_at': now,
+        'updated_at': now,
+      });
+
+      // Add both users as participants
+      await _supabase.from('chat_participants').insert([
+        {
+          'chat_id': chatId,
+          'user_id': currentUserId,
+          'joined_at': now,
+        },
+        {
+          'chat_id': chatId,
+          'user_id': targetUserId,
+          'joined_at': now,
+        },
+      ]);
+
+      // Create and return the chat object
+      final chat = Chat(
+        id: chatId,
+        isGroup: false,
+        name: null,
+        createdAt: DateTime.now(),
+        createdBy: currentUserId,
+        lastMessageAt: null,
+        lastMessage: null,
+        unreadCount: 0,
+        participants: [],
+        pairKey: pairKey,
+      );
+
+      chat.otherParticipantId = targetUserId;
+      chat.otherParticipantName = targetUserName;
+
+      return chat;
+    } catch (e) {
+      print('Error in findOrCreateDirectChat: $e');
+      return null;
     }
   }
 }
