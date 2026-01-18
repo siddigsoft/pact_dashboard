@@ -7,6 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_colors.dart';
 import '../providers/sync_provider.dart';
 
@@ -488,18 +490,63 @@ PACT Mobile User
   void _showSignOutDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Sign Out',
-          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600),
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.accentRed.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.logout_rounded,
+                color: AppColors.accentRed,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Sign Out',
+              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+          ],
         ),
-        content: Text(
-          'Are you sure you want to sign out?',
-          style: GoogleFonts.poppins(fontSize: 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to sign out?',
+              style: GoogleFonts.poppins(fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.amber, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Any unsaved data will be lost. Make sure to sync your data before signing out.',
+                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.amber[800]),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text(
               'Cancel',
               style: GoogleFonts.poppins(
@@ -508,16 +555,21 @@ PACT Mobile User
               ),
             ),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Sign out logic
-              // Navigator.pushReplacementNamed(context, '/login');
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _performSignOut(context);
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentRed,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             child: Text(
               'Sign Out',
               style: GoogleFonts.poppins(
-                color: AppColors.accentRed,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -526,5 +578,48 @@ PACT Mobile User
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
+  }
+  
+  Future<void> _performSignOut(BuildContext context) async {
+    try {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: AppColors.primaryOrange),
+        ),
+      );
+      
+      // Perform sign out
+      await Supabase.instance.client.auth.signOut();
+      
+      // Clear local data
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('auth_token');
+      await prefs.remove('refresh_token');
+      await prefs.remove('user_id');
+      await prefs.remove('user_email');
+      await prefs.remove('user_name');
+      await prefs.setBool('is_logged_in', false);
+      await prefs.remove('token_expires_at');
+      
+      // Close loading dialog and navigate to login
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to sign out: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
