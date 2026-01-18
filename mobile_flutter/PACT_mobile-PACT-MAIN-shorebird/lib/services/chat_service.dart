@@ -976,13 +976,11 @@ class ChatService {
       final chat = Chat(
         id: chatId,
         isGroup: false,
-        name: null,
+        name: targetUserName ?? 'Direct Chat',
+        type: 'private',
         createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
         createdBy: currentUserId,
-        lastMessageAt: null,
-        lastMessage: null,
-        unreadCount: 0,
-        participants: [],
         pairKey: pairKey,
       );
 

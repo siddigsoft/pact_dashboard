@@ -276,7 +276,8 @@ class PresenceService {
 
       _onlineUsers.clear();
       
-      presences.forEach((key, presenceList) {
+      for (final entry in presences.entries) {
+        final presenceList = entry.value;
         for (final presence in presenceList) {
           final data = presence.payload;
           final odId = data['user_id'] as String?;
@@ -293,7 +294,7 @@ class PresenceService {
             currentCallId: data['call_id'] as String?,
           );
         }
-      });
+      }
 
       _updateAllUsersOnlineStatus();
       _onlineUsersController.add(Map.from(_onlineUsers));
