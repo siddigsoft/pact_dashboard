@@ -272,13 +272,14 @@ class PresenceService {
   void _handlePresenceSync() {
     try {
       final presences = _presenceChannel?.presenceState();
-      if (presences == null) return;
+      if (presences == null || presences.isEmpty) return;
 
       _onlineUsers.clear();
       
       // presenceState() returns List<SinglePresenceState>
+      // SinglePresenceState is Map<String, dynamic>
       for (final presence in presences) {
-        final data = presence.payload;
+        final data = presence as Map<String, dynamic>;
         final odId = data['user_id'] as String?;
         if (odId == null || odId.isEmpty) continue;
 
