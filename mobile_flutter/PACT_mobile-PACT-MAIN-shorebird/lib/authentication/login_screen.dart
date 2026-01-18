@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../theme/app_colors.dart';
 import '../widgets/app_widgets.dart';
 import '../services/auth_service.dart';
@@ -174,8 +175,54 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // Attempt login
-      debugPrint('🔑 Attempting login with stored credentials...');
+      // Check connectivity first - if offline, use cached session
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOnline = !connectivityResult.contains(ConnectivityResult.none);
+      
+      if (!isOnline) {
+        // OFFLINE MODE: Check if we have a valid cached session
+        debugPrint('📴 Device is offline - checking cached session...');
+        final localAuthData = await _authService.getLocalAuthData();
+        
+        if (localAuthData != null && localAuthData['user_id'] != null) {
+          debugPrint('✅ Cached session found - proceeding offline');
+          HapticFeedback.mediumImpact();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.wifi_off, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Text('Offline mode - using cached data'),
+                  ],
+                ),
+                backgroundColor: Color(0xFF6B7280),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            Navigator.pushReplacementNamed(context, '/main');
+          }
+          return;
+        } else {
+          // No cached session - need network to login
+          debugPrint('❌ No cached session and device is offline');
+          setState(() => _isLoading = false);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No internet connection. Please connect to login for the first time.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // ONLINE MODE: Attempt login with stored credentials
+      debugPrint('🔑 Attempting online login with stored credentials...');
       final response = await _authService.signIn(
         email: email,
         password: password,
@@ -212,11 +259,48 @@ class _LoginScreenState extends State<LoginScreen>
       }
     } catch (e) {
       debugPrint('❌ Error during biometric login: $e');
+      
+      // If network error, try offline mode
+      if (e.toString().contains('SocketException') || 
+          e.toString().contains('Failed host lookup') ||
+          e.toString().contains('No address associated')) {
+        debugPrint('📴 Network error detected - attempting offline login...');
+        final localAuthData = await _authService.getLocalAuthData();
+        
+        if (localAuthData != null && localAuthData['user_id'] != null) {
+          debugPrint('✅ Cached session found - proceeding offline');
+          HapticFeedback.mediumImpact();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.wifi_off, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Text('Offline mode - using cached data'),
+                  ],
+                ),
+                backgroundColor: Color(0xFF6B7280),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            Navigator.pushReplacementNamed(context, '/main');
+          }
+          return;
+        }
+      }
+      
       setState(() => _isLoading = false);
       if (mounted) {
+        String errorMessage = 'Biometric login error';
+        if (e.toString().contains('SocketException') || 
+            e.toString().contains('Failed host lookup')) {
+          errorMessage = 'No internet connection. Please try again when online.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Biometric login error: $e'),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );
