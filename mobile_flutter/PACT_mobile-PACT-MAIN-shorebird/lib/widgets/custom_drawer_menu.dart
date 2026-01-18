@@ -19,6 +19,10 @@ import '../screens/site_verification_screen.dart';
 import '../screens/chats_screen.dart';
 import '../screens/help_screen.dart';
 import '../screens/support_screen.dart';
+import '../screens/help_support_screen.dart';
+import '../screens/admin_dashboard_screen.dart';
+import '../screens/super_admin_screen.dart';
+import '../screens/communications_screen.dart';
 
 class CustomDrawerMenu extends ConsumerStatefulWidget {
   final User? currentUser;
@@ -466,14 +470,14 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                       ),
                       _MenuItemData(
                         icon: Icons.help_rounded,
-                        title: 'Help',
+                        title: 'Help & Support',
                         subtitle: 'Get help and find answers',
                         iconColor: Colors.purple,
                         onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const HelpScreen(),
+                              builder: (context) => const HelpSupportScreen(),
                             ),
                           );
                           widget.onClose();
@@ -494,6 +498,58 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           widget.onClose();
                         },
                       ),
+                      _MenuItemData(
+                        icon: Icons.phone_in_talk_rounded,
+                        title: 'Communications',
+                        subtitle: 'Calls and messages',
+                        iconColor: Colors.indigo,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const CommunicationsScreen(),
+                            ),
+                          );
+                          widget.onClose();
+                        },
+                      ),
+                      // Admin Dashboard - Only for admins
+                      if (_userRole.toLowerCase() == 'admin' ||
+                          _userRole.toLowerCase() == 'super_admin' ||
+                          _userRole.toLowerCase() == 'superadmin')
+                        _MenuItemData(
+                          icon: Icons.admin_panel_settings_rounded,
+                          title: 'Admin Dashboard',
+                          subtitle: 'Manage contacts and users',
+                          iconColor: Colors.deepPurple,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AdminDashboardScreen(),
+                              ),
+                            );
+                            widget.onClose();
+                          },
+                        ),
+                      // Super Admin - Only for super admins
+                      if (_userRole.toLowerCase() == 'super_admin' ||
+                          _userRole.toLowerCase() == 'superadmin')
+                        _MenuItemData(
+                          icon: Icons.security_rounded,
+                          title: 'Super Admin',
+                          subtitle: 'System administration',
+                          iconColor: Colors.red,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const SuperAdminScreen(),
+                              ),
+                            );
+                            widget.onClose();
+                          },
+                        ),
                       // _MenuItemData(
                       //   icon: Icons.dashboard_rounded,
                       //   title: 'PACT Dashboard',

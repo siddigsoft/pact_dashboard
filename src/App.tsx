@@ -94,6 +94,7 @@ const EmailManagement = lazy(() => import('./pages/EmailManagement'));
 const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement'));
 const CostPredictions = lazy(() => import('./pages/CostPredictions'));
 const ExchangeRates = lazy(() => import('./pages/ExchangeRates'));
+const SupportContacts = lazy(() => import('./pages/SupportContacts'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -268,6 +269,7 @@ const AppRoutes = () => {
         <Route path="/email-tracking" element={<EmailTracking />} />
         <Route path="/email-management" element={<EmailManagement />} />
         <Route path="/permissions-management" element={<PermissionsManagement />} />
+        <Route path="/support-contacts" element={<SupportContacts />} />
       </Route>
 
       {/* Redirects */}
