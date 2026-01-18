@@ -63,7 +63,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       int? patchNumber;
       try {
         final codePush = ShorebirdCodePush();
-        if (codePush.isShorebirdAvailable()) {
+        final isAvailable = await codePush.isShorebirdAvailable();
+        if (isAvailable) {
           patchNumber = await codePush.currentPatchNumber();
         }
       } catch (e) {
