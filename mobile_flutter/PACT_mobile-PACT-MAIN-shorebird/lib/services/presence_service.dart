@@ -276,24 +276,22 @@ class PresenceService {
 
       _onlineUsers.clear();
       
-      for (final entry in presences.entries) {
-        final presenceList = entry.value;
-        for (final presence in presenceList) {
-          final data = presence.payload;
-          final odId = data['user_id'] as String?;
-          if (odId == null || odId.isEmpty) continue;
+      // presenceState() returns List<SinglePresenceState>
+      for (final presence in presences) {
+        final data = presence.payload;
+        final odId = data['user_id'] as String?;
+        if (odId == null || odId.isEmpty) continue;
 
-          _onlineUsers[odId] = UserPresence(
-            odId: odId,
-            userName: data['user_name'] as String? ?? 'Unknown',
-            userAvatar: data['user_avatar'] as String?,
-            role: data['role'] as String?,
-            isOnline: true,
-            isInCall: data['in_call'] as bool? ?? false,
-            lastSeen: DateTime.tryParse(data['last_seen'] as String? ?? ''),
-            currentCallId: data['call_id'] as String?,
-          );
-        }
+        _onlineUsers[odId] = UserPresence(
+          odId: odId,
+          userName: data['user_name'] as String? ?? 'Unknown',
+          userAvatar: data['user_avatar'] as String?,
+          role: data['role'] as String?,
+          isOnline: true,
+          isInCall: data['in_call'] as bool? ?? false,
+          lastSeen: DateTime.tryParse(data['last_seen'] as String? ?? ''),
+          currentCallId: data['call_id'] as String?,
+        );
       }
 
       _updateAllUsersOnlineStatus();
