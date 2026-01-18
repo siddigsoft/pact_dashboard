@@ -118,8 +118,49 @@ class _OnlineOfflineToggleState extends ConsumerState<OnlineOfflineToggle> {
 
     try {
       final profile = ref.read(currentUserProfileProvider);
+      
+      // Handle null profile gracefully - use cached local availability
       if (profile == null) {
-        throw Exception('User profile not found');
+        // Check if we have a local override we can toggle
+        if (_localAvailabilityOverride != null) {
+          final newAvailability = _localAvailabilityOverride == UserAvailability.online
+              ? UserAvailability.offline
+              : UserAvailability.online;
+          
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_pendingAvailabilityKey, newAvailability.value);
+          await prefs.setString(_localAvailabilityKey, newAvailability.value);
+          
+          if (mounted) {
+            setState(() {
+              _localAvailabilityOverride = newAvailability;
+              _isLoading = false;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(newAvailability == UserAvailability.online
+                    ? 'Status set to Online (will sync when connected)'
+                    : 'Status set to Offline (will sync when connected)'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+        
+        // No profile and no local override - show friendly message
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please wait for profile to load or check your connection'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
       }
 
       // Use local override if available, otherwise use profile

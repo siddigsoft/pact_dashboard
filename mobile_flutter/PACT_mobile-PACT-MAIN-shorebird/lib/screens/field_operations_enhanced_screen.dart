@@ -45,6 +45,7 @@ class _MMPScreenState extends State<MMPScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   bool _isLoading = true;
+  bool _isOffline = false;
   bool _isCoordinator = false;
   bool _isDataCollector = false;
   String? _userId;
@@ -113,6 +114,10 @@ class _MMPScreenState extends State<MMPScreen> {
       final connectivityResult = await Connectivity().checkConnectivity();
       final isOffline = connectivityResult.contains(ConnectivityResult.none);
       
+      if (mounted) {
+        setState(() => _isOffline = isOffline);
+      }
+      
       if (isOffline) {
         // OFFLINE MODE: Load everything from cache
         debugPrint('[_initializeMMP] Offline - loading from cache');
@@ -175,6 +180,9 @@ class _MMPScreenState extends State<MMPScreen> {
   /// Initialize from cached data when offline
   Future<void> _initializeFromCache(String userId) async {
     try {
+      if (mounted) {
+        setState(() => _isOffline = true);
+      }
       debugPrint('[_initializeFromCache] Loading cached profile and data');
       final offlineService = OfflineDataService();
       
@@ -3618,6 +3626,61 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   Widget _buildClaimableSites() {
+    // Claimable tab requires internet - show offline message
+    if (_isOffline) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.wifi_off, size: 64, color: AppColors.primaryOrange),
+              const SizedBox(height: 16),
+              Text(
+                'Internet Required',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Claiming sites requires an internet connection. Please connect to the internet and try again.',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: AppColors.textLight,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Connectivity().checkConnectivity();
+                  final isOffline = result.contains(ConnectivityResult.none);
+                  if (mounted) {
+                    setState(() => _isOffline = isOffline);
+                    if (!isOffline) {
+                      _initializeMMP();
+                    }
+                  }
+                },
+                icon: const Icon(Icons.refresh, color: Colors.white),
+                label: Text(
+                  'Retry',
+                  style: GoogleFonts.poppins(color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
     final filtered = _getFilteredSites(_availableSites);
 
     if (filtered.isEmpty) {
