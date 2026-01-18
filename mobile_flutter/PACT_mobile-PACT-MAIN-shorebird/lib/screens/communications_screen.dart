@@ -28,6 +28,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   late TabController _tabController;
   StreamSubscription? _allUsersSubscription;
   StreamSubscription? _onlineUsersSubscription;
+  StreamSubscription? _errorSubscription;
 
   List<UserPresence> _allUsers = [];
   List<UserPresence> _filteredUsers = [];
@@ -46,6 +47,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     _checkConnectivity();
     _loadUsers();
     _subscribeToPresence();
+    _subscribeToErrors();
   }
 
   @override
@@ -54,7 +56,16 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     _searchController.dispose();
     _allUsersSubscription?.cancel();
     _onlineUsersSubscription?.cancel();
+    _errorSubscription?.cancel();
     super.dispose();
+  }
+
+  void _subscribeToErrors() {
+    _errorSubscription = _webrtcService.errorStream.listen((error) {
+      if (mounted) {
+        _showMessage(error, isError: true);
+      }
+    });
   }
 
   Future<void> _checkConnectivity() async {
