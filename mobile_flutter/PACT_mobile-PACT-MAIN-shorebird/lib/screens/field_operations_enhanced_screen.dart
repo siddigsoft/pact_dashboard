@@ -29,6 +29,7 @@ import '../models/visit_report_data.dart';
 import '../widgets/request_advance_dialog.dart';
 import '../models/site_visit.dart';
 import 'visit_report_detail_screen.dart';
+import '../widgets/sync_status_indicator.dart';
 
 class FieldOperationsEnhancedScreen extends StatefulWidget {
   const FieldOperationsEnhancedScreen({super.key});
