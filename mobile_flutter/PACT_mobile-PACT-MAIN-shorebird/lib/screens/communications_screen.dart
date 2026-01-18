@@ -10,6 +10,8 @@ import '../services/presence_service.dart';
 import '../services/webrtc_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/incoming_call_overlay.dart';
+import '../models/call_state.dart';
+import 'call_screen.dart';
 
 class CommunicationsScreen extends StatefulWidget {
   const CommunicationsScreen({super.key});
@@ -177,6 +179,12 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       return;
     }
 
+    // Check if already in a call
+    if (_webrtcService.callState.isInCall) {
+      _showMessage('You are already in a call', isError: true);
+      return;
+    }
+
     HapticFeedback.mediumImpact();
     
     final success = await _webrtcService.initiateCall(
@@ -186,8 +194,23 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       isAudioOnly: true,
     );
 
-    if (!success && mounted) {
-      _showMessage('Could not start call. Please try again.', isError: true);
+    if (success && mounted) {
+      // Navigate to call screen
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CallScreen(
+            remoteUserName: user.userName,
+            remoteUserAvatar: user.userAvatar,
+          ),
+        ),
+      );
+    } else if (!success && mounted) {
+      final callState = _webrtcService.callState;
+      String message = 'Could not start call. Please try again.';
+      if (callState.status == CallStatus.busy) {
+        message = '${user.userName} is busy on another call';
+      }
+      _showMessage(message, isError: true);
     }
   }
 
