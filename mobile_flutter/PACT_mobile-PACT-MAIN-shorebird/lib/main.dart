@@ -19,6 +19,8 @@ import 'authentication/biometric_prompt_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/field_operations_enhanced_screen.dart';
 import 'screens/comprehensive_monitoring_form_screen.dart';
+import 'screens/chat_screen.dart';
+import 'models/chat.dart';
 import 'theme/app_colors.dart';
 import 'l10n/app_localizations.dart';
 import 'providers/locale_provider.dart';
@@ -343,6 +345,42 @@ class MyApp extends StatelessWidget {
           // Backup with onGenerateRoute for dynamic routes and better debugging
           onGenerateRoute: (settings) {
             debugPrint('⚠️ Fallback route generation: ${settings.name}');
+
+            // Handle /chat route with Chat argument or chatId string
+            if (settings.name == '/chat') {
+              final args = settings.arguments;
+              if (args is Chat) {
+                return MaterialPageRoute(
+                  settings: settings,
+                  builder: (context) => ChatScreen(chat: args),
+                );
+              }
+              // If args is a string (chatId from notification), create a minimal Chat object
+              if (args is String) {
+                final chatId = args;
+                debugPrint('📱 Chat route with chatId: $chatId');
+                // Create a minimal Chat object - the ChatScreen will load full details
+                final chat = Chat(
+                  id: chatId,
+                  isGroup: false,
+                  name: 'Chat',
+                  type: 'private',
+                  createdAt: DateTime.now(),
+                  updatedAt: DateTime.now(),
+                );
+                return MaterialPageRoute(
+                  settings: settings,
+                  builder: (context) => ChatScreen(chat: chat),
+                );
+              }
+              // Fallback for unknown argument types
+              debugPrint('⚠️ Chat route called without proper argument');
+              return MaterialPageRoute(
+                builder: (context) => const Scaffold(
+                  body: Center(child: Text('Unable to open chat')),
+                ),
+              );
+            }
 
             // Only for routes not defined in routes map
             switch (settings.name) {
