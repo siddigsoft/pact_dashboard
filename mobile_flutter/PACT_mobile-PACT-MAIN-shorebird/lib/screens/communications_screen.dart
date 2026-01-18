@@ -217,7 +217,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : AppColors.primaryGreen,
+        backgroundColor: isError ? Colors.red : AppColors.accentGreen,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -244,7 +244,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.backgroundGray,
       appBar: _buildAppBar(),
       body: Column(
         children: [

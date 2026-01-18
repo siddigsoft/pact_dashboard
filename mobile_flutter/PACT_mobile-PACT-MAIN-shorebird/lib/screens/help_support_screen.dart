@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/help_models.dart';
 import '../services/help_service.dart';
 import '../theme/app_colors.dart';
-import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 
 class HelpSupportScreen extends StatefulWidget {
@@ -93,10 +92,25 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: AppColors.backgroundGray,
-        drawer: const CustomDrawerMenu(),
-        appBar: ReusableAppBar(
-          title: isArabic ? 'المساعدة والدعم' : 'Help & Support',
-          scaffoldKey: _scaffoldKey,
+        drawer: CustomDrawerMenu(
+          currentUser: Supabase.instance.client.auth.currentUser,
+          onClose: () => _scaffoldKey.currentState?.closeDrawer(),
+        ),
+        appBar: AppBar(
+          backgroundColor: AppColors.primaryBlue,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white),
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
+          title: Text(
+            isArabic ? 'المساعدة والدعم' : 'Help & Support',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           actions: [
             TextButton.icon(
               onPressed: _toggleLanguage,
