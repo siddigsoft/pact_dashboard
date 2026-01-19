@@ -814,6 +814,23 @@ class WebRTCService {
     _callTimeoutTimer = null;
   }
 
+  /// Reset call state without full cleanup (for fixing stuck states)
+  void resetCallState() {
+    debugPrint('[WebRTC] Resetting call state to idle');
+    _callState = CallState();
+    _callStateController.add(_callState);
+  }
+  
+  /// Force reset if stuck in a call state
+  Future<void> forceResetIfNotInActiveCall() async {
+    // If we think we're in a call but have no active peer connection,
+    // then we're in a stuck state and should reset
+    if (_callState.isInCall && _peerConnection == null) {
+      debugPrint('[WebRTC] Detected stuck call state, forcing reset');
+      await _cleanup();
+    }
+  }
+
   /// Cleanup resources
   Future<void> _cleanup() async {
     debugPrint('[WebRTC] Cleaning up resources');

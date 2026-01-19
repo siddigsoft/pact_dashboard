@@ -50,6 +50,16 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     _loadUsers();
     _subscribeToPresence();
     _subscribeToErrors();
+    // Reset any stuck call states when entering the screen
+    _resetStuckCallState();
+  }
+  
+  Future<void> _resetStuckCallState() async {
+    try {
+      await _webrtcService.forceResetIfNotInActiveCall();
+    } catch (e) {
+      debugPrint('[CommunicationsScreen] Error resetting call state: $e');
+    }
   }
 
   @override
@@ -217,22 +227,34 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   Future<void> _initiateChat(UserPresence user) async {
     HapticFeedback.lightImpact();
     
+    // Check if user is authenticated
+    final currentUserId = _chatService.getCurrentUserId();
+    if (currentUserId == null) {
+      debugPrint('[CommunicationsScreen] User not authenticated for chat');
+      _showMessage('Please log in again to start a chat.', isError: true);
+      return;
+    }
+    
+    if (!_isOnline) {
+      _showOfflineMessage('Starting new chats requires an internet connection');
+      return;
+    }
+    
     try {
+      debugPrint('[CommunicationsScreen] Initiating chat with user: ${user.odId}');
       // Find or create chat with user
       final chat = await _chatService.findOrCreateDirectChat(user.odId);
       
       if (chat != null && mounted) {
+        debugPrint('[CommunicationsScreen] Chat created/found: ${chat.id}');
         Navigator.pushNamed(context, '/chat', arguments: chat);
       } else {
+        debugPrint('[CommunicationsScreen] Chat returned null for user: ${user.odId}');
         _showMessage('Could not open chat. Please try again.', isError: true);
       }
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error initiating chat: $e');
-      if (!_isOnline) {
-        _showOfflineMessage('Starting new chats requires an internet connection');
-      } else {
-        _showMessage('Could not open chat. Please try again.', isError: true);
-      }
+      _showMessage('Could not open chat: ${e.toString().split('\n').first}', isError: true);
     }
   }
 
