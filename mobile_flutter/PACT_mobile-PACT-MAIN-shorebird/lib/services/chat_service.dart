@@ -888,21 +888,70 @@ class ChatService {
   /// Returns the Chat object if found or created successfully
   Future<Chat?> findOrCreateDirectChat(String targetUserId) async {
     final currentUserId = getCurrentUserId();
-    if (currentUserId == null) return null;
+    if (currentUserId == null) {
+      print('[ChatService] findOrCreateDirectChat: No current user ID');
+      return null;
+    }
+
+    print('[ChatService] findOrCreateDirectChat: currentUser=$currentUserId, target=$targetUserId');
 
     try {
       // First, check if a direct chat already exists between these users
       // Build pair key for lookup (sorted UUIDs joined by underscore)
       final sortedIds = [currentUserId, targetUserId]..sort();
       final pairKey = sortedIds.join('_');
+      print('[ChatService] Looking for chat with pair_key: $pairKey');
 
       // Check for existing chat with this pair key
-      final existingChats = await _supabase
-          .from('chats')
-          .select('*')
-          .eq('pair_key', pairKey)
-          .eq('is_group', false)
-          .limit(1);
+      // Fallback: also check by participants if pair_key query fails
+      List<dynamic> existingChats = [];
+      
+      try {
+        existingChats = await _supabase
+            .from('chats')
+            .select('*')
+            .eq('pair_key', pairKey)
+            .eq('is_group', false)
+            .limit(1);
+      } catch (pairKeyError) {
+        print('[ChatService] pair_key query failed, trying participant lookup: $pairKeyError');
+        // Fallback: Find chat by looking at participants
+        // This handles cases where pair_key column might not exist
+        try {
+          final myChats = await _supabase
+              .from('chat_participants')
+              .select('chat_id')
+              .eq('user_id', currentUserId);
+          
+          if (myChats.isNotEmpty) {
+            final chatIds = (myChats as List).map((c) => c['chat_id'] as String).toList();
+            
+            for (final chatId in chatIds) {
+              final participants = await _supabase
+                  .from('chat_participants')
+                  .select('user_id')
+                  .eq('chat_id', chatId);
+              
+              final participantIds = (participants as List).map((p) => p['user_id'] as String).toSet();
+              if (participantIds.contains(targetUserId) && participantIds.length == 2) {
+                // Found existing direct chat
+                final chatData = await _supabase
+                    .from('chats')
+                    .select('*')
+                    .eq('id', chatId)
+                    .eq('is_group', false)
+                    .maybeSingle();
+                if (chatData != null) {
+                  existingChats = [chatData];
+                  break;
+                }
+              }
+            }
+          }
+        } catch (fallbackError) {
+          print('[ChatService] Fallback participant lookup also failed: $fallbackError');
+        }
+      }
 
       if (existingChats.isNotEmpty) {
         final chatData = Map<String, dynamic>.from(existingChats.first as Map);
@@ -929,6 +978,7 @@ class ChatService {
       }
 
       // No existing chat found, create a new one
+      print('[ChatService] No existing chat found, creating new one');
       final chatId = const Uuid().v4();
       final now = DateTime.now().toIso8601String();
 
@@ -945,18 +995,30 @@ class ChatService {
           targetUserName = profileResponse['full_name'] as String?;
         }
       } catch (e) {
-        print('Error fetching target user profile: $e');
+        print('[ChatService] Error fetching target user profile: $e');
       }
 
-      // Create the chat
-      await _supabase.from('chats').insert({
-        'id': chatId,
-        'is_group': false,
-        'pair_key': pairKey,
-        'created_by': currentUserId,
-        'created_at': now,
-        'updated_at': now,
-      });
+      // Create the chat - try with pair_key first, fallback without
+      try {
+        await _supabase.from('chats').insert({
+          'id': chatId,
+          'is_group': false,
+          'pair_key': pairKey,
+          'created_by': currentUserId,
+          'created_at': now,
+          'updated_at': now,
+        });
+      } catch (insertError) {
+        print('[ChatService] Insert with pair_key failed, trying without: $insertError');
+        // Try without pair_key in case column doesn't exist
+        await _supabase.from('chats').insert({
+          'id': chatId,
+          'is_group': false,
+          'created_by': currentUserId,
+          'created_at': now,
+          'updated_at': now,
+        });
+      }
 
       // Add both users as participants
       await _supabase.from('chat_participants').insert([
@@ -988,9 +1050,10 @@ class ChatService {
       chat.otherParticipantName = targetUserName;
 
       return chat;
-    } catch (e) {
-      print('Error in findOrCreateDirectChat: $e');
-      return null;
+    } catch (e, stackTrace) {
+      print('[ChatService] Error in findOrCreateDirectChat: $e');
+      print('[ChatService] Stack trace: $stackTrace');
+      rethrow; // Rethrow so the caller can show a more detailed error
     }
   }
 }
