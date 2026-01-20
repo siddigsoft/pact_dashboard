@@ -290,6 +290,18 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
 
     HapticFeedback.mediumImpact();
     
+    // Ensure WebRTC is initialized before making call
+    if (!_webrtcService.isInitialized) {
+      debugPrint('[CommunicationsScreen] WebRTC not initialized, initializing now...');
+      await _initializeWebRTCService();
+      
+      // Check again after initialization
+      if (!_webrtcService.isInitialized) {
+        _showMessage('Could not initialize call service. Please try again.', isError: true);
+        return;
+      }
+    }
+    
     final success = await _webrtcService.initiateCall(
       user.odId,
       user.userName,
