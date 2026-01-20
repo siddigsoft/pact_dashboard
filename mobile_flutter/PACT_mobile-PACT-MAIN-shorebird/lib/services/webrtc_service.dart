@@ -245,8 +245,14 @@ class WebRTCService {
       // Update presence
       await _updatePresence(inCall: true, callId: callId, callToken: callToken);
 
-      // Setup local media
-      await _setupLocalMedia(isAudioOnly: isAudioOnly);
+      // Setup local media - this may fail if permissions are denied
+      try {
+        await _setupLocalMedia(isAudioOnly: isAudioOnly);
+      } catch (mediaError) {
+        // _setupLocalMedia already handles cleanup and state reset for permission errors
+        debugPrint('[WebRTC] Media setup failed: $mediaError');
+        return false;
+      }
 
       // Send call request signal with retry
       final success = await _sendSignalWithRetry(
@@ -276,6 +282,7 @@ class WebRTCService {
     } catch (e) {
       debugPrint('[WebRTC] Error initiating call: $e');
       _errorController.add('Unable to connect call: ${e.toString()}');
+      await _updatePresence(inCall: false);
       await _cleanup();
       _updateCallState(CallStatus.idle);
       return false;
@@ -411,6 +418,20 @@ class WebRTCService {
       debugPrint('[WebRTC] Local media stream acquired');
     } catch (e) {
       debugPrint('[WebRTC] Error getting local media: $e');
+      // Check if it's a permission error
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('notallowederror') || 
+          errorStr.contains('permission') ||
+          errorStr.contains('denied') ||
+          errorStr.contains('domexception')) {
+        // Clean up call state and presence when permissions are denied
+        debugPrint('[WebRTC] Permission denied - cleaning up call state and presence');
+        await _updatePresence(inCall: false);
+        await _cleanup();
+        _updateCallState(CallStatus.idle);
+        _errorController.add('Microphone/camera permission denied. Please enable in Settings.');
+        throw Exception('Microphone/camera permission denied. Please enable in Settings.');
+      }
       throw Exception('Failed to access camera/microphone: $e');
     }
   }
