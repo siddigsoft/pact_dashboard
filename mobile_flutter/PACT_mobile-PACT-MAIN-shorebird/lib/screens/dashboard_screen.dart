@@ -4,12 +4,14 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/dashboard_card.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../widgets/notifications_panel.dart';
 import '../widgets/main_layout.dart';
 import '../services/wallet_service.dart';
+import '../services/offline/offline_db.dart';
 import '../models/site_visit.dart';
 import '../theme/app_colors.dart';
 
@@ -25,6 +27,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final WalletService _walletService = WalletService();
 
   bool _isLoading = true;
+  bool _isOffline = false;
   bool _isCoordinator = false;
   String? _userId;
   String? _userState;
@@ -85,48 +88,211 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       _userId = user.id;
 
-      // Get user profile to determine role
-      final profileResponse = await Supabase.instance.client
-          .from('profiles')
-          .select('role, state_id, hub_id')
-          .eq('id', user.id)
-          .maybeSingle();
+      // Check connectivity first
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOffline = connectivityResult.contains(ConnectivityResult.none);
+      
+      if (mounted) {
+        setState(() => _isOffline = isOffline);
+      }
+      
+      if (isOffline) {
+        // OFFLINE MODE: Load from cache
+        debugPrint('[Dashboard] Offline - loading from cache');
+        await _initializeFromCache(user.id);
+        return;
+      }
 
-      if (profileResponse != null) {
-        _userRole = (profileResponse['role'] as String?)?.toLowerCase() ?? '';
-        _isCoordinator =
-            _userRole == 'coordinator' ||
-            _userRole == 'field_coordinator' ||
-            _userRole == 'state_coordinator';
+      // ONLINE MODE: Fetch from Supabase and cache
+      try {
+        // Get user profile to determine role
+        final profileResponse = await Supabase.instance.client
+            .from('profiles')
+            .select('role, state_id, hub_id')
+            .eq('id', user.id)
+            .maybeSingle();
 
-        _userState = profileResponse['state_id'] as String?;
-        _userHub = profileResponse['hub_id'] as String?;
+        if (profileResponse != null) {
+          // Cache profile for offline use
+          await _cacheProfile(user.id, profileResponse);
+          _applyProfileData(profileResponse);
 
-        // Check if user is admin or supervisor (can see all projects)
-        _isAdminOrSuperUser =
-            _userRole == 'admin' ||
-            _userRole == 'super_admin' ||
-            _userRole == 'supervisor' ||
-            _userRole == 'fom';
-
-        // Fetch user's project memberships (for non-admin users)
-        if (!_isAdminOrSuperUser) {
-          await _fetchUserProjectMemberships();
+          // Fetch user's project memberships (for non-admin users)
+          if (!_isAdminOrSuperUser) {
+            await _fetchUserProjectMemberships();
+          }
         }
-      }
 
-      // Load dashboard data based on role
-      if (_isCoordinator) {
-        await _loadCoordinatorDashboard();
-        _setupRealtimeSubscription();
-      } else {
-        await _loadDataCollectorDashboard();
-      }
+        // Load dashboard data based on role
+        if (_isCoordinator) {
+          await _loadCoordinatorDashboard();
+          _setupRealtimeSubscription();
+        } else {
+          await _loadDataCollectorDashboard();
+        }
 
-      setState(() => _isLoading = false);
+        setState(() => _isLoading = false);
+      } catch (e) {
+        // Network error - fall back to cache
+        debugPrint('[Dashboard] Network error, falling back to cache: $e');
+        await _initializeFromCache(user.id);
+      }
     } catch (e) {
       debugPrint('Error initializing dashboard: $e');
+      // Try cache as last resort
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await _initializeFromCache(user.id);
+      } else {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+  
+  /// Initialize from cached data when offline
+  Future<void> _initializeFromCache(String userId) async {
+    try {
+      if (mounted) {
+        setState(() => _isOffline = true);
+      }
+      debugPrint('[Dashboard] Loading from cache');
+      
+      // Load cached profile
+      final cachedProfile = await _getCachedProfile(userId);
+      if (cachedProfile != null) {
+        _applyProfileData(cachedProfile);
+      }
+      
+      // Load cached dashboard data
+      final cachedData = await _getCachedDashboardData(userId);
+      if (cachedData != null) {
+        _applyCachedDashboardData(cachedData);
+      }
+      
+      if (!mounted) return;
       setState(() => _isLoading = false);
+    } catch (e) {
+      debugPrint('[Dashboard] Error loading from cache: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+  
+  void _applyProfileData(Map<String, dynamic> profileResponse) {
+    _userRole = (profileResponse['role'] as String?)?.toLowerCase() ?? '';
+    _isCoordinator =
+        _userRole == 'coordinator' ||
+        _userRole == 'field_coordinator' ||
+        _userRole == 'state_coordinator';
+
+    _userState = profileResponse['state_id'] as String?;
+    _userHub = profileResponse['hub_id'] as String?;
+
+    _isAdminOrSuperUser =
+        _userRole == 'admin' ||
+        _userRole == 'super_admin' ||
+        _userRole == 'supervisor' ||
+        _userRole == 'fom';
+  }
+  
+  Future<void> _cacheProfile(String userId, Map<String, dynamic> profile) async {
+    try {
+      final offlineDb = OfflineDb();
+      await offlineDb.cacheItem(
+        OfflineDb.profileCacheBox,
+        'profile_$userId',
+        data: profile,
+        ttl: const Duration(days: 7),
+      );
+    } catch (e) {
+      debugPrint('[Dashboard] Error caching profile: $e');
+    }
+  }
+  
+  Future<Map<String, dynamic>?> _getCachedProfile(String userId) async {
+    try {
+      final offlineDb = OfflineDb();
+      final cached = offlineDb.getCachedItem(OfflineDb.profileCacheBox, 'profile_$userId');
+      return cached?.data as Map<String, dynamic>?;
+    } catch (e) {
+      debugPrint('[Dashboard] Error getting cached profile: $e');
+      return null;
+    }
+  }
+  
+  Future<void> _cacheDashboardData(String userId) async {
+    try {
+      final offlineDb = OfflineDb();
+      final data = {
+        'totalOperations': _totalOperations,
+        'completedVisits': _completedVisits,
+        'activeOperations': _activeOperations,
+        'pendingQueue': _pendingQueue,
+        'completionRate': _completionRate,
+        'assigned': _assigned,
+        'today': _today,
+        'inProgress': _inProgress,
+        'completed': _completed,
+        'overdue': _overdue,
+        'earnings': _earnings,
+        'streak': _streak,
+        'completionRateDC': _completionRateDC,
+        'isCoordinator': _isCoordinator,
+        'coordinatorVisits': _coordinatorVisits.map((v) => v.toJson()).toList(),
+        'dataCollectorVisits': _dataCollectorVisits.map((v) => v.toJson()).toList(),
+      };
+      await offlineDb.cacheItem(
+        OfflineDb.siteCacheBox,
+        'dashboard_data_$userId',
+        data: data,
+        ttl: const Duration(hours: 12),
+      );
+      debugPrint('[Dashboard] Cached dashboard data with ${_coordinatorVisits.length} coordinator and ${_dataCollectorVisits.length} DC visits');
+    } catch (e) {
+      debugPrint('[Dashboard] Error caching dashboard data: $e');
+    }
+  }
+  
+  Future<Map<String, dynamic>?> _getCachedDashboardData(String userId) async {
+    try {
+      final offlineDb = OfflineDb();
+      final cached = offlineDb.getCachedItem(OfflineDb.siteCacheBox, 'dashboard_data_$userId');
+      return cached?.data as Map<String, dynamic>?;
+    } catch (e) {
+      debugPrint('[Dashboard] Error getting cached dashboard data: $e');
+      return null;
+    }
+  }
+  
+  void _applyCachedDashboardData(Map<String, dynamic> data) {
+    _totalOperations = (data['totalOperations'] as num?)?.toInt() ?? 0;
+    _completedVisits = (data['completedVisits'] as num?)?.toInt() ?? 0;
+    _activeOperations = (data['activeOperations'] as num?)?.toInt() ?? 0;
+    _pendingQueue = (data['pendingQueue'] as num?)?.toInt() ?? 0;
+    _completionRate = (data['completionRate'] as num?)?.toDouble() ?? 0.0;
+    _assigned = (data['assigned'] as num?)?.toInt() ?? 0;
+    _today = (data['today'] as num?)?.toInt() ?? 0;
+    _inProgress = (data['inProgress'] as num?)?.toInt() ?? 0;
+    _completed = (data['completed'] as num?)?.toInt() ?? 0;
+    _overdue = (data['overdue'] as num?)?.toInt() ?? 0;
+    _earnings = (data['earnings'] as num?)?.toDouble() ?? 0.0;
+    _streak = (data['streak'] as num?)?.toInt() ?? 0;
+    _completionRateDC = (data['completionRateDC'] as num?)?.toDouble() ?? 0.0;
+    _isCoordinator = data['isCoordinator'] as bool? ?? false;
+    
+    // Restore visit lists
+    final coordVisits = data['coordinatorVisits'] as List?;
+    if (coordVisits != null) {
+      _coordinatorVisits = coordVisits
+          .map((v) => SiteVisit.fromJson(Map<String, dynamic>.from(v as Map)))
+          .toList();
+    }
+    
+    final dcVisits = data['dataCollectorVisits'] as List?;
+    if (dcVisits != null) {
+      _dataCollectorVisits = dcVisits
+          .map((v) => SiteVisit.fromJson(Map<String, dynamic>.from(v as Map)))
+          .toList();
     }
   }
 
@@ -364,6 +530,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _completionRate = 0.0;
       }
 
+      // Cache dashboard data for offline use
+      await _cacheDashboardData(_userId!);
+
       if (mounted) {
         setState(() {});
       }
@@ -516,6 +685,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       // Load location info
       await _loadLocationInfo();
+
+      // Cache dashboard data for offline use
+      await _cacheDashboardData(_userId!);
 
       if (mounted) {
         setState(() {});

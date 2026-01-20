@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../theme/app_colors.dart';
 import '../widgets/main_layout.dart';
 import '../services/wallet_service.dart';
+import '../services/offline/offline_db.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -19,6 +21,7 @@ class _WalletScreenState extends State<WalletScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   bool _isLoading = true;
+  bool _isOffline = false;
   String? _userId;
 
   // Wallet data
@@ -72,18 +75,127 @@ class _WalletScreenState extends State<WalletScreen> {
 
       _userId = user.id;
 
-      await Future.wait([
-        _loadWallet(),
-        _loadTransactions(),
-        _loadWithdrawalRequests(),
-        _loadPaymentMethods(),
-      ]);
+      // Check connectivity first
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isOffline = connectivityResult.contains(ConnectivityResult.none);
+      
+      if (mounted) {
+        setState(() => _isOffline = isOffline);
+      }
+      
+      if (isOffline) {
+        // OFFLINE MODE: Load from cache
+        debugPrint('[Wallet] Offline - loading from cache');
+        await _initializeFromCache(user.id);
+        return;
+      }
 
-      _setupRealtimeSubscription();
-      setState(() => _isLoading = false);
+      // ONLINE MODE: Fetch from Supabase and cache
+      try {
+        await Future.wait([
+          _loadWallet(),
+          _loadTransactions(),
+          _loadWithdrawalRequests(),
+          _loadPaymentMethods(),
+        ]);
+
+        // Cache wallet data for offline use
+        await _cacheWalletData(user.id);
+
+        _setupRealtimeSubscription();
+        setState(() => _isLoading = false);
+      } catch (e) {
+        // Network error - fall back to cache
+        debugPrint('[Wallet] Network error, falling back to cache: $e');
+        await _initializeFromCache(user.id);
+      }
     } catch (e) {
       debugPrint('Error initializing wallet: $e');
+      // Try cache as last resort
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        await _initializeFromCache(user.id);
+      } else {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+  
+  /// Initialize from cached data when offline
+  Future<void> _initializeFromCache(String userId) async {
+    try {
+      if (mounted) {
+        setState(() => _isOffline = true);
+      }
+      debugPrint('[Wallet] Loading from cache');
+      
+      // Load cached wallet data
+      final cachedData = await _getCachedWalletData(userId);
+      if (cachedData != null) {
+        _applyCachedWalletData(cachedData);
+      }
+      
+      if (!mounted) return;
       setState(() => _isLoading = false);
+    } catch (e) {
+      debugPrint('[Wallet] Error loading from cache: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+  
+  Future<void> _cacheWalletData(String userId) async {
+    try {
+      final offlineDb = OfflineDb();
+      final data = {
+        'currentBalance': _currentBalance,
+        'totalEarned': _totalEarned,
+        'totalWithdrawn': _totalWithdrawn,
+        'pendingWithdrawals': _pendingWithdrawals,
+        'thisMonthEarnings': _thisMonthEarnings,
+        'thisWeekEarnings': _thisWeekEarnings,
+        'transactions': _transactions,
+        'withdrawalRequests': _withdrawalRequests,
+      };
+      await offlineDb.cacheItem(
+        OfflineDb.walletCacheBox,
+        'wallet_data_$userId',
+        data: data,
+        ttl: const Duration(hours: 12),
+      );
+      debugPrint('[Wallet] Cached wallet data');
+    } catch (e) {
+      debugPrint('[Wallet] Error caching wallet data: $e');
+    }
+  }
+  
+  Future<Map<String, dynamic>?> _getCachedWalletData(String userId) async {
+    try {
+      final offlineDb = OfflineDb();
+      final cached = offlineDb.getCachedItem(OfflineDb.walletCacheBox, 'wallet_data_$userId');
+      return cached?.data as Map<String, dynamic>?;
+    } catch (e) {
+      debugPrint('[Wallet] Error getting cached wallet data: $e');
+      return null;
+    }
+  }
+  
+  void _applyCachedWalletData(Map<String, dynamic> data) {
+    _currentBalance = (data['currentBalance'] as num?)?.toDouble() ?? 0.0;
+    _totalEarned = (data['totalEarned'] as num?)?.toDouble() ?? 0.0;
+    _totalWithdrawn = (data['totalWithdrawn'] as num?)?.toDouble() ?? 0.0;
+    _pendingWithdrawals = (data['pendingWithdrawals'] as num?)?.toDouble() ?? 0.0;
+    _thisMonthEarnings = (data['thisMonthEarnings'] as num?)?.toDouble() ?? 0.0;
+    _thisWeekEarnings = (data['thisWeekEarnings'] as num?)?.toDouble() ?? 0.0;
+    
+    final txList = data['transactions'] as List?;
+    if (txList != null) {
+      _transactions = txList.map((t) => Map<String, dynamic>.from(t as Map)).toList();
+    }
+    
+    final wrList = data['withdrawalRequests'] as List?;
+    if (wrList != null) {
+      _withdrawalRequests = wrList.map((w) => Map<String, dynamic>.from(w as Map)).toList();
     }
   }
 
