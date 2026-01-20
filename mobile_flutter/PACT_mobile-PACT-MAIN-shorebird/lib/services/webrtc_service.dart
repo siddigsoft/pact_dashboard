@@ -864,7 +864,23 @@ class WebRTCService {
     // If we think we're in a call but have no active peer connection,
     // then we're in a stuck state and should reset
     if (_callState.isInCall && _peerConnection == null) {
-      debugPrint('[WebRTC] Detected stuck call state, forcing reset');
+      debugPrint('[WebRTC] Detected stuck call state (no peer connection), forcing reset');
+      await _cleanup();
+      return;
+    }
+    
+    // Also reset if we're in a "ended/rejected/busy" state that wasn't cleaned up
+    if (_callState.status == CallStatus.ended ||
+        _callState.status == CallStatus.rejected ||
+        _callState.status == CallStatus.busy) {
+      debugPrint('[WebRTC] Detected stale terminal call state, forcing reset');
+      await _cleanup();
+      return;
+    }
+    
+    // Reset if local/remote streams are null but we think we're in a call
+    if (_callState.isInCall && _localStream == null && _remoteStream == null) {
+      debugPrint('[WebRTC] Detected stuck call state (no streams), forcing reset');
       await _cleanup();
     }
   }
