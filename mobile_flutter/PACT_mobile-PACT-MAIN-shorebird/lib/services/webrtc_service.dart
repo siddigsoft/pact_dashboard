@@ -544,9 +544,25 @@ class WebRTCService {
     );
   }
 
-  /// Handle incoming offer
+  /// Handle incoming offer (caller receives this after callee accepts)
   Future<void> _handleOffer(Map<String, dynamic> offer) async {
-    debugPrint('[WebRTC] Handling offer');
+    debugPrint('[WebRTC] Handling offer from callee');
+    
+    // Ensure we have local media before creating peer connection
+    // (Caller should already have it from initiateCall, but verify)
+    if (_localStream == null) {
+      debugPrint('[WebRTC] No local stream - setting up media first');
+      try {
+        await _setupLocalMedia(isAudioOnly: _callState.isAudioOnly);
+      } catch (e) {
+        debugPrint('[WebRTC] Failed to setup local media: $e');
+        _errorController.add('Failed to access microphone. Please check permissions.');
+        await _cleanup();
+        _updateCallState(CallStatus.ended);
+        return;
+      }
+    }
+    
     await _createPeerConnection();
 
     await _peerConnection!.setRemoteDescription(
@@ -555,6 +571,8 @@ class WebRTCService {
 
     final answer = await _peerConnection!.createAnswer();
     await _peerConnection!.setLocalDescription(answer);
+    
+    debugPrint('[WebRTC] Sending answer back to callee');
 
     await _sendSignalWithRetry(
       CallSignal(
@@ -616,8 +634,12 @@ class WebRTCService {
         break;
 
       case CallSignalType.callAccept:
-        debugPrint('[WebRTC] Call accepted, creating peer connection');
-        await _createPeerConnection();
+        // Call was accepted by the callee - they will send an offer next
+        // Do NOT create peer connection here - wait for the offer
+        debugPrint('[WebRTC] Call accepted, waiting for offer from callee');
+        _cancelCallTimeoutTimer(); // Stop timeout since call was accepted
+        _callState = _callState.copyWith(status: CallStatus.ringing);
+        _callStateController.add(_callState);
         break;
 
       case CallSignalType.callReject:
