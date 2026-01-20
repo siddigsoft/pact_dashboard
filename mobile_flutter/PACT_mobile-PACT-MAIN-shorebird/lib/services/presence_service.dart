@@ -171,6 +171,11 @@ class PresenceService {
       debugPrint('[PresenceService] Error loading cached users: $e');
     }
   }
+  
+  /// Public method to load cached users (for offline mode)
+  Future<void> loadCachedUsers() async {
+    await _loadCachedUsers();
+  }
 
   Future<void> _cacheUsers(List<UserPresence> users) async {
     try {
