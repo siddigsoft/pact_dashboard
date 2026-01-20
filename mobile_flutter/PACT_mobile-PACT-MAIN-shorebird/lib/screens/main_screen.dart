@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'dashboard_screen.dart';
 import 'field_operations_enhanced_screen.dart';
 // import 'forms_screen.dart'; // Removed forms screen
@@ -48,6 +50,19 @@ class _MainScreenState extends State<MainScreen> {
         return;
       }
 
+      // Try to load cached role first for instant offline support
+      await _loadCachedRole();
+
+      // Check connectivity before making network call
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOnline = !connectivity.contains(ConnectivityResult.none);
+      
+      if (!isOnline) {
+        debugPrint('📴 Offline mode - using cached role');
+        setState(() => _isLoadingRole = false);
+        return;
+      }
+
       final response = await Supabase.instance.client
           .from('profiles')
           .select('role')
@@ -63,13 +78,46 @@ class _MainScreenState extends State<MainScreen> {
               role == 'state_coordinator';
           _isLoadingRole = false;
         });
+        // Cache role for offline use
+        await _cacheRole(role);
         debugPrint('✅ User role: $role, isCoordinator: $_isCoordinator');
       } else {
         setState(() => _isLoadingRole = false);
       }
     } catch (e) {
       debugPrint('❌ Error checking user role: $e');
+      // Fall back to cached role if network fails
+      await _loadCachedRole();
       setState(() => _isLoadingRole = false);
+    }
+  }
+
+  Future<void> _loadCachedRole() async {
+    try {
+      final box = await Hive.openBox('user_profile_cache');
+      final cachedRole = box.get('user_role') as String?;
+      if (cachedRole != null && mounted) {
+        final role = cachedRole.toLowerCase();
+        setState(() {
+          _isCoordinator =
+              role == 'coordinator' ||
+              role == 'field_coordinator' ||
+              role == 'state_coordinator';
+        });
+        debugPrint('📦 Loaded cached role: $role');
+      }
+    } catch (e) {
+      debugPrint('Error loading cached role: $e');
+    }
+  }
+
+  Future<void> _cacheRole(String role) async {
+    try {
+      final box = await Hive.openBox('user_profile_cache');
+      await box.put('user_role', role);
+      debugPrint('💾 Cached role: $role');
+    } catch (e) {
+      debugPrint('Error caching role: $e');
     }
   }
 
@@ -81,23 +129,54 @@ class _MainScreenState extends State<MainScreen> {
         return;
       }
 
-      // Get user profile for name, avatar, and role
-      final response = await Supabase.instance.client
-          .from('profiles')
-          .select('full_name, username, avatar_url, role')
-          .eq('id', user.id)
-          .maybeSingle();
+      // Check connectivity
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOnline = !connectivity.contains(ConnectivityResult.none);
 
-      String userName = 'User';
+      String userName = user.email?.split('@').first ?? 'User';
       String? userAvatar;
+      String? userRole;
 
-      if (response != null) {
-        userName =
-            (response['full_name'] as String?) ??
-            (response['username'] as String?) ??
-            user.email?.split('@').first ??
-            'User';
-        userAvatar = response['avatar_url'] as String?;
+      // Try to load cached profile first
+      try {
+        final box = await Hive.openBox('user_profile_cache');
+        userName = box.get('full_name') as String? ?? userName;
+        userAvatar = box.get('avatar_url') as String?;
+        userRole = box.get('user_role') as String?;
+        debugPrint('📦 Loaded cached profile for WebRTC: $userName');
+      } catch (e) {
+        debugPrint('Error loading cached profile: $e');
+      }
+
+      // Fetch fresh data if online
+      if (isOnline) {
+        try {
+          final response = await Supabase.instance.client
+              .from('profiles')
+              .select('full_name, username, avatar_url, role')
+              .eq('id', user.id)
+              .maybeSingle();
+
+          if (response != null) {
+            userName =
+                (response['full_name'] as String?) ??
+                (response['username'] as String?) ??
+                userName;
+            userAvatar = response['avatar_url'] as String?;
+            userRole = response['role'] as String?;
+            
+            // Cache for offline use
+            final box = await Hive.openBox('user_profile_cache');
+            await box.put('full_name', userName);
+            if (userAvatar != null) await box.put('avatar_url', userAvatar);
+            if (userRole != null) await box.put('user_role', userRole);
+          }
+        } catch (e) {
+          debugPrint('⚠️ Error fetching profile from server: $e');
+        }
+      } else {
+        debugPrint('📴 Offline mode - skipping WebRTC/Presence initialization');
+        return; // Skip WebRTC when offline - it won't work anyway
       }
 
       // Initialize WebRTC service
@@ -114,7 +193,7 @@ class _MainScreenState extends State<MainScreen> {
         odId: user.id,
         userName: userName,
         userAvatar: userAvatar,
-        userRole: response?['role'] as String?,
+        userRole: userRole,
       );
 
       debugPrint('✅ Presence service initialized for user: $userName');
