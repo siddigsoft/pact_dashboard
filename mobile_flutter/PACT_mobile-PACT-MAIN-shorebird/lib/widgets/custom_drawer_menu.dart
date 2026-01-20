@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shorebird_code_push/shorebird_code_push.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../services/auth_service.dart';
 import '../providers/sync_provider.dart';
 import '../providers/profile_provider.dart';
@@ -88,20 +90,70 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
 
   Future<void> _fetchUserRole() async {
     if (widget.currentUser == null) return;
+    
+    // Load cached role first for instant offline support
+    await _loadCachedRole();
+    
+    // Check connectivity
+    final connectivity = await Connectivity().checkConnectivity();
+    final isOnline = !connectivity.contains(ConnectivityResult.none);
+    
+    if (!isOnline) {
+      debugPrint('📴 Drawer: Offline mode - using cached role');
+      return;
+    }
+    
     try {
-      final response = await Supabase.instance.client
+      // Try user_roles table first
+      var response = await Supabase.instance.client
           .from('user_roles')
           .select('role')
           .eq('user_id', widget.currentUser!.id)
           .maybeSingle();
 
+      // Fallback to profiles table if user_roles doesn't have data
+      if (response == null) {
+        response = await Supabase.instance.client
+            .from('profiles')
+            .select('role')
+            .eq('id', widget.currentUser!.id)
+            .maybeSingle();
+      }
+
       if (response != null && mounted) {
+        final role = response['role'] as String? ?? 'User';
         setState(() {
-          _userRole = response['role'] as String;
+          _userRole = role;
         });
+        // Cache role for offline use
+        await _cacheRole(role);
       }
     } catch (e) {
       debugPrint('Error fetching role: $e');
+    }
+  }
+  
+  Future<void> _loadCachedRole() async {
+    try {
+      final box = await Hive.openBox('user_profile_cache');
+      final cachedRole = box.get('user_role') as String?;
+      if (cachedRole != null && mounted) {
+        setState(() {
+          _userRole = cachedRole;
+        });
+        debugPrint('📦 Drawer: Loaded cached role: $cachedRole');
+      }
+    } catch (e) {
+      debugPrint('Error loading cached role in drawer: $e');
+    }
+  }
+  
+  Future<void> _cacheRole(String role) async {
+    try {
+      final box = await Hive.openBox('user_profile_cache');
+      await box.put('user_role', role);
+    } catch (e) {
+      debugPrint('Error caching role in drawer: $e');
     }
   }
 
