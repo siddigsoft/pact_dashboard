@@ -127,11 +127,13 @@ class SyncManager {
     int failedCount = 0;
 
     try {
+      const totalPhases = 5;
+      
       // Phase 1: Sync site visits
       _notifyProgress(SyncProgress(
         phase: 'site_visits',
-        current: 0,
-        total: 1,
+        current: 1,
+        total: totalPhases,
         percentage: 0,
         message: 'Syncing site visits...',
       ));
@@ -143,9 +145,9 @@ class SyncManager {
       // Phase 2: Sync locations
       _notifyProgress(SyncProgress(
         phase: 'locations',
-        current: 1,
-        total: 3,
-        percentage: 33,
+        current: 2,
+        total: totalPhases,
+        percentage: 20,
         message: 'Syncing location data...',
       ));
       final (locSynced, locFailed, locErrors) = await _syncLocations();
@@ -156,9 +158,9 @@ class SyncManager {
       // Phase 3: Sync pending actions
       _notifyProgress(SyncProgress(
         phase: 'pending_actions',
-        current: 2,
-        total: 4,
-        percentage: 50,
+        current: 3,
+        total: totalPhases,
+        percentage: 40,
         message: 'Processing pending actions...',
       ));
       final (actionSynced, actionFailed, actionErrors) = await _syncPendingActions();
@@ -169,9 +171,9 @@ class SyncManager {
       // Phase 4: Sync chat messages
       _notifyProgress(SyncProgress(
         phase: 'chat_messages',
-        current: 3,
-        total: 4,
-        percentage: 75,
+        current: 4,
+        total: totalPhases,
+        percentage: 60,
         message: 'Syncing messages...',
       ));
       final (chatSynced, chatFailed, chatErrors) = await _syncChatMessages();
@@ -182,12 +184,21 @@ class SyncManager {
       // Phase 5: Cleanup
       _notifyProgress(SyncProgress(
         phase: 'cleanup',
-        current: 4,
-        total: 4,
-        percentage: 100,
+        current: 5,
+        total: totalPhases,
+        percentage: 80,
         message: 'Cleaning up...',
       ));
       await _cleanupExpiredData();
+      
+      // Final progress
+      _notifyProgress(SyncProgress(
+        phase: 'complete',
+        current: totalPhases,
+        total: totalPhases,
+        percentage: 100,
+        message: 'Sync complete',
+      ));
 
       // Success
       _consecutiveFailures = 0;
