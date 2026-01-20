@@ -100,6 +100,9 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     setState(() => _isLoading = true);
     
     try {
+      // Initialize WebRTC service with current user info for calls to work
+      await _initializeWebRTCService();
+      
       await _presenceService.fetchAllUsers();
       _allUsers = _presenceService.getAllUsersList();
       _filterUsers();
@@ -108,6 +111,69 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     }
     
     setState(() => _isLoading = false);
+  }
+  
+  Future<void> _initializeWebRTCService() async {
+    try {
+      final currentUserId = _chatService.getCurrentUserId();
+      if (currentUserId == null) {
+        debugPrint('[CommunicationsScreen] Cannot initialize WebRTC - no user ID');
+        return;
+      }
+      
+      // First ensure PresenceService is initialized with the current user
+      if (!_presenceService.isInitialized) {
+        // Fetch user profile data from Supabase
+        final supabase = Supabase.instance.client;
+        final profileResponse = await supabase
+            .from('profiles')
+            .select('id, full_name, avatar_url, role')
+            .eq('id', currentUserId)
+            .maybeSingle();
+        
+        final userName = profileResponse?['full_name'] as String? ?? 'User';
+        final userAvatar = profileResponse?['avatar_url'] as String?;
+        final userRole = profileResponse?['role'] as String?;
+        
+        // Initialize PresenceService first
+        await _presenceService.initialize(
+          odId: currentUserId,
+          userName: userName,
+          userAvatar: userAvatar,
+          userRole: userRole,
+        );
+        debugPrint('[CommunicationsScreen] PresenceService initialized for $userName');
+        
+        // Now initialize WebRTC with the same data
+        if (!_webrtcService.isInitialized) {
+          await _webrtcService.initialize(
+            currentUserId,
+            userName,
+            userAvatar: userAvatar,
+          );
+          debugPrint('[CommunicationsScreen] WebRTC service initialized for $userName');
+        }
+      } else {
+        // PresenceService already initialized, use its data for WebRTC
+        final currentUserData = _presenceService.getCurrentUserPresence();
+        final userName = currentUserData?.userName ?? 'User';
+        final userAvatar = currentUserData?.userAvatar;
+        
+        if (!_webrtcService.isInitialized) {
+          await _webrtcService.initialize(
+            currentUserId,
+            userName,
+            userAvatar: userAvatar,
+          );
+          debugPrint('[CommunicationsScreen] WebRTC service initialized for $userName');
+        }
+      }
+    } catch (e) {
+      debugPrint('[CommunicationsScreen] Error initializing WebRTC: $e');
+      if (mounted) {
+        _showMessage('Failed to initialize communications. Please try again.', isError: true);
+      }
+    }
   }
 
   void _subscribeToPresence() {

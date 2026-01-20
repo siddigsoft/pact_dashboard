@@ -8,6 +8,7 @@ import 'dart:io';
 import '../widgets/reusable_app_bar.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../theme/app_colors.dart';
+import '../services/offline/offline_db.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -38,6 +39,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _buildNumber = '';
   int? _patchNumber;
 
+  // Sync status
+  int _pendingSyncCount = 0;
+  int _pendingSiteVisitsCount = 0;
+  int _pendingRequestsCount = 0;
+
   // Password change
   final bool _showChangePassword = false;
   final TextEditingController _oldPasswordController = TextEditingController();
@@ -53,6 +59,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadUserData();
     _loadAppVersion();
+    _loadSyncStatus();
+  }
+
+  Future<void> _loadSyncStatus() async {
+    try {
+      final offlineDb = OfflineDb();
+      final pendingSync = offlineDb.getPendingSyncActions(status: 'pending');
+      final pendingSiteVisits = offlineDb.getPendingSiteVisits();
+      
+      setState(() {
+        _pendingSyncCount = pendingSync.length;
+        _pendingSiteVisitsCount = pendingSiteVisits.length;
+        _pendingRequestsCount = pendingSync.length + pendingSiteVisits.length;
+      });
+    } catch (e) {
+      debugPrint('Error loading sync status: $e');
+    }
   }
   
   Future<void> _loadAppVersion() async {
@@ -443,6 +466,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildSyncStatusBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orange,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.cloud_upload, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pending Sync',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange[800],
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  '$_pendingRequestsCount item${_pendingRequestsCount > 1 ? 's' : ''} waiting to upload',
+                  style: GoogleFonts.poppins(
+                    color: Colors.orange[700],
+                    fontSize: 12,
+                  ),
+                ),
+                if (_pendingSiteVisitsCount > 0)
+                  Text(
+                    '($_pendingSiteVisitsCount site visit${_pendingSiteVisitsCount > 1 ? 's' : ''}, $_pendingSyncCount other action${_pendingSyncCount > 1 ? 's' : ''})',
+                    style: GoogleFonts.poppins(
+                      color: Colors.orange[600],
+                      fontSize: 11,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.refresh, color: Colors.orange[700]),
+            onPressed: _loadSyncStatus,
+            tooltip: 'Refresh sync status',
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSwitchTile({
     required String title,
     required String subtitle,
@@ -487,6 +570,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Sync Status Banner
+                          if (_pendingRequestsCount > 0)
+                            _buildSyncStatusBanner(),
+                            
                           // Profile Section
                           _buildSection(
                             title: 'Profile',

@@ -437,6 +437,20 @@ class PresenceService {
   int get onlineUsersCount => _onlineUsers.length;
   int get totalUsersCount => _allUsers.length;
 
+  /// Get current user's presence info (for WebRTC initialization)
+  UserPresence? getCurrentUserPresence() {
+    if (_currentUserId == null) return null;
+    
+    return UserPresence(
+      odId: _currentUserId!,
+      userName: _currentUserName ?? 'User',
+      userAvatar: _currentUserAvatar,
+      role: _currentUserRole,
+      isOnline: true,
+      isInCall: false,
+    );
+  }
+
   void dispose() {
     _heartbeatTimer?.cancel();
     _connectivitySubscription?.cancel();
