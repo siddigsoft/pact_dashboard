@@ -2084,28 +2084,7 @@ class _MMPScreenState extends State<MMPScreen> {
       margin: const EdgeInsets.only(top: 8),
       child: Column(
         children: [
-          // In-App Call Button (for PACT users)
-          if (isPactUser)
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => _initiateInAppCall(
-                    contactUserId.toString(),
-                    contactName.toString(),
-                    isAudioOnly: true,
-                  ),
-                  icon: const Icon(Icons.phone_in_talk, size: 18),
-                  label: Text('In-App Call to $contactName'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-            ),
+          // In-App Call button removed per user request - use Communications screen instead
           // External contact buttons (Phone, SMS, WhatsApp)
           if (phoneStr.isNotEmpty)
             Row(

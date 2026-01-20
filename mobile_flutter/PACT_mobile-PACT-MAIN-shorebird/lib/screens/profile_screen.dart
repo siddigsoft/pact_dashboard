@@ -2,8 +2,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/pact_user_profile.dart';
 import '../providers/profile_provider.dart';
+import '../services/offline/offline_db.dart';
+import '../theme/app_colors.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -16,7 +20,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _imagePicker = ImagePicker();
 
-  // Form controllers
   late TextEditingController _fullNameController;
   late TextEditingController _usernameController;
   late TextEditingController _phoneController;
@@ -26,6 +29,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   XFile? _selectedImage;
   Uint8List? _selectedImageBytes;
 
+  // Resolved names from lookup tables
+  String? _hubName;
+  String? _stateName;
+  String? _localityName;
+  List<String> _classificationNames = [];
+  bool _isLoadingLookups = false;
+
+  // Sync status
+  int _pendingSyncCount = 0;
+  int _pendingSiteVisitsCount = 0;
+  int _pendingRequestsCount = 0;
+  bool _isLoadingSyncStatus = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,9 +50,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _phoneController = TextEditingController();
     _emailController = TextEditingController();
 
-    // Load profile on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(profileProvider.notifier).loadProfile();
+      _loadSyncStatus();
     });
   }
 
@@ -47,6 +63,111 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _phoneController.dispose();
     _emailController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSyncStatus() async {
+    setState(() => _isLoadingSyncStatus = true);
+    
+    try {
+      final offlineDb = OfflineDb();
+      final pendingSync = offlineDb.getPendingSyncActions(status: 'pending');
+      final pendingSiteVisits = offlineDb.getPendingSiteVisits();
+      
+      setState(() {
+        _pendingSyncCount = pendingSync.length;
+        _pendingSiteVisitsCount = pendingSiteVisits.length;
+        _pendingRequestsCount = pendingSync.length + pendingSiteVisits.length;
+        _isLoadingSyncStatus = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading sync status: $e');
+      setState(() => _isLoadingSyncStatus = false);
+    }
+  }
+
+  Future<void> _loadLookupNames(PACTUserProfile profile) async {
+    if (_isLoadingLookups) return;
+    
+    setState(() => _isLoadingLookups = true);
+    
+    try {
+      final supabase = Supabase.instance.client;
+      
+      // Load hub name
+      if (profile.hubId != null && profile.hubId!.isNotEmpty) {
+        try {
+          final hubResponse = await supabase
+              .from('hubs')
+              .select('name')
+              .eq('id', profile.hubId!)
+              .maybeSingle();
+          if (hubResponse != null) {
+            _hubName = hubResponse['name'] as String?;
+          }
+        } catch (e) {
+          debugPrint('Error loading hub name: $e');
+        }
+      }
+      
+      // Load state name
+      if (profile.stateId != null && profile.stateId!.isNotEmpty) {
+        try {
+          final stateResponse = await supabase
+              .from('states')
+              .select('name')
+              .eq('id', profile.stateId!)
+              .maybeSingle();
+          if (stateResponse != null) {
+            _stateName = stateResponse['name'] as String?;
+          }
+        } catch (e) {
+          debugPrint('Error loading state name: $e');
+        }
+      }
+      
+      // Load locality name
+      if (profile.localityId != null && profile.localityId!.isNotEmpty) {
+        try {
+          final localityResponse = await supabase
+              .from('localities')
+              .select('name')
+              .eq('id', profile.localityId!)
+              .maybeSingle();
+          if (localityResponse != null) {
+            _localityName = localityResponse['name'] as String?;
+          }
+        } catch (e) {
+          debugPrint('Error loading locality name: $e');
+        }
+      }
+      
+      // Load classifications
+      try {
+        final classificationsResponse = await supabase
+            .from('user_classifications')
+            .select('classification_level, role_scope')
+            .eq('user_id', profile.id);
+        
+        _classificationNames = (classificationsResponse as List)
+            .map((c) {
+              final level = c['classification_level'] as String? ?? '';
+              final scope = c['role_scope'] as String? ?? '';
+              return scope.isNotEmpty ? '$level ($scope)' : level;
+            })
+            .toList();
+      } catch (e) {
+        debugPrint('Error loading classifications: $e');
+      }
+      
+      if (mounted) {
+        setState(() => _isLoadingLookups = false);
+      }
+    } catch (e) {
+      debugPrint('Error loading lookup names: $e');
+      if (mounted) {
+        setState(() => _isLoadingLookups = false);
+      }
+    }
   }
 
   void _populateControllers(PACTUserProfile profile) {
@@ -72,7 +193,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _selectedImageBytes = bytes;
         });
 
-        // Upload immediately
         await _uploadAvatar();
       }
     } catch (e) {
@@ -171,6 +291,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profileState = ref.watch(profileProvider);
     final profile = profileState.profile;
 
+    // Load lookup names when profile is available
+    if (profile != null && !_isLoadingLookups && _hubName == null && _stateName == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadLookupNames(profile);
+      });
+    }
+
     // Populate controllers when profile is loaded
     if (profile != null && !_isEditMode) {
       if (_fullNameController.text.isEmpty && profile.fullName != null) {
@@ -189,7 +316,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: Text(
+          'Profile',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: AppColors.primaryBlue,
+        foregroundColor: Colors.white,
         actions: [
           if (profile != null && !profileState.isLoading)
             IconButton(
@@ -197,11 +329,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onPressed: () {
                 setState(() {
                   if (_isEditMode) {
-                    // Cancel edit - reset controllers
                     _populateControllers(profile);
                     _isEditMode = false;
                   } else {
-                    // Enter edit mode
                     _populateControllers(profile);
                     _isEditMode = true;
                   }
@@ -241,13 +371,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // Sync Status Banner
+                    if (_pendingRequestsCount > 0) _buildSyncStatusBanner(),
+                    
                     // Avatar Section
                     Center(
                       child: Stack(
                         children: [
                           CircleAvatar(
                             radius: 60,
-                            backgroundColor: Colors.grey[300],
+                            backgroundColor: AppColors.primaryBlue.withOpacity(0.2),
                             backgroundImage: _selectedImageBytes != null
                                 ? MemoryImage(_selectedImageBytes!)
                                 : profile.hasAvatar
@@ -258,9 +391,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     _selectedImageBytes == null
                                 ? Text(
                                     profile.initials,
-                                    style: const TextStyle(
+                                    style: GoogleFonts.poppins(
                                       fontSize: 32,
                                       fontWeight: FontWeight.bold,
+                                      color: AppColors.primaryBlue,
                                     ),
                                   )
                                 : null,
@@ -269,7 +403,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             bottom: 0,
                             right: 0,
                             child: CircleAvatar(
-                              backgroundColor: Theme.of(context).primaryColor,
+                              backgroundColor: AppColors.primaryOrange,
                               child: IconButton(
                                 icon: const Icon(
                                   Icons.camera_alt,
@@ -292,13 +426,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       children: [
                         _buildBadge(
                           label: profile.roleDisplayName,
-                          color: Colors.blue,
+                          color: AppColors.primaryBlue,
                           icon: Icons.badge,
                         ),
                         _buildBadge(
                           label: profile.status.toUpperCase(),
                           color: profile.isApproved
-                              ? Colors.green
+                              ? AppColors.primaryGreen
                               : Colors.orange,
                           icon: profile.isApproved
                               ? Icons.check_circle
@@ -346,7 +480,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       controller: _emailController,
                       label: 'Email',
                       icon: Icons.email,
-                      enabled: false, // Email is read-only
+                      enabled: false,
                     ),
                     const SizedBox(height: 16),
 
@@ -359,39 +493,109 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Additional Info (Read-only)
-                    if (profile.employeeId != null) ...[
-                      _buildInfoRow('Employee ID', profile.employeeId!),
-                      const SizedBox(height: 12),
-                    ],
-
-                    if (profile.hubId != null) ...[
-                      _buildInfoRow('Hub ID', profile.hubId!),
-                      const SizedBox(height: 12),
-                    ],
-
-                    if (profile.stateId != null) ...[
-                      _buildInfoRow('State ID', profile.stateId!),
-                      const SizedBox(height: 12),
-                    ],
-
-                    if (profile.localityId != null) ...[
-                      _buildInfoRow('Locality ID', profile.localityId!),
-                      const SizedBox(height: 12),
-                    ],
-
-                    _buildInfoRow(
-                      'Member Since',
-                      _formatDate(profile.createdAt),
+                    // Organization Info Section
+                    _buildSection(
+                      title: 'Organization',
+                      icon: Icons.business,
+                      color: AppColors.primaryBlue,
+                      children: [
+                        if (profile.hubId != null) ...[
+                          _buildInfoRow(
+                            'Hub',
+                            _isLoadingLookups ? 'Loading...' : (_hubName ?? 'Not assigned'),
+                            icon: Icons.hub,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (profile.stateId != null) ...[
+                          _buildInfoRow(
+                            'State',
+                            _isLoadingLookups ? 'Loading...' : (_stateName ?? 'Not assigned'),
+                            icon: Icons.location_city,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (profile.localityId != null) ...[
+                          _buildInfoRow(
+                            'Locality',
+                            _isLoadingLookups ? 'Loading...' : (_localityName ?? 'Not assigned'),
+                            icon: Icons.location_on,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (profile.employeeId != null) ...[
+                          _buildInfoRow(
+                            'Employee ID',
+                            profile.employeeId!,
+                            icon: Icons.badge_outlined,
+                          ),
+                        ],
+                      ],
                     ),
+                    const SizedBox(height: 16),
 
-                    if (profile.lastActive != null) ...[
-                      const SizedBox(height: 12),
-                      _buildInfoRow(
-                        'Last Active',
-                        _formatDate(profile.lastActive!),
+                    // Classifications Section
+                    if (_classificationNames.isNotEmpty || profile.classification != null)
+                      _buildSection(
+                        title: 'Classifications',
+                        icon: Icons.stars,
+                        color: AppColors.primaryOrange,
+                        children: [
+                          if (_classificationNames.isNotEmpty)
+                            ..._classificationNames.map((name) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _buildInfoRow(
+                                'Level',
+                                name,
+                                icon: Icons.grade,
+                              ),
+                            ))
+                          else if (profile.classification != null) ...[
+                            _buildInfoRow(
+                              'Level',
+                              profile.classification!.level.toUpperCase(),
+                              icon: Icons.grade,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildInfoRow(
+                              'Scope',
+                              profile.classification!.roleScope,
+                              icon: Icons.work,
+                            ),
+                            if (profile.classification!.hasRetainer) ...[
+                              const SizedBox(height: 8),
+                              _buildInfoRow(
+                                'Retainer',
+                                '${profile.classification!.retainerAmount} ${profile.classification!.retainerCurrency}',
+                                icon: Icons.payments,
+                              ),
+                            ],
+                          ],
+                        ],
                       ),
-                    ],
+                    const SizedBox(height: 16),
+
+                    // Timestamps Section
+                    _buildSection(
+                      title: 'Activity',
+                      icon: Icons.access_time,
+                      color: Colors.teal,
+                      children: [
+                        _buildInfoRow(
+                          'Member Since',
+                          _formatDate(profile.createdAt),
+                          icon: Icons.calendar_today,
+                        ),
+                        if (profile.lastActive != null) ...[
+                          const SizedBox(height: 12),
+                          _buildInfoRow(
+                            'Last Active',
+                            _formatDate(profile.lastActive!),
+                            icon: Icons.history,
+                          ),
+                        ],
+                      ],
+                    ),
 
                     // Save Button
                     if (_isEditMode) ...[
@@ -403,7 +607,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               ? null
                               : _saveProfile,
                           style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryBlue,
+                            foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           child: profileState.isLoading
                               ? const SizedBox(
@@ -411,9 +620,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   width: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
+                                    color: Colors.white,
                                   ),
                                 )
-                              : const Text('Save Changes'),
+                              : Text(
+                                  'Save Changes',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
                         ),
                       ),
                     ],
@@ -426,6 +642,123 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  Widget _buildSyncStatusBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orange,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.cloud_upload, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pending Sync',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange[800],
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  '$_pendingRequestsCount item${_pendingRequestsCount > 1 ? 's' : ''} waiting to upload',
+                  style: GoogleFonts.poppins(
+                    color: Colors.orange[700],
+                    fontSize: 12,
+                  ),
+                ),
+                if (_pendingSiteVisitsCount > 0)
+                  Text(
+                    '($_pendingSiteVisitsCount site visit${_pendingSiteVisitsCount > 1 ? 's' : ''}, $_pendingSyncCount other action${_pendingSyncCount > 1 ? 's' : ''})',
+                    style: GoogleFonts.poppins(
+                      color: Colors.orange[600],
+                      fontSize: 11,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.refresh, color: Colors.orange[700]),
+            onPressed: _loadSyncStatus,
+            tooltip: 'Refresh sync status',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required List<Widget> children,
+  }) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(children: children),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBadge({
     required String label,
     required Color color,
@@ -435,7 +768,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       avatar: Icon(icon, size: 16, color: Colors.white),
       label: Text(
         label,
-        style: const TextStyle(color: Colors.white, fontSize: 12),
+        style: GoogleFonts.poppins(color: Colors.white, fontSize: 12),
       ),
       backgroundColor: color,
     );
@@ -454,9 +787,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       enabled: enabled,
       validator: validator,
       keyboardType: keyboardType,
+      style: GoogleFonts.poppins(),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon),
+        labelStyle: GoogleFonts.poppins(color: AppColors.textLight),
+        prefixIcon: Icon(icon, color: AppColors.primaryBlue),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: !enabled,
         fillColor: enabled ? null : Colors.grey[100],
@@ -464,14 +799,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(String label, String value, {IconData? icon}) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+        if (icon != null) ...[
+          Icon(icon, size: 18, color: AppColors.textLight),
+          const SizedBox(width: 8),
+        ],
         Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+          label,
+          style: GoogleFonts.poppins(color: AppColors.textLight, fontSize: 13),
+        ),
+        const Spacer(),
+        Flexible(
+          child: Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+              color: AppColors.textDark,
+            ),
+            textAlign: TextAlign.end,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

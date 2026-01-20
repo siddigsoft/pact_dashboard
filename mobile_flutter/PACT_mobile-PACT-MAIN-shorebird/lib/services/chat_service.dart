@@ -1002,6 +1002,7 @@ class ChatService {
       try {
         await _supabase.from('chats').insert({
           'id': chatId,
+          'type': 'direct',  // REQUIRED: 'type' column cannot be null
           'is_group': false,
           'pair_key': pairKey,
           'created_by': currentUserId,
@@ -1013,6 +1014,7 @@ class ChatService {
         // Try without pair_key in case column doesn't exist
         await _supabase.from('chats').insert({
           'id': chatId,
+          'type': 'direct',  // REQUIRED: 'type' column cannot be null
           'is_group': false,
           'created_by': currentUserId,
           'created_at': now,
