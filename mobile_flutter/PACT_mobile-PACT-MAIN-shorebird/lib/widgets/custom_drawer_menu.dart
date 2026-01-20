@@ -19,8 +19,7 @@ import '../screens/field_operations_enhanced_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/wallet_screen.dart';
 import '../screens/site_verification_screen.dart';
-// Chats screen disabled - using Communications only
-// import '../screens/chats_screen.dart';
+import '../screens/chats_screen.dart';
 import '../screens/help_screen.dart';
 import '../screens/support_screen.dart';
 import '../screens/help_support_screen.dart';
@@ -522,22 +521,21 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           widget.onClose();
                         },
                       ),
-                      // Chats screen disabled - using Communications only
-                      // _MenuItemData(
-                      //   icon: Icons.chat_rounded,
-                      //   title: 'Chats',
-                      //   subtitle: 'Messages and conversations',
-                      //   iconColor: Colors.blue,
-                      //   onTap: () {
-                      //     Navigator.push(
-                      //       context,
-                      //       MaterialPageRoute(
-                      //         builder: (context) => const ChatsScreen(),
-                      //       ),
-                      //     );
-                      //     widget.onClose();
-                      //   },
-                      // ),
+                      _MenuItemData(
+                        icon: Icons.chat_rounded,
+                        title: 'Chats',
+                        subtitle: 'Messages and conversations',
+                        iconColor: Colors.blue,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ChatsScreen(),
+                            ),
+                          );
+                          widget.onClose();
+                        },
+                      ),
                       _MenuItemData(
                         icon: Icons.help_rounded,
                         title: 'Help & Support',
