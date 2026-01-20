@@ -180,10 +180,13 @@ class _MMPScreenState extends State<MMPScreen> {
   /// Initialize from cached data when offline
   Future<void> _initializeFromCache(String userId) async {
     try {
+      // CRITICAL: Set _userId BEFORE loading from cache (cache keys use _userId)
+      _userId = userId;
+      
       if (mounted) {
         setState(() => _isOffline = true);
       }
-      debugPrint('[_initializeFromCache] Loading cached profile and data');
+      debugPrint('[_initializeFromCache] Loading cached profile and data for user: $_userId');
       final offlineService = OfflineDataService();
       
       // Load cached profile
