@@ -768,6 +768,23 @@ class WebRTCService {
     return muted;
   }
 
+  /// Toggle speaker (earpiece/speaker)
+  bool toggleSpeaker() {
+    final speakerOn = !_callState.isSpeakerOn;
+    
+    // Use flutter_webrtc helper to switch audio output
+    try {
+      Helper.setSpeakerphoneOn(speakerOn);
+    } catch (e) {
+      debugPrint('[WebRTC] Error toggling speaker: $e');
+    }
+
+    _callState = _callState.copyWith(isSpeakerOn: speakerOn);
+    _callStateController.add(_callState);
+
+    return speakerOn;
+  }
+
   /// Switch camera (front/back)
   Future<void> switchCamera() async {
     if (_localStream == null) return;

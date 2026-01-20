@@ -21,6 +21,7 @@ class CallState {
   final String? remoteUserAvatar;
   final bool isVideoEnabled;
   final bool isMuted;
+  final bool isSpeakerOn;
   final DateTime? startTime;
   final String? jitsiRoom;
   final bool isAudioOnly;
@@ -34,6 +35,7 @@ class CallState {
     this.remoteUserAvatar,
     this.isVideoEnabled = false,
     this.isMuted = false,
+    this.isSpeakerOn = false,
     this.startTime,
     this.jitsiRoom,
     this.isAudioOnly = false,
@@ -53,6 +55,7 @@ class CallState {
     String? remoteUserAvatar,
     bool? isVideoEnabled,
     bool? isMuted,
+    bool? isSpeakerOn,
     DateTime? startTime,
     String? jitsiRoom,
     bool? isAudioOnly,
@@ -66,6 +69,7 @@ class CallState {
       remoteUserAvatar: remoteUserAvatar ?? this.remoteUserAvatar,
       isVideoEnabled: isVideoEnabled ?? this.isVideoEnabled,
       isMuted: isMuted ?? this.isMuted,
+      isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
       startTime: startTime ?? this.startTime,
       jitsiRoom: jitsiRoom ?? this.jitsiRoom,
       isAudioOnly: isAudioOnly ?? this.isAudioOnly,
