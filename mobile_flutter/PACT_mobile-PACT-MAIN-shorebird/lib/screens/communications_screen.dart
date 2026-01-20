@@ -101,14 +101,40 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     setState(() => _isLoading = true);
     
     try {
-      // Initialize WebRTC service with current user info for calls to work
+      // Check connectivity first
+      await _checkConnectivity();
+      
+      if (!_isOnline) {
+        // OFFLINE: Load cached users
+        debugPrint('[CommunicationsScreen] Offline - loading cached users');
+        _allUsers = _presenceService.getAllUsersList();
+        if (_allUsers.isEmpty) {
+          // Try loading from cache
+          await _presenceService.loadCachedUsers();
+          _allUsers = _presenceService.getAllUsersList();
+        }
+        _filterUsers();
+        setState(() => _isLoading = false);
+        return;
+      }
+      
+      // ONLINE: Initialize services and fetch users
       await _initializeWebRTCService();
       
       await _presenceService.fetchAllUsers();
       _allUsers = _presenceService.getAllUsersList();
       _filterUsers();
+      
+      // Sync any pending messages
+      final syncedCount = await _chatService.syncPendingMessages();
+      if (syncedCount > 0 && mounted) {
+        _showMessage('Synced $syncedCount pending messages');
+      }
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error loading users: $e');
+      // Fallback to cached data
+      _allUsers = _presenceService.getAllUsersList();
+      _filterUsers();
     }
     
     setState(() => _isLoading = false);
