@@ -40,14 +40,6 @@ waitForPort = 5000
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 5001
-externalPort = 3001
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
 [objectStorage]
 defaultBucketID = "replit-objstore-005adaa9-1cce-4c34-9d82-43b2125a4ea5"
 
