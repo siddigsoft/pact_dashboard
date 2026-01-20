@@ -277,15 +277,27 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       return;
     }
 
+    // Check if target user is online
+    if (!user.isOnline) {
+      _showMessage('${user.userName} is offline. Send a message instead.', isError: true);
+      return;
+    }
+
     if (user.isInCall) {
       _showMessage('${user.userName} is currently in another call', isError: true);
       return;
     }
 
-    // Check if already in a call
+    // Check if already in a call - force reset if stuck
     if (_webrtcService.callState.isInCall) {
-      _showMessage('You are already in a call', isError: true);
-      return;
+      // Try to reset stuck state first
+      await _webrtcService.forceResetIfNotInActiveCall();
+      
+      // Check again after reset
+      if (_webrtcService.callState.isInCall) {
+        _showMessage('You are already in a call', isError: true);
+        return;
+      }
     }
 
     HapticFeedback.mediumImpact();
@@ -340,14 +352,29 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       return;
     }
     
-    if (!_isOnline) {
-      _showOfflineMessage('Starting new chats requires an internet connection');
-      return;
-    }
-    
     try {
       debugPrint('[CommunicationsScreen] Initiating chat with user: ${user.odId}');
-      // Find or create chat with user
+      
+      if (!_isOnline) {
+        // OFFLINE: Try to find cached chat first
+        debugPrint('[CommunicationsScreen] Offline - looking for cached chat');
+        final cachedChats = await _chatService.getCachedUserChats();
+        final existingChat = cachedChats.where((c) => 
+          c.participants?.any((p) => p.odId == user.odId) ?? false
+        ).toList();
+        
+        if (existingChat.isNotEmpty && mounted) {
+          debugPrint('[CommunicationsScreen] Found cached chat: ${existingChat.first.id}');
+          Navigator.pushNamed(context, '/chat', arguments: existingChat.first);
+          _showMessage('Offline mode - messages will sync when online');
+          return;
+        } else {
+          _showOfflineMessage('No existing chat found. Start a chat when online.');
+          return;
+        }
+      }
+      
+      // ONLINE: Find or create chat with user
       final chat = await _chatService.findOrCreateDirectChat(user.odId);
       
       if (chat != null && mounted) {
@@ -732,19 +759,23 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                       onPressed: () => _initiateChat(user),
                       tooltip: 'Message',
                     ),
-                    // Call button
+                    // Call button - only enabled for online users who are available
                     IconButton(
                       icon: Icon(
                         Icons.call,
-                        color: user.isInCall
-                            ? Colors.grey
-                            : (_isOnline ? AppColors.primaryGreen : Colors.grey),
+                        color: (user.isOnline && !user.isInCall && _isOnline)
+                            ? AppColors.primaryGreen
+                            : Colors.grey.withOpacity(0.5),
                       ),
                       iconSize: 22,
-                      onPressed: user.isInCall || !_isOnline
-                          ? null
-                          : () => _initiateCall(user),
-                      tooltip: user.isInCall ? 'User is busy' : 'Call',
+                      onPressed: (user.isOnline && !user.isInCall && _isOnline)
+                          ? () => _initiateCall(user)
+                          : null,
+                      tooltip: !_isOnline
+                          ? 'You are offline'
+                          : (!user.isOnline
+                              ? 'User is offline'
+                              : (user.isInCall ? 'User is busy' : 'Call')),
                     ),
                   ],
                 ),
@@ -899,35 +930,43 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: (user.isInCall || !_isOnline)
-                        ? Colors.grey.withOpacity(0.1)
-                        : AppColors.primaryGreen.withOpacity(0.1),
+                    color: (user.isOnline && !user.isInCall && _isOnline)
+                        ? AppColors.primaryGreen.withOpacity(0.1)
+                        : Colors.grey.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     Icons.call,
-                    color: (user.isInCall || !_isOnline) ? Colors.grey : AppColors.primaryGreen,
+                    color: (user.isOnline && !user.isInCall && _isOnline)
+                        ? AppColors.primaryGreen
+                        : Colors.grey,
                   ),
                 ),
                 title: Text(
                   'Voice Call',
                   style: GoogleFonts.poppins(
                     fontWeight: FontWeight.w500,
-                    color: (user.isInCall || !_isOnline) ? Colors.grey : null,
+                    color: (user.isOnline && !user.isInCall && _isOnline)
+                        ? null
+                        : Colors.grey,
                   ),
                 ),
                 subtitle: Text(
-                  user.isInCall
-                      ? 'User is currently in a call'
-                      : (!_isOnline ? 'Requires internet connection' : 'Start an in-app call'),
+                  !_isOnline
+                      ? 'You are offline'
+                      : (!user.isOnline
+                          ? 'User is offline - send a message instead'
+                          : (user.isInCall
+                              ? 'User is currently in a call'
+                              : 'Start an in-app voice call')),
                   style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
                 ),
-                onTap: (user.isInCall || !_isOnline)
-                    ? null
-                    : () {
+                onTap: (user.isOnline && !user.isInCall && _isOnline)
+                    ? () {
                         Navigator.pop(context);
                         _initiateCall(user);
-                      },
+                      }
+                    : null,
               ),
               
               const SizedBox(height: 16),
