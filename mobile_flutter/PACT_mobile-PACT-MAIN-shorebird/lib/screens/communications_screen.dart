@@ -360,7 +360,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         debugPrint('[CommunicationsScreen] Offline - looking for cached chat');
         final cachedChats = await _chatService.getCachedUserChats();
         final existingChat = cachedChats.where((c) => 
-          c.participants?.any((p) => p.odId == user.odId) ?? false
+          c.participants?.any((p) => p.userId == user.odId) ?? false
         ).toList();
         
         if (existingChat.isNotEmpty && mounted) {
