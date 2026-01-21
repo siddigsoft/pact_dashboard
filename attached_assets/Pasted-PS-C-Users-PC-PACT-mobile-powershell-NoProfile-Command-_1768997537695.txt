@@ -1,0 +1,61 @@
+PS C:\Users\PC\PACT_mobile> powershell -NoProfile -Command "Stop-Process -Name emulator -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Start-Process -FilePath 'C:\Users\PC\AppData\Local\Android\sdk\emulator\emulator.exe' -ArgumentList '-avd','Medium_Phone_API_36.1','-wipe-data','-no-snapshot-load' -NoNewWindow; $adb='C:\Users\PC\AppData\Local\Android\sdk\platform-tools\adb.exe'; for($i=0;$i -lt 120;$i++){ $out=& $adb devices -l; if($out -match 'emulator-5554\s+device'){ Write-Output 'EMULATOR ONLINE'; break } Write-Output "Waiting for emulator to appear... ($i)"; Start-Sleep -Seconds 3 }; if($out -match 'emulator-5554\s+device'){ & $adb -s emulator-5554 install -r 'build\app\outputs\flutter-apk\app-debug.apk'; & $adb -s emulator-5554 shell am start -n com.example.pact_mobile/.MainActivity; Write-Output 'APK installed and app started'; } else { Write-Output 'Emulator did not become online in time'; exit 1 }"
+At line:1 char:345
++ ... Local\Android\sdk\platform-tools\adb.exe'; for(=0; -lt 120;++){ =&  d ...
++                                                                  ~
+Missing expression after unary operator '++'.
+At line:1 char:349
++ ... \Android\sdk\platform-tools\adb.exe'; for(=0; -lt 120;++){ =&  device ...
++                                                                 ~
+The ampersand (&) character is not allowed. The & operator is reserved for future use;      
+wrap an ampersand in double quotation marks ("&") to pass it as part of a string.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException       
+    + FullyQualifiedErrorId : MissingExpressionAfterOperator
+
+PS C:\Users\PC\PACT_mobile> powershell -NoProfile -Command "Stop-Process -Name emulator -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Start-Process -FilePath 'C:\Users\PC\AppData\Local\Android\sdk\emulator\emulator.exe' -ArgumentList '-avd','Medium_Phone_API_36.1','-wipe-data','-no-snapshot-load' -NoNewWindow; $adb='C:\Users\PC\AppData\Local\Android\sdk\platform-tools\adb.exe'; for($i=0;$i -lt 120;$i++){ $out=& $adb devices -l; if($out -match 'emulator-5554\s+device'){ Write-Output 'EMULATOR ONLINE'; break } Write-Output ('Waiting for emulator... ' + $i); Start-Sleep -Seconds 3 }; if($out -match 'emulator-5554\s+device'){ & $adb -s emulator-5554 install -r 'build\app\outputs\flutter-apk\app-debug.apk'; & $adb -s emulator-5554 shell am start -n com.example.pact_mobile/.MainActivity; Write-Output 'APK installed and app started'; } else { Write-Output 'Emulator did not become online in time'; exit 1 }"
+At line:1 char:345
++ ... Local\Android\sdk\platform-tools\adb.exe'; for(=0; -lt 120;++){ =&  d ...
++                                                                  ~
+Missing expression after unary operator '++'.
+At line:1 char:349
++ ... \Android\sdk\platform-tools\adb.exe'; for(=0; -lt 120;++){ =&  device ...
++                                                                 ~
+The ampersand (&) character is not allowed. The & operator is reserved for future use;      
+wrap an ampersand in double quotation marks ("&") to pass it as part of a string.
+At line:1 char:484
++ ... R ONLINE'; break } Write-Output ('Waiting for emulator... ' + ); Star ...
++                                                                  ~
+You must provide a value expression following the '+' operator.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException       
+    + FullyQualifiedErrorId : MissingExpressionAfterOperator
+ 
+PS C:\Users\PC\PACT_mobile> # Start emulator
+>> Start-Process "C:\Users\PC\AppData\Local\Android\sdk\emulator\emulator.exe" -ArgumentList
+ '-avd','Medium_Phone_API_36.1','-wipe-data','-no-snapshot-load'
+>>
+>> # Wait for it to be ready (check manually)
+>> adb devices
+>>
+>> # Once it shows "device", install the APK
+>> adb install -r build\app\outputs\flutter-apk\app-debug.apk
+>>
+>> # Start the app
+>> adb shell am start -n com.example.pact_mobile/.MainActivity
+adb: 
+Line |
+   5 |  adb devices
+     |  ~~~
+     | The term 'adb' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+adb: 
+Line |
+   8 |  adb install -r build\app\outputs\flutter-apk\app-debug.apk
+     |  ~~~
+     | The term 'adb' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+adb: 
+Line |
+  11 |  adb shell am start -n com.example.pact_mobile/.MainActivity
+     |  ~~~
+     | The term 'adb' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+PS C:\Users\PC\PACT_mobile> 
