@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:io';
@@ -22,15 +23,51 @@ class OfflineDataService {
 
   /// Initialize Hive and register adapters
   static Future<void> initialize() async {
-    await Hive.initFlutter();
+    try {
+      await Hive.initFlutter();
 
-    // Open boxes for different data types
-    await Hive.openBox(_siteVisitsBox);
-    await Hive.openBox(_reportsBox);
-    await Hive.openBox(_mmpsBox);
-    await Hive.openBox(_chatMessagesBox);
-    await Hive.openBox(_syncQueueBox);
-    await Hive.openBox(_lastSyncBox);
+      // Open boxes for different data types with error recovery
+      await _openBoxSafely(_siteVisitsBox);
+      await _openBoxSafely(_reportsBox);
+      await _openBoxSafely(_mmpsBox);
+      await _openBoxSafely(_chatMessagesBox);
+      await _openBoxSafely(_syncQueueBox);
+      await _openBoxSafely(_lastSyncBox);
+      
+      debugPrint('[OfflineDataService] All Hive boxes initialized successfully');
+    } catch (e, stack) {
+      debugPrint('[OfflineDataService] Error initializing Hive: $e');
+      debugPrint('[OfflineDataService] Stack: $stack');
+      // Continue anyway - individual box operations will handle errors
+    }
+  }
+  
+  /// Safely open a Hive box with error recovery
+  static Future<void> _openBoxSafely(String boxName) async {
+    try {
+      if (Hive.isBoxOpen(boxName)) {
+        debugPrint('[OfflineDataService] Box $boxName already open');
+        return;
+      }
+      await Hive.openBox(boxName).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          debugPrint('[OfflineDataService] Timeout opening box $boxName');
+          throw TimeoutException('Box $boxName open timeout');
+        },
+      );
+      debugPrint('[OfflineDataService] Opened box: $boxName');
+    } catch (e) {
+      debugPrint('[OfflineDataService] Error opening box $boxName: $e');
+      // Try to delete corrupted box and recreate
+      try {
+        await Hive.deleteBoxFromDisk(boxName);
+        await Hive.openBox(boxName);
+        debugPrint('[OfflineDataService] Recreated box: $boxName');
+      } catch (e2) {
+        debugPrint('[OfflineDataService] Failed to recreate box $boxName: $e2');
+      }
+    }
   }
 
   /// Check if device is online
