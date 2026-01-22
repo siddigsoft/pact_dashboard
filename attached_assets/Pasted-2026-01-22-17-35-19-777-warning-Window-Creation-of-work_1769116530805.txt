@@ -1,0 +1,26 @@
+2026-01-22 17:35:19.777 [warning] [Window] Creation of workbench contribution 'workbench.contrib.configurationDefaultOverridesContribution' took 25ms.
+2026-01-22 17:35:21.217 [info] [Window] Started local extension host with pid 28412.
+2026-01-22 17:35:23.213 [info] [Window] MCP Registry configured: https://api.mcp.github.com
+2026-01-22 17:35:24.826 [info] [Window] Settings Sync: Account status changed from uninitialized to unavailable
+2026-01-22 17:35:25.560 [info] [Cloud Changes] Prompting to enable cloud changes, has application previously launched from Continue On flow: false
+2026-01-22 17:35:26.146 [error] [Window] [Extension Host] (node:28412) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `Code --trace-deprecation ...` to show where the warning was created)
+2026-01-22 17:35:26.151 [error] [Window] [Extension Host] (node:28412) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+2026-01-22 17:35:26.171 [info] [Window] [perf] Render performance baseline is 75ms
+2026-01-22 17:35:28.678 [error] [Window] Failed to fetch MCP registry providers Server returned 404
+2026-01-22 17:35:29.164 [error] [Window] chatParticipant must be declared in package.json: claude-code
+2026-01-22 17:49:50.171 [error] [Window] An unknown error occurred. Please consult the log for more details.
+2026-01-22 18:10:46.975 [error] [Window] An unknown error occurred. Please consult the log for more details.
+2026-01-22 18:58:51.192 [error] [Network] #24: https://main.vscode-cdn.net/extensions/chat.json - error GET Offline
+2026-01-22 18:58:51.194 [warning] [Window] Failed to fetch chat participant registry Offline
+2026-01-22 18:58:52.495 [error] [Network] #25: https://api.github.com/copilot_internal/user - error GET Offline
+2026-01-22 18:58:52.495 [error] [Window] [chat entitlement] request: error Offline: Offline
+2026-01-22 18:58:52.503 [error] [Network] #26: https://api.github.com/copilot_internal/user - error GET Offline
+2026-01-22 18:58:52.503 [error] [Window] [chat entitlement] request: error Offline: Offline
+2026-01-22 18:58:52.755 [error] [Window] An unknown error occurred. Please consult the log for more details.
+2026-01-22 22:35:58.785 [error] [Network] #27: https://main.vscode-cdn.net/extensions/chat.json - error GET Offline
+2026-01-22 22:35:58.786 [warning] [Window] Failed to fetch chat participant registry Offline
+2026-01-22 22:35:58.822 [error] [Window] An unknown error occurred. Please consult the log for more details.
+2026-01-22 22:40:58.803 [error] [Network] #28: https://main.vscode-cdn.net/extensions/chat.json - error GET Offline
+2026-01-22 22:40:58.805 [warning] [Window] Failed to fetch chat participant registry Offline
+2026-01-22 23:13:26.731 [error] [Window] An unknown error occurred. Please consult the log for more details.
