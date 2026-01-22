@@ -1,0 +1,120 @@
+PS C:\Users\PC\PACT_mobile> git status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+PS C:\Users\PC\PACT_mobile> git push origin master
+error: src refspec master does not match any
+error: failed to push some refs to 'https://github.com/kazibwefrancis/PACT_mobile.git'
+PS C:\Users\PC\PACT_mobile> git push 
+Everything up-to-date
+PS C:\Users\PC\PACT_mobile> git pull 
+Already up to date.
+PS C:\Users\PC\PACT_mobile> git log main 
+commit c8d5a7d4953dfe4ca163d54310b5c530d25e0b9a (HEAD -> main, origin/main)
+Merge: 072b343 d571436
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Thu Jan 22 13:56:01 2026 +0200
+
+    Merge branch 'backup'
+
+commit 072b3438441d9f74bbcb84aa915d533fc1979ad1
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Thu Jan 22 13:51:38 2026 +0200
+
+    changes
+
+commit c0cd47eb762aaf57fc454cd938ef67cb6f67268b
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Thu Jan 22 12:53:10 2026 +0200
+
+    delete
+
+commit d571436132abc4236edd99e6fc7f21ee74cc01ca (backup)
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Thu Jan 22 10:47:01 2026 +0200
+
+    Test 10:46
+
+commit 0cc28c4cfa5b79ccf9a16b2fd60129abc4ec89c7 (feature-branch)
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Thu Jan 22 09:35:36 2026 +0200
+
+    Siddig Test to VC
+
+commit 34ba059c9f1c7a840e57ee06c706760342ffabb4
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Thu Jan 22 08:58:18 2026 +0200
+
+    Test Commit to You VC please confirm
+
+commit aafd5e17c4368df8ac213e9cb3ce52e081a3a302
+Author: Mukisa Vaniah Christian <vierycalliper@gmail.com>
+Date:   Thu Jan 22 08:45:19 2026 +0300
+
+    delete algorithms
+
+commit dfa5315781a64f198931a53948a9e84d02a44873
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Tue Jan 20 09:13:29 2026 +0200
+
+    Initial commit - PACT Mobile
+
+commit 92ba8227794cd2ddd79a7170c57e4c451e5e477f
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Sun Jan 18 03:01:42 2026 +0300
+
+    Calling fix siddi
+
+commit ca18910265ce632febf02e3bd3b6eb894087e63f
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Sat Jan 17 13:09:57 2026 +0300
+
+    Fix version number to 1.0.5+10
+
+commit ebbe535ffb0d57054004dcad96192baca99927a1
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Sat Jan 17 11:59:24 2026 +0300
+
+    FIx
+
+commit 6d7a70dc8a1c1b8d58a15845692fc599172605a9
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Sat Jan 17 03:08:42 2026 +0300
+
+    Fix offline saving  Siddig
+
+commit f305e483ce2022b029bd799eb8e577dd1563d903
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Fri Jan 16 18:07:05 2026 +0300
+
+    test offline again
+
+commit fcbe9c7620bd5d242742db35712ff8f0575d5788
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Fri Jan 16 17:59:45 2026 +0300
+
+    fxi offline
+    5 times
+
+commit b52042fe1662c448de536d0ae99d79d13add53f4
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Fri Jan 16 17:51:20 2026 +0300
+
+    Offline features again
+
+commit c5b4556804d97def8be12f1252224e79a467dfc1
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Fri Jan 16 17:50:14 2026 +0300
+
+    offline
+
+commit afc92e1a51a898f33e1531b17354bdbda92d2e3c
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+Date:   Fri Jan 16 15:35:26 2026 +0300
+
+    still test fixing cost and offfiline features
+
+commit 981557bd8b83b6c5fb6412c940a4a383d3f52076
+Author: Elsiddig Mamoun Elshekh Ibrahim <siddigsoft123@gmail.com>
+:
