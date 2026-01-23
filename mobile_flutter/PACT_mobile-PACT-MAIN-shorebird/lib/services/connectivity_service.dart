@@ -39,8 +39,13 @@ class ConnectivityService {
 
   Future<bool> checkConnectivity() async {
     try {
-      final result = await _connectivity.checkConnectivity();
-      return result != ConnectivityResult.none;
+      final results = await _connectivity.checkConnectivity();
+      // Handle List<ConnectivityResult> from newer connectivity_plus
+      if (results is List) {
+        return (results as List).any((r) =>
+            r != ConnectivityResult.none && r != ConnectivityResult.bluetooth);
+      }
+      return results != ConnectivityResult.none;
     } catch (e) {
       return false;
     }
