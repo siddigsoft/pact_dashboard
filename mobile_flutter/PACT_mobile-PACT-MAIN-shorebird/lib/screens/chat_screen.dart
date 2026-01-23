@@ -13,6 +13,7 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/chat.dart';
 import '../models/chat_message.dart';
 import '../models/chat_participant.dart';
@@ -463,21 +464,22 @@ class _ChatScreenState extends State<ChatScreen> {
       final storagePath = 'chat_files/${widget.chat.id}/$fileName';
 
       final bytes = await file.readAsBytes();
+      
       await Supabase.instance.client.storage
           .from('chat-attachments')
           .uploadBinary(storagePath, bytes);
 
-      final publicUrl = Supabase.instance.client.storage
+      final url = await Supabase.instance.client.storage
           .from('chat-attachments')
-          .getPublicUrl(storagePath);
+          .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
 
       String messageContent;
       if (fileType == 'image') {
-        messageContent = '[Image] $publicUrl';
+        messageContent = '[Image] $url';
       } else if (fileType == 'audio') {
-        messageContent = '[Voice Message] $publicUrl';
+        messageContent = '[Voice Message] $url';
       } else {
-        messageContent = '[Document] ${file.path.split('/').last}\n$publicUrl';
+        messageContent = '[Document] ${file.path.split('/').last}\n$url';
       }
 
       final message = await _chatService.sendMessage(widget.chat.id, messageContent);
@@ -1094,8 +1096,19 @@ class _ChatScreenState extends State<ChatScreen> {
             const SizedBox(width: 4),
             _messageController.text.trim().isEmpty
                 ? GestureDetector(
-                    onLongPress: _startRecording,
+                    onLongPressStart: (_) => _startRecording(),
+                    onLongPressEnd: (_) => _stopRecording(),
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Hold to record voice message'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
                     child: Container(
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [Color(0xFFFF9800), Color(0xFFFFB74D)],
@@ -1109,11 +1122,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         ],
                       ),
-                      child: IconButton(
-                        icon: const Icon(Icons.mic, color: Colors.white),
-                        onPressed: null,
-                        tooltip: 'Hold to record',
-                      ),
+                      child: const Icon(Icons.mic, color: Colors.white),
                     ),
                   )
                 : Container(
@@ -1149,6 +1158,150 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildMessageContent(ChatMessage message, bool isCurrentUser) {
+    final content = message.content ?? '';
+    final textColor = isCurrentUser ? Colors.white : const Color(0xFF263238);
+
+    if (content.startsWith('[Image]')) {
+      final url = content.replaceFirst('[Image] ', '');
+      return GestureDetector(
+        onTap: () => _showFullImage(url),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            url,
+            width: 200,
+            height: 200,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return Container(
+                width: 200,
+                height: 200,
+                color: Colors.grey[200],
+                child: const Center(child: CircularProgressIndicator()),
+              );
+            },
+            errorBuilder: (context, error, stack) {
+              return Container(
+                width: 200,
+                height: 100,
+                color: Colors.grey[200],
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.broken_image, color: Colors.grey[500]),
+                    const SizedBox(height: 4),
+                    Text('Image unavailable', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    } else if (content.startsWith('[Voice Message]')) {
+      final url = content.replaceFirst('[Voice Message] ', '');
+      return _buildVoiceMessagePlayer(url, isCurrentUser);
+    } else if (content.startsWith('[Document]')) {
+      final parts = content.replaceFirst('[Document] ', '').split('\n');
+      final fileName = parts.isNotEmpty ? parts[0] : 'Document';
+      final url = parts.length > 1 ? parts[1] : '';
+      return GestureDetector(
+        onTap: () => _openDocument(url, fileName),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isCurrentUser ? Colors.white.withOpacity(0.2) : Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.insert_drive_file, color: isCurrentUser ? Colors.white : Colors.blue),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  fileName,
+                  style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Text(
+      content,
+      style: TextStyle(color: textColor, fontSize: 16),
+    );
+  }
+
+  Widget _buildVoiceMessagePlayer(String url, bool isCurrentUser) {
+    return _VoiceMessagePlayer(
+      key: ValueKey(url),
+      url: url,
+      isCurrentUser: isCurrentUser,
+    );
+  }
+
+  void _showFullImage(String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: InteractiveViewer(
+            child: Image.network(
+              url,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stack) {
+                return Container(
+                  color: Colors.black,
+                  child: const Center(
+                    child: Text('Failed to load image', style: TextStyle(color: Colors.white)),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openDocument(String url, String fileName) async {
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Document URL not available')),
+      );
+      return;
+    }
+    
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Cannot open: $fileName')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error opening document: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to open: $fileName')),
+        );
+      }
+    }
   }
 
   Widget _buildMessageBubble(ChatMessage message, bool isCurrentUser) {
@@ -1218,13 +1371,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                 ),
-              Text(
-                message.content ?? '',
-                style: TextStyle(
-                  color: isCurrentUser ? Colors.white : const Color(0xFF263238),
-                  fontSize: 16,
-                ),
-              ),
+              _buildMessageContent(message, isCurrentUser),
               const SizedBox(height: 4),
               Text(
                 _formatMessageTime(message.createdAt),
@@ -1375,5 +1522,153 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
+  }
+}
+
+class _VoiceMessagePlayer extends StatefulWidget {
+  final String url;
+  final bool isCurrentUser;
+
+  const _VoiceMessagePlayer({
+    super.key,
+    required this.url,
+    required this.isCurrentUser,
+  });
+
+  @override
+  State<_VoiceMessagePlayer> createState() => _VoiceMessagePlayerState();
+}
+
+class _VoiceMessagePlayerState extends State<_VoiceMessagePlayer> {
+  late AudioPlayer _audioPlayer;
+  bool _isPlaying = false;
+  Duration _position = Duration.zero;
+  Duration _duration = const Duration(seconds: 30);
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+  StreamSubscription<PlayerState>? _stateSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer = AudioPlayer();
+    _setupListeners();
+  }
+
+  void _setupListeners() {
+    _positionSub = _audioPlayer.onPositionChanged.listen((pos) {
+      if (mounted) setState(() => _position = pos);
+    });
+    _durationSub = _audioPlayer.onDurationChanged.listen((dur) {
+      if (mounted) setState(() => _duration = dur);
+    });
+    _stateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = state == PlayerState.playing;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _stateSub?.cancel();
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePlay() async {
+    try {
+      if (_isPlaying) {
+        await _audioPlayer.pause();
+      } else {
+        await _audioPlayer.play(UrlSource(widget.url));
+      }
+    } catch (e) {
+      debugPrint('Error toggling audio playback: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = _duration.inMilliseconds > 0
+        ? _position.inMilliseconds / _duration.inMilliseconds
+        : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: _togglePlay,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: widget.isCurrentUser
+                    ? Colors.white.withOpacity(0.3)
+                    : const Color(0xFFFF9800),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isPlaying ? Icons.pause : Icons.play_arrow,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress.clamp(0.0, 1.0),
+                    backgroundColor: widget.isCurrentUser
+                        ? Colors.white.withOpacity(0.3)
+                        : Colors.grey[300],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      widget.isCurrentUser ? Colors.white : const Color(0xFFFF9800),
+                    ),
+                    minHeight: 4,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${_formatDur(_position)} / ${_formatDur(_duration)}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: widget.isCurrentUser
+                        ? Colors.white.withOpacity(0.7)
+                        : Colors.grey[500],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.mic,
+            size: 16,
+            color: widget.isCurrentUser
+                ? Colors.white.withOpacity(0.7)
+                : Colors.grey[500],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDur(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 }
