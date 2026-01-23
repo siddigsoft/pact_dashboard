@@ -276,18 +276,19 @@ class PresenceService {
 
   void _handlePresenceSync() {
     try {
-      final presenceState = _presenceChannel?.presenceState();
-      if (presenceState == null || presenceState.isEmpty) {
+      final presences = _presenceChannel?.presenceState();
+      if (presences == null || presences.isEmpty) {
         debugPrint('[PresenceService] No presence state available');
         return;
       }
 
       _onlineUsers.clear();
       
-      // presenceState() returns Map<String, List<Presence>>
-      // Each key maps to a list of Presence objects with payload
-      presenceState.forEach((key, presenceList) {
-        for (final presence in presenceList) {
+      // presenceState() returns List<SinglePresenceState> in supabase_flutter 2.10.x
+      // Each SinglePresenceState has presenceRef and presences list
+      for (final singleState in presences) {
+        // singleState.presences is a List<Presence>
+        for (final presence in singleState.presences) {
           final data = presence.payload;
           final odId = data['user_id'] as String?;
           if (odId == null || odId.isEmpty) continue;
@@ -303,7 +304,7 @@ class PresenceService {
             currentCallId: data['call_id'] as String?,
           );
         }
-      });
+      }
 
       debugPrint('[PresenceService] Synced ${_onlineUsers.length} online users');
       _updateAllUsersOnlineStatus();
