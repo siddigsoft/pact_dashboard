@@ -1,0 +1,74 @@
+PS C:\Users\PC> cd .\PACT_mobile\      
+PS C:\Users\PC\PACT_mobile> cd .\PACT_mobile-PACT-MAIN-shorebird\
+PS C:\Users\PC\PACT_mobile\PACT_mobile-PACT-MAIN-shorebird>  >> & "C:\Users\PC\.shorebird\bin\shorebird.bat" patch android
+ParserError: 
+Line |
+   1 |   >> & "C:\Users\PC\.shorebird\bin\shorebird.bat" patch android
+     |                                                   ~~~~~
+     | Unexpected token 'patch' in expression or statement.
+PS C:\Users\PC\PACT_mobile\PACT_mobile-PACT-MAIN-shorebird> cd ..                      
+PS C:\Users\PC\PACT_mobile> cd .. 
+PS C:\Users\PC> cd .\pact_dashboard\   
+PS C:\Users\PC\pact_dashboard>  git pull 
+remote: Enumerating objects: 632, done.
+remote: Counting objects: 100% (361/361), done.
+remote: Compressing objects: 100% (76/76), done.
+remote: Total 632 (delta 293), reused 344 (delta 282), pack-reused 271 (from 1)        
+Receiving objects: 100% (632/632), 16.23 MiB | 2.76 MiB/s, done.
+Resolving deltas: 100% (476/476), completed with 31 local objects.
+From https://github.com/siddigsoft/pact_dashboard
+   56c95ffe..8c866fc7  master     -> origin/master
+Already up to date.
+PS C:\Users\PC\pact_dashboard>  cd C:\Users\PC\Siddig-PACT-Mobile
+>>
+>> # Remove submodule from git config
+>> git submodule deinit -f Siddig-PACT-Mobile
+>> git rm -f Siddig-PACT-Mobile
+>> rm -rf .git/modules/Siddig-PACT-Mobile
+>>
+>> # Remove .gitmodules file if it only had that one entry
+>> git rm .gitmodules
+>>
+>> # Commit the change
+>> git add -A
+>> git commit -m "Remove duplicate Siddig-PACT-Mobile submodule"
+error: pathspec 'Siddig-PACT-Mobile' did not match any file(s) known to git
+fatal: pathspec 'Siddig-PACT-Mobile' did not match any files
+Remove-Item: 
+Line |
+   6 |  rm -rf .git/modules/Siddig-PACT-Mobile
+     |     ~~~
+     | A parameter cannot be found that matches parameter name 'rf'.
+fatal: pathspec '.gitmodules' did not match any files
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+PS C:\Users\PC\Siddig-PACT-Mobile> CD ..
+PS C:\Users\PC>  CD .\pact_dashboard\
+PS C:\Users\PC\pact_dashboard>  cd C:\Users\PC\Siddig-PACT-Mobile
+>>
+>> # Remove submodule from git config
+>> git submodule deinit -f Siddig-PACT-Mobile
+>> git rm -f Siddig-PACT-Mobile
+>> rm -rf .git/modules/Siddig-PACT-Mobile
+>>
+>> # Remove .gitmodules file if it only had that one entry
+>> git rm .gitmodules
+>>
+>> # Commit the change
+>> git add -A
+>> git commit -m "Remove duplicate Siddig-PACT-Mobile submodule"
+error: pathspec 'Siddig-PACT-Mobile' did not match any file(s) known to git
+fatal: pathspec 'Siddig-PACT-Mobile' did not match any files
+Remove-Item: 
+Line |
+   6 |  rm -rf .git/modules/Siddig-PACT-Mobile
+     |     ~~~
+     | A parameter cannot be found that matches parameter name 'rf'.
+fatal: pathspec '.gitmodules' did not match any files
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+PS C:\Users\PC\Siddig-PACT-Mobile> 
