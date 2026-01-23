@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/call_signal.dart';
 import '../models/call_state.dart';
 
@@ -388,9 +389,48 @@ class WebRTCService {
     });
   }
 
+  /// Request microphone and camera permissions
+  Future<bool> requestCallPermissions({bool needsCamera = false}) async {
+    try {
+      debugPrint('[WebRTC] Requesting call permissions (camera: $needsCamera)');
+      
+      // Request microphone permission (always needed for calls)
+      final micStatus = await Permission.microphone.request();
+      debugPrint('[WebRTC] Microphone permission: $micStatus');
+      
+      if (!micStatus.isGranted) {
+        _errorController.add('Microphone permission is required for calls. Please enable it in Settings.');
+        return false;
+      }
+      
+      // Request camera permission if video call
+      if (needsCamera) {
+        final cameraStatus = await Permission.camera.request();
+        debugPrint('[WebRTC] Camera permission: $cameraStatus');
+        
+        if (!cameraStatus.isGranted) {
+          _errorController.add('Camera permission is required for video calls. Please enable it in Settings.');
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('[WebRTC] Error requesting permissions: $e');
+      _errorController.add('Failed to request permissions: $e');
+      return false;
+    }
+  }
+
   /// Setup local media stream
   Future<void> _setupLocalMedia({bool isAudioOnly = false}) async {
     try {
+      // Request permissions before accessing media
+      final hasPermissions = await requestCallPermissions(needsCamera: !isAudioOnly);
+      if (!hasPermissions) {
+        throw Exception('Required permissions not granted');
+      }
+
       final Map<String, dynamic> mediaConstraints = {
         'audio': {
           'echoCancellation': true,
