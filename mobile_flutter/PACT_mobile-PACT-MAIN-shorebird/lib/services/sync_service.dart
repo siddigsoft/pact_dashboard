@@ -56,8 +56,12 @@ class SyncService {
   }
 
   void _setupConnectivityListener() {
-    Connectivity().onConnectivityChanged.listen((result) {
-      if (result != ConnectivityResult.none) {
+    Connectivity().onConnectivityChanged.listen((results) {
+      // Handle List<ConnectivityResult> from newer connectivity_plus
+      final hasConnection = results is List
+          ? !(results as List).contains(ConnectivityResult.none)
+          : results != ConnectivityResult.none;
+      if (hasConnection) {
         syncData();
       }
     });
