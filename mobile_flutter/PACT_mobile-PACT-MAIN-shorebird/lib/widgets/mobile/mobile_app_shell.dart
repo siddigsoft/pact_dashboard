@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:uuid/uuid.dart';
 import '../../services/offline/offline_db.dart';
+import '../../services/offline/models.dart';
 import '../../services/offline/sync_manager.dart';
 import '../../providers/offline_provider.dart';
-import '../offline/sync_status_widget.dart';
+import '../offline/sync_status_widget.dart' show SyncStatusBar, SyncProgressToast, OfflineBanner;
 
 /// Main app shell for mobile that sets up offline functionality
 class MobileAppShell extends ConsumerStatefulWidget {
@@ -160,14 +162,17 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     required double accuracy,
   }) async {
     try {
-      // Save location directly to OfflineDb
       final db = OfflineDb();
-      await db.saveLocation({
-        'latitude': lat,
-        'longitude': lng,
-        'accuracy': accuracy,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      final location = CachedLocation(
+        id: const Uuid().v4(),
+        userId: '', // Will be set by sync manager if needed
+        lat: lat,
+        lng: lng,
+        accuracy: accuracy,
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        synced: false,
+      );
+      await db.saveLocationOffline(location);
     } catch (e) {
       debugPrint('[GPSTracking] Failed to save location: $e');
     }
@@ -311,24 +316,9 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
       children: [
         widget.child,
         // Offline banner at top
-        if (!_isOnline)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              color: Colors.orange,
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-              child: const SafeArea(
-                bottom: false,
-                child: Text(
-                  'Offline Mode - Changes will sync when online',
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ),
+        const Positioned(top: 0, left: 0, right: 0, child: OfflineBanner()),
+        // Sync progress toast at bottom
+        const SyncProgressToast(),
       ],
     );
   }
@@ -351,7 +341,14 @@ class OfflineModeWrapper extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
-        if (showStatusBar) const SyncStatusWidget(),
+        if (showStatusBar)
+          SyncStatusBar(
+            onSyncPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Starting sync...')),
+              );
+            },
+          ),
         Expanded(
           child: MobileAppShell(
             enableOfflineMode: true,
