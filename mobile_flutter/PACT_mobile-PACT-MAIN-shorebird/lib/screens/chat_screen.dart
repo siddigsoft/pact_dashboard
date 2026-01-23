@@ -9,7 +9,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -40,7 +39,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
-  final AudioRecorder _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<ChatMessage> _messages = [];
   bool _isLoading = true;
@@ -82,7 +80,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _recordingTimer?.cancel();
-    _audioRecorder.dispose();
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -502,70 +499,20 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _startRecording() async {
-    try {
-      final status = await Permission.microphone.request();
-      if (status.isDenied) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Microphone permission is required')),
-          );
-        }
-        return;
-      }
-
-      if (await _audioRecorder.hasPermission()) {
-        final directory = await getTemporaryDirectory();
-        final path = '${directory.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-        await _audioRecorder.start(
-          const RecordConfig(encoder: AudioEncoder.aacLc),
-          path: path,
-        );
-
-        setState(() {
-          _isRecording = true;
-          _recordingPath = path;
-          _recordingDuration = Duration.zero;
-        });
-
-        _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-          setState(() {
-            _recordingDuration += const Duration(seconds: 1);
-          });
-        });
-      }
-    } catch (e) {
-      debugPrint('Error starting recording: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to start recording: $e')),
-        );
-      }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Voice recording coming soon!')),
+      );
     }
   }
 
   Future<void> _stopRecording() async {
-    try {
-      _recordingTimer?.cancel();
-      final path = await _audioRecorder.stop();
-
-      setState(() {
-        _isRecording = false;
-      });
-
-      if (path != null && _recordingDuration.inSeconds >= 1) {
-        await _uploadFile(File(path), 'audio');
-      }
-    } catch (e) {
-      debugPrint('Error stopping recording: $e');
-      setState(() => _isRecording = false);
-    }
+    setState(() => _isRecording = false);
   }
 
   Future<void> _cancelRecording() async {
     try {
       _recordingTimer?.cancel();
-      await _audioRecorder.stop();
 
       if (_recordingPath != null) {
         final file = File(_recordingPath!);
