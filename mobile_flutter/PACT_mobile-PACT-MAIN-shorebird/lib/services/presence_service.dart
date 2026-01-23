@@ -14,6 +14,8 @@ class UserPresence {
   final String? role;
   final String? phone;
   final String? email;
+  final String? state;
+  final String? hub;
   final bool isOnline;
   final bool isInCall;
   final DateTime? lastSeen;
@@ -26,6 +28,8 @@ class UserPresence {
     this.role,
     this.phone,
     this.email,
+    this.state,
+    this.hub,
     this.isOnline = false,
     this.isInCall = false,
     this.lastSeen,
@@ -39,6 +43,8 @@ class UserPresence {
     String? role,
     String? phone,
     String? email,
+    String? state,
+    String? hub,
     bool? isOnline,
     bool? isInCall,
     DateTime? lastSeen,
@@ -51,6 +57,8 @@ class UserPresence {
       role: role ?? this.role,
       phone: phone ?? this.phone,
       email: email ?? this.email,
+      state: state ?? this.state,
+      hub: hub ?? this.hub,
       isOnline: isOnline ?? this.isOnline,
       isInCall: isInCall ?? this.isInCall,
       lastSeen: lastSeen ?? this.lastSeen,
@@ -65,6 +73,8 @@ class UserPresence {
     'role': role,
     'phone': phone,
     'email': email,
+    'state': state,
+    'hub': hub,
     'is_online': isOnline,
     'in_call': isInCall,
     'last_seen': lastSeen?.toIso8601String(),
@@ -79,6 +89,8 @@ class UserPresence {
       role: json['role'] as String?,
       phone: json['phone'] as String?,
       email: json['email'] as String?,
+      state: json['state'] as String?,
+      hub: json['hub'] as String?,
       isOnline: json['is_online'] as bool? ?? false,
       isInCall: json['in_call'] as bool? ?? false,
       lastSeen: json['last_seen'] != null 
@@ -197,7 +209,7 @@ class PresenceService {
 
       final response = await _supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, role, phone, email, updated_at')
+          .select('id, full_name, avatar_url, role, phone, email, state, hub, updated_at')
           .eq('status', 'approved')
           .order('full_name');
 
@@ -211,6 +223,8 @@ class PresenceService {
           role: map['role'] as String?,
           phone: map['phone'] as String?,
           email: map['email'] as String?,
+          state: map['state'] as String?,
+          hub: map['hub'] as String?,
           isOnline: _onlineUsers.containsKey(odId),
           isInCall: _onlineUsers[odId]?.isInCall ?? false,
         );

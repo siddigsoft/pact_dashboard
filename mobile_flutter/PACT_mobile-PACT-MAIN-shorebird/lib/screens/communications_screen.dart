@@ -40,7 +40,18 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   String _searchQuery = '';
   int _selectedTabIndex = 0;
 
+  // Current user info for role-based calling
+  String? _currentUserRole;
+  String? _currentUserState;
+  String? _currentUserHub;
+
   final List<String> _tabs = ['All', 'Online', 'Coordinators', 'Data Collectors', 'Admins'];
+
+  // Roles that can call anyone in the system
+  static const List<String> _unrestrictedRoles = ['admin', 'super_admin', 'fom', 'super admin'];
+  
+  // Roles that can be called by anyone (supervisory roles)
+  static const List<String> _supervisoryRoles = ['admin', 'super_admin', 'coordinator', 'supervisor', 'hub coordinator', 'fom', 'super admin'];
 
   @override
   void initState() {
@@ -48,6 +59,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(_onTabChanged);
     _checkConnectivity();
+    _loadCurrentUserInfo();
     _loadUsers();
     _subscribeToPresence();
     _subscribeToErrors();
@@ -61,6 +73,74 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error resetting call state: $e');
     }
+  }
+
+  Future<void> _loadCurrentUserInfo() async {
+    try {
+      final currentUserId = _chatService.getCurrentUserId();
+      if (currentUserId == null) return;
+
+      final supabase = Supabase.instance.client;
+      final profileResponse = await supabase
+          .from('profiles')
+          .select('role, state, hub')
+          .eq('id', currentUserId)
+          .maybeSingle();
+
+      if (profileResponse != null) {
+        setState(() {
+          _currentUserRole = profileResponse['role'] as String?;
+          _currentUserState = profileResponse['state'] as String?;
+          _currentUserHub = profileResponse['hub'] as String?;
+        });
+        debugPrint('[CommunicationsScreen] Loaded user info: role=$_currentUserRole, state=$_currentUserState, hub=$_currentUserHub');
+      }
+    } catch (e) {
+      debugPrint('[CommunicationsScreen] Error loading current user info: $e');
+    }
+  }
+
+  /// Check if the current user can call the target user based on role-based restrictions
+  /// Rules:
+  /// - Admin, Super Admin, FOM can call anyone
+  /// - Data Collectors & Coordinators can only call:
+  ///   1. Users from the same state or hub
+  ///   2. Users with supervisory roles (Admin, Coordinator, Supervisor)
+  bool _canCallUser(UserPresence targetUser) {
+    final currentRole = _currentUserRole?.toLowerCase() ?? '';
+    final targetRole = targetUser.role?.toLowerCase() ?? '';
+
+    // Admins, Super Admins, and FOM can call anyone
+    if (_unrestrictedRoles.any((r) => currentRole.contains(r))) {
+      return true;
+    }
+
+    // Anyone can call supervisory roles
+    if (_supervisoryRoles.any((r) => targetRole.contains(r))) {
+      return true;
+    }
+
+    // For Data Collectors and Coordinators: check if same state or hub
+    final targetState = targetUser.state?.toLowerCase() ?? '';
+    final targetHub = targetUser.hub?.toLowerCase() ?? '';
+    final currentState = _currentUserState?.toLowerCase() ?? '';
+    final currentHub = _currentUserHub?.toLowerCase() ?? '';
+
+    // Check if same state
+    if (currentState.isNotEmpty && targetState.isNotEmpty && currentState == targetState) {
+      return true;
+    }
+
+    // Check if same hub
+    if (currentHub.isNotEmpty && targetHub.isNotEmpty && currentHub == targetHub) {
+      return true;
+    }
+
+    return false;
+  }
+
+  String _getCallRestrictionMessage(UserPresence targetUser) {
+    return 'You can only call users from your state/hub or supervisors. ${targetUser.userName} is in a different area.';
   }
 
   @override
@@ -274,6 +354,12 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   Future<void> _initiateCall(UserPresence user) async {
     if (!_isOnline) {
       _showOfflineMessage('Calls require an internet connection');
+      return;
+    }
+
+    // Check role-based calling restrictions
+    if (!_canCallUser(user)) {
+      _showMessage(_getCallRestrictionMessage(user), isError: true);
       return;
     }
 
