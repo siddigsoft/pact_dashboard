@@ -1,0 +1,71 @@
+PS C:\Users\PC\Siddig-PACT-Mobile> cd C:\Users\PC\Siddig-PACT-Mobile
+>> shorebird patch android
+✓ Fetching apps (1.1s)
+✓ Fetching releases (0.6s)
+Which release would you like to patch? 1.0.5+8
+✓ Fetching aab artifact (2.0s)
+✓ Downloading aab (100%) (64.9s)
+Building patch with Flutter 3.38.6 (55c197eb61)
+
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 28864 bytes (98.2% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:signReleaseBundle'.
+> A failure occurred while executing com.android.build.gradle.internal.tasks.FinalizeBundleTask$BundleToolRunnable
+   > java.lang.NullPointerException (no error message)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 2m 53s
+Running Gradle task 'bundleRelease'...                            174.5s
+
+┌─ Flutter Fix ───────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ [!] Starting AGP 9+, only the new DSL interface will be read. This results in a build failure when applying the Flutter │      
+│ Gradle plugin at C:\Users\PC\Siddig-PACT-Mobile\android\app\build.gradle.kts.                                           │      
+│                                                                                                                         │
+│ To resolve this update flutter or opt out of `android.newDsl`. For instructions on how to opt out, see:                 │      
+│ https://docs.flutter.dev/release/breaking-changes/migrate-to-agp-9                                                      │      
+│                                                                                                                         │      
+│ If you are not upgrading to AGP 9+, run `flutter analyze --suggestions` to check for incompatible dependencies.         │      
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘      
+Gradle task bundleRelease failed with exit code 1
+Failed to build AAB.
+Command: flutter build appbundle --release
+Reason: Exited with code 1.
+
+💡 Fix Recommendations
+
+• Check that running `flutter build` with the same command-line arguments
+completes successfully by running the following command:
+
+flutter build appbundle --release
+
+If the above command fails, then this is likely not a Shorebird issue and
+the underlying `flutter build` failure must be resolved for Shorebird to
+build a release.
+
+• If `flutter build` completes successfully, please ensure that you are
+providing the desired flutter version to the release command via
+the `--flutter-version` option. If you do not specify a `--flutter-version`
+Shorebird will default to the latest stable version of Flutter.
+We strongly encourage always specifying an explicit Flutter version:
+
+shorebird release <platform> --flutter-version=3.29.0
+
+• If `flutter build` completes successfully and `shorebird release`
+fails when using the same flutter version, please file an issue:
+https://github.com/shorebirdtech/shorebird/issues/new
+
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1769161519200_shorebird.log
+
+PS C:\Users\PC\Siddig-PACT-Mobile> 
