@@ -14,8 +14,8 @@ extension SiteVisitSync on SiteVisit {
       return true;
     }
 
-    // If local modifications exist that haven't been synced
-    if (localModifications != other.localModifications) {
+    // If additional data differs (could indicate local modifications)
+    if (additionalData != other.additionalData) {
       return true;
     }
 
@@ -40,41 +40,78 @@ extension SiteVisitSync on SiteVisit {
       return other;
     }
 
-    // Merge metadata and notes
-    final mergedMetadata = {...(metadata ?? {}), ...(other.metadata ?? {})};
-    final mergedNotes =
-        <dynamic>{...(notes ?? []), ...(other.notes ?? [])}.toList();
+    // Merge additionalData
+    final mergedAdditionalData = <String, dynamic>{
+      ...(additionalData ?? {}),
+      ...(other.additionalData ?? {}),
+    };
+
+    // Merge notes - combine if different
+    final mergedNotes = notes.isNotEmpty && other.notes.isNotEmpty && notes != other.notes
+        ? '$notes\n${other.notes}'
+        : other.notes.isNotEmpty ? other.notes : notes;
 
     // Create new instance with merged data
     return SiteVisit(
       id: id,
-      siteName: other.siteName, // Prefer server data for basic fields
+      userId: other.userId ?? userId,
+      siteName: other.siteName,
       siteCode: other.siteCode,
-      status: other.status, // Prefer server status unless handled above
+      status: other.status,
       locality: other.locality,
       state: other.state,
       activity: other.activity,
       priority: other.priority,
       dueDate: other.dueDate,
+      notes: mergedNotes,
+      mainActivity: other.mainActivity,
+      location: other.location ?? location,
+      fees: other.fees ?? fees,
+      visitData: other.visitData ?? visitData,
       assignedTo: other.assignedTo,
-      latitude: other.latitude,
-      longitude: other.longitude,
-      metadata: mergedMetadata, // Use merged metadata
-      notes: mergedNotes, // Use merged notes
-      lastModified: DateTime.now(),
-      localModifications: false, // Reset local modifications flag
+      assignedBy: other.assignedBy ?? assignedBy,
+      assignedAt: other.assignedAt ?? assignedAt,
+      attachments: other.attachments ?? attachments,
+      completedAt: other.completedAt ?? completedAt,
+      rating: other.rating ?? rating,
+      mmpId: other.mmpId ?? mmpId,
+      createdAt: createdAt,
+      arrivalLatitude: other.arrivalLatitude ?? arrivalLatitude,
+      arrivalLongitude: other.arrivalLongitude ?? arrivalLongitude,
+      arrivalTimestamp: other.arrivalTimestamp ?? arrivalTimestamp,
+      journeyPath: other.journeyPath ?? journeyPath,
+      arrivalRecorded: other.arrivalRecorded || arrivalRecorded,
+      claimedBy: other.claimedBy ?? claimedBy,
+      claimedAt: other.claimedAt ?? claimedAt,
+      acceptedBy: other.acceptedBy ?? acceptedBy,
+      acceptedAt: other.acceptedAt ?? acceptedAt,
+      visitStartedBy: other.visitStartedBy ?? visitStartedBy,
+      visitStartedAt: other.visitStartedAt ?? visitStartedAt,
+      visitCompletedBy: other.visitCompletedBy ?? visitCompletedBy,
+      visitCompletedAt: other.visitCompletedAt ?? visitCompletedAt,
+      updatedAt: DateTime.now(),
+      enumeratorFee: other.enumeratorFee ?? enumeratorFee,
+      transportFee: other.transportFee ?? transportFee,
+      cost: other.cost ?? cost,
+      additionalData: mergedAdditionalData,
     );
   }
 
-  /// Returns a copy of this SiteVisit with updated fields and localModifications flag set
+  /// Returns a copy of this SiteVisit with updated fields
   SiteVisit copyWithModification({
     String? status,
     String? assignedTo,
-    Map<String, dynamic>? metadata,
-    List<String>? notes,
+    Map<String, dynamic>? additionalDataUpdates,
+    String? notesUpdate,
   }) {
+    // Merge additional data if provided
+    final mergedAdditionalData = additionalDataUpdates != null
+        ? <String, dynamic>{...(additionalData ?? {}), ...additionalDataUpdates}
+        : additionalData;
+
     return SiteVisit(
       id: id,
+      userId: userId,
       siteName: siteName,
       siteCode: siteCode,
       status: status ?? this.status,
@@ -83,13 +120,37 @@ extension SiteVisitSync on SiteVisit {
       activity: activity,
       priority: priority,
       dueDate: dueDate,
+      notes: notesUpdate ?? notes,
+      mainActivity: mainActivity,
+      location: location,
+      fees: fees,
+      visitData: visitData,
       assignedTo: assignedTo ?? this.assignedTo,
-      latitude: latitude,
-      longitude: longitude,
-      metadata: metadata ?? this.metadata,
-      notes: notes ?? this.notes,
-      lastModified: DateTime.now(),
-      localModifications: true, // Mark as locally modified
+      assignedBy: assignedBy,
+      assignedAt: assignedAt,
+      attachments: attachments,
+      completedAt: completedAt,
+      rating: rating,
+      mmpId: mmpId,
+      createdAt: createdAt,
+      arrivalLatitude: arrivalLatitude,
+      arrivalLongitude: arrivalLongitude,
+      arrivalTimestamp: arrivalTimestamp,
+      journeyPath: journeyPath,
+      arrivalRecorded: arrivalRecorded,
+      claimedBy: claimedBy,
+      claimedAt: claimedAt,
+      acceptedBy: acceptedBy,
+      acceptedAt: acceptedAt,
+      visitStartedBy: visitStartedBy,
+      visitStartedAt: visitStartedAt,
+      visitCompletedBy: visitCompletedBy,
+      visitCompletedAt: visitCompletedAt,
+      updatedAt: DateTime.now(),
+      enumeratorFee: enumeratorFee,
+      transportFee: transportFee,
+      cost: cost,
+      additionalData: mergedAdditionalData,
     );
   }
 }
