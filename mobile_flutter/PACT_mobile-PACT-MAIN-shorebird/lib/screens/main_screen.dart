@@ -14,6 +14,7 @@ import '../widgets/incoming_call_dialog.dart';
 import '../services/webrtc_service.dart';
 import '../services/presence_service.dart';
 import '../models/call_state.dart';
+import '../widgets/whats_new_dialog.dart';
 import 'dart:async';
 
 class MainScreen extends StatefulWidget {
@@ -34,6 +35,14 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _checkUserRole();
     _initializeWebRTC();
+    _showWhatsNewIfNeeded();
+  }
+
+  Future<void> _showWhatsNewIfNeeded() async {
+    await Future.delayed(const Duration(milliseconds: 1500));
+    if (mounted) {
+      await WhatsNewDialog.showIfNeeded(context);
+    }
   }
 
   @override
