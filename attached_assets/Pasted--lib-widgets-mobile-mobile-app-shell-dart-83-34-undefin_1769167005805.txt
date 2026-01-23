@@ -1,0 +1,1016 @@
+         lib\widgets\mobile\mobile_app_shell.dart:83:34 - undefined_identifier
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:87:9 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:92:5 - avoid_print
+  error - The method 'requestLocationPermission' isn't defined for the type 'Geolocator' -
+         lib\widgets\mobile\mobile_app_shell.dart:112:43 - undefined_method
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:115:9 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:122:9 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:141:11 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:145:7 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:147:7 - avoid_print
+  error - The method 'saveLocationOfflineProvider' isn't defined for the type
+         '_MobileAppShellState' - lib\widgets\mobile\mobile_app_shell.dart:159:9 -        
+         undefined_method
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:166:7 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:179:7 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:197:7 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:220:5 - avoid_print
+  error - Undefined name 'syncNotifierProvider' -
+         lib\widgets\mobile\mobile_app_shell.dart:221:14 - undefined_identifier
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:236:7 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:238:7 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:264:9 - avoid_print
+   info - The type of the right operand ('ConnectivityResult') isn't a subtype or a       
+          supertype of the left operand ('List<ConnectivityResult>') -
+          lib\widgets\mobile\mobile_app_shell.dart:268:24 - unrelated_type_equality_checks
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:275:9 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:278:9 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:281:9 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:284:9 - avoid_print
+  error - Invalid constant value - lib\widgets\mobile\mobile_app_shell.dart:301:60 -      
+         invalid_constant
+  error - The method 'OfflineBanner' isn't defined for the type '_MobileAppShellState' -  
+         lib\widgets\mobile\mobile_app_shell.dart:301:60 - undefined_method
+  error - The name 'SyncProgressToast' isn't a class -
+         lib\widgets\mobile\mobile_app_shell.dart:303:15 - creation_with_non_type
+  error - The method 'SyncStatusBar' isn't defined for the type 'OfflineModeWrapper' -    
+         lib\widgets\mobile\mobile_app_shell.dart:327:11 - undefined_method
+  error - The function 'OfflineDb' isn't defined -
+         lib\widgets\mobile\mobile_app_shell.dart:349:16 - undefined_function
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:351:5 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:355:5 - avoid_print
+   info - Don't invoke 'print' in production code -
+          lib\widgets\mobile\mobile_app_shell.dart:357:5 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\modern_app_header.dart:75:42 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\modern_app_header.dart:160:32 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\modern_app_header.dart:164:46 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid
+          precision loss - lib\widgets\modern_app_header.dart:240:46 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\modern_card.dart:58:46 - deprecated_member_use     
+warning - The value of the local variable 'toggleWidth' isn't used -
+       lib\widgets\movable_online_offline_toggle.dart:43:18 - unused_local_variable       
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\network_status_indicator.dart:72:28 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\network_status_indicator.dart:73:26 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\network_status_indicator.dart:77:30 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid
+          precision loss - lib\widgets\network_status_indicator.dart:78:28 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\notifications_panel.dart:177:49 -
+          deprecated_member_use
+warning - The left operand can't be null, so the right operand is never executed -        
+       lib\widgets\notifications_panel.dart:187:67 - dead_null_aware_expression
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\notifications_panel.dart:187:75 -
+          deprecated_member_use
+warning - The left operand can't be null, so the right operand is never executed -        
+       lib\widgets\notifications_panel.dart:191:59 - dead_null_aware_expression
+warning - The left operand can't be null, so the right operand is never executed -
+       lib\widgets\notifications_panel.dart:192:67 - dead_null_aware_expression
+  error - Target of URI doesn't exist: '../../theme/app_colors.dart' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:9:8 -
+         uri_does_not_exist
+  error - Target of URI doesn't exist: '../../services/permit_upload_service.dart' -      
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:10:8 -
+         uri_does_not_exist
+  error - Target of URI doesn't exist: '../../l10n/app_localizations.dart' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:11:8 -
+         uri_does_not_exist
+  error - Undefined class 'PermitUploadService' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:36:9 -
+         undefined_class
+  error - The method 'PermitUploadService' isn't defined for the type
+         '_LocalityPermitUploadDialogState' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:36:46 -
+         undefined_method
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:62:27 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:80:27 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:98:27 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:132:24 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:170:18 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:174:18 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:178:18 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:227:15 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:253:18 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:290:23 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:294:16 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:302:42 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:313:28 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:338:27 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:342:16 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:344:35 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:348:43 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:362:30 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:366:73 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:368:73 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:370:73 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:385:31 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:402:35 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:424:45 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:426:26 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:430:72 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:434:57 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:506:35 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:559:52 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:561:33 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:565:56 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:591:30 -
+         undefined_class
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:625:29 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_permit_upload_dialog.dart:663:32 -
+         undefined_identifier
+  error - Target of URI doesn't exist: '../../theme/app_colors.dart' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:5:8 -        
+         uri_does_not_exist
+  error - Target of URI doesn't exist: '../../l10n/app_localizations.dart' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:6:8 -        
+         uri_does_not_exist
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:56:18 -      
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:79:23 -      
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:83:16 -      
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:94:22 -      
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:99:22 -      
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:113:28 -     
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:142:32 -     
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:225:36 -     
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:244:29 -     
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:329:25 -     
+         undefined_identifier
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss -
+          lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:369:37 -    
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss -
+          lib\widgets\offline\permits\locality_requirement_triage_dialog.dart:376:30 -    
+          deprecated_member_use
+  error - Target of URI doesn't exist: '../../theme/app_colors.dart' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:9:8 -
+         uri_does_not_exist
+  error - Target of URI doesn't exist: '../../services/permit_upload_service.dart' -      
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:10:8 -
+         uri_does_not_exist
+  error - Target of URI doesn't exist: '../../l10n/app_localizations.dart' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:11:8 -
+         uri_does_not_exist
+  error - Undefined class 'PermitUploadService' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:34:9 -
+         undefined_class
+  error - The method 'PermitUploadService' isn't defined for the type
+         '_StatePermitUploadDialogState' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:34:46 -
+         undefined_method
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:60:27 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:78:27 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:96:27 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:130:24 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:168:18 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:172:18 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:176:18 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:221:15 -
+         undefined_identifier
+  error - Undefined name 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:247:18 -
+         undefined_identifier
+  error - The getter 'rtl' isn't defined for the type 'TextDirection' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:248:63 -
+         undefined_getter
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:285:23 -
+         undefined_class
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:321:30 -
+         undefined_class
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:349:30 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:353:73 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:355:73 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:357:73 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:372:31 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:389:35 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:411:45 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:413:26 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:417:72 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:421:57 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:493:35 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:546:52 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:548:33 -
+         undefined_identifier
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:552:56 -
+         undefined_identifier
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:578:30 -
+         undefined_class
+  error - Undefined class 'AppLocalizations' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:612:29 -
+         undefined_class
+  error - Undefined name 'AppColors' -
+         lib\widgets\offline\permits\state_permit_upload_dialog.dart:650:32 -
+         undefined_identifier
+  error - Target of URI doesn't exist: '../providers/offline_provider.dart' -
+         lib\widgets\offline\sync_status_widget.dart:4:8 - uri_does_not_exist
+  error - Target of URI doesn't exist: '../services/offline/models.dart' -
+         lib\widgets\offline\sync_status_widget.dart:5:8 - uri_does_not_exist
+  error - Undefined name 'offlineStatsStreamProvider' -
+         lib\widgets\offline\sync_status_widget.dart:15:34 - undefined_identifier
+warning - The value of the local variable 'syncResultAsync' isn't used -
+       lib\widgets\offline\sync_status_widget.dart:16:11 - unused_local_variable
+  error - Undefined name 'syncCompleteProvider' -
+         lib\widgets\offline\sync_status_widget.dart:16:39 - undefined_identifier
+  error - Undefined name 'syncNotifierProvider' -
+         lib\widgets\offline\sync_status_widget.dart:66:32 - undefined_identifier
+  error - Undefined name 'syncProgressProvider' -
+         lib\widgets\offline\sync_status_widget.dart:114:37 - undefined_identifier        
+  error - Undefined name 'offlineStatsStreamProvider' -
+         lib\widgets\offline\sync_status_widget.dart:207:34 - undefined_identifier        
+  error - Undefined name 'syncNotifierProvider' -
+         lib\widgets\offline\sync_status_widget.dart:208:39 - undefined_identifier        
+  error - Undefined name 'syncNotifierProvider' -
+         lib\widgets\offline\sync_status_widget.dart:221:22 - undefined_identifier        
+  error - Undefined name 'queuedRequestsProvider' -
+         lib\widgets\offline\sync_status_widget.dart:271:34 - undefined_identifier        
+  error - Undefined name 'offlineStatsStreamProvider' -
+         lib\widgets\offline\sync_status_widget.dart:314:34 - undefined_identifier        
+warning - The left operand can't be null, so the right operand is never executed -        
+       lib\widgets\online_offline_toggle.dart:270:37 - dead_null_aware_expression
+warning - The value of the field '_showAddDialog' isn't used -
+       lib\widgets\payment_methods_card_widget.dart:19:8 - unused_field
+   info - Don't use 'BuildContext's across async gaps -
+          lib\widgets\payment_methods_card_widget.dart:152:30 -
+          use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps -
+          lib\widgets\payment_methods_card_widget.dart:160:30 -
+          use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps -
+          lib\widgets\payment_methods_card_widget.dart:177:28 -
+          use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps -
+          lib\widgets\payment_methods_card_widget.dart:185:28 -
+          use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\payment_methods_card_widget.dart:298:52 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\payment_methods_card_widget.dart:394:60 -
+          deprecated_member_use
+warning - The declaration '_showAddDialog' isn't referenced -
+       lib\widgets\payment_methods_card_widget.dart:463:8 - unused_element
+  error - The name '_showAddDialog' is already defined -
+         lib\widgets\payment_methods_card_widget.dart:463:8 - duplicate_definition        
+warning - The left operand can't be null, so the right operand is never executed -        
+       lib\widgets\professional_movable_toggle.dart:489:37 - dead_null_aware_expression   
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid
+          precision loss - lib\widgets\professional_movable_toggle.dart:538:53 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\professional_movable_toggle.dart:539:53 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\professional_movable_toggle.dart:543:32 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\professional_movable_toggle.dart:555:47 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\professional_movable_toggle.dart:611:35 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\professional_movable_toggle.dart:612:35 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\professional_movable_toggle.dart:622:31 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\professional_movable_toggle.dart:627:33 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid
+          precision loss - lib\widgets\professional_movable_toggle.dart:633:33 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\professional_movable_toggle.dart:674:51 -
+          deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to  
+          manage group value instead. This feature was deprecated after v3.32.0-0.0.pre - 
+          lib\widgets\request_advance_dialog.dart:373:31 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value 
+          change instead. This feature was deprecated after v3.32.0-0.0.pre -
+          lib\widgets\request_advance_dialog.dart:374:31 - deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to  
+          manage group value instead. This feature was deprecated after v3.32.0-0.0.pre - 
+          lib\widgets\request_advance_dialog.dart:394:31 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value 
+          change instead. This feature was deprecated after v3.32.0-0.0.pre -
+          lib\widgets\request_advance_dialog.dart:395:31 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\reusable_app_bar.dart:324:35 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\reusable_app_bar.dart:332:52 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\reusable_app_bar.dart:440:41 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\sos_button.dart:63:52 - deprecated_member_use      
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid
+          precision loss - lib\widgets\sos_button.dart:105:40 - deprecated_member_use     
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\sos_button.dart:128:38 - deprecated_member_use     
+warning - The value of the local variable 'hasActiveVisit' isn't used -
+       lib\widgets\start_visit_button.dart:33:11 - unused_local_variable
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\start_visit_button.dart:76:34 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\start_visit_button.dart:78:53 -
+          deprecated_member_use
+   info - The type of the right operand ('ConnectivityResult') isn't a subtype or a
+          supertype of the left operand ('List<ConnectivityResult>') -
+          lib\widgets\start_visit_button.dart:124:42 - unrelated_type_equality_checks     
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\start_visit_dialog.dart:78:49 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\start_visit_dialog.dart:142:49 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid
+          precision loss - lib\widgets\start_visit_dialog.dart:194:62 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\start_visit_dialog.dart:309:64 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\start_visit_dialog.dart:340:41 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\sync_status_indicator.dart:198:33 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\sync_status_indicator.dart:214:48 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\sync_status_indicator.dart:215:39 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\sync_status_indicator.dart:250:42 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\sync_status_indicator.dart:337:46 -
+          deprecated_member_use
+  error - Target of URI doesn't exist: '../algorithms/nearest_site_visits.dart' -
+         lib\widgets\task_dashboard.dart:7:8 - uri_does_not_exist
+  error - The name 'SiteVisitWithDistance' isn't a type, so it can't be used as a type
+         argument - lib\widgets\task_dashboard.dart:12:14 - non_type_as_type_argument     
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\task_dashboard.dart:109:41 - deprecated_member_use 
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\task_dashboard.dart:148:45 - deprecated_member_use 
+  error - Undefined class 'SiteVisitWithDistance' - lib\widgets\task_dashboard.dart:162:25
+         - undefined_class
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\task_dashboard.dart:197:65 - deprecated_member_use 
+  error - The constructor being called isn't a const constructor -
+         lib\widgets\transaction_search.dart:19:27 - const_with_non_const
+  error - The default value of an optional parameter must be constant -
+         lib\widgets\transaction_search.dart:19:27 - non_constant_default_value
+  error - The constructor being called isn't a const constructor -
+         lib\widgets\transaction_search.dart:93:9 - const_with_non_const
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\visit_report_dialog.dart:377:49 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid
+          precision loss - lib\widgets\visit_report_dialog.dart:505:33 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\visit_report_dialog.dart:526:42 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\visit_report_dialog.dart:533:42 -
+          deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - lib\widgets\visit_report_dialog.dart:767:45 -
+          deprecated_member_use
+warning - The dev dependency on json_serializable is unnecessary because there is also a  
+       normal dependency on that package - pubspec.yaml:111:3 - unnecessary_dev_dependency
+  error - Target of URI doesn't exist:
+         'package:pact_mobile/algorithms/distance_helper.dart' -
+         test\algorithms\distance_helper_test.dart:2:8 - uri_does_not_exist
+  error - Undefined name 'DistanceHelper' - test\algorithms\distance_helper_test.dart:10:9
+         - undefined_identifier
+  error - Undefined name 'DistanceHelper' -
+         test\algorithms\distance_helper_test.dart:17:29 - undefined_identifier
+  error - Undefined name 'DistanceHelper' -
+         test\algorithms\distance_helper_test.dart:30:25 - undefined_identifier
+  error - Undefined name 'DistanceHelper' -
+         test\algorithms\distance_helper_test.dart:33:26 - undefined_identifier
+  error - Undefined name 'DistanceHelper' - test\algorithms\distance_helper_test.dart:40:9
+         - undefined_identifier
+  error - Undefined name 'DistanceHelper' - test\algorithms\distance_helper_test.dart:46:9
+         - undefined_identifier
+  error - Undefined name 'DistanceHelper' - test\algorithms\distance_helper_test.dart:53:9
+         - undefined_identifier
+  error - Target of URI doesn't exist:
+         'package:pact_mobile/algorithms/nearest_site_visits.dart' -
+         test\algorithms\nearest_site_visits_test.dart:2:8 - uri_does_not_exist
+  error - The function 'Location' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:7:26 - undefined_function
+  error - The named parameter 'activity' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:14:9 -
+         missing_required_argument
+  error - The named parameter 'assignedTo' is required, but there's no corresponding      
+         argument - test\algorithms\nearest_site_visits_test.dart:14:9 -
+         missing_required_argument
+  error - The named parameter 'createdAt' is required, but there's no corresponding       
+         argument - test\algorithms\nearest_site_visits_test.dart:14:9 -
+         missing_required_argument
+  error - The named parameter 'locality' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:14:9 -
+         missing_required_argument
+  error - The named parameter 'mainActivity' is required, but there's no corresponding    
+         argument - test\algorithms\nearest_site_visits_test.dart:14:9 -
+         missing_required_argument
+  error - The named parameter 'notes' is required, but there's no corresponding argument -
+         test\algorithms\nearest_site_visits_test.dart:14:9 - missing_required_argument   
+  error - The named parameter 'priority' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:14:9 -
+         missing_required_argument
+  error - The named parameter 'siteCode' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:14:9 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:14:9 -
+         missing_required_argument
+  error - The named parameter 'state' is required, but there's no corresponding argument -
+         test\algorithms\nearest_site_visits_test.dart:14:9 - missing_required_argument   
+  error - The named parameter 'latitude' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:16:11 - undefined_named_parameter  
+  error - The named parameter 'longitude' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:17:11 - undefined_named_parameter  
+  error - The named parameter 'activity' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:20:9 -
+         missing_required_argument
+  error - The named parameter 'assignedTo' is required, but there's no corresponding      
+         argument - test\algorithms\nearest_site_visits_test.dart:20:9 -
+         missing_required_argument
+  error - The named parameter 'createdAt' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:20:9 -
+         missing_required_argument
+  error - The named parameter 'locality' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:20:9 -
+         missing_required_argument
+  error - The named parameter 'mainActivity' is required, but there's no corresponding    
+         argument - test\algorithms\nearest_site_visits_test.dart:20:9 -
+         missing_required_argument
+  error - The named parameter 'notes' is required, but there's no corresponding argument -
+         test\algorithms\nearest_site_visits_test.dart:20:9 - missing_required_argument   
+  error - The named parameter 'priority' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:20:9 -
+         missing_required_argument
+  error - The named parameter 'siteCode' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:20:9 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:20:9 -
+         missing_required_argument
+  error - The named parameter 'state' is required, but there's no corresponding argument -
+         test\algorithms\nearest_site_visits_test.dart:20:9 - missing_required_argument   
+  error - The named parameter 'latitude' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:22:11 - undefined_named_parameter  
+  error - The named parameter 'longitude' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:23:11 - undefined_named_parameter  
+  error - The named parameter 'activity' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:26:9 -
+         missing_required_argument
+  error - The named parameter 'assignedTo' is required, but there's no corresponding      
+         argument - test\algorithms\nearest_site_visits_test.dart:26:9 -
+         missing_required_argument
+  error - The named parameter 'createdAt' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:26:9 -
+         missing_required_argument
+  error - The named parameter 'locality' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:26:9 -
+         missing_required_argument
+  error - The named parameter 'mainActivity' is required, but there's no corresponding    
+         argument - test\algorithms\nearest_site_visits_test.dart:26:9 -
+         missing_required_argument
+  error - The named parameter 'notes' is required, but there's no corresponding argument -
+         test\algorithms\nearest_site_visits_test.dart:26:9 - missing_required_argument   
+  error - The named parameter 'priority' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:26:9 -
+         missing_required_argument
+  error - The named parameter 'siteCode' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:26:9 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:26:9 -
+         missing_required_argument
+  error - The named parameter 'state' is required, but there's no corresponding argument -
+         test\algorithms\nearest_site_visits_test.dart:26:9 - missing_required_argument   
+  error - The named parameter 'latitude' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:28:11 - undefined_named_parameter  
+  error - The named parameter 'longitude' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:29:11 - undefined_named_parameter  
+  error - The named parameter 'activity' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:32:9 -
+         missing_required_argument
+  error - The named parameter 'assignedTo' is required, but there's no corresponding      
+         argument - test\algorithms\nearest_site_visits_test.dart:32:9 -
+         missing_required_argument
+  error - The named parameter 'createdAt' is required, but there's no corresponding       
+         argument - test\algorithms\nearest_site_visits_test.dart:32:9 -
+         missing_required_argument
+  error - The named parameter 'locality' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:32:9 -
+         missing_required_argument
+  error - The named parameter 'mainActivity' is required, but there's no corresponding    
+         argument - test\algorithms\nearest_site_visits_test.dart:32:9 -
+         missing_required_argument
+  error - The named parameter 'notes' is required, but there's no corresponding argument -
+         test\algorithms\nearest_site_visits_test.dart:32:9 - missing_required_argument   
+  error - The named parameter 'priority' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:32:9 -
+         missing_required_argument
+  error - The named parameter 'siteCode' is required, but there's no corresponding
+         argument - test\algorithms\nearest_site_visits_test.dart:32:9 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding        
+         argument - test\algorithms\nearest_site_visits_test.dart:32:9 -
+         missing_required_argument
+  error - The named parameter 'state' is required, but there's no corresponding argument -
+         test\algorithms\nearest_site_visits_test.dart:32:9 - missing_required_argument   
+  error - The named parameter 'latitude' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:34:11 - undefined_named_parameter  
+  error - The named parameter 'longitude' isn't defined -
+         test\algorithms\nearest_site_visits_test.dart:35:11 - undefined_named_parameter  
+  error - Undefined name 'NearestSiteVisits' -
+         test\algorithms\nearest_site_visits_test.dart:42:22 - undefined_identifier       
+  error - Undefined name 'NearestSiteVisits' -
+         test\algorithms\nearest_site_visits_test.dart:65:22 - undefined_identifier       
+  error - Undefined name 'NearestSiteVisits' -
+         test\algorithms\nearest_site_visits_test.dart:78:22 - undefined_identifier       
+  error - Target of URI doesn't exist:
+         'package:pact_mobile/algorithms/site_visit_assignment.dart' -
+         test\algorithms\site_visit_assignment_test.dart:4:8 - uri_does_not_exist
+  error - Undefined class 'SiteVisitAssignment' -
+         test\algorithms\site_visit_assignment_test.dart:11:10 - undefined_class
+  error - The function 'SiteVisitAssignment' isn't defined -
+         test\algorithms\site_visit_assignment_test.dart:15:20 - undefined_function       
+  error - The argument type 'Future<PostgrestResponse<Map<String, Object>>>
+         Function(Invocation)' can't be assigned to the parameter type
+         'Answer<PostgrestFilterBuilder<dynamic>>'.  -
+         test\algorithms\site_visit_assignment_test.dart:23:25 -
+         argument_type_not_assignable
+  error - The named parameter 'status' isn't defined -
+         test\algorithms\site_visit_assignment_test.dart:29:13 - undefined_named_parameter
+  error - The argument type 'Null' can't be assigned to the parameter type 'int'.  -      
+         test\algorithms\site_visit_assignment_test.dart:30:20 -
+         argument_type_not_assignable
+  error - The argument type 'Future<PostgrestResponse<Map<String, Object>>>
+         Function(Invocation)' can't be assigned to the parameter type
+         'Answer<PostgrestFilterBuilder<dynamic>>'.  -
+         test\algorithms\site_visit_assignment_test.dart:49:25 -
+         argument_type_not_assignable
+  error - The named parameter 'status' isn't defined -
+         test\algorithms\site_visit_assignment_test.dart:55:13 - undefined_named_parameter
+  error - The argument type 'Null' can't be assigned to the parameter type 'int'.  -      
+         test\algorithms\site_visit_assignment_test.dart:56:20 -
+         argument_type_not_assignable
+  error - The argument type 'Future<PostgrestResponse<Null>> Function(Invocation)' can't  
+         be assigned to the parameter type 'Answer<PostgrestFilterBuilder<dynamic>>'.  -  
+         test\algorithms\site_visit_assignment_test.dart:75:25 -
+         argument_type_not_assignable
+  error - The named parameter 'status' isn't defined -
+         test\algorithms\site_visit_assignment_test.dart:77:13 - undefined_named_parameter
+  error - The named parameter 'error' isn't defined -
+         test\algorithms\site_visit_assignment_test.dart:78:13 - undefined_named_parameter
+  error - The function 'PostgrestError' isn't defined -
+         test\algorithms\site_visit_assignment_test.dart:78:20 - undefined_function       
+  error - The argument type 'Null' can't be assigned to the parameter type 'int'.  -      
+         test\algorithms\site_visit_assignment_test.dart:79:20 -
+         argument_type_not_assignable
+   info - The imported package 'integration_test' isn't a dependency of the importing     
+          package - test\integration_test\offline_integration_test.dart:3:8 -
+          depend_on_referenced_packages
+  error - Target of URI doesn't exist: 'package:integration_test/integration_test.dart' - 
+         test\integration_test\offline_integration_test.dart:3:8 - uri_does_not_exist     
+  error - Undefined name 'IntegrationTestWidgetsFlutterBinding' -
+         test\integration_test\offline_integration_test.dart:11:3 - undefined_identifier  
+warning - The value of the local variable 'migrationService' isn't used -
+       test\offline_functionality_test.dart:14:29 - unused_local_variable
+  error - The named parameter 'createdAt' is required, but there's no corresponding       
+         argument - test\offline_functionality_test.dart:44:20 - missing_required_argument
+  error - The named parameter 'siteAddress' is required, but there's no corresponding     
+         argument - test\offline_functionality_test.dart:44:20 - missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding
+         argument - test\offline_functionality_test.dart:44:20 - missing_required_argument
+  error - The named parameter 'updatedAt' is required, but there's no corresponding       
+         argument - test\offline_functionality_test.dart:44:20 - missing_required_argument
+  error - The named parameter 'userId' is required, but there's no corresponding argument 
+         - test\offline_functionality_test.dart:44:20 - missing_required_argument
+  error - The named parameter 'visitStatus' is required, but there's no corresponding     
+         argument - test\offline_functionality_test.dart:44:20 - missing_required_argument
+  error - The named parameter 'title' isn't defined -
+         test\offline_functionality_test.dart:46:9 - undefined_named_parameter
+  error - The named parameter 'description' isn't defined -
+         test\offline_functionality_test.dart:47:9 - undefined_named_parameter
+  error - The named parameter 'status' isn't defined -
+         test\offline_functionality_test.dart:48:9 - undefined_named_parameter
+  error - The named parameter 'dueDate' isn't defined -
+         test\offline_functionality_test.dart:49:9 - undefined_named_parameter
+  error - The named parameter 'assignedTo' isn't defined -
+         test\offline_functionality_test.dart:50:9 - undefined_named_parameter
+  error - The named parameter 'priority' isn't defined -
+         test\offline_functionality_test.dart:51:9 - undefined_named_parameter
+  error - The getter 'title' isn't defined for the type 'Task' -
+         test\offline_functionality_test.dart:58:29 - undefined_getter
+  error - The getter 'status' isn't defined for the type 'Task' -
+         test\offline_functionality_test.dart:59:28 - undefined_getter
+  error - The method 'saveSafetyReport' isn't defined for the type 'LocalStorageService' -
+         test\offline_functionality_test.dart:91:26 - undefined_method
+  error - The method 'getSafetyReport' isn't defined for the type 'LocalStorageService' -
+         test\offline_functionality_test.dart:92:44 - undefined_method
+  error - The named parameter 'createdAt' is required, but there's no corresponding       
+         argument - test\offline_functionality_test.dart:101:9 - missing_required_argument
+  error - The named parameter 'siteAddress' is required, but there's no corresponding     
+         argument - test\offline_functionality_test.dart:101:9 - missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding        
+         argument - test\offline_functionality_test.dart:101:9 - missing_required_argument
+  error - The named parameter 'updatedAt' is required, but there's no corresponding       
+         argument - test\offline_functionality_test.dart:101:9 - missing_required_argument
+  error - The named parameter 'userId' is required, but there's no corresponding argument 
+         - test\offline_functionality_test.dart:101:9 - missing_required_argument
+  error - The named parameter 'visitStatus' is required, but there's no corresponding
+         argument - test\offline_functionality_test.dart:101:9 - missing_required_argument
+  error - The named parameter 'title' isn't defined -
+         test\offline_functionality_test.dart:103:11 - undefined_named_parameter
+  error - The named parameter 'description' isn't defined -
+         test\offline_functionality_test.dart:104:11 - undefined_named_parameter
+  error - The named parameter 'status' isn't defined -
+         test\offline_functionality_test.dart:105:11 - undefined_named_parameter
+  error - The named parameter 'dueDate' isn't defined -
+         test\offline_functionality_test.dart:106:11 - undefined_named_parameter
+  error - The named parameter 'assignedTo' isn't defined -
+         test\offline_functionality_test.dart:107:11 - undefined_named_parameter
+  error - The named parameter 'priority' isn't defined -
+         test\offline_functionality_test.dart:108:11 - undefined_named_parameter
+  error - The named parameter 'createdAt' is required, but there's no corresponding       
+         argument - test\offline_functionality_test.dart:110:9 - missing_required_argument
+  error - The named parameter 'siteAddress' is required, but there's no corresponding     
+         argument - test\offline_functionality_test.dart:110:9 - missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding        
+         argument - test\offline_functionality_test.dart:110:9 - missing_required_argument
+  error - The named parameter 'updatedAt' is required, but there's no corresponding
+         argument - test\offline_functionality_test.dart:110:9 - missing_required_argument
+  error - The named parameter 'userId' is required, but there's no corresponding argument 
+         - test\offline_functionality_test.dart:110:9 - missing_required_argument
+  error - The named parameter 'visitStatus' is required, but there's no corresponding     
+         argument - test\offline_functionality_test.dart:110:9 - missing_required_argument
+  error - The named parameter 'title' isn't defined -
+         test\offline_functionality_test.dart:112:11 - undefined_named_parameter
+  error - The named parameter 'description' isn't defined -
+         test\offline_functionality_test.dart:113:11 - undefined_named_parameter
+  error - The named parameter 'status' isn't defined -
+         test\offline_functionality_test.dart:114:11 - undefined_named_parameter
+  error - The named parameter 'dueDate' isn't defined -
+         test\offline_functionality_test.dart:115:11 - undefined_named_parameter
+  error - The named parameter 'assignedTo' isn't defined -
+         test\offline_functionality_test.dart:116:11 - undefined_named_parameter
+  error - The named parameter 'priority' isn't defined -
+         test\offline_functionality_test.dart:117:11 - undefined_named_parameter
+  error - The named parameter 'createdAt' is required, but there's no corresponding       
+         argument - test\offline_functionality_test.dart:132:20 -
+         missing_required_argument
+  error - The named parameter 'siteAddress' is required, but there's no corresponding     
+         argument - test\offline_functionality_test.dart:132:20 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding
+         argument - test\offline_functionality_test.dart:132:20 -
+         missing_required_argument
+  error - The named parameter 'updatedAt' is required, but there's no corresponding       
+         argument - test\offline_functionality_test.dart:132:20 -
+         missing_required_argument
+  error - The named parameter 'userId' is required, but there's no corresponding argument 
+         - test\offline_functionality_test.dart:132:20 - missing_required_argument        
+  error - The named parameter 'visitStatus' is required, but there's no corresponding     
+         argument - test\offline_functionality_test.dart:132:20 -
+         missing_required_argument
+  error - The named parameter 'title' isn't defined -
+         test\offline_functionality_test.dart:134:9 - undefined_named_parameter
+  error - The named parameter 'description' isn't defined -
+         test\offline_functionality_test.dart:135:9 - undefined_named_parameter
+  error - The named parameter 'status' isn't defined -
+         test\offline_functionality_test.dart:136:9 - undefined_named_parameter
+  error - The named parameter 'dueDate' isn't defined -
+         test\offline_functionality_test.dart:137:9 - undefined_named_parameter
+  error - The named parameter 'assignedTo' isn't defined -
+         test\offline_functionality_test.dart:138:9 - undefined_named_parameter
+  error - The named parameter 'priority' isn't defined -
+         test\offline_functionality_test.dart:139:9 - undefined_named_parameter
+warning - The value of the local variable 'prefs' isn't used -
+       test\offline_functionality_test.dart:172:13 - unused_local_variable
+warning - The value of the local variable 'prefs' isn't used -
+       test\offline_functionality_test.dart:203:13 - unused_local_variable
+  error - The method 'getAllSafetyReports' isn't defined for the type
+         'LocalStorageService' - test\offline_functionality_test.dart:208:44 -
+         undefined_method
+  error - The named parameter 'activity' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'createdAt' is required, but there's no corresponding
+         argument - test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'locality' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'mainActivity' is required, but there's no corresponding    
+         argument - test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'notes' is required, but there's no corresponding argument -
+         test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'priority' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'siteCode' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'state' is required, but there's no corresponding argument -
+         test\services\conflict_resolution_service_test.dart:23:26 -
+         missing_required_argument
+  error - The named parameter 'activity' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The named parameter 'createdAt' is required, but there's no corresponding       
+         argument - test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The named parameter 'locality' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The named parameter 'mainActivity' is required, but there's no corresponding    
+         argument - test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The named parameter 'notes' is required, but there's no corresponding argument -
+         test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The named parameter 'priority' is required, but there's no corresponding
+         argument - test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The named parameter 'siteCode' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The named parameter 'state' is required, but there's no corresponding argument -
+         test\services\conflict_resolution_service_test.dart:29:27 -
+         missing_required_argument
+  error - The argument type 'Null' can't be assigned to the parameter type 'String'.  -   
+         test\services\conflict_resolution_service_test.dart:32:21 -
+         argument_type_not_assignable
+  error - The named parameter 'activity' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'createdAt' is required, but there's no corresponding       
+         argument - test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'locality' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'mainActivity' is required, but there's no corresponding
+         argument - test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'notes' is required, but there's no corresponding argument -
+         test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'priority' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'siteCode' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'state' is required, but there's no corresponding argument -
+         test\services\conflict_resolution_service_test.dart:45:26 -
+         missing_required_argument
+  error - The named parameter 'activity' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+  error - The named parameter 'createdAt' is required, but there's no corresponding
+         argument - test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+  error - The named parameter 'locality' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+  error - The named parameter 'mainActivity' is required, but there's no corresponding    
+         argument - test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+  error - The named parameter 'notes' is required, but there's no corresponding argument -
+         test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+  error - The named parameter 'priority' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+  error - The named parameter 'siteCode' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+  error - The named parameter 'siteName' is required, but there's no corresponding        
+         argument - test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+  error - The named parameter 'state' is required, but there's no corresponding argument -
+         test\services\conflict_resolution_service_test.dart:51:27 -
+         missing_required_argument
+warning - The value of the local variable 'service' isn't used -
+       test\services\location_tracking_service_test.dart:16:34 - unused_local_variable    
+  error - Too many positional arguments: 0 expected, but 1 found -
+         test\services\location_tracking_service_test.dart:20:41 -
+         extra_positional_arguments
+  error - The named parameter 'updatedAt' isn't defined -
+         test\unit\wallet_provider_test.dart:219:9 - undefined_named_parameter
+  error - The named parameter 'updatedAt' isn't defined -
+         test\unit\wallet_provider_test.dart:228:9 - undefined_named_parameter
+  error - The named parameter 'updatedAt' isn't defined -
+         test\unit\wallet_provider_test.dart:237:9 - undefined_named_parameter
+  error - The function 'isCloseTo' isn't defined -
+         test\unit\wallet_provider_test.dart:274:20 - undefined_function
+  error - The argument type 'ProviderContainer' can't be assigned to the parameter type   
+         'Widget'.  - test\widget\wallet_page_test.dart:13:9 -
+         argument_type_not_assignable
+  error - The named parameter 'child' isn't defined -
+         test\widget\wallet_page_test.dart:14:11 - undefined_named_parameter
+  error - The argument type 'ProviderContainer' can't be assigned to the parameter type   
+         'Widget'.  - test\widget\wallet_page_test.dart:75:9 -
+         argument_type_not_assignable
+  error - The named parameter 'child' isn't defined -
+         test\widget\wallet_page_test.dart:76:11 - undefined_named_parameter
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid   
+          precision loss - test\widget\wallet_page_test.dart:319:38 -
+          deprecated_member_use
+  error - The named parameter 'initialRoute' is required, but there's no corresponding    
+         argument - test\widget_test.dart:16:35 - missing_required_argument
+
+1520 issues found. (ran in 186.8s)
+PS C:\Users\PC\Siddig-PACT-Mobile> 

@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import '../services/offline/offline_db.dart';
-import '../services/offline/sync_manager.dart';
-import '../providers/offline_provider.dart';
-import 'offline/sync_status_widget.dart';
+import '../../services/offline/offline_db.dart';
+import '../../services/offline/sync_manager.dart';
+import '../../providers/offline_provider.dart';
+import '../offline/sync_status_widget.dart';
 
 /// Main app shell for mobile that sets up offline functionality
 class MobileAppShell extends ConsumerStatefulWidget {
@@ -61,18 +61,23 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
       // Setup network connectivity monitoring
       _connectivity = Connectivity();
       _connectivity.onConnectivityChanged.listen((result) {
-        final isOnline = result != ConnectivityResult.none;
+        // Handle List<ConnectivityResult> from newer connectivity_plus
+        final isOnline = result is List
+            ? !(result as List).contains(ConnectivityResult.none)
+            : result != ConnectivityResult.none;
         _handleNetworkChange(isOnline);
       });
 
       // Initial network check
       final result = await _connectivity.checkConnectivity();
-      _isOnline = result != ConnectivityResult.none;
+      _isOnline = result is List
+          ? !(result as List).contains(ConnectivityResult.none)
+          : result != ConnectivityResult.none;
       _handleNetworkChange(_isOnline);
 
-      print('[OfflineMode] Initialization complete. Online: $_isOnline');
+      debugPrint('[OfflineMode] Initialization complete. Online: $_isOnline');
     } catch (e) {
-      print('[OfflineMode] Initialization error: $e');
+      debugPrint('[OfflineMode] Initialization error: $e');
     }
   }
 
@@ -81,45 +86,45 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     setState(() => _isOnline = isOnline);
 
     final syncManager = ref.read(syncManagerProvider);
-    syncManager.onNetworkChange((isOnline) {
-      if (isOnline && !syncManager.isSyncing) {
-        // Network came back online, force sync
-        print('[OfflineMode] Network restored, forcing sync...');
-        syncManager.forceSync();
-      }
-    });
+    if (isOnline && !syncManager.isSyncing) {
+      // Network came back online, force sync
+      debugPrint('[OfflineMode] Network restored, forcing sync...');
+      syncManager.forceSync();
+    }
 
-    print(
+    debugPrint(
       '[OfflineMode] Network status changed: ${isOnline ? 'ONLINE' : 'OFFLINE'}',
     );
 
     // Show snackbar for network changes
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 2),
-        backgroundColor: isOnline ? Colors.green : Colors.orange,
-        content: Text(
-          isOnline ? 'Back online' : 'Lost connection - offline mode',
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 2),
+          backgroundColor: isOnline ? Colors.green : Colors.orange,
+          content: Text(
+            isOnline ? 'Back online' : 'Lost connection - offline mode',
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   /// Start GPS tracking for location updates
   Future<void> _startGPSTracking() async {
     try {
-      // Request location permission
-      final permission = await Geolocator.requestLocationPermission();
+      // Request location permission (correct method name)
+      final permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        print('[GPSTracking] Location permission denied');
+        debugPrint('[GPSTracking] Location permission denied');
         return;
       }
 
       // Check if location services are enabled
       final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!isServiceEnabled) {
-        print('[GPSTracking] Location services disabled');
+        debugPrint('[GPSTracking] Location services disabled');
         return;
       }
 
@@ -138,13 +143,13 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
           );
         },
         onError: (error) {
-          print('[GPSTracking] Error: $error');
+          debugPrint('[GPSTracking] Error: $error');
         },
       );
 
-      print('[GPSTracking] Started tracking location');
+      debugPrint('[GPSTracking] Started tracking location');
     } catch (e) {
-      print('[GPSTracking] Initialization error: $e');
+      debugPrint('[GPSTracking] Initialization error: $e');
     }
   }
 
@@ -155,15 +160,16 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     required double accuracy,
   }) async {
     try {
-      await ref.read(
-        saveLocationOfflineProvider({
-          lat: lat,
-          lng: lng,
-          accuracy: accuracy,
-        }).future,
-      );
+      // Save location directly to OfflineDb
+      final db = OfflineDb();
+      await db.saveLocation({
+        'latitude': lat,
+        'longitude': lng,
+        'accuracy': accuracy,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
     } catch (e) {
-      print('[GPSTracking] Failed to save location: $e');
+      debugPrint('[GPSTracking] Failed to save location: $e');
     }
   }
 
@@ -176,7 +182,7 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
 
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('[FCM] Foreground message: ${message.notification?.title}');
+      debugPrint('[FCM] Foreground message: ${message.notification?.title}');
 
       // Check if this is a sync request
       if (message.data['type'] == 'sync') {
@@ -194,7 +200,7 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
 
     // Handle background/terminated messages
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('[FCM] Message opened app: ${message.notification?.title}');
+      debugPrint('[FCM] Message opened app: ${message.notification?.title}');
 
       // Handle navigation based on message data
       if (message.data['type'] == 'sync') {
@@ -217,15 +223,18 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
 
   /// Handle sync request from push notification
   void _handleSyncRequest() {
-    print('[FCM] Sync requested via push');
-    ref.read(syncNotifierProvider.notifier).forceSync();
+    debugPrint('[FCM] Sync requested via push');
+    final syncManager = ref.read(syncManagerProvider);
+    syncManager.forceSync();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        duration: Duration(seconds: 2),
-        content: Text('Syncing updates...'),
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 2),
+          content: Text('Syncing updates...'),
+        ),
+      );
+    }
   }
 
   /// Save FCM token to user profile
@@ -233,14 +242,15 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
     try {
       // This would typically update the user's profile with the FCM token
       // await supabase.from('profiles').update({'fcm_token': token}).eq('id', userId);
-      print('[FCM] Token saved: ${token.substring(0, 20)}...');
+      debugPrint('[FCM] Token saved: ${token.substring(0, 20)}...');
     } catch (e) {
-      print('[FCM] Failed to save token: $e');
+      debugPrint('[FCM] Failed to save token: $e');
     }
   }
 
   /// Show local notification
   void _showLocalNotification({required String title, required String body}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 5),
@@ -261,27 +271,30 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        print('[AppLifecycle] App resumed - checking for offline sync');
+        debugPrint('[AppLifecycle] App resumed - checking for offline sync');
         if (!_isOnline) {
           // App came to foreground, check if we're online again
           _connectivity.checkConnectivity().then((result) {
-            if (result != ConnectivityResult.none) {
+            final isOnline = result is List
+                ? !(result as List).contains(ConnectivityResult.none)
+                : result != ConnectivityResult.none;
+            if (isOnline) {
               _handleNetworkChange(true);
             }
           });
         }
         break;
       case AppLifecycleState.paused:
-        print('[AppLifecycle] App paused');
+        debugPrint('[AppLifecycle] App paused');
         break;
       case AppLifecycleState.detached:
-        print('[AppLifecycle] App detached');
+        debugPrint('[AppLifecycle] App detached');
         break;
       case AppLifecycleState.inactive:
-        print('[AppLifecycle] App inactive');
+        debugPrint('[AppLifecycle] App inactive');
         break;
       case AppLifecycleState.hidden:
-        print('[AppLifecycle] App hidden');
+        debugPrint('[AppLifecycle] App hidden');
         break;
     }
   }
@@ -298,9 +311,24 @@ class _MobileAppShellState extends ConsumerState<MobileAppShell>
       children: [
         widget.child,
         // Offline banner at top
-        const Positioned(top: 0, left: 0, right: 0, child: OfflineBanner()),
-        // Sync progress toast at bottom
-        const SyncProgressToast(),
+        if (!_isOnline)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              color: Colors.orange,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+              child: const SafeArea(
+                bottom: false,
+                child: Text(
+                  'Offline Mode - Changes will sync when online',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -323,14 +351,7 @@ class OfflineModeWrapper extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
-        if (showStatusBar)
-          SyncStatusBar(
-            onSyncPressed: () {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Starting sync...')));
-            },
-          ),
+        if (showStatusBar) const SyncStatusWidget(),
         Expanded(
           child: MobileAppShell(
             enableOfflineMode: true,
@@ -348,13 +369,13 @@ Future<void> initializeOfflineMode() async {
   try {
     final db = OfflineDb();
     await db.init();
-    print('[OfflineMode] Hive boxes initialized successfully');
+    debugPrint('[OfflineMode] Hive boxes initialized successfully');
 
     // Log diagnostics
     final diagnostics = db.getDiagnostics();
-    print('[OfflineMode] Diagnostics: $diagnostics');
+    debugPrint('[OfflineMode] Diagnostics: $diagnostics');
   } catch (e) {
-    print('[OfflineMode] Initialization failed: $e');
+    debugPrint('[OfflineMode] Initialization failed: $e');
     rethrow;
   }
 }
