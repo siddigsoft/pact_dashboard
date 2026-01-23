@@ -134,22 +134,22 @@ class ChangelogService {
   }
 
   static const List<String> _currentFeatures = [
-    'Online presence detection - see who is available for calls',
-    'Audio and video calls with WebRTC',
-    'Real-time messaging with offline support',
-    'Communications screen for unified calls and chats',
+    'File attachments in chat - send images and documents',
+    'Voice message recording with hold-to-record',
+    'Role-based calling restrictions for field staff',
+    'Camera and gallery integration for photo sharing',
   ];
 
   static const List<String> _currentFixes = [
-    'Fixed user online status not displaying correctly',
-    'Fixed presence sync with Supabase realtime',
-    'Improved connectivity detection for offline mode',
+    'Fixed microphone and camera permissions for calls',
+    'Fixed chat message input layout',
+    'Improved presence sync with state and hub fields',
   ];
 
   static const List<String> _currentImprovements = [
-    'Dark blue version text in drawer menu',
-    'Better offline data caching with Hive',
-    'Enhanced sync queue for pending operations',
+    'WhatsApp-style attachment picker',
+    'Recording indicator with duration timer',
+    'Smoother message input toggle between mic and send',
   ];
 
   static final List<ChangelogEntry> _changelogs = [
