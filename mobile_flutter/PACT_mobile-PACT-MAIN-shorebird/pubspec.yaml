@@ -98,7 +98,6 @@ dependencies:
   flutter_riverpod: ^2.4.9 # For state management
   csv: ^5.0.2 # For CSV export
   audioplayers: ^6.1.0 # For playing call sounds
-  record: ^5.1.2 # For voice message recording
   freezed_annotation: ^2.4.1 # For code generation
   json_serializable: ^6.7.1 # For JSON serialization
   package_info_plus: ^8.0.0 # For app version info
