@@ -276,30 +276,36 @@ class PresenceService {
 
   void _handlePresenceSync() {
     try {
-      final presences = _presenceChannel?.presenceState();
-      if (presences == null || presences.isEmpty) return;
+      final presenceState = _presenceChannel?.presenceState();
+      if (presenceState == null || presenceState.isEmpty) {
+        debugPrint('[PresenceService] No presence state available');
+        return;
+      }
 
       _onlineUsers.clear();
       
-      // presenceState() returns List<SinglePresenceState>
-      // SinglePresenceState is Map<String, dynamic>
-      for (final presence in presences) {
-        final data = presence as Map<String, dynamic>;
-        final odId = data['user_id'] as String?;
-        if (odId == null || odId.isEmpty) continue;
+      // presenceState() returns Map<String, List<Presence>>
+      // Each key maps to a list of Presence objects with payload
+      presenceState.forEach((key, presenceList) {
+        for (final presence in presenceList) {
+          final data = presence.payload;
+          final odId = data['user_id'] as String?;
+          if (odId == null || odId.isEmpty) continue;
 
-        _onlineUsers[odId] = UserPresence(
-          odId: odId,
-          userName: data['user_name'] as String? ?? 'Unknown',
-          userAvatar: data['user_avatar'] as String?,
-          role: data['role'] as String?,
-          isOnline: true,
-          isInCall: data['in_call'] as bool? ?? false,
-          lastSeen: DateTime.tryParse(data['last_seen'] as String? ?? ''),
-          currentCallId: data['call_id'] as String?,
-        );
-      }
+          _onlineUsers[odId] = UserPresence(
+            odId: odId,
+            userName: data['user_name'] as String? ?? 'Unknown',
+            userAvatar: data['user_avatar'] as String?,
+            role: data['role'] as String?,
+            isOnline: true,
+            isInCall: data['in_call'] as bool? ?? false,
+            lastSeen: DateTime.tryParse(data['last_seen'] as String? ?? ''),
+            currentCallId: data['call_id'] as String?,
+          );
+        }
+      });
 
+      debugPrint('[PresenceService] Synced ${_onlineUsers.length} online users');
       _updateAllUsersOnlineStatus();
       _onlineUsersController.add(Map.from(_onlineUsers));
     } catch (e) {
