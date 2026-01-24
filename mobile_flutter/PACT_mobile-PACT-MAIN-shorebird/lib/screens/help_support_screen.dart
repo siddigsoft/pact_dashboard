@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -118,7 +119,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     final isArabic = _currentLocale == 'ar';
 
     return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: AppColors.backgroundGray,
@@ -193,7 +194,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       ),
       child: TextField(
         controller: _searchController,
-        textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+        textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
         decoration: InputDecoration(
           hintText: isArabic ? 'ابحث في مقالات المساعدة...' : 'Search help articles...',
           prefixIcon: const Icon(Icons.search),
@@ -1214,7 +1215,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         expand: false,
         builder: (context, scrollController) {
           return Directionality(
-            textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+            textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -1310,7 +1311,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     showDialog(
       context: context,
       builder: (context) => Directionality(
-        textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+        textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
         child: AlertDialog(
           title: Text(isArabic ? 'الإبلاغ عن مشكلة' : 'Report a Problem'),
           content: SingleChildScrollView(

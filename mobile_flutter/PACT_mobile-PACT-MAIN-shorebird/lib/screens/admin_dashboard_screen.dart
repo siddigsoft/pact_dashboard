@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -610,7 +611,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   labelText: 'Name (Arabic)',
                   border: OutlineInputBorder(),
                 ),
-                textDirection: TextDirection.rtl,
+                textDirection: ui.TextDirection.rtl,
               ),
               const SizedBox(height: 12),
               TextField(
@@ -627,7 +628,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   labelText: 'Role (Arabic)',
                   border: OutlineInputBorder(),
                 ),
-                textDirection: TextDirection.rtl,
+                textDirection: ui.TextDirection.rtl,
               ),
               const SizedBox(height: 12),
               TextField(

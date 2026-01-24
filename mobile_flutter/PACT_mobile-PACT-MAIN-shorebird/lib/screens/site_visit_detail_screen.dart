@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -158,7 +158,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
     final isArabic = _currentLocale == 'ar';
 
     return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: Scaffold(
         backgroundColor: AppColors.backgroundGray,
         appBar: AppBar(

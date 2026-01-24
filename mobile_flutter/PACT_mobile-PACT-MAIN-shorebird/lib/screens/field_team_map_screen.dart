@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -211,7 +212,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
     }
     
     return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: AppColors.backgroundGray,

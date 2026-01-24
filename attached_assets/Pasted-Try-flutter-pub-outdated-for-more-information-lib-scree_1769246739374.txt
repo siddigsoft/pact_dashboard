@@ -1,0 +1,57 @@
+Try `flutter pub outdated` for more information.
+lib/screens/calendar_screen.dart:134:47: Error: Member not found: 'rtl'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                              ^^^
+lib/screens/calendar_screen.dart:134:67: Error: Member not found: 'ltr'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                                                  ^^^
+lib/screens/documents_screen.dart:263:47: Error: Member not found: 'rtl'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                              ^^^
+lib/screens/documents_screen.dart:263:67: Error: Member not found: 'ltr'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                                                  ^^^
+lib/screens/site_visit_detail_screen.dart:161:47: Error: Member not found: 'rtl'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                              ^^^
+lib/screens/site_visit_detail_screen.dart:161:67: Error: Member not found: 'ltr'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                                                  ^^^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command 'C:\Users\PC\.shorebird\bin\cache\flutter\55c197eb61ef2219a709002c39ffa445b05600f8\bin\flutter.bat'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1m 53s
+Running Gradle task 'bundleRelease'...                            114.2s
+Gradle task bundleRelease failed with exit code 1
+Failed to build AAB.
+Command: flutter build appbundle --release
+Reason: Exited with code 1.
+
+💡 Fix Recommendations
+
+• Check that running `flutter build` with the same command-line arguments
+completes successfully by running the following command:
+
+flutter build appbundle --release
+
+If the above command fails, then this is likely not a Shorebird issue and
+the underlying `flutter build` failure must be resolved for Shorebird to
+build a release.
+
+• If `flutter build` completes successfully, please ensure that you are
+providing the desired flutter version to the release command via
+the `--flutter-version` option. If you do not specify a `--flutter-version`
+Shorebird will default to the latest stable version of Flutter.
+We strongly encourage always specifying an explicit Flutter version:
