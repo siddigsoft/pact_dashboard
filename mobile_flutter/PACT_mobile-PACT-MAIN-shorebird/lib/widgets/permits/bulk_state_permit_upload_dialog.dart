@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/permit_upload_service.dart';
@@ -112,6 +112,23 @@ class _BulkStatePermitUploadDialogState
                   setState(() {
                     _permitItems[index].file = File(image.path);
                     _permitItems[index].fileName = image.name;
+                  });
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+              title: Text(l10n.selectPdf),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['pdf'],
+                );
+                if (result != null && result.files.single.path != null) {
+                  setState(() {
+                    _permitItems[index].file = File(result.files.single.path!);
+                    _permitItems[index].fileName = result.files.single.name;
                   });
                 }
               },
