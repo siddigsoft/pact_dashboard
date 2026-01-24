@@ -113,8 +113,8 @@ class PermissionHandlerService {
     return await Permission.photos.isGranted;
   }
 
-  Future<void> openAppSettings() async {
-    await openAppSettings();
+  Future<bool> openSystemSettings() async {
+    return await openAppSettings();
   }
 
   Future<Map<String, bool>> checkAllPermissions() async {

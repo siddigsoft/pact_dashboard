@@ -27,12 +27,51 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   DateTime? _endDate;
   
   RealtimeChannel? _logsChannel;
+  bool _hasAccess = false;
 
   @override
   void initState() {
     super.initState();
-    _loadLogs();
-    _setupRealtimeSubscription();
+    _checkSuperAdminAccess();
+  }
+
+  Future<void> _checkSuperAdminAccess() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      
+      final profile = await _supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+      
+      final role = (profile?['role'] as String?)?.toLowerCase() ?? '';
+      final isSuperAdmin = role == 'super_admin' || role == 'superadmin';
+      
+      if (!mounted) return;
+      
+      if (!isSuperAdmin) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic ? 'الوصول مرفوض - للمشرف العام فقط' : 'Access Denied - Super Admin Only'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      setState(() => _hasAccess = true);
+      _loadLogs();
+      _setupRealtimeSubscription();
+    } catch (e) {
+      debugPrint('Error checking super admin access: $e');
+      if (mounted) Navigator.pop(context);
+    }
   }
 
   @override
@@ -57,6 +96,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   }
 
   Future<void> _loadLogs() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       var query = _supabase
@@ -79,12 +119,14 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
 
       final response = await query;
       
+      if (!mounted) return;
       setState(() {
         _logs = List<Map<String, dynamic>>.from(response as List);
         _isLoading = false;
       });
     } catch (e) {
       debugPrint('Error loading audit logs: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -121,25 +163,27 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
             ),
           ],
         ),
-        body: Column(
-          children: [
-            _buildFiltersBar(),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _logs.isEmpty
-                      ? _buildEmptyState()
-                      : RefreshIndicator(
-                          onRefresh: _loadLogs,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _logs.length,
-                            itemBuilder: (context, index) => _buildLogCard(_logs[index]),
-                          ),
-                        ),
-            ),
-          ],
-        ),
+        body: !_hasAccess
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  _buildFiltersBar(),
+                  Expanded(
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _logs.isEmpty
+                            ? _buildEmptyState()
+                            : RefreshIndicator(
+                                onRefresh: _loadLogs,
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: _logs.length,
+                                  itemBuilder: (context, index) => _buildLogCard(_logs[index]),
+                                ),
+                              ),
+                  ),
+                ],
+              ),
       ),
     );
   }
