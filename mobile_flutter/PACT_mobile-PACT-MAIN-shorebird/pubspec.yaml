@@ -33,11 +33,11 @@ dependencies:
     sdk: flutter
   supabase_flutter: ^2.10.2
   # google_maps_flutter: ^2.5.0  # Removed - replaced with flutter_map
-  location: ^5.0.3
+  location: ^8.0.0
   geolocator: ^11.0.0        # For location services
   latlong2: ^0.9.0           # For coordinates in flutter_map
   http: ^1.2.1               # For HTTP requests (OSRM API)
-  workmanager: ^0.9.0+3        # For background tasks
+  workmanager: ^0.5.2          # For background tasks
   hive: ^2.2.3               # For local storage
   hive_flutter: ^1.1.0       # Hive Flutter integration
   shared_preferences: ^2.2.2  # For local storage
