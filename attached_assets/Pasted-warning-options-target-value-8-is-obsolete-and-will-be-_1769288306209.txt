@@ -1,0 +1,74 @@
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: C:\Users\PC\AppData\Local\Pub\Cache\hosted\pub.dev\firebase_messaging-14.7.10\android\src\main\java\io\flutter\plugins\firebase\messaging\FlutterFirebaseMessagingPlugin.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+C:\Users\PC\AppData\Local\Pub\Cache\hosted\pub.dev\flutter_local_notifications-16.3.3\android\src\main\java\com\dexterous\flutterlocalnotifications\FlutterLocalNotificationsPlugin.java:1033: error: reference to bigLargeIcon is ambiguous
+      bigPictureStyle.bigLargeIcon(null);
+                     ^
+  both method bigLargeIcon(Bitmap) in BigPictureStyle and method bigLargeIcon(Icon) in BigPictureStyle match
+1 error
+3 warnings
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':flutter_local_notifications:compileReleaseJavaWithJavac'.
+> Compilation failed; see the compiler output below.
+  warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.warning: [options] source value 8 is obsolete and will be removed in a future releasewarning: [options] target value 8 is obsolete and will be removed in a future releaseC:\Users\PC\AppData\Local\Pub\Cache\hosted\pub.dev\flutter_local_notifications-16.3.3\android\src\main\java\com\dexterous\flutterlocalnotifications\FlutterLocalNotificationsPlugin.java:1033: error: reference to bigLargeIcon is ambiguous
+        bigPictureStyle.bigLargeIcon(null);
+                       ^
+    both method bigLargeIcon(Bitmap) in BigPictureStyle and method bigLargeIcon(Icon) in BigPictureStyle match
+  1 error
+  3 warnings
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to get full insights.
+
+BUILD FAILED in 6m 27s
+Running Gradle task 'bundleRelease'...                            389.2s
+Gradle task bundleRelease failed with exit code 1
+Failed to build AAB.
+Command: flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+Reason: Exited with code 1.
+
+💡 Fix Recommendations
+
+• Check that running `flutter build` with the same command-line arguments
+completes successfully by running the following command:
+
+flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+
+If the above command fails, then this is likely not a Shorebird issue and
+the underlying `flutter build` failure must be resolved for Shorebird to
+build a release.
+
+• If `flutter build` completes successfully, please ensure that you are
+providing the desired flutter version to the release command via
+the `--flutter-version` option. If you do not specify a `--flutter-version`
+Shorebird will default to the latest stable version of Flutter.
+We strongly encourage always specifying an explicit Flutter version:
+
+shorebird release <platform> --flutter-version=3.29.0
+
+• If `flutter build` completes successfully and `shorebird release`
+fails when using the same flutter version, please file an issue:
+https://github.com/shorebirdtech/shorebird/issues/new
+
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1769287729341_shorebird.log
+
+PS C:\Users\PC\PACT_mobile> 
