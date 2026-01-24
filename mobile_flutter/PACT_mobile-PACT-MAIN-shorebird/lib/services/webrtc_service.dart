@@ -66,15 +66,55 @@ class WebRTCService {
   final _errorController = StreamController<String>.broadcast();
   Stream<String> get errorStream => _errorController.stream;
 
-  // ICE servers configuration with TURN for better connectivity
-  final Map<String, dynamic> _iceServers = {
+  // ICE servers configuration with STUN and TURN for better connectivity
+  // TURN servers are essential for users behind symmetric NATs or strict firewalls
+  Map<String, dynamic> _iceServers = {
     'iceServers': [
+      // Google STUN servers (free, reliable)
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
       {'urls': 'stun:stun2.l.google.com:19302'},
       {'urls': 'stun:stun3.l.google.com:19302'},
+      // OpenRelay TURN servers (free, community-maintained)
+      {
+        'urls': 'turn:openrelay.metered.ca:80',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      // Metered TURN servers (free tier available)
+      {
+        'urls': 'turn:a.relay.metered.ca:80',
+        'username': 'e8dd65c92641c31e16de6eda',
+        'credential': 'uWdWNmkhvyqTEswO',
+      },
+      {
+        'urls': 'turn:a.relay.metered.ca:443',
+        'username': 'e8dd65c92641c31e16de6eda',
+        'credential': 'uWdWNmkhvyqTEswO',
+      },
+      {
+        'urls': 'turn:a.relay.metered.ca:443?transport=tcp',
+        'username': 'e8dd65c92641c31e16de6eda',
+        'credential': 'uWdWNmkhvyqTEswO',
+      },
     ],
+    'iceCandidatePoolSize': 10,
   };
+  
+  // Custom TURN server credentials (loaded from Supabase config)
+  String? _customTurnUrl;
+  String? _customTurnUsername;
+  String? _customTurnCredential;
 
   bool get isInitialized => _userId != null && _signalingChannel != null;
 
@@ -93,10 +133,116 @@ class WebRTCService {
     _userName = userName;
     _userAvatar = userAvatar;
 
+    // Load custom TURN credentials from Supabase config
+    await _loadTurnCredentials();
+    
     await _setupSignalingChannel();
     await _setupPresenceChannel();
     
     debugPrint('[WebRTC] Initialized for user: $userName ($userId)');
+  }
+  
+  /// Load custom TURN server credentials from Supabase app_config table
+  Future<void> _loadTurnCredentials() async {
+    try {
+      final response = await _supabase
+          .from('app_config')
+          .select('key, value')
+          .inFilter('key', ['turn_url', 'turn_username', 'turn_credential']);
+      
+      final configs = List<Map<String, dynamic>>.from(response as List);
+      
+      for (final config in configs) {
+        final key = config['key'] as String?;
+        final value = config['value'] as String?;
+        
+        if (key == 'turn_url' && value != null && value.isNotEmpty) {
+          _customTurnUrl = value;
+        } else if (key == 'turn_username' && value != null && value.isNotEmpty) {
+          _customTurnUsername = value;
+        } else if (key == 'turn_credential' && value != null && value.isNotEmpty) {
+          _customTurnCredential = value;
+        }
+      }
+      
+      // Add custom TURN server if credentials are available
+      if (_customTurnUrl != null && _customTurnUsername != null && _customTurnCredential != null) {
+        debugPrint('[WebRTC] Adding custom TURN server: $_customTurnUrl');
+        
+        final iceServers = List<Map<String, dynamic>>.from(_iceServers['iceServers'] as List);
+        
+        // Add custom TURN with multiple transport options
+        iceServers.insert(0, {
+          'urls': _customTurnUrl,
+          'username': _customTurnUsername,
+          'credential': _customTurnCredential,
+        });
+        
+        // Add TCP variant if not already TCP
+        if (!_customTurnUrl!.contains('transport=tcp')) {
+          final tcpUrl = _customTurnUrl!.contains('?') 
+              ? '$_customTurnUrl&transport=tcp'
+              : '$_customTurnUrl?transport=tcp';
+          iceServers.insert(1, {
+            'urls': tcpUrl,
+            'username': _customTurnUsername,
+            'credential': _customTurnCredential,
+          });
+        }
+        
+        _iceServers = {
+          'iceServers': iceServers,
+          'iceCandidatePoolSize': 10,
+        };
+        
+        debugPrint('[WebRTC] Custom TURN server added successfully');
+      } else {
+        debugPrint('[WebRTC] Using default TURN servers (no custom config found)');
+      }
+    } catch (e) {
+      debugPrint('[WebRTC] Error loading TURN credentials: $e');
+      // Continue with default servers if loading fails
+    }
+  }
+  
+  /// Configure custom TURN server programmatically
+  void configureTurnServer({
+    required String url,
+    required String username,
+    required String credential,
+  }) {
+    _customTurnUrl = url;
+    _customTurnUsername = username;
+    _customTurnCredential = credential;
+    
+    final iceServers = List<Map<String, dynamic>>.from(_iceServers['iceServers'] as List);
+    
+    // Add at the beginning for priority
+    iceServers.insert(0, {
+      'urls': url,
+      'username': username,
+      'credential': credential,
+    });
+    
+    // Add TCP variant
+    final tcpUrl = url.contains('?') ? '$url&transport=tcp' : '$url?transport=tcp';
+    iceServers.insert(1, {
+      'urls': tcpUrl,
+      'username': username,
+      'credential': credential,
+    });
+    
+    _iceServers = {
+      'iceServers': iceServers,
+      'iceCandidatePoolSize': 10,
+    };
+    
+    debugPrint('[WebRTC] Custom TURN server configured: $url');
+  }
+  
+  /// Get current ICE server configuration (for debugging)
+  List<Map<String, dynamic>> getIceServers() {
+    return List<Map<String, dynamic>>.from(_iceServers['iceServers'] as List);
   }
 
   /// Setup signaling channel for receiving call signals
