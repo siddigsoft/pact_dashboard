@@ -21,6 +21,7 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
   List<Map<String, dynamic>> _roles = [];
   Map<String, int> _roleUserCounts = {};
   bool _isLoading = true;
+  bool _hasAccess = false;
 
   final List<Map<String, dynamic>> _defaultRoles = [
     {
@@ -78,10 +79,49 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
   @override
   void initState() {
     super.initState();
-    _loadRoles();
+    _checkAdminAccess();
+  }
+
+  Future<void> _checkAdminAccess() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      
+      final profile = await _supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+      
+      final role = (profile?['role'] as String?)?.toLowerCase() ?? '';
+      final isAdmin = role == 'admin' || role == 'super_admin' || role == 'superadmin';
+      
+      if (!mounted) return;
+      
+      if (!isAdmin) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic ? 'الوصول مرفوض' : 'Access Denied'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      setState(() => _hasAccess = true);
+      _loadRoles();
+    } catch (e) {
+      debugPrint('Error checking admin access: $e');
+      if (mounted) Navigator.pop(context);
+    }
   }
 
   Future<void> _loadRoles() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final usersResponse = await _supabase.from('profiles').select('role');
@@ -100,12 +140,14 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
         _roles = [];
       }
       
+      if (!mounted) return;
       setState(() {
         _roleUserCounts = counts;
         _isLoading = false;
       });
     } catch (e) {
       debugPrint('Error loading roles: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -138,9 +180,11 @@ class _RoleManagementScreenState extends State<RoleManagementScreen> {
             ),
           ],
         ),
-        body: _isLoading
+        body: !_hasAccess
             ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
+            : _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
                 onRefresh: _loadRoles,
                 child: ListView(
                   padding: const EdgeInsets.all(16),

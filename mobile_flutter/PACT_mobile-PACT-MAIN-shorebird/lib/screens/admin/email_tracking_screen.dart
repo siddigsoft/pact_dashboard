@@ -30,12 +30,51 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
   int _failedEmails = 0;
   
   RealtimeChannel? _emailChannel;
+  bool _hasAccess = false;
 
   @override
   void initState() {
     super.initState();
-    _loadEmails();
-    _setupRealtimeSubscription();
+    _checkSuperAdminAccess();
+  }
+
+  Future<void> _checkSuperAdminAccess() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      
+      final profile = await _supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+      
+      final role = (profile?['role'] as String?)?.toLowerCase() ?? '';
+      final isSuperAdmin = role == 'super_admin' || role == 'superadmin';
+      
+      if (!mounted) return;
+      
+      if (!isSuperAdmin) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic ? 'الوصول مرفوض - للمشرف العام فقط' : 'Access Denied - Super Admin Only'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      setState(() => _hasAccess = true);
+      _loadEmails();
+      _setupRealtimeSubscription();
+    } catch (e) {
+      debugPrint('Error checking super admin access: $e');
+      if (mounted) Navigator.pop(context);
+    }
   }
 
   @override
@@ -60,6 +99,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
   }
 
   Future<void> _loadEmails() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       var query = _supabase
@@ -75,6 +115,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
       final response = await query;
       final emails = List<Map<String, dynamic>>.from(response as List);
       
+      if (!mounted) return;
       setState(() {
         _emails = emails;
         _totalEmails = emails.length;
@@ -85,6 +126,7 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
       });
     } catch (e) {
       debugPrint('Error loading emails: $e');
+      if (!mounted) return;
       setState(() {
         _emails = [];
         _isLoading = false;
@@ -120,26 +162,28 @@ class _EmailTrackingScreenState extends State<EmailTrackingScreen> {
             ),
           ],
         ),
-        body: Column(
-          children: [
-            _buildStatsRow(),
-            _buildFilterBar(),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _emails.isEmpty
-                      ? _buildEmptyState()
-                      : RefreshIndicator(
-                          onRefresh: _loadEmails,
-                          child: ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _emails.length,
-                            itemBuilder: (context, index) => _buildEmailCard(_emails[index]),
-                          ),
-                        ),
-            ),
-          ],
-        ),
+        body: !_hasAccess
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  _buildStatsRow(),
+                  _buildFilterBar(),
+                  Expanded(
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _emails.isEmpty
+                            ? _buildEmptyState()
+                            : RefreshIndicator(
+                                onRefresh: _loadEmails,
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: _emails.length,
+                                  itemBuilder: (context, index) => _buildEmailCard(_emails[index]),
+                                ),
+                              ),
+                  ),
+                ],
+              ),
       ),
     );
   }

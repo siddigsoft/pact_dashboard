@@ -33,14 +33,53 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   int _adminUsers = 0;
   
   RealtimeChannel? _usersChannel;
+  bool _hasAccess = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabChanged);
-    _loadUsers();
-    _setupRealtimeSubscription();
+    _checkAdminAccess();
+  }
+
+  Future<void> _checkAdminAccess() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      
+      final profile = await _supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+      
+      final role = (profile?['role'] as String?)?.toLowerCase() ?? '';
+      final isAdmin = role == 'admin' || role == 'super_admin' || role == 'superadmin';
+      
+      if (!mounted) return;
+      
+      if (!isAdmin) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isArabic ? 'الوصول مرفوض' : 'Access Denied'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      setState(() => _hasAccess = true);
+      _loadUsers();
+      _setupRealtimeSubscription();
+    } catch (e) {
+      debugPrint('Error checking admin access: $e');
+      if (mounted) Navigator.pop(context);
+    }
   }
 
   @override
@@ -82,6 +121,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
       final users = List<Map<String, dynamic>>.from(response as List);
       
+      if (!mounted) return;
+      
       setState(() {
         _users = users;
         _totalUsers = users.length;
@@ -96,6 +137,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       });
     } catch (e) {
       debugPrint('Error loading users: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -169,21 +211,23 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
             ),
           ],
         ),
-        body: Column(
-          children: [
-            _buildStatsRow(),
-            _buildSearchAndFilters(),
-            _buildTabBar(),
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : RefreshIndicator(
-                      onRefresh: _loadUsers,
-                      child: _buildUsersList(),
-                    ),
-            ),
-          ],
-        ),
+        body: !_hasAccess
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  _buildStatsRow(),
+                  _buildSearchAndFilters(),
+                  _buildTabBar(),
+                  Expanded(
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : RefreshIndicator(
+                            onRefresh: _loadUsers,
+                            child: _buildUsersList(),
+                          ),
+                  ),
+                ],
+              ),
       ),
     );
   }
