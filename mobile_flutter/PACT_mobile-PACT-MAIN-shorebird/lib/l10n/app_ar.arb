@@ -1411,5 +1411,53 @@
   "selectDate": "اختر التاريخ",
   "@selectDate": {
     "description": "Select date placeholder"
+  },
+  "bulkStatePermitUpload": "رفع تصاريح الولايات بالجملة",
+  "@bulkStatePermitUpload": {
+    "description": "Title for bulk state permit upload dialog"
+  },
+  "bulkLocalityPermitUpload": "رفع تصاريح المحليات بالجملة",
+  "@bulkLocalityPermitUpload": {
+    "description": "Title for bulk locality permit upload dialog"
+  },
+  "statesSelected": "ولايات محددة",
+  "@statesSelected": {
+    "description": "Label for number of states selected"
+  },
+  "localitiesSelected": "محليات محددة",
+  "@localitiesSelected": {
+    "description": "Label for number of localities selected"
+  },
+  "bulkUploadInstructions": "حدد الملفات والتواريخ لكل ولاية. سيتم رفع الولايات ذات المعلومات الكاملة فقط.",
+  "@bulkUploadInstructions": {
+    "description": "Instructions for bulk upload"
+  },
+  "bulkLocalityUploadInstructions": "حدد الملفات والتواريخ لكل محلية. سيتم رفع المحليات ذات المعلومات الكاملة فقط.",
+  "@bulkLocalityUploadInstructions": {
+    "description": "Instructions for bulk locality upload"
+  },
+  "noPermitsReady": "لا توجد تصاريح جاهزة للرفع",
+  "@noPermitsReady": {
+    "description": "Error message when no permits are ready"
+  },
+  "ready": "جاهز",
+  "@ready": {
+    "description": "Status label for ready items"
+  },
+  "uploaded": "تم الرفع",
+  "@uploaded": {
+    "description": "Status label for uploaded items"
+  },
+  "failed": "فشل",
+  "@failed": {
+    "description": "Status label for failed items"
+  },
+  "uploadAll": "رفع الكل",
+  "@uploadAll": {
+    "description": "Button to upload all ready permits"
+  },
+  "selectFile": "اختر ملف",
+  "@selectFile": {
+    "description": "Button to select a file"
   }
 }
