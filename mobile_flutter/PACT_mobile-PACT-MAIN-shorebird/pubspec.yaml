@@ -82,8 +82,8 @@ dependencies:
   provider: ^6.1.1           # For state management
   flutter_map_tile_caching: ^9.0.1 # For offline map tile caching
   flutter_map_marker_popup: ^6.1.2  # For marker popups
-  syncfusion_flutter_xlsio: ^32.1.24 # For Excel file handling
-  syncfusion_flutter_pdf: ^32.1.24 # For PDF viewing
+  syncfusion_flutter_xlsio: ^28.1.36 # For Excel file handling (Dart 3.6 compatible)
+  syncfusion_flutter_pdf: ^28.1.36 # For PDF viewing (Dart 3.6 compatible)
   webview_flutter: ^4.10.0 # For in-app document viewing
   shorebird_code_push: ^1.1.0 # For Shorebird OTA updates
   firebase_messaging: ^15.2.10 # For push notifications (optional, for FCM)
