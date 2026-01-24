@@ -1,105 +1,159 @@
 import '../models/help_models.dart';
 
 class HelpService {
-  /// Common error messages with solutions
+  /// Common error messages with solutions - Fully bilingual
   static final Map<String, ErrorMessage> commonErrors = {
     'session_expired': ErrorMessage(
       error: 'Session Expired',
+      errorAr: 'انتهت صلاحية الجلسة',
       meaning: 'Your login session has timed out for security reasons',
+      meaningAr: 'انتهت جلسة تسجيل الدخول الخاصة بك لأسباب أمنية',
       solution: 'Please log in again to continue using the app',
+      solutionAr: 'يرجى تسجيل الدخول مرة أخرى للمتابعة',
     ),
     'permission_denied': ErrorMessage(
       error: 'Permission Denied',
+      errorAr: 'تم رفض الإذن',
       meaning: 'You do not have permission to access this resource',
+      meaningAr: 'ليس لديك إذن للوصول إلى هذا المورد',
       solution: 'Contact your administrator to request the necessary permissions',
+      solutionAr: 'تواصل مع المسؤول لطلب الأذونات اللازمة',
     ),
     'network_error': ErrorMessage(
       error: 'Network Error',
+      errorAr: 'خطأ في الشبكة',
       meaning: 'Cannot connect to the server',
+      meaningAr: 'لا يمكن الاتصال بالخادم',
       solution: 'Check your internet connection and try again. If offline, your data will sync when connection is restored',
+      solutionAr: 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى. إذا كنت غير متصل، ستتم مزامنة بياناتك عند استعادة الاتصال',
     ),
     'validation_failed': ErrorMessage(
       error: 'Validation Failed',
+      errorAr: 'فشل التحقق',
       meaning: 'The data you entered does not meet the required format',
+      meaningAr: 'البيانات التي أدخلتها لا تتوافق مع التنسيق المطلوب',
       solution: 'Review the error messages on each field and correct the invalid data',
+      solutionAr: 'راجع رسائل الخطأ في كل حقل وصحح البيانات غير الصالحة',
     ),
     'server_error': ErrorMessage(
       error: 'Server Error',
+      errorAr: 'خطأ في الخادم',
       meaning: 'An error occurred on the server while processing your request',
+      meaningAr: 'حدث خطأ في الخادم أثناء معالجة طلبك',
       solution: 'Try again in a few moments. If the problem persists, contact support',
+      solutionAr: 'حاول مرة أخرى بعد لحظات. إذا استمرت المشكلة، تواصل مع الدعم',
     ),
     'duplicate_site': ErrorMessage(
       error: 'Duplicate Site',
+      errorAr: 'موقع مكرر',
       meaning: 'A site with this location or name already exists',
+      meaningAr: 'يوجد موقع بهذا الاسم أو الموقع الجغرافي بالفعل',
       solution: 'Check existing sites or choose a different location/name',
+      solutionAr: 'تحقق من المواقع الحالية أو اختر موقعاً/اسماً مختلفاً',
     ),
     'location_disabled': ErrorMessage(
       error: 'Location Services Disabled',
+      errorAr: 'خدمات الموقع معطلة',
       meaning: 'GPS location services are turned off on your device',
+      meaningAr: 'خدمات تحديد الموقع GPS معطلة على جهازك',
       solution: 'Enable location services in your device settings to continue',
+      solutionAr: 'قم بتفعيل خدمات الموقع في إعدادات جهازك للمتابعة',
     ),
     'low_gps_accuracy': ErrorMessage(
       error: 'Low GPS Accuracy',
+      errorAr: 'دقة GPS منخفضة',
       meaning: 'Your current GPS accuracy is below the required 5 meters',
+      meaningAr: 'دقة GPS الحالية أقل من الـ 5 أمتار المطلوبة',
       solution: 'Move to an area with clear sky view. Avoid indoor locations and tall buildings',
+      solutionAr: 'انتقل إلى منطقة مفتوحة بدون عوائق. تجنب الأماكن الداخلية والمباني العالية',
     ),
     'storage_full': ErrorMessage(
       error: 'Storage Full',
+      errorAr: 'التخزين ممتلئ',
       meaning: 'Your device storage is full',
+      meaningAr: 'مساحة تخزين جهازك ممتلئة',
       solution: 'Free up space by deleting unused apps or files, then try again',
+      solutionAr: 'قم بتحرير مساحة بحذف التطبيقات أو الملفات غير المستخدمة، ثم حاول مرة أخرى',
     ),
     'file_too_large': ErrorMessage(
       error: 'File Too Large',
+      errorAr: 'الملف كبير جداً',
       meaning: 'The file you are trying to upload exceeds the size limit',
+      meaningAr: 'الملف الذي تحاول رفعه يتجاوز الحد المسموح به',
       solution: 'Compress the file or choose a smaller file (max 5MB per file)',
+      solutionAr: 'قم بضغط الملف أو اختر ملفاً أصغر (الحد الأقصى 5 ميجابايت لكل ملف)',
     ),
     'unsupported_file': ErrorMessage(
       error: 'Unsupported File Type',
+      errorAr: 'نوع ملف غير مدعوم',
       meaning: 'The file format is not supported',
+      meaningAr: 'تنسيق الملف غير مدعوم',
       solution: 'Use PDF, JPG, or PNG files only',
+      solutionAr: 'استخدم ملفات PDF أو JPG أو PNG فقط',
     ),
     'sync_failed': ErrorMessage(
       error: 'Sync Failed',
+      errorAr: 'فشلت المزامنة',
       meaning: 'Unable to synchronize your local data with the server',
+      meaningAr: 'تعذرت مزامنة بياناتك المحلية مع الخادم',
       solution: 'Check your internet connection. Your data is saved locally and will sync automatically when connection is restored',
+      solutionAr: 'تحقق من اتصالك بالإنترنت. بياناتك محفوظة محلياً وستتم مزامنتها تلقائياً عند استعادة الاتصال',
     ),
     'draft_not_found': ErrorMessage(
       error: 'Draft Not Found',
+      errorAr: 'المسودة غير موجودة',
       meaning: 'The saved draft could not be loaded',
+      meaningAr: 'تعذر تحميل المسودة المحفوظة',
       solution: 'The draft may have been corrupted. Check your offline queue or create a new entry',
+      solutionAr: 'قد تكون المسودة تالفة. تحقق من قائمة الانتظار غير المتصلة أو أنشئ إدخالاً جديداً',
     ),
     'submission_queued': ErrorMessage(
       error: 'Submission Queued',
+      errorAr: 'الإرسال في قائمة الانتظار',
       meaning: 'Your submission is waiting to be sent (offline mode)',
+      meaningAr: 'إرسالك في انتظار الإرسال (وضع عدم الاتصال)',
       solution: 'This is not an error. Your data will be submitted automatically when internet is available',
+      solutionAr: 'هذا ليس خطأ. ستُرسل بياناتك تلقائياً عند توفر الإنترنت',
     ),
     'biometric_failed': ErrorMessage(
       error: 'Biometric Authentication Failed',
+      errorAr: 'فشل التحقق البيومتري',
       meaning: 'Fingerprint or face recognition was not recognized',
+      meaningAr: 'لم يتم التعرف على بصمة الإصبع أو الوجه',
       solution: 'Try again or use your password. Ensure finger is clean and properly placed. You may need to re-register biometrics in device settings',
+      solutionAr: 'حاول مرة أخرى أو استخدم كلمة المرور. تأكد من نظافة الإصبع ووضعه بشكل صحيح. قد تحتاج إلى إعادة تسجيل البيومترية في إعدادات الجهاز',
     ),
     'call_failed': ErrorMessage(
       error: 'Call Failed',
+      errorAr: 'فشلت المكالمة',
       meaning: 'Unable to connect the voice or video call',
+      meaningAr: 'تعذر الاتصال بالمكالمة الصوتية أو المرئية',
       solution: 'Check your internet connection. Ensure microphone/camera permissions are granted. Try calling again',
+      solutionAr: 'تحقق من اتصالك بالإنترنت. تأكد من منح أذونات الميكروفون/الكاميرا. حاول الاتصال مرة أخرى',
     ),
     'chat_message_failed': ErrorMessage(
       error: 'Message Not Sent',
+      errorAr: 'لم يتم إرسال الرسالة',
       meaning: 'Your chat message could not be delivered',
+      meaningAr: 'تعذر تسليم رسالتك',
       solution: 'Check your internet connection and try sending again. Messages require an active connection',
+      solutionAr: 'تحقق من اتصالك بالإنترنت وحاول الإرسال مرة أخرى. الرسائل تتطلب اتصالاً نشطاً',
     ),
   };
 
-  /// Help categories with articles
+  /// Help categories with articles - Fully bilingual
   static final List<HelpCategory> helpCategories = [
     HelpCategory(
       id: 'getting_started',
       title: 'Getting Started',
+      titleAr: 'البداية',
       description: 'Learn the basics of using PACT Mobile',
+      descriptionAr: 'تعلم أساسيات استخدام تطبيق PACT للجوال',
       articles: [
         HelpArticle(
           id: 'login',
           title: 'How to Login',
+          titleAr: 'كيفية تسجيل الدخول',
           content: '''
 1. Open the PACT Mobile app
 2. Enter your email address
@@ -109,11 +163,21 @@ class HelpService {
 
 For first-time users, check your email for login credentials from your administrator.
 ''',
+          contentAr: '''
+1. افتح تطبيق PACT للجوال
+2. أدخل عنوان بريدك الإلكتروني
+3. أدخل كلمة المرور
+4. اضغط على "تسجيل الدخول"
+5. إذا كان لديك التحقق البيومتري مفعلاً، يمكنك استخدام بصمة الإصبع أو التعرف على الوجه
+
+للمستخدمين الجدد، تحقق من بريدك الإلكتروني للحصول على بيانات تسجيل الدخول من المسؤول.
+''',
           tags: ['login', 'authentication', 'getting started'],
         ),
         HelpArticle(
           id: 'first_setup',
           title: 'First-Time Setup',
+          titleAr: 'الإعداد لأول مرة',
           content: '''
 After your first login:
 
@@ -135,11 +199,33 @@ After your first login:
    - Enable fingerprint or face recognition
    - Provides quick and secure access
 ''',
+          contentAr: '''
+بعد تسجيل الدخول لأول مرة:
+
+1. تحديث ملفك الشخصي
+   - اذهب إلى الإعدادات > الملف الشخصي
+   - أضف رقم هاتفك
+   - ارفع صورة شخصية (اختياري)
+
+2. تفعيل خدمات الموقع
+   - اسمح للتطبيق بالوصول إلى موقعك
+   - مطلوب للزيارات الميدانية والخرائط
+
+3. تفعيل الإشعارات
+   - ابقَ على اطلاع بالمهام والتحديثات
+   - اضبط تفضيلات الإشعارات في الإعدادات
+
+4. تفعيل تسجيل الدخول البيومتري (اختياري)
+   - اذهب إلى الإعدادات > الأمان
+   - فعّل بصمة الإصبع أو التعرف على الوجه
+   - يوفر وصولاً سريعاً وآمناً
+''',
           tags: ['setup', 'profile', 'getting started'],
         ),
         HelpArticle(
           id: 'navigation',
           title: 'Navigating the App',
+          titleAr: 'التنقل في التطبيق',
           content: '''
 The app has 5 main sections:
 
@@ -152,6 +238,18 @@ The app has 5 main sections:
 Use the bottom navigation bar to switch between sections.
 Pull down on most screens to refresh data.
 ''',
+          contentAr: '''
+يحتوي التطبيق على 5 أقسام رئيسية:
+
+1. الرئيسية - لوحة المعلومات مع الإحصائيات السريعة والنشاط الأخير
+2. العمليات الميدانية - الزيارات الميدانية والاستبيانات وجمع البيانات
+3. المحفظة - الإدارة المالية وتقديم التكاليف
+4. التقارير - عرض وإنشاء التقارير
+5. الملف الشخصي - الإعدادات وإدارة الحساب
+
+استخدم شريط التنقل السفلي للتبديل بين الأقسام.
+اسحب للأسفل في معظم الشاشات لتحديث البيانات.
+''',
           tags: ['navigation', 'getting started'],
         ),
       ],
@@ -159,11 +257,14 @@ Pull down on most screens to refresh data.
     HelpCategory(
       id: 'troubleshooting',
       title: 'Troubleshooting',
+      titleAr: 'استكشاف الأخطاء وإصلاحها',
       description: 'Common issues and solutions',
+      descriptionAr: 'المشاكل الشائعة وحلولها',
       articles: [
         HelpArticle(
           id: 'cannot_login',
           title: 'Cannot Login',
+          titleAr: 'لا يمكن تسجيل الدخول',
           content: '''
 If you cannot log in, try these steps:
 
@@ -187,12 +288,37 @@ If you cannot log in, try these steps:
    - Tap "Clear Cache" (not "Clear Data")
    - Restart app
 ''',
+          contentAr: '''
+إذا لم تتمكن من تسجيل الدخول، جرب هذه الخطوات:
+
+1. تحقق من بياناتك
+   - تأكد من صحة عنوان البريد الإلكتروني
+   - تأكد من صحة كلمة المرور (حساسة لحالة الأحرف)
+   - تحقق من عدم وجود مسافات إضافية
+
+2. إعادة تعيين كلمة المرور
+   - اضغط على "نسيت كلمة المرور؟" في شاشة تسجيل الدخول
+   - أدخل بريدك الإلكتروني
+   - تحقق من بريدك للحصول على رابط إعادة التعيين
+   - اتبع التعليمات لإنشاء كلمة مرور جديدة
+
+3. تحقق من اتصال الإنترنت
+   - تأكد من وجود اتصال إنترنت نشط
+   - جرب التبديل بين Wi-Fi وبيانات الجوال
+
+4. مسح ذاكرة التخزين المؤقت
+   - اذهب إلى إعدادات الجهاز > التطبيقات > PACT Mobile
+   - اضغط على "مسح ذاكرة التخزين المؤقت" (وليس "مسح البيانات")
+   - أعد تشغيل التطبيق
+''',
           solution: 'If still unable to login, contact your administrator',
+          solutionAr: 'إذا كنت لا تزال غير قادر على تسجيل الدخول، تواصل مع المسؤول',
           tags: ['login', 'troubleshooting', 'password'],
         ),
         HelpArticle(
           id: 'location_not_working',
           title: 'Location Not Working',
+          titleAr: 'الموقع لا يعمل',
           content: '''
 If GPS location is not working:
 
@@ -217,12 +343,38 @@ If GPS location is not working:
    - Turn location back on
    - Restart the app
 ''',
+          contentAr: '''
+إذا كان موقع GPS لا يعمل:
+
+1. تفعيل خدمات الموقع
+   - أندرويد: الإعدادات > الموقع > تشغيل
+   - iOS: الإعدادات > الخصوصية > خدمات الموقع > PACT Mobile > أثناء الاستخدام
+
+2. تحسين دقة GPS
+   - انتقل إلى منطقة مفتوحة برؤية واضحة للسماء
+   - تجنب الأماكن الداخلية
+   - ابتعد عن المباني العالية
+   - انتظر 30 ثانية حتى يستقر GPS
+
+3. التحقق من دقة GPS
+   - يتطلب التطبيق دقة 5 أمتار
+   - الدقة الحالية تظهر عند إنشاء المواقع
+   - النص الأحمر يعني أن الدقة غير كافية
+
+4. إعادة تشغيل خدمات الموقع
+   - أوقف تشغيل الموقع في إعدادات الجهاز
+   - انتظر 10 ثوانٍ
+   - أعد تشغيل الموقع
+   - أعد تشغيل التطبيق
+''',
           solution: 'If GPS continues to have issues, your device may have hardware problems. Contact support.',
+          solutionAr: 'إذا استمرت مشاكل GPS، قد يكون لدى جهازك مشاكل في الأجهزة. تواصل مع الدعم.',
           tags: ['gps', 'location', 'troubleshooting'],
         ),
         HelpArticle(
           id: 'data_not_syncing',
           title: 'Data Not Syncing',
+          titleAr: 'البيانات لا تتزامن',
           content: '''
 If your data is not syncing with the server:
 
@@ -247,11 +399,36 @@ If your data is not syncing with the server:
 
 Don't worry - your data is saved locally and will automatically sync when connection is restored.
 ''',
+          contentAr: '''
+إذا كانت بياناتك لا تتزامن مع الخادم:
+
+1. تحقق من اتصال الإنترنت
+   - تأكد من وجود اتصال إنترنت نشط
+   - جرب فتح متصفح ويب للتحقق
+
+2. المزامنة اليدوية
+   - اذهب إلى الإعدادات > مزامنة البيانات
+   - اضغط على "مزامنة الآن"
+   - انتظر حتى تكتمل المزامنة
+
+3. التحقق من حالة المزامنة
+   - ابحث عن أيقونة المزامنة في شريط التطبيق
+   - علامة خضراء = متزامن
+   - سهم برتقالي = جاري المزامنة
+   - X أحمر = فشلت المزامنة
+
+4. مراجعة التغييرات المعلقة
+   - الإعدادات > مزامنة البيانات > عرض المعلقة
+   - تظهر العناصر في انتظار المزامنة
+
+لا تقلق - بياناتك محفوظة محلياً وستتم مزامنتها تلقائياً عند استعادة الاتصال.
+''',
           tags: ['sync', 'offline', 'troubleshooting'],
         ),
         HelpArticle(
           id: 'app_crashing',
           title: 'App Keeps Crashing',
+          titleAr: 'التطبيق يتعطل باستمرار',
           content: '''
 If the app crashes frequently:
 
@@ -278,7 +455,34 @@ If the app crashes frequently:
    - Download from store
    - Login again
 ''',
+          contentAr: '''
+إذا كان التطبيق يتعطل باستمرار:
+
+1. تحديث التطبيق
+   - تحقق من التحديثات في متجر Play/App Store
+   - ثبّت أحدث إصدار
+
+2. مسح ذاكرة التخزين المؤقت
+   - إعدادات الجهاز > التطبيقات > PACT Mobile
+   - مسح ذاكرة التخزين المؤقت (وليس مسح البيانات)
+
+3. تحرير مساحة التخزين
+   - تأكد من وجود 500 ميجابايت على الأقل متاحة
+   - احذف التطبيقات أو الملفات غير المستخدمة
+
+4. إعادة تشغيل الجهاز
+   - أوقف التشغيل بالكامل
+   - انتظر 30 ثانية
+   - أعد التشغيل
+
+5. إعادة تثبيت التطبيق (كحل أخير)
+   - تأكد من مزامنة البيانات أولاً
+   - أزل التطبيق
+   - حمّله من المتجر
+   - سجل الدخول مرة أخرى
+''',
           solution: 'If crashes persist, report the issue with crash details',
+          solutionAr: 'إذا استمر التعطل، أبلغ عن المشكلة مع تفاصيل التعطل',
           tags: ['crash', 'troubleshooting', 'performance'],
         ),
       ],
@@ -286,11 +490,14 @@ If the app crashes frequently:
     HelpCategory(
       id: 'field_operations',
       title: 'Field Operations',
+      titleAr: 'العمليات الميدانية',
       description: 'Working with sites, surveys, and assignments',
+      descriptionAr: 'العمل مع المواقع والاستبيانات والمهام',
       articles: [
         HelpArticle(
           id: 'create_site',
           title: 'How to Create a Site',
+          titleAr: 'كيفية إنشاء موقع',
           content: '''
 Creating a new site:
 
@@ -310,11 +517,31 @@ Requirements:
 - Must have an active assignment
 - Site name must be unique within assignment
 ''',
+          contentAr: '''
+إنشاء موقع جديد:
+
+1. اذهب إلى العمليات الميدانية > المواقع
+2. اضغط على زر "+"
+3. اختر المهمة من القائمة المنسدلة
+4. أدخل تفاصيل الموقع:
+   - اسم الموقع (مطلوب)
+   - رمز الموقع (يُنشأ تلقائياً أو مخصص)
+   - اسم القرية/المجتمع
+   - إحداثيات GPS (تُلتقط تلقائياً)
+5. ارفع صور الموقع (اختياري)
+6. اضغط على "إنشاء موقع"
+
+المتطلبات:
+- دقة GPS يجب أن تكون أقل من 5 أمتار
+- يجب أن يكون لديك مهمة نشطة
+- اسم الموقع يجب أن يكون فريداً ضمن المهمة
+''',
           tags: ['site', 'field operations', 'gps'],
         ),
         HelpArticle(
           id: 'submit_survey',
           title: 'How to Submit a Survey',
+          titleAr: 'كيفية تقديم استبيان',
           content: '''
 Completing and submitting surveys:
 
@@ -332,11 +559,29 @@ Tips:
 - Cannot edit after submission
 - Review carefully before submitting
 ''',
+          contentAr: '''
+إكمال وتقديم الاستبيانات:
+
+1. اذهب إلى العمليات الميدانية > الاستبيانات
+2. اختر استبياناً من مهامك
+3. تنقل عبر أقسام الاستبيان
+4. أجب على جميع الأسئلة المطلوبة (مميزة بـ *)
+5. أضف الصور حيث طُلب
+6. راجع إجاباتك
+7. اضغط على "تقديم الاستبيان"
+
+نصائح:
+- احفظ كمسودة للمتابعة لاحقاً
+- يمكنك العمل بدون اتصال - يُقدّم عند الاتصال
+- لا يمكن التعديل بعد التقديم
+- راجع بعناية قبل التقديم
+''',
           tags: ['survey', 'field operations', 'data collection'],
         ),
         HelpArticle(
           id: 'offline_work',
           title: 'Working Offline',
+          titleAr: 'العمل بدون اتصال',
           content: '''
 The app supports offline data collection:
 
@@ -359,39 +604,34 @@ Best Practices:
 - Don't uninstall app with pending data
 - Ensure sufficient device storage
 ''',
-          tags: ['offline', 'sync', 'field operations'],
-        ),
-        HelpArticle(
-          id: 'draft_vs_complete',
-          title: 'Draft vs Complete Submission',
-          content: '''
-Understanding draft and complete modes:
+          contentAr: '''
+يدعم التطبيق جمع البيانات بدون اتصال:
 
-DRAFT MODE (Save as Draft):
-- Saves your work locally
-- Shows orange "Draft" badge on site tile
-- Can continue editing anytime
-- Does NOT submit to server
-- Use when: No internet, need more info, taking break
+ما يعمل بدون اتصال:
+- إنشاء المواقع
+- إكمال الاستبيانات
+- التقاط الصور
+- تسجيل إحداثيات GPS
+- عرض البيانات الموجودة
+- حفظ العمل كمسودة
 
-COMPLETE MODE (Submit Now):
-- Submits directly to server when online
-- If offline, queues for submission
-- Shows pending sync indicator
-- Cannot edit after successful submission
-- Use when: All data is ready and verified
+ما يتزامن لاحقاً:
+- جميع البيانات غير المتصلة تتزامن تلقائياً عند استعادة الاتصال
+- تحقق من الإعدادات > مزامنة البيانات لرؤية العناصر المعلقة
+- أيقونة السحابة البرتقالية تظهر العناصر في انتظار المزامنة
 
-OFFLINE QUEUE:
-- If you tap "Complete" while offline
-- Entry is queued for submission
-- Auto-submits when online
-- Check sync status in site details
+أفضل الممارسات:
+- تزامن قبل الذهاب إلى الميدان
+- أبقِ التطبيق مفتوحاً أثناء المزامنة
+- لا تزل التطبيق مع وجود بيانات معلقة
+- تأكد من كفاية مساحة تخزين الجهاز
 ''',
-          tags: ['draft', 'complete', 'offline', 'submission'],
+          tags: ['offline', 'sync', 'field operations'],
         ),
         HelpArticle(
           id: 'site_visits',
           title: 'Recording Site Visits',
+          titleAr: 'تسجيل الزيارات الميدانية',
           content: '''
 How to record a site visit:
 
@@ -414,82 +654,43 @@ Tips:
 - Answer all required fields (marked with *)
 - Review before completing
 ''',
+          contentAr: '''
+كيفية تسجيل زيارة ميدانية:
+
+1. اذهب إلى العمليات الميدانية > مركز الزيارات الميدانية
+2. اختر موقعاً من مهامك
+3. اضغط على "بدء الزيارة" أو "متابعة الزيارة"
+4. املأ المعلومات المطلوبة:
+   - رمز MMP
+   - تفاصيل الأسرة
+   - قراءات المعدات
+   - تقييم السلامة
+   - الصور/الأدلة
+5. اختر الإجراء:
+   - "حفظ كمسودة" - حفظ محلياً للاحقاً
+   - "إكمال" - تقديم للمعالجة
+
+نصائح:
+- يُلتقط GPS تلقائياً
+- التقط صوراً واضحة للمعدات
+- أجب على جميع الحقول المطلوبة (مميزة بـ *)
+- راجع قبل الإكمال
+''',
           tags: ['site visit', 'mmp', 'field operations'],
-        ),
-      ],
-    ),
-    HelpCategory(
-      id: 'payment_methods',
-      title: 'Payment Methods',
-      description: 'Managing how you receive payments',
-      articles: [
-        HelpArticle(
-          id: 'add_payment_method',
-          title: 'How to Add a Payment Method',
-          content: '''
-Adding a payment method for receiving funds:
-
-1. Go to Wallet > Payment Methods
-2. Tap "Add Payment Method"
-3. Select payment type:
-   - Bank Account
-   - Mobile Money
-   - Debit/Credit Card
-4. Enter required details:
-   - Bank: Bank name, account number
-   - Mobile: Provider name, phone number
-   - Card: Cardholder name, card number
-5. Tap "Save"
-
-Your payment details are encrypted and secure.
-''',
-          tags: ['payment', 'wallet', 'bank'],
-        ),
-        HelpArticle(
-          id: 'default_payment',
-          title: 'Set Default Payment Method',
-          content: '''
-Setting your preferred payment method:
-
-1. Go to Wallet > Payment Methods
-2. Find the payment method you want as default
-3. Tap "Set as Default"
-
-Your default payment method will be used for:
-- Salary payments
-- Cost reimbursements
-- Bonuses and incentives
-
-You can change the default at any time.
-''',
-          solution: 'Only one payment method can be default at a time',
-          tags: ['payment', 'wallet', 'default'],
-        ),
-        HelpArticle(
-          id: 'remove_payment',
-          title: 'Remove a Payment Method',
-          content: '''
-Deleting a payment method:
-
-1. Go to Wallet > Payment Methods
-2. Find the payment method to remove
-3. Tap the delete icon
-4. Confirm deletion
-
-Note: If this was your default payment method, you'll need to set a new default before receiving payments.
-''',
-          tags: ['payment', 'wallet', 'delete'],
         ),
       ],
     ),
     HelpCategory(
       id: 'cost_submissions',
       title: 'Cost Submissions',
+      titleAr: 'تقديم التكاليف',
       description: 'Submit and track expense reimbursements',
+      descriptionAr: 'تقديم وتتبع استرداد النفقات',
       articles: [
         HelpArticle(
           id: 'submit_costs',
           title: 'How to Submit Costs',
+          titleAr: 'كيفية تقديم التكاليف',
           content: '''
 Submitting expense reimbursements:
 
@@ -511,11 +712,33 @@ Requirements:
 - Detailed descriptions required
 - Max 10 documents (5MB each)
 ''',
+          contentAr: '''
+تقديم استرداد النفقات:
+
+1. اذهب إلى المحفظة > تقديم التكاليف
+2. اضغط على "تقديم تكاليف جديدة"
+3. أدخل تفاصيل التكاليف:
+   - تكاليف النقل
+   - تكاليف الإقامة
+   - الوجبات والبدل اليومي
+   - نفقات أخرى
+4. أضف وصفاً لكل فئة
+5. ارفع المستندات الداعمة (الإيصالات، الفواتير)
+6. راجع المبلغ الإجمالي
+7. اضغط على "تقديم"
+
+المتطلبات:
+- يجب وجود مستندات داعمة
+- جميع المبالغ بالعملة الصحيحة
+- الأوصاف التفصيلية مطلوبة
+- الحد الأقصى 10 مستندات (5 ميجابايت لكل منها)
+''',
           tags: ['costs', 'expenses', 'reimbursement', 'wallet'],
         ),
         HelpArticle(
           id: 'track_costs',
           title: 'Track Your Submissions',
+          titleAr: 'تتبع تقديماتك',
           content: '''
 Monitoring your cost submissions:
 
@@ -533,6 +756,23 @@ View details:
 - Download supporting documents
 - See reviewer comments
 ''',
+          contentAr: '''
+مراقبة تقديمات التكاليف الخاصة بك:
+
+معاني الحالات:
+- معلق: تم التقديم، في انتظار المراجعة
+- قيد المراجعة: يتم مراجعته من قبل فريق المالية
+- موافق عليه: تمت الموافقة، جاري معالجة الدفع
+- مدفوع: تم إكمال الدفع
+- مرفوض: لم تتم الموافقة (انظر التعليقات)
+- ملغى: تم إلغاؤه من قبلك
+
+عرض التفاصيل:
+- اضغط على أي تقديم لرؤية التفاصيل الكاملة
+- عرض تفصيل التكاليف
+- تحميل المستندات الداعمة
+- رؤية تعليقات المراجع
+''',
           tags: ['costs', 'status', 'wallet'],
         ),
       ],
@@ -540,11 +780,14 @@ View details:
     HelpCategory(
       id: 'settings',
       title: 'Settings & Account',
+      titleAr: 'الإعدادات والحساب',
       description: 'Manage your account and preferences',
+      descriptionAr: 'إدارة حسابك وتفضيلاتك',
       articles: [
         HelpArticle(
           id: 'change_password',
           title: 'Change Your Password',
+          titleAr: 'تغيير كلمة المرور',
           content: '''
 Updating your password:
 
@@ -561,11 +804,28 @@ Password Requirements:
 - At least one number
 - At least one special character
 ''',
+          contentAr: '''
+تحديث كلمة المرور:
+
+1. اذهب إلى الملف الشخصي > الإعدادات > الأمان
+2. اضغط على "تغيير كلمة المرور"
+3. أدخل كلمة المرور الحالية
+4. أدخل كلمة المرور الجديدة (يجب أن تستوفي المتطلبات)
+5. أكد كلمة المرور الجديدة
+6. اضغط على "تحديث كلمة المرور"
+
+متطلبات كلمة المرور:
+- 8 أحرف على الأقل
+- مزيج من الأحرف الكبيرة والصغيرة
+- رقم واحد على الأقل
+- حرف خاص واحد على الأقل
+''',
           tags: ['password', 'security', 'settings'],
         ),
         HelpArticle(
           id: 'enable_biometric',
           title: 'Enable Biometric Authentication',
+          titleAr: 'تفعيل التحقق البيومتري',
           content: '''
 Setting up fingerprint or face recognition:
 
@@ -582,11 +842,28 @@ Benefits:
 
 Note: Device must support biometric authentication
 ''',
+          contentAr: '''
+إعداد بصمة الإصبع أو التعرف على الوجه:
+
+1. اذهب إلى الملف الشخصي > الإعدادات > الأمان
+2. اضغط على "التحقق البيومتري"
+3. اتبع تعليمات الجهاز لمسح بصمة الإصبع/الوجه
+4. أنشئ رمز PIN احتياطي (مطلوب)
+5. أكد الإعداد
+
+الفوائد:
+- تسجيل دخول سريع بدون كتابة كلمة المرور
+- أكثر أماناً من كلمة المرور وحدها
+- يعمل بدون اتصال
+
+ملاحظة: يجب أن يدعم الجهاز التحقق البيومتري
+''',
           tags: ['biometric', 'security', 'settings'],
         ),
         HelpArticle(
           id: 'notification_settings',
           title: 'Manage Notifications',
+          titleAr: 'إدارة الإشعارات',
           content: '''
 Customize notification preferences:
 
@@ -604,6 +881,23 @@ Notification Types:
 - In-app: Within app only
 - Email: Email notifications
 ''',
+          contentAr: '''
+تخصيص تفضيلات الإشعارات:
+
+1. اذهب إلى الملف الشخصي > الإعدادات > الإشعارات
+2. تفعيل/إيقاف أنواع الإشعارات:
+   - المهام الجديدة
+   - تذكيرات الاستبيانات
+   - إشعارات الدفع
+   - تحديثات النظام
+3. تعيين ساعات الهدوء (اختياري)
+4. اختيار صوت الإشعار
+
+أنواع الإشعارات:
+- الفورية: تنبيهات في الوقت الفعلي
+- داخل التطبيق: داخل التطبيق فقط
+- البريد الإلكتروني: إشعارات البريد الإلكتروني
+''',
           tags: ['notifications', 'settings'],
         ),
       ],
@@ -611,11 +905,14 @@ Notification Types:
     HelpCategory(
       id: 'communication',
       title: 'Communication',
+      titleAr: 'التواصل',
       description: 'Chat, calls, and messaging features',
+      descriptionAr: 'المحادثة والمكالمات وميزات المراسلة',
       articles: [
         HelpArticle(
           id: 'using_chat',
           title: 'Using the Chat Feature',
+          titleAr: 'استخدام ميزة المحادثة',
           content: '''
 Communicating with team members:
 
@@ -630,17 +927,40 @@ Features:
 - New messages appear at bottom
 - Unread message indicators
 - Group and individual chats
+- Image and document attachments
 
 Tips:
 - Pull down to refresh messages
 - Messages sync automatically
 - Works when online only
 ''',
+          contentAr: '''
+التواصل مع أعضاء الفريق:
+
+1. اذهب إلى المحادثة من شريط التنقل السفلي
+2. اعرض محادثاتك
+3. اضغط على محادثة لفتحها
+4. اكتب رسالتك واضغط إرسال
+
+الميزات:
+- المراسلة في الوقت الفعلي
+- الرسائل تظهر بالترتيب الزمني
+- الرسائل الجديدة تظهر في الأسفل
+- مؤشرات الرسائل غير المقروءة
+- محادثات جماعية وفردية
+- مرفقات الصور والمستندات
+
+نصائح:
+- اسحب للأسفل لتحديث الرسائل
+- الرسائل تتزامن تلقائياً
+- يعمل عند الاتصال فقط
+''',
           tags: ['chat', 'messaging', 'communication'],
         ),
         HelpArticle(
           id: 'voice_calls',
           title: 'Making Voice/Video Calls',
+          titleAr: 'إجراء المكالمات الصوتية/المرئية',
           content: '''
 Calling team members within the app:
 
@@ -661,6 +981,26 @@ Requirements:
 - Microphone permission
 - Camera permission (for video)
 ''',
+          contentAr: '''
+الاتصال بأعضاء الفريق داخل التطبيق:
+
+1. افتح محادثة
+2. اضغط على أيقونة الهاتف أو الفيديو في الرأس
+3. انتظر حتى يرد الشخص الآخر
+4. اضغط على زر إنهاء المكالمة عند الانتهاء
+
+ميزات المكالمات:
+- مكالمات صوتية
+- مكالمات مرئية
+- كتم/إلغاء كتم الصوت
+- وضع مكبر الصوت
+- تشغيل/إيقاف الكاميرا
+
+المتطلبات:
+- اتصال إنترنت مستقر
+- إذن الميكروفون
+- إذن الكاميرا (للفيديو)
+''',
           tags: ['calls', 'video', 'voice', 'communication'],
         ),
       ],
@@ -672,7 +1012,7 @@ Requirements:
     return commonErrors[errorKey];
   }
 
-  /// Search articles by query
+  /// Search articles by query - searches both languages
   static List<HelpArticle> searchArticles(String query) {
     final lowercaseQuery = query.toLowerCase();
     final results = <HelpArticle>[];
@@ -680,7 +1020,9 @@ Requirements:
     for (final category in helpCategories) {
       for (final article in category.articles) {
         if (article.title.toLowerCase().contains(lowercaseQuery) ||
+            article.titleAr.toLowerCase().contains(lowercaseQuery) ||
             article.content.toLowerCase().contains(lowercaseQuery) ||
+            article.contentAr.toLowerCase().contains(lowercaseQuery) ||
             article.tags.any((tag) => tag.toLowerCase().contains(lowercaseQuery))) {
           results.add(article);
         }

@@ -6,6 +6,7 @@ import '../models/help_models.dart';
 import '../services/help_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_drawer_menu.dart';
+import '../services/webrtc_service.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
@@ -25,12 +26,17 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
   bool _isSearching = false;
   List<SupportContact> _supportContacts = [];
   bool _loadingContacts = false;
+  
+  List<Map<String, dynamic>> _ictAdminUsers = [];
+  bool _loadingIctUsers = false;
+  String? _selectedRecipientId;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _loadSupportContacts();
+    _loadIctAdminUsers();
   }
 
   @override
@@ -61,6 +67,30 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       debugPrint('Error loading support contacts: $e');
       if (mounted) {
         setState(() => _loadingContacts = false);
+      }
+    }
+  }
+
+  Future<void> _loadIctAdminUsers() async {
+    setState(() => _loadingIctUsers = true);
+    try {
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('id, full_name, email, role, phone')
+          .inFilter('role', ['admin', 'super_admin', 'ict'])
+          .eq('is_active', true)
+          .order('full_name', ascending: true);
+
+      if (mounted) {
+        setState(() {
+          _ictAdminUsers = List<Map<String, dynamic>>.from(response as List);
+          _loadingIctUsers = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading ICT/Admin users: $e');
+      if (mounted) {
+        setState(() => _loadingIctUsers = false);
       }
     }
   }
@@ -597,8 +627,12 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildBusinessHoursCard(isArabic),
+          const SizedBox(height: 16),
           _buildEmergencyContactCard(isArabic),
           const SizedBox(height: 16),
+          _buildContactIctDropdown(isArabic),
+          const SizedBox(height: 24),
           Text(
             isArabic ? 'فريق الدعم' : 'Support Team',
             style: GoogleFonts.poppins(
@@ -615,6 +649,72 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             ..._supportContacts.map((contact) => _buildContactCard(contact, isArabic)),
           const SizedBox(height: 24),
           _buildReportBugCard(isArabic),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBusinessHoursCard(bool isArabic) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.access_time, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isArabic ? 'ساعات العمل' : 'Business Hours',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    isArabic ? '24/7 - متاح على مدار الساعة' : '24/7 - Available Around the Clock',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isArabic ? 'نحن هنا لمساعدتك في أي وقت' : 'We are here to help you anytime',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -665,7 +765,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             ),
           ),
           IconButton(
-            onPressed: () => _launchPhone('+249123456789'),
+            onPressed: _initiateEmergencyCall,
             icon: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -680,6 +780,236 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     );
   }
 
+  Widget _buildContactIctDropdown(bool isArabic) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryBlue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.headset_mic, color: AppColors.primaryBlue),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                isArabic ? 'تواصل مع فريق الدعم التقني' : 'Contact ICT Support Team',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_loadingIctUsers)
+            const Center(child: CircularProgressIndicator())
+          else ...[
+            DropdownButtonFormField<String>(
+              value: _selectedRecipientId,
+              decoration: InputDecoration(
+                labelText: isArabic ? 'اختر جهة الاتصال' : 'Select Contact',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+              items: [
+                DropdownMenuItem<String>(
+                  value: 'all',
+                  child: Text(isArabic ? 'جميع فريق الدعم التقني' : 'All ICT Support Team'),
+                ),
+                ..._ictAdminUsers.map((user) => DropdownMenuItem<String>(
+                  value: user['id'] as String,
+                  child: Text(
+                    '${user['full_name'] ?? 'Unknown'} (${_getRoleLabel(user['role'] as String?, isArabic)})',
+                  ),
+                )),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedRecipientId = value;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _selectedRecipientId != null ? () => _sendEmailToSelected(isArabic) : null,
+                    icon: const Icon(Icons.email),
+                    label: Text(isArabic ? 'إرسال بريد' : 'Send Email'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _selectedRecipientId != null && _selectedRecipientId != 'all'
+                        ? () => _initiateDirectCall(_selectedRecipientId!)
+                        : null,
+                    icon: const Icon(Icons.call),
+                    label: Text(isArabic ? 'اتصال مباشر' : 'Direct Call'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _getRoleLabel(String? role, bool isArabic) {
+    switch (role) {
+      case 'super_admin':
+        return isArabic ? 'مدير عام' : 'Super Admin';
+      case 'admin':
+        return isArabic ? 'مدير' : 'Admin';
+      case 'ict':
+        return isArabic ? 'تقنية المعلومات' : 'ICT';
+      default:
+        return isArabic ? 'دعم' : 'Support';
+    }
+  }
+
+  Future<void> _sendEmailToSelected(bool isArabic) async {
+    if (_selectedRecipientId == null) return;
+
+    List<String> emails = [];
+    
+    if (_selectedRecipientId == 'all') {
+      emails = _ictAdminUsers
+          .where((u) => u['email'] != null)
+          .map((u) => u['email'] as String)
+          .toList();
+    } else {
+      final user = _ictAdminUsers.firstWhere(
+        (u) => u['id'] == _selectedRecipientId,
+        orElse: () => {},
+      );
+      if (user.isNotEmpty && user['email'] != null) {
+        emails.add(user['email'] as String);
+      }
+    }
+
+    if (emails.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isArabic ? 'لم يتم العثور على بريد إلكتروني' : 'No email address found'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri.parse('mailto:${emails.join(',')}?subject=${Uri.encodeComponent(isArabic ? 'طلب دعم' : 'Support Request')}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Future<void> _initiateDirectCall(String userId) async {
+    final user = _ictAdminUsers.firstWhere(
+      (u) => u['id'] == userId,
+      orElse: () => {},
+    );
+    
+    if (user.isEmpty) return;
+
+    final webRtcService = WebRtcService();
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_currentLocale == 'ar' ? 'يجب تسجيل الدخول' : 'Please login first'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await webRtcService.initiateCall(
+        callerId: currentUser.id,
+        calleeId: userId,
+        callerName: currentUser.userMetadata?['full_name'] ?? 'User',
+        calleeName: user['full_name'] ?? 'Support',
+        isVideoCall: false,
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_currentLocale == 'ar' ? 'جاري الاتصال...' : 'Calling...'),
+          backgroundColor: AppColors.primaryGreen,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_currentLocale == 'ar' ? 'فشل الاتصال: $e' : 'Call failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _initiateEmergencyCall() async {
+    if (_supportContacts.isNotEmpty) {
+      final emergencyContact = _supportContacts.firstWhere(
+        (c) => c.phone != null,
+        orElse: () => _supportContacts.first,
+      );
+      if (emergencyContact.phone != null) {
+        await _launchPhone(emergencyContact.phone!);
+      }
+    } else if (_ictAdminUsers.isNotEmpty) {
+      final firstAdmin = _ictAdminUsers.firstWhere(
+        (u) => u['phone'] != null,
+        orElse: () => _ictAdminUsers.first,
+      );
+      if (firstAdmin['phone'] != null) {
+        await _launchPhone(firstAdmin['phone'] as String);
+      } else {
+        _initiateDirectCall(firstAdmin['id'] as String);
+      }
+    }
+  }
+
   Widget _buildDefaultContacts(bool isArabic) {
     return Column(
       children: [
@@ -691,7 +1021,6 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             role: 'IT Support Team',
             roleAr: 'فريق الدعم التقني',
             email: 'support@pact.org',
-            phone: '+249123456789',
           ),
           isArabic,
         ),
@@ -703,7 +1032,6 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             role: 'Operations Team',
             roleAr: 'فريق العمليات',
             email: 'field@pact.org',
-            phone: '+249987654321',
           ),
           isArabic,
         ),

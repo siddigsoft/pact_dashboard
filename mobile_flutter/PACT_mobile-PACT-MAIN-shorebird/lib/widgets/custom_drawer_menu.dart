@@ -26,6 +26,8 @@ import '../screens/help_support_screen.dart';
 import '../screens/admin_dashboard_screen.dart';
 import '../screens/super_admin_screen.dart';
 import '../screens/communications_screen.dart';
+import '../screens/field_team_map_screen.dart';
+import '../screens/digital_signatures_screen.dart';
 
 class CustomDrawerMenu extends ConsumerStatefulWidget {
   final User? currentUser;
@@ -581,6 +583,40 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           widget.onClose();
                         },
                       ),
+                      _MenuItemData(
+                        icon: Icons.draw_rounded,
+                        title: 'Digital Signatures',
+                        subtitle: 'Manage your signatures',
+                        iconColor: Colors.deepOrange,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DigitalSignaturesScreen(),
+                            ),
+                          );
+                          widget.onClose();
+                        },
+                      ),
+                      // Field Team Map - Only for admins
+                      if (_userRole.toLowerCase() == 'admin' ||
+                          _userRole.toLowerCase() == 'super_admin' ||
+                          _userRole.toLowerCase() == 'superadmin')
+                        _MenuItemData(
+                          icon: Icons.map_rounded,
+                          title: 'Field Team Map',
+                          subtitle: 'Monitor team locations',
+                          iconColor: Colors.teal,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const FieldTeamMapScreen(),
+                              ),
+                            );
+                            widget.onClose();
+                          },
+                        ),
                       // Admin Dashboard - Only for admins
                       if (_userRole.toLowerCase() == 'admin' ||
                           _userRole.toLowerCase() == 'super_admin' ||
