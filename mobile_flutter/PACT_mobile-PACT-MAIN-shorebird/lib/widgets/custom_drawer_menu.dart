@@ -28,6 +28,9 @@ import '../screens/super_admin_screen.dart';
 import '../screens/communications_screen.dart';
 import '../screens/field_team_map_screen.dart';
 import '../screens/digital_signatures_screen.dart';
+import '../screens/calendar_screen.dart';
+import '../screens/documents_screen.dart';
+import '../screens/site_visit_detail_screen.dart';
 
 class CustomDrawerMenu extends ConsumerStatefulWidget {
   final User? currentUser;
@@ -487,6 +490,36 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                             context,
                             MaterialPageRoute(
                               builder: (context) => const WalletScreen(),
+                            ),
+                          );
+                          widget.onClose();
+                        },
+                      ),
+                      _MenuItemData(
+                        icon: Icons.calendar_month_rounded,
+                        title: 'Calendar',
+                        subtitle: 'Schedule and planning',
+                        iconColor: Colors.purple,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const CalendarScreen(),
+                            ),
+                          );
+                          widget.onClose();
+                        },
+                      ),
+                      _MenuItemData(
+                        icon: Icons.folder_rounded,
+                        title: 'Documents',
+                        subtitle: 'Files and permits',
+                        iconColor: Colors.amber,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DocumentsScreen(),
                             ),
                           );
                           widget.onClose();
