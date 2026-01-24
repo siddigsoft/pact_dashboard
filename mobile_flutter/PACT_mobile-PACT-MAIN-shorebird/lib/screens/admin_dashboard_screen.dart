@@ -6,6 +6,10 @@ import '../widgets/custom_drawer_menu.dart';
 import '../theme/app_colors.dart';
 import '../models/help_models.dart';
 import 'admin_user_approval_screen.dart';
+import 'admin/user_management_screen.dart';
+import 'admin/role_management_screen.dart';
+import 'admin/audit_logs_screen.dart';
+import 'admin/email_tracking_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -323,16 +327,144 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Colors.purple,
               _scrollToContacts,
             ),
-            if (_isSuperAdmin)
-              _buildActionChip(
-                'System Settings',
-                Icons.settings,
-                Colors.blueGrey,
-                () {},
-              ),
           ],
         ),
+        const SizedBox(height: 24),
+        _buildAdministrationSection(),
+        if (_isSuperAdmin) ...[
+          const SizedBox(height: 24),
+          _buildSuperAdminSection(),
+        ],
       ],
+    );
+  }
+
+  Widget _buildAdministrationSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.admin_panel_settings, color: AppColors.primaryBlue, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Administration',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryBlue,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildAdminMenuCard(
+          'User Management',
+          'Manage users, roles, and permissions',
+          Icons.people,
+          AppColors.primaryBlue,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const UserManagementScreen()),
+          ),
+        ),
+        _buildAdminMenuCard(
+          'Role Management',
+          'Configure roles and access levels',
+          Icons.security,
+          Colors.teal,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const RoleManagementScreen()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSuperAdminSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.shield, color: Colors.purple, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Super Admin',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.purple,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildAdminMenuCard(
+          'Audit Logs',
+          'View system activity and changes',
+          Icons.history,
+          Colors.indigo,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AuditLogsScreen()),
+          ),
+        ),
+        _buildAdminMenuCard(
+          'Email Tracking',
+          'Monitor email delivery status',
+          Icons.email,
+          Colors.deepOrange,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const EmailTrackingScreen()),
+          ),
+        ),
+        _buildAdminMenuCard(
+          'User Permissions',
+          'Configure granular access controls',
+          Icons.lock,
+          Colors.blueGrey,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const UserManagementScreen()),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdminMenuCard(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        onTap: onTap,
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        title: Text(
+          title,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey[600]),
+        ),
+        trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+      ),
     );
   }
 
