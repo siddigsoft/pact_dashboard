@@ -31,86 +31,80 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  supabase_flutter: ^2.10.2
-  # google_maps_flutter: ^2.5.0  # Removed - replaced with flutter_map
-  location: ^8.0.0
-  geolocator: ^11.0.0        # For location services
-  latlong2: ^0.9.0           # For coordinates in flutter_map
-  http: ^1.2.1               # For HTTP requests (OSRM API)
-  workmanager: ^0.5.2          # For background tasks
-  hive: ^2.2.3               # For local storage
-  hive_flutter: ^1.1.0       # Hive Flutter integration
-  shared_preferences: ^2.2.2  # For local storage
-  flutter_secure_storage: ^9.0.0 # For storing encryption keys
-  local_auth: ^2.3.0         # For biometric authentication
-  local_auth_android: ^1.0.56 # Platform-specific Android authentication
-  local_auth_darwin: ^1.6.1   # Platform-specific iOS/macOS authentication
-  flutter_local_notifications: ^19.4.2 # For local notifications
-  connectivity_plus: ^7.0.0  # For network connectivity
-  uuid: ^4.4.0              # For generating unique IDs
-  encrypt: ^5.0.3           # For encryption
-  dio: ^5.4.1              # For HTTP client
-  dio_smart_retry: ^6.0.0   # For smart request retrying
-  crypto: ^3.0.3            # For cryptographic functions
-  path_provider: ^2.1.4     # For working with paths
-  geocoding: ^2.1.0         # For reverse geocoding
-  permission_handler: ^11.3.0 # For location permissions
-  image_picker: ^1.0.7      # For camera integration
-  intl: ^0.20.2             # For date formatting
-  flutter_localizations:     # For internationalization
+  supabase_flutter: ^2.5.0
+  location: ^6.0.2
+  geolocator: ^10.1.0
+  latlong2: ^0.9.0
+  http: ^1.2.0
+  workmanager: ^0.5.2
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+  local_auth: ^2.1.8
+  local_auth_android: ^1.0.43
+  local_auth_darwin: ^1.3.1
+  flutter_local_notifications: ^17.2.3
+  connectivity_plus: ^6.0.5
+  uuid: ^4.4.0
+  encrypt: ^5.0.3
+  dio: ^5.4.1
+  dio_smart_retry: ^6.0.0
+  crypto: ^3.0.3
+  path_provider: ^2.1.4
+  geocoding: ^2.1.0
+  permission_handler: ^11.3.0
+  image_picker: ^1.0.7
+  intl: ^0.19.0
+  flutter_localizations:
     sdk: flutter
-  flutter_map: ^6.1.0       # Alternative map provider
-  # Using flutter_map_marker_cluster for clustering with flutter_map
-  flutter_map_marker_cluster: ^1.3.1 # For marker clustering
-  url_launcher: ^6.3.2      # For launching URLs and emails
+  flutter_map: ^6.1.0
+  flutter_map_marker_cluster: ^1.3.1
+  url_launcher: ^6.2.6
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   
-  # Modern UI packages
-  flutter_svg: ^2.2.1         # For SVG support
-  google_fonts: ^6.3.1        # For modern typography
-  flutter_animate: ^4.5.2     # For modern animations
-  cached_network_image: ^3.4.1 # For efficient image loading and caching
-  pinput: ^5.0.1              # For PIN/OTP input fields
-  open_file: ^3.5.10
-  file_picker: ^10.3.3
-  rxdart: ^0.28.0
-  background_fetch: ^1.3.7
-  sqflite: ^2.4.2
-  provider: ^6.1.1           # For state management
-  flutter_map_tile_caching: ^9.0.1 # For offline map tile caching
-  flutter_map_marker_popup: ^6.1.2  # For marker popups
-  syncfusion_flutter_xlsio: ^28.1.36 # For Excel file handling (Dart 3.6 compatible)
-  syncfusion_flutter_pdf: ^28.1.36 # For PDF viewing (Dart 3.6 compatible)
-  webview_flutter: ^4.10.0 # For in-app document viewing
-  shorebird_code_push: ^1.1.0 # For Shorebird OTA updates
-  firebase_messaging: ^15.2.10 # For push notifications (optional, for FCM)
-  flutter_webrtc: ^1.2.1 # For WebRTC audio/video calls
-  # excel package removed - using syncfusion_flutter_xlsio for Excel handling
-  share_plus: ^10.0.2 # For sharing exported CSV or original Excel files
-  pdf: ^3.10.7 # For PDF generation
-  printing: ^5.12.0 # For printing and saving PDFs
-  flutter_email_sender: ^6.0.3 # For sending emails with attachments
-  json_annotation: ^4.9.0 # For JSON serialization
-  flutter_riverpod: ^2.4.9 # For state management
-  csv: ^5.0.2 # For CSV export
-  audioplayers: ^6.1.0 # For playing call sounds
-  table_calendar: ^3.0.9 # For calendar view
-  freezed_annotation: ^2.4.1 # For code generation
-  json_serializable: ^6.7.1 # For JSON serialization
-  package_info_plus: ^8.0.0 # For app version info
+  flutter_svg: ^2.0.10
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.5.0
+  cached_network_image: ^3.3.1
+  pinput: ^4.0.0
+  open_file: ^3.5.3
+  file_picker: ^6.2.1
+  rxdart: ^0.27.7
+  background_fetch: ^1.3.3
+  sqflite: ^2.3.3
+  provider: ^6.1.1
+  flutter_map_tile_caching: ^9.0.1
+  flutter_map_marker_popup: ^6.1.2
+  syncfusion_flutter_xlsio: ^24.2.9
+  syncfusion_flutter_pdf: ^24.2.9
+  webview_flutter: ^4.7.0
+  shorebird_code_push: ^1.1.0
+  firebase_messaging: ^14.9.4
+  flutter_webrtc: ^0.10.7
+  share_plus: ^9.0.0
+  pdf: ^3.10.7
+  printing: ^5.12.0
+  flutter_email_sender: ^6.0.3
+  json_annotation: ^4.9.0
+  flutter_riverpod: ^2.4.9
+  csv: ^5.0.2
+  audioplayers: ^5.2.1
+  table_calendar: ^3.0.9
+  freezed_annotation: ^2.4.1
+  json_serializable: ^6.7.1
+  package_info_plus: ^5.0.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^3.0.2
   mocktail: ^1.0.3
   build_runner: ^2.4.8
-  json_serializable: ^6.7.1 # For JSON serialization
-  freezed: ^2.4.1 # For code generation
-  flutter_launcher_icons: ^0.14.4
+  json_serializable: ^6.7.1
+  freezed: ^2.4.1
+  flutter_launcher_icons: ^0.13.1
   test: ^1.24.9
 
 # For information on the generic Dart part of this file, see the
