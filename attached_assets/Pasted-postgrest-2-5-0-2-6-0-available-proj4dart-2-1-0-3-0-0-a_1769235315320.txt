@@ -1,0 +1,147 @@
+postgrest 2.5.0 (2.6.0 available)
+  proj4dart 2.1.0 (3.0.0 available)
+  realtime_client 2.5.3 (2.7.0 available)
+  riverpod 2.6.1 (3.2.0 available)
+  share_plus 10.1.4 (12.0.1 available)
+  share_plus_platform_interface 5.0.2 (6.1.0 available)
+  shared_preferences 2.5.3 (2.5.4 available)
+  shared_preferences_android 2.4.13 (2.4.18 available)
+  shared_preferences_foundation 2.5.4 (2.5.6 available)
+  shorebird_code_push 1.1.6 (2.0.5 available)
+  source_gen 2.0.0 (4.2.0 available)
+  source_helper 1.3.7 (1.3.10 available)
+  sqflite_android 2.4.1 (2.4.2+2 available)
+  supabase 2.9.2 (2.10.2 available)
+  supabase_flutter 2.10.2 (2.12.0 available)
+  syncfusion_flutter_core 28.2.12 (32.1.24 available)
+  syncfusion_flutter_pdf 28.2.12 (32.1.24 available)
+  syncfusion_flutter_xlsio 28.2.11 (32.1.24 available)
+  syncfusion_officecore 28.2.12 (32.1.24 available)
+  test 1.26.3 (1.29.0 available)
+  test_api 0.7.7 (0.7.9 available)
+  test_core 0.6.12 (0.6.15 available)
+  timezone 0.10.1 (0.11.0 available)
+  unicode 0.3.1 (1.1.9 available)
+  url_launcher_android 6.3.20 (6.3.28 available)
+  url_launcher_ios 6.3.4 (6.3.6 available)
+  url_launcher_linux 3.2.1 (3.2.2 available)
+  url_launcher_macos 3.2.3 (3.2.5 available)
+  url_launcher_web 2.4.1 (2.4.2 available)
+  url_launcher_windows 3.1.4 (3.1.5 available)
+  uuid 4.5.1 (4.5.2 available)
+  vector_graphics_compiler 1.1.19 (1.1.20 available)
+  vm_service 15.0.0 (15.0.2 available)
+  watcher 1.1.4 (1.2.1 available)
+  webrtc_interface 1.3.0 (1.4.0 available)
+  webview_flutter 4.13.0 (4.13.1 available)
+  webview_flutter_android 4.10.1 (4.10.11 available)
+  webview_flutter_wkwebview 3.23.0 (3.23.5 available)
+  win32 5.14.0 (5.15.0 available)
+Got dependencies!
+137 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Error: Couldn't resolve the package 'table_calendar' in 'package:table_calendar/table_calendar.dart'.
+lib/screens/calendar_screen.dart:5:8: Error: Not found: 'package:table_calendar/table_calendar.dart'
+import 'package:table_calendar/table_calendar.dart';
+       ^
+lib/screens/calendar_screen.dart:24:3: Error: Type 'CalendarFormat' not found.
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+  ^^^^^^^^^^^^^^
+lib/screens/field_team_map_screen.dart:691:29: Error: The method 'WebRtcService' isn't defined for the type '_FieldTeamMapScreenState'.
+ - '_FieldTeamMapScreenState' is from 'package:pact_mobile/screens/field_team_map_screen.dart' ('lib/screens/field_team_map_screen.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'WebRtcService'.
+      final webRtcService = WebRtcService();
+                            ^^^^^^^^^^^^^
+lib/screens/digital_signatures_screen.dart:836:20: Error: 'RenderRepaintBoundary' isn't a type.
+                as RenderRepaintBoundary?;
+                   ^^^^^^^^^^^^^^^^^^^^^
+lib/screens/calendar_screen.dart:24:3: Error: 'CalendarFormat' isn't a type.
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+  ^^^^^^^^^^^^^^
+lib/screens/calendar_screen.dart:24:36: Error: Undefined name 'CalendarFormat'.
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+                                   ^^^^^^^^^^^^^^
+lib/screens/calendar_screen.dart:76:14: Error: The method 'isSameDay' isn't defined for the type '_CalendarScreenState'.
+ - '_CalendarScreenState' is from 'package:pact_mobile/screens/calendar_screen.dart' ('lib/screens/calendar_screen.dart').  
+Try correcting the name to the name of an existing method, or defining a method named 'isSameDay'.
+      return isSameDay(visitDate, day);
+             ^^^^^^^^^
+lib/screens/calendar_screen.dart:133:47: Error: Member not found: 'rtl'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                              ^^^
+lib/screens/calendar_screen.dart:133:67: Error: Member not found: 'ltr'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                                                  ^^^
+lib/screens/calendar_screen.dart:293:16: Error: The method 'TableCalendar' isn't defined for the type '_CalendarScreenState'.
+ - '_CalendarScreenState' is from 'package:pact_mobile/screens/calendar_screen.dart' ('lib/screens/calendar_screen.dart').  
+Try correcting the name to the name of an existing method, or defining a method named 'TableCalendar'.
+        child: TableCalendar(
+               ^^^^^^^^^^^^^
+lib/screens/calendar_screen.dart:315:26: Error: The method 'CalendarStyle' isn't defined for the type '_CalendarScreenState'.
+ - '_CalendarScreenState' is from 'package:pact_mobile/screens/calendar_screen.dart' ('lib/screens/calendar_screen.dart').  
+Try correcting the name to the name of an existing method, or defining a method named 'CalendarStyle'.
+          calendarStyle: CalendarStyle(
+                         ^^^^^^^^^^^^^
+lib/screens/calendar_screen.dart:331:24: Error: The method 'HeaderStyle' isn't defined for the type '_CalendarScreenState'. 
+ - '_CalendarScreenState' is from 'package:pact_mobile/screens/calendar_screen.dart' ('lib/screens/calendar_screen.dart').
+Try correcting the name to the name of an existing method, or defining a method named 'HeaderStyle'.
+          headerStyle: HeaderStyle(
+                       ^^^^^^^^^^^
+lib/screens/calendar_screen.dart:347:28: Error: The method 'DaysOfWeekStyle' isn't defined for the type '_CalendarScreenState'.
+ - '_CalendarScreenState' is from 'package:pact_mobile/screens/calendar_screen.dart' ('lib/screens/calendar_screen.dart').  
+Try correcting the name to the name of an existing method, or defining a method named 'DaysOfWeekStyle'.
+          daysOfWeekStyle: DaysOfWeekStyle(
+                           ^^^^^^^^^^^^^^^
+lib/screens/calendar_screen.dart:298:42: Error: The method 'isSameDay' isn't defined for the type '_CalendarScreenState'.   
+ - '_CalendarScreenState' is from 'package:pact_mobile/screens/calendar_screen.dart' ('lib/screens/calendar_screen.dart').  
+Try correcting the name to the name of an existing method, or defining a method named 'isSameDay'.
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                                         ^^^^^^^^^
+lib/screens/documents_screen.dart:285:47: Error: Member not found: 'rtl'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                              ^^^
+lib/screens/documents_screen.dart:285:67: Error: Member not found: 'ltr'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                                                  ^^^
+lib/screens/site_visit_detail_screen.dart:159:47: Error: Member not found: 'rtl'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                              ^^^
+lib/screens/site_visit_detail_screen.dart:159:67: Error: Member not found: 'ltr'.
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+                                                                  ^^^
+Unhandled exception:
+FileSystemException(uri=org-dartlang-untranslatable-uri:package%3Atable_calendar%2Ftable_calendar.dart; message=StandardFileSystem only supports file:* and data:* URIs)
+#0      StandardFileSystem.entityForUri (package:front_end/src/api_prototype/standard_file_system.dart:45)
+#1      asFileUri (package:vm/kernel_front_end.dart:1008)
+#2      writeDepfile (package:vm/kernel_front_end.dart:1171)
+<asynchronous suspension>
+#3      FrontendCompiler.compile (package:frontend_server/frontend_server.dart:738)
+<asynchronous suspension>
+#4      starter (package:frontend_server/starter.dart:102)
+<asynchronous suspension>
+#5      main (file:///C:/Users/gha/.engine_checkout/flutter/engine/src/flutter/third_party/dart/pkg/frontend_server/bin/frontend_server_starter.dart:13)
+<asynchronous suspension>
+
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command 'C:\Users\PC\.shorebird\bin\cache\flutter\55c197eb61ef2219a709002c39ffa445b05600f8\bin\flutter.bat'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1m 1s
+Running Gradle task 'bundleRelease'...                             61.8s
+Gradle task bundleRelease failed with exit code 1
+Failed to build AAB.
+Command: flutter build appbundle --release
+Reason: Exited with code 1.
+
+💡 Fix Recommendations

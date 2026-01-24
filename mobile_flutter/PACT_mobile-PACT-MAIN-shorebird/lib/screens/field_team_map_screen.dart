@@ -676,7 +676,7 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
     if (currentUser == null) return;
 
     try {
-      final webRtcService = WebRtcService();
+      final webRtcService = WebRTCService();
       await webRtcService.initiateCall(
         callerId: currentUser.id,
         calleeId: member['id'],
