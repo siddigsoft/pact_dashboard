@@ -82,7 +82,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
     final isArabic = _currentLocale == 'ar';
 
     return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: AppColors.backgroundGray,
