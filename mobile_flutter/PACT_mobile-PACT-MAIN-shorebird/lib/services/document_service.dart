@@ -1,27 +1,22 @@
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
-import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/mmp_file.dart';
 
 class DocumentService {
   Future<void> openDocument(MMPFile file) async {
-    final result = await OpenFile.open(file.localPath);
-    if (result.type != ResultType.done) {
-      throw Exception('Could not open file: ${result.message}');
+    final uri = Uri.file(file.localPath);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      throw Exception('Could not open file: ${file.localPath}');
     }
   }
 
-  Future<String> saveDocument(PlatformFile file) async {
+  Future<String> saveDocumentFromBytes(String fileName, List<int> bytes) async {
     final appDir = await getApplicationDocumentsDirectory();
-    final savedFile = File('${appDir.path}/${file.name}');
-    
-    if (file.bytes != null) {
-      await savedFile.writeAsBytes(file.bytes!);
-    } else if (file.path != null) {
-      await File(file.path!).copy(savedFile.path);
-    }
-    
+    final savedFile = File('${appDir.path}/$fileName');
+    await savedFile.writeAsBytes(bytes);
     return savedFile.path;
   }
 

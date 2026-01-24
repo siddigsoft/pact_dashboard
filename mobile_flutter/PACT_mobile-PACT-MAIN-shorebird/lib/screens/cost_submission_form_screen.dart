@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/cost_submission_models.dart';
 import '../models/site_visit.dart';
@@ -987,20 +987,22 @@ class _CostSubmissionFormScreenState
 
   Future<void> _pickDocument() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-        allowMultiple: false,
+      // Use image picker instead of file picker
+      final ImagePicker imagePicker = ImagePicker();
+      final XFile? image = await imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
       );
 
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
+      if (image != null) {
+        final file = File(image.path);
+        final fileSize = await file.length();
 
         // Validate file
         final service = ref.read(costSubmissionServiceProvider);
         final validation = service.validateDocument(
-          filename: file.name,
-          fileSizeBytes: file.size,
+          filename: image.name,
+          fileSizeBytes: fileSize,
         );
 
         if (!validation.isValid && mounted) {
@@ -1013,9 +1015,9 @@ class _CostSubmissionFormScreenState
         // Create document (in real app, upload to storage first)
         final document = SupportingDocument(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
-          url: file.path ?? '',
-          type: _getDocumentType(file.extension ?? ''),
-          filename: file.name,
+          url: image.path,
+          type: _getDocumentType(image.path.split('.').last),
+          filename: image.name,
           uploadedAt: DateTime.now(),
         );
 

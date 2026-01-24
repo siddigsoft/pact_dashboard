@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:open_file/open_file.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/mmp_file.dart';
@@ -132,8 +132,6 @@ class MMPFileService {
           .order('created_at', ascending: false);
 
       return response.map((item) => Map<String, dynamic>.from(item)).toList();
-
-      return [];
     } catch (e) {
       LoggerService.log(
         'Failed to fetch MMP files: ${e.toString()}',
@@ -428,7 +426,7 @@ class MMPFileService {
       for (final key in box.keys) {
         final download = box.get(key);
         if (download != null && download['status'] == 'pending') {
-          pending.add(download);
+          pending.add(Map<String, dynamic>.from(download));
         }
       }
 
@@ -565,7 +563,7 @@ class MMPFileService {
     }
   }
 
-  /// Open cached file if available
+  /// Open cached file if available using url_launcher
   Future<bool> openCachedFile(String fileId) async {
     try {
       final cachedFile = await _getLocalFileRecord(fileId);
@@ -575,8 +573,9 @@ class MMPFileService {
         if (filePath != null) {
           final file = File(filePath);
           if (await file.exists()) {
-            final result = await OpenFile.open(filePath);
-            if (result.type == ResultType.done) {
+            final uri = Uri.file(filePath);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri);
               await _touchLocalFileRecord(fileId);
               LoggerService.log('Opened cached file: $filePath');
               return true;
@@ -605,9 +604,11 @@ class MMPFileService {
         file,
         forceRefresh: forceRefresh,
       );
-      final result = await OpenFile.open(localPath);
-      if (result.type != ResultType.done) {
-        throw Exception('Could not open file: ${result.message}');
+      final uri = Uri.file(localPath);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        throw Exception('Could not open file: $localPath');
       }
     } catch (e) {
       LoggerService.log(
@@ -741,150 +742,60 @@ class MMPFileService {
         await _touchLocalFileRecord(file.id);
         return existingPath;
       }
-      throw Exception('Unable to download file from storage: ${e.message}');
-    } catch (e) {
-      // General error - use cached version if available
-      if (existingPath != null) {
-        LoggerService.log(
-          'Error downloading file, using cached version for ${file.name ?? file.id}: $e',
-          level: LogLevel.warning,
-        );
-        await _touchLocalFileRecord(file.id);
-        return existingPath;
-      }
-      LoggerService.log(
-        'Failed to download file and no cache available: ${file.name ?? file.id}: $e',
-        level: LogLevel.error,
-      );
       rethrow;
     }
   }
 
-  /// Prefetch and cache a list of MMP files for offline use.
-  Future<void> prefetchMMPFiles(
-    List<MMPFile> files, {
-    bool forceRefresh = false,
-  }) async {
-    LoggerService.log(
-      'Starting automatic download for ${files.length} MMP files',
-    );
-    int successCount = 0;
-    int failCount = 0;
-
-    for (final file in files) {
-      try {
-        await ensureFileAvailable(file, forceRefresh: forceRefresh);
-        successCount++;
-        LoggerService.log(
-          'Auto-download success for ${file.name ?? file.id} ($successCount/${files.length})',
-        );
-      } catch (e) {
-        failCount++;
-        LoggerService.log(
-          'Auto-download failed for ${file.name ?? file.id}: $e',
-          level: LogLevel.warning,
-        );
-      }
+  /// Handle file access on web platform
+  Future<String> _handleWebFileAccess(MMPFile file) async {
+    final storagePath = file.fileUrl ?? file.filePath;
+    if (storagePath == null) {
+      throw Exception('Storage path not available for file ${file.name}');
     }
 
-    LoggerService.log(
-      'Auto-download complete: $successCount succeeded, $failCount failed out of ${files.length}',
-    );
+    // Get a signed URL for web access
+    final signedUrl = await _supabase.storage
+        .from(_storageBucket)
+        .createSignedUrl(storagePath, 3600); // 1 hour expiry
+
+    return signedUrl;
   }
 
-  /// Get locally cached files
-  Future<List<Map<String, dynamic>>> getLocallyCachedFiles() async {
+  /// Clear all cached files
+  Future<void> clearCache() async {
     try {
-      final box = await _getLocalFilesBox();
-      final cachedFiles = <Map<String, dynamic>>[];
+      final cacheDir = await _ensureCacheDirectory();
+      if (await cacheDir.exists()) {
+        await cacheDir.delete(recursive: true);
+        await cacheDir.create(recursive: true);
+      }
 
-      for (final key in box.keys) {
-        final fileData = box.get(key);
-        if (fileData != null) {
-          cachedFiles.add(fileData);
+      final localFilesBox = await _getLocalFilesBox();
+      await localFilesBox.clear();
+
+      LoggerService.log('File cache cleared');
+    } catch (e) {
+      LoggerService.log('Error clearing cache: $e', level: LogLevel.error);
+    }
+  }
+
+  /// Get cache size
+  Future<int> getCacheSize() async {
+    try {
+      final cacheDir = await _ensureCacheDirectory();
+      int totalSize = 0;
+
+      await for (final entity in cacheDir.list(recursive: true)) {
+        if (entity is File) {
+          totalSize += await entity.length();
         }
       }
 
-      return cachedFiles;
+      return totalSize;
     } catch (e) {
-      LoggerService.log(
-        'Error getting locally cached files: $e',
-        level: LogLevel.error,
-      );
-      return [];
+      LoggerService.log('Error getting cache size: $e', level: LogLevel.error);
+      return 0;
     }
-  }
-
-  /// Clear cached file data
-  Future<void> clearFileCache() async {
-    try {
-      final cacheBox = await _getMMPFilesCacheBox();
-      final queueBox = await _getDownloadQueueBox();
-      final localBox = await _getLocalFilesBox();
-
-      await cacheBox.clear();
-      await queueBox.clear();
-
-      // Optionally clear local files (be careful with this)
-      // await localBox.clear();
-
-      LoggerService.log('Cleared MMP file cache');
-    } catch (e) {
-      LoggerService.log('Error clearing file cache: $e', level: LogLevel.error);
-    }
-  }
-
-  /// Get file cache statistics
-  Future<Map<String, dynamic>> getFileCacheStats() async {
-    try {
-      final cacheBox = await _getMMPFilesCacheBox();
-      final queueBox = await _getDownloadQueueBox();
-      final localBox = await _getLocalFilesBox();
-
-      final pendingDownloads = queueBox.keys.where((key) {
-        final item = queueBox.get(key);
-        return item != null && item['status'] == 'pending';
-      }).length;
-
-      final failedDownloads = queueBox.keys.where((key) {
-        final item = queueBox.get(key);
-        return item != null && item['status'] == 'failed';
-      }).length;
-
-      return {
-        'cached_file_metadata': cacheBox.length,
-        'pending_downloads': pendingDownloads,
-        'failed_downloads': failedDownloads,
-        'locally_cached_files': localBox.length,
-      };
-    } catch (e) {
-      LoggerService.log(
-        'Error getting file cache stats: $e',
-        level: LogLevel.error,
-      );
-      return {};
-    }
-  }
-
-  Future<String> _handleWebFileAccess(MMPFile file) async {
-    // On web, we can't cache files locally, so we return a special URL that can be used for downloading
-    final storagePath = file.fileUrl ?? file.filePath;
-    if (storagePath == null) {
-      throw Exception(
-        'Storage path not available for file ${file.name ?? file.id}',
-      );
-    }
-
-    // For web, we'll construct a download URL that can be used by the browser
-    final downloadUrl = _supabase.storage
-        .from(_storageBucket)
-        .getPublicUrl(storagePath);
-    LoggerService.log(
-      'Web file access URL: $downloadUrl for ${file.name ?? file.id}',
-    );
-
-    // Return the download URL as the "local path" for web
-    return downloadUrl;
   }
 }
 
