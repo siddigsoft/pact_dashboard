@@ -1,8 +1,9 @@
-// lib/screens/call_screen.dart
-
+import 'dart:ui';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/webrtc_service.dart';
 import '../models/call_state.dart';
 import '../theme/app_colors.dart';
@@ -11,11 +12,13 @@ import 'dart:async';
 class CallScreen extends StatefulWidget {
   final String? remoteUserName;
   final String? remoteUserAvatar;
+  final String? remoteUserRole;
 
   const CallScreen({
     super.key,
     this.remoteUserName,
     this.remoteUserAvatar,
+    this.remoteUserRole,
   });
 
   @override
@@ -35,10 +38,16 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   Duration _callDuration = Duration.zero;
   Timer? _durationTimer;
 
-  // Animation controllers
   late AnimationController _pulseController;
   late AnimationController _waveController;
+  late AnimationController _particleController;
+  late AnimationController _glowController;
   late Animation<double> _pulseAnimation;
+  late Animation<double> _glowAnimation;
+
+  Offset _pipPosition = const Offset(20, 100);
+  bool _isDraggingPip = false;
+  int _connectionQuality = 3;
 
   @override
   void initState() {
@@ -47,7 +56,6 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _subscribeToStreams();
     _initAnimations();
     
-    // Set status bar style for call screen
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -57,7 +65,6 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   }
 
   void _initAnimations() {
-    // Pulse animation for avatar
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1500),
       vsync: this,
@@ -67,11 +74,24 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Wave animation for ripple effect
     _waveController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 2500),
       vsync: this,
     )..repeat();
+
+    _particleController = AnimationController(
+      duration: const Duration(seconds: 10),
+      vsync: this,
+    )..repeat();
+
+    _glowController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _glowAnimation = Tween<double>(begin: 0.2, end: 0.6).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -84,6 +104,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _remoteRenderer.dispose();
     _pulseController.dispose();
     _waveController.dispose();
+    _particleController.dispose();
+    _glowController.dispose();
     super.dispose();
   }
 
@@ -94,6 +116,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
   void _subscribeToStreams() {
     _callStateSubscription = _webrtcService.callStateStream.listen((state) {
+      if (!mounted) return;
       setState(() {
         _callState = state;
       });
@@ -124,6 +147,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
 
   void _startDurationTimer() {
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
       setState(() {
         _callDuration = Duration(seconds: _callDuration.inSeconds + 1);
       });
@@ -177,93 +201,260 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     final isVideoEnabled = !_callState.isAudioOnly && _callState.isVideoEnabled;
     final isDialing = _callState.status == CallStatus.calling || 
                       _callState.status == CallStatus.ringing;
+    final isConnected = _callState.status == CallStatus.connected;
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDialing
-                ? [
-                    const Color(0xFF1a1a2e),
-                    const Color(0xFF16213e),
-                    const Color(0xFF0f3460),
-                  ]
-                : [
-                    Colors.black,
-                    Colors.grey[900]!,
-                  ],
+      body: Stack(
+        children: [
+          _buildBackground(isDialing, isConnected),
+          if (isVideoEnabled && isConnected)
+            Positioned.fill(
+              child: RTCVideoView(
+                _remoteRenderer,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+              ),
+            ),
+          if (isDialing || !isVideoEnabled)
+            Positioned.fill(
+              child: _buildDialingUI(),
+            ),
+          if (isVideoEnabled && isConnected)
+            _buildDraggablePip(),
+          if (isConnected)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 20,
+              left: 0,
+              right: 0,
+              child: _buildTopBar(),
+            ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildCallControls(isConnected, isVideoEnabled),
+          ),
+          if (isDialing)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              left: 10,
+              child: _buildBackButton(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBackground(bool isDialing, bool isConnected) {
+    return AnimatedBuilder(
+      animation: _particleController,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDialing
+                  ? [
+                      const Color(0xFF0D1B2A),
+                      const Color(0xFF1B263B),
+                      const Color(0xFF415A77),
+                    ]
+                  : isConnected
+                      ? [
+                          Colors.black,
+                          Colors.grey[900]!,
+                        ]
+                      : [
+                          const Color(0xFF1a1a2e),
+                          const Color(0xFF16213e),
+                        ],
+            ),
+          ),
+          child: isDialing
+              ? CustomPaint(
+                  size: Size.infinite,
+                  painter: ParticlePainter(
+                    animation: _particleController.value,
+                    particleColor: AppColors.primaryBlue.withOpacity(0.3),
+                  ),
+                )
+              : null,
+        );
+      },
+    );
+  }
+
+  Widget _buildBackButton() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+            ),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+            onPressed: () async {
+              await _webrtcService.endCall();
+            },
           ),
         ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              // Remote video (full screen) - only when connected
-              if (isVideoEnabled && _callState.status == CallStatus.connected)
-                Positioned.fill(
-                  child: RTCVideoView(
-                    _remoteRenderer,
-                    objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                  ),
-                ),
+      ),
+    );
+  }
 
-              // Dialing/Calling UI
-              if (isDialing || !isVideoEnabled)
-                Positioned.fill(
-                  child: _buildDialingUI(),
+  Widget _buildTopBar() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.1),
                 ),
-
-              // Local video (picture-in-picture)
-              if (isVideoEnabled && _callState.status == CallStatus.connected)
-                Positioned(
-                  top: 20,
-                  right: 20,
-                  width: 120,
-                  height: 160,
-                  child: Container(
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 10,
-                          spreadRadius: 2,
+                      color: AppColors.primaryGreen.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.security,
+                      color: AppColors.primaryGreen,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'End-to-end encrypted',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          _formatDuration(),
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: RTCVideoView(
-                        _localRenderer,
-                        mirror: true,
-                        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                  ),
+                  _buildConnectionQualityIndicator(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConnectionQualityIndicator() {
+    return Row(
+      children: List.generate(4, (index) {
+        final isActive = index < _connectionQuality;
+        return Container(
+          width: 4,
+          height: 6 + (index * 4).toDouble(),
+          margin: const EdgeInsets.only(left: 2),
+          decoration: BoxDecoration(
+            color: isActive 
+                ? (_connectionQuality >= 3 ? AppColors.primaryGreen : Colors.orange)
+                : Colors.white24,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildDraggablePip() {
+    return Positioned(
+      left: _pipPosition.dx,
+      top: _pipPosition.dy,
+      child: GestureDetector(
+        onPanStart: (_) => setState(() => _isDraggingPip = true),
+        onPanUpdate: (details) {
+          setState(() {
+            _pipPosition = Offset(
+              (_pipPosition.dx + details.delta.dx).clamp(0, MediaQuery.of(context).size.width - 140),
+              (_pipPosition.dy + details.delta.dy).clamp(0, MediaQuery.of(context).size.height - 200),
+            );
+          });
+        },
+        onPanEnd: (_) => setState(() => _isDraggingPip = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 130,
+          height: 180,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(_isDraggingPip ? 0.5 : 0.3),
+                blurRadius: _isDraggingPip ? 20 : 15,
+                spreadRadius: _isDraggingPip ? 4 : 2,
+              ),
+            ],
+            border: Border.all(
+              color: Colors.white.withOpacity(_isDraggingPip ? 0.4 : 0.2),
+              width: 2,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Stack(
+              children: [
+                RTCVideoView(
+                  _localRenderer,
+                  mirror: true,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                ),
+                Positioned(
+                  bottom: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'You',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
                 ),
-
-              // Call controls
-              Positioned(
-                bottom: 50,
-                left: 0,
-                right: 0,
-                child: _buildCallControls(),
-              ),
-
-              // Back button (when dialing)
-              if (isDialing)
-                Positioned(
-                  top: 10,
-                  left: 10,
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                    onPressed: () async {
-                      await _webrtcService.endCall();
-                    },
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -280,36 +471,49 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const Spacer(flex: 2),
-
-        // Animated avatar with ripple waves
         Stack(
           alignment: Alignment.center,
           children: [
-            // Ripple waves (only when dialing)
-            if (isDialing) ...[
+            if (isDialing)
               AnimatedBuilder(
                 animation: _waveController,
                 builder: (context, child) {
                   return CustomPaint(
-                    size: const Size(200, 200),
-                    painter: RipplePainter(
+                    size: const Size(280, 280),
+                    painter: EnhancedRipplePainter(
                       animation: _waveController.value,
-                      color: AppColors.primaryBlue.withOpacity(0.3),
+                      color: AppColors.primaryBlue,
                     ),
                   );
                 },
               ),
-            ],
-
-            // Pulsing avatar
+            AnimatedBuilder(
+              animation: _glowAnimation,
+              builder: (context, child) {
+                return Container(
+                  width: 160,
+                  height: 160,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryBlue.withOpacity(_glowAnimation.value),
+                        blurRadius: 50,
+                        spreadRadius: 15,
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             AnimatedBuilder(
               animation: _pulseAnimation,
               builder: (context, child) {
                 return Transform.scale(
                   scale: isDialing ? _pulseAnimation.value : 1.0,
                   child: Container(
-                    width: 120,
-                    height: 120,
+                    width: 140,
+                    height: 140,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
@@ -320,13 +524,10 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                           AppColors.primaryBlue.withOpacity(0.7),
                         ],
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primaryBlue.withOpacity(0.4),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 3,
+                      ),
                     ),
                     child: widget.remoteUserAvatar != null
                         ? ClipOval(
@@ -336,8 +537,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                               errorBuilder: (_, __, ___) => Center(
                                 child: Text(
                                   userInitial,
-                                  style: const TextStyle(
-                                    fontSize: 48,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 56,
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -348,8 +549,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                         : Center(
                             child: Text(
                               userInitial,
-                              style: const TextStyle(
-                                fontSize: 48,
+                              style: GoogleFonts.poppins(
+                                fontSize: 56,
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -361,23 +562,35 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             ),
           ],
         ),
-
-        const SizedBox(height: 30),
-
-        // User name
+        const SizedBox(height: 40),
         Text(
           userName,
-          style: const TextStyle(
-            fontSize: 28,
+          style: GoogleFonts.poppins(
+            fontSize: 32,
             color: Colors.white,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.5,
           ),
         ),
-
-        const SizedBox(height: 12),
-
-        // Status with animated dots
+        if (widget.remoteUserRole != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              widget.remoteUserRole!,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -385,16 +598,23 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               Container(
                 width: 10,
                 height: 10,
-                margin: const EdgeInsets.only(right: 8),
-                decoration: const BoxDecoration(
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
                   color: AppColors.primaryGreen,
                   shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryGreen.withOpacity(0.5),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
               ),
             Text(
               _getStatusText(),
-              style: TextStyle(
-                fontSize: 16,
+              style: GoogleFonts.poppins(
+                fontSize: 18,
                 color: _getStatusColor(),
                 fontWeight: FontWeight.w500,
               ),
@@ -402,39 +622,70 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             if (isDialing) _buildAnimatedDots(),
           ],
         ),
-
-        // Call quality indicator (when connected)
         if (_callState.status == CallStatus.connected) ...[
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _callState.isAudioOnly ? Icons.phone_in_talk : Icons.videocam,
-                  color: AppColors.primaryGreen,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _callState.isAudioOnly ? 'Voice Call' : 'Video Call',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 24),
+          _buildCallInfoChip(),
         ],
-
         const Spacer(flex: 3),
       ],
+    );
+  }
+
+  Widget _buildCallInfoChip() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(25),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.2),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _callState.isAudioOnly ? Icons.phone_in_talk_rounded : Icons.videocam_rounded,
+                color: AppColors.primaryGreen,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                _callState.isAudioOnly ? 'Voice Call' : 'Video Call',
+                style: GoogleFonts.poppins(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Container(
+                width: 1,
+                height: 16,
+                color: Colors.white24,
+              ),
+              const SizedBox(width: 16),
+              const Icon(
+                Icons.security,
+                color: AppColors.primaryGreen,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Encrypted',
+                style: GoogleFonts.poppins(
+                  color: Colors.white54,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -444,11 +695,11 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       builder: (context, snapshot) {
         final dotCount = (DateTime.now().millisecondsSinceEpoch ~/ 500) % 4;
         return SizedBox(
-          width: 24,
+          width: 30,
           child: Text(
             '.' * dotCount,
-            style: TextStyle(
-              fontSize: 16,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
               color: _getStatusColor(),
               fontWeight: FontWeight.bold,
             ),
@@ -458,61 +709,79 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildCallControls() {
-    final isConnected = _callState.status == CallStatus.connected;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          // Speaker toggle (only when connected)
-          if (isConnected)
-            _buildCallControl(
-              icon: _callState.isSpeakerOn ? Icons.volume_up : Icons.volume_down,
-              label: 'Speaker',
-              onPressed: () {
-                _webrtcService.toggleSpeaker();
-              },
-              isActive: _callState.isSpeakerOn,
+  Widget _buildCallControls(bool isConnected, bool isVideoEnabled) {
+    return SafeArea(
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.3),
+                  Colors.black.withOpacity(0.5),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+              border: Border(
+                top: BorderSide(
+                  color: Colors.white.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
             ),
-
-          // Toggle video (only for video calls when connected)
-          if (!_callState.isAudioOnly && isConnected)
-            _buildCallControl(
-              icon: _callState.isVideoEnabled ? Icons.videocam : Icons.videocam_off,
-              label: 'Camera',
-              onPressed: () async {
-                await _webrtcService.toggleVideo();
-              },
-              isActive: _callState.isVideoEnabled,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                if (isConnected)
+                  _buildControlButton(
+                    icon: _callState.isSpeakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                    label: 'Speaker',
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      _webrtcService.toggleSpeaker();
+                    },
+                    isActive: _callState.isSpeakerOn,
+                  ),
+                if (!_callState.isAudioOnly && isConnected)
+                  _buildControlButton(
+                    icon: _callState.isVideoEnabled ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                    label: 'Camera',
+                    onPressed: () async {
+                      HapticFeedback.lightImpact();
+                      await _webrtcService.toggleVideo();
+                    },
+                    isActive: _callState.isVideoEnabled,
+                  ),
+                _buildControlButton(
+                  icon: _callState.isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                  label: _callState.isMuted ? 'Unmute' : 'Mute',
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    _webrtcService.toggleMute();
+                  },
+                  isActive: !_callState.isMuted,
+                  isWarning: _callState.isMuted,
+                ),
+                _buildEndCallButton(),
+              ],
             ),
-
-          // Toggle mute
-          _buildCallControl(
-            icon: _callState.isMuted ? Icons.mic_off : Icons.mic,
-            label: _callState.isMuted ? 'Unmute' : 'Mute',
-            onPressed: () {
-              _webrtcService.toggleMute();
-              HapticFeedback.lightImpact();
-            },
-            isActive: !_callState.isMuted,
-            showWarning: _callState.isMuted,
           ),
-
-          // End call
-          _buildEndCallButton(),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildCallControl({
+  Widget _buildControlButton({
     required IconData icon,
     required String label,
     required VoidCallback onPressed,
     bool isActive = true,
-    bool showWarning = false,
+    bool isWarning = false,
   }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -520,35 +789,38 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         GestureDetector(
           onTap: onPressed,
           child: Container(
-            width: 56,
-            height: 56,
+            width: 60,
+            height: 60,
             decoration: BoxDecoration(
-              color: showWarning
-                  ? Colors.orange.withOpacity(0.3)
-                  : (isActive
-                      ? Colors.white.withOpacity(0.15)
-                      : Colors.white.withOpacity(0.1)),
+              gradient: isWarning
+                  ? LinearGradient(
+                      colors: [
+                        Colors.orange.withOpacity(0.3),
+                        Colors.orange.withOpacity(0.2),
+                      ],
+                    )
+                  : null,
+              color: isWarning ? null : Colors.white.withOpacity(isActive ? 0.15 : 0.08),
               shape: BoxShape.circle,
               border: Border.all(
-                color: showWarning
-                    ? Colors.orange
-                    : Colors.white.withOpacity(0.3),
+                color: isWarning ? Colors.orange : Colors.white.withOpacity(0.2),
                 width: 1.5,
               ),
             ),
             child: Icon(
               icon,
-              color: showWarning ? Colors.orange : Colors.white,
+              color: isWarning ? Colors.orange : Colors.white,
               size: 26,
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+          style: GoogleFonts.poppins(
+            color: Colors.white60,
             fontSize: 12,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
@@ -565,8 +837,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             await _webrtcService.endCall();
           },
           child: Container(
-            width: 70,
-            height: 70,
+            width: 72,
+            height: 72,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
@@ -580,24 +852,26 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
               boxShadow: [
                 BoxShadow(
                   color: Colors.red.withOpacity(0.4),
-                  blurRadius: 15,
+                  blurRadius: 20,
                   spreadRadius: 2,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
             child: const Icon(
-              Icons.call_end,
+              Icons.call_end_rounded,
               color: Colors.white,
               size: 32,
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Text(
           'End',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+          style: GoogleFonts.poppins(
+            color: Colors.white60,
             fontSize: 12,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
@@ -605,34 +879,63 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   }
 }
 
-// Custom painter for ripple wave effect
-class RipplePainter extends CustomPainter {
+class EnhancedRipplePainter extends CustomPainter {
   final double animation;
   final Color color;
 
-  RipplePainter({required this.animation, required this.color});
+  EnhancedRipplePainter({required this.animation, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final maxRadius = size.width / 2;
 
-    for (int i = 0; i < 3; i++) {
-      final progress = (animation + i * 0.33) % 1.0;
-      final radius = maxRadius * (0.5 + progress * 0.5);
-      final opacity = (1.0 - progress) * 0.6;
+    for (int i = 0; i < 4; i++) {
+      final progress = ((animation + (i * 0.25)) % 1.0);
+      final radius = 50 + (progress * 90);
+      final opacity = (1 - progress) * 0.5;
 
       final paint = Paint()
         ..color = color.withOpacity(opacity)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
+        ..strokeWidth = 3 - (2 * progress);
 
       canvas.drawCircle(center, radius, paint);
     }
   }
 
   @override
-  bool shouldRepaint(RipplePainter oldDelegate) {
+  bool shouldRepaint(EnhancedRipplePainter oldDelegate) {
+    return oldDelegate.animation != animation;
+  }
+}
+
+class ParticlePainter extends CustomPainter {
+  final double animation;
+  final Color particleColor;
+
+  ParticlePainter({required this.animation, required this.particleColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final random = math.Random(42);
+    final paint = Paint()..style = PaintingStyle.fill;
+
+    for (int i = 0; i < 30; i++) {
+      final baseX = random.nextDouble() * size.width;
+      final baseY = random.nextDouble() * size.height;
+      final particleSize = 1 + random.nextDouble() * 3;
+      final speed = 0.5 + random.nextDouble() * 1.5;
+
+      final y = (baseY + animation * speed * size.height * 0.3) % size.height;
+      final opacity = 0.3 + (math.sin((animation + i / 30) * math.pi * 2) * 0.3);
+
+      paint.color = particleColor.withOpacity(opacity.clamp(0.0, 1.0));
+      canvas.drawCircle(Offset(baseX, y), particleSize, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(ParticlePainter oldDelegate) {
     return oldDelegate.animation != animation;
   }
 }

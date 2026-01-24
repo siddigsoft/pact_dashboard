@@ -1,10 +1,13 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 
-class IncomingCallOverlay extends StatelessWidget {
+class IncomingCallOverlay extends StatefulWidget {
   final String callerName;
   final String? callerAvatar;
+  final String? callerRole;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
   final bool isVideoCall;
@@ -13,106 +16,476 @@ class IncomingCallOverlay extends StatelessWidget {
     super.key,
     required this.callerName,
     this.callerAvatar,
+    this.callerRole,
     required this.onAccept,
     required this.onDecline,
     this.isVideoCall = false,
   });
 
   @override
+  State<IncomingCallOverlay> createState() => _IncomingCallOverlayState();
+}
+
+class _IncomingCallOverlayState extends State<IncomingCallOverlay>
+    with TickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late AnimationController _rippleController;
+  late AnimationController _slideController;
+  late AnimationController _glowController;
+  late Animation<double> _pulseAnimation;
+  late Animation<double> _slideAnimation;
+  late Animation<double> _glowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAnimations();
+    HapticFeedback.heavyImpact();
+  }
+
+  void _initAnimations() {
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _rippleController = AnimationController(
+      duration: const Duration(milliseconds: 2500),
+      vsync: this,
+    )..repeat();
+
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    )..forward();
+
+    _slideAnimation = CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.elasticOut,
+    );
+
+    _glowController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _glowAnimation = Tween<double>(begin: 0.3, end: 0.8).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _rippleController.dispose();
+    _slideController.dispose();
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black87,
-      child: SafeArea(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Spacer(),
-            CircleAvatar(
-              radius: 60,
-              backgroundColor: AppColors.primaryBlue.withOpacity(0.2),
-              backgroundImage: callerAvatar != null ? NetworkImage(callerAvatar!) : null,
-              child: callerAvatar == null
-                  ? Text(
-                      callerName.isNotEmpty ? callerName[0].toUpperCase() : '?',
-                      style: GoogleFonts.poppins(
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              callerName,
-              style: GoogleFonts.poppins(
-                fontSize: 28,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.7),
+                      const Color(0xFF1a1a2e).withOpacity(0.95),
+                      const Color(0xFF0f0f1a).withOpacity(0.98),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              isVideoCall ? 'Incoming video call...' : 'Incoming call...',
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                color: Colors.white70,
-              ),
-            ),
-            const Spacer(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          ),
+          SafeArea(
+            child: Column(
               children: [
-                _buildCallButton(
-                  icon: Icons.call_end,
-                  color: Colors.red,
-                  label: 'Decline',
-                  onTap: onDecline,
-                ),
-                _buildCallButton(
-                  icon: isVideoCall ? Icons.videocam : Icons.call,
-                  color: Colors.green,
-                  label: 'Accept',
-                  onTap: onAccept,
-                ),
+                const SizedBox(height: 20),
+                _buildCallTypeIndicator(),
+                const Spacer(flex: 2),
+                _buildAnimatedAvatar(),
+                const SizedBox(height: 32),
+                _buildCallerInfo(),
+                const Spacer(flex: 2),
+                _buildActionButtons(),
+                const SizedBox(height: 60),
               ],
             ),
-            const SizedBox(height: 48),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildCallButton({
+  Widget _buildCallTypeIndicator() {
+    return AnimatedBuilder(
+      animation: _slideAnimation,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _slideAnimation.value,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryGreen,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryGreen.withOpacity(0.5),
+                        blurRadius: 8,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  widget.isVideoCall ? 'Incoming Video Call' : 'Incoming Voice Call',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAnimatedAvatar() {
+    final userInitial = widget.callerName.isNotEmpty
+        ? widget.callerName[0].toUpperCase()
+        : '?';
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        AnimatedBuilder(
+          animation: _rippleController,
+          builder: (context, child) {
+            return CustomPaint(
+              size: const Size(280, 280),
+              painter: EnhancedRipplePainter(
+                animation: _rippleController.value,
+                color: widget.isVideoCall ? AppColors.primaryBlue : AppColors.primaryGreen,
+              ),
+            );
+          },
+        ),
+        AnimatedBuilder(
+          animation: _glowAnimation,
+          builder: (context, child) {
+            return Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: (widget.isVideoCall ? AppColors.primaryBlue : AppColors.primaryGreen)
+                        .withOpacity(_glowAnimation.value),
+                    blurRadius: 40,
+                    spreadRadius: 10,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+        AnimatedBuilder(
+          animation: _pulseAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _pulseAnimation.value,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: widget.isVideoCall
+                        ? [
+                            AppColors.primaryBlue,
+                            AppColors.primaryBlue.withOpacity(0.7),
+                          ]
+                        : [
+                            AppColors.primaryGreen,
+                            AppColors.primaryGreen.withOpacity(0.7),
+                          ],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 3,
+                  ),
+                ),
+                child: widget.callerAvatar != null
+                    ? ClipOval(
+                        child: Image.network(
+                          widget.callerAvatar!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Text(
+                              userInitial,
+                              style: GoogleFonts.poppins(
+                                fontSize: 56,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Text(
+                          userInitial,
+                          style: GoogleFonts.poppins(
+                            fontSize: 56,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCallerInfo() {
+    return AnimatedBuilder(
+      animation: _slideAnimation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, 30 * (1 - _slideAnimation.value)),
+          child: Opacity(
+            opacity: _slideAnimation.value,
+            child: Column(
+              children: [
+                Text(
+                  widget.callerName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                if (widget.callerRole != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      widget.callerRole!,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      widget.isVideoCall ? Icons.videocam_rounded : Icons.phone_rounded,
+                      color: Colors.white54,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.isVideoCall ? 'Video Call' : 'Voice Call',
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return AnimatedBuilder(
+      animation: _slideAnimation,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, 50 * (1 - _slideAnimation.value)),
+          child: Opacity(
+            opacity: _slideAnimation.value,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildActionButton(
+                    icon: Icons.call_end_rounded,
+                    label: 'Decline',
+                    color: const Color(0xFFE53935),
+                    shadowColor: const Color(0xFFE53935),
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      widget.onDecline();
+                    },
+                  ),
+                  _buildActionButton(
+                    icon: widget.isVideoCall ? Icons.videocam_rounded : Icons.call_rounded,
+                    label: 'Accept',
+                    color: const Color(0xFF43A047),
+                    shadowColor: const Color(0xFF43A047),
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      widget.onAccept();
+                    },
+                    isAccept: true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionButton({
     required IconData icon,
-    required Color color,
     required String label,
+    required Color color,
+    required Color shadowColor,
     required VoidCallback onTap,
+    bool isAccept = false,
   }) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
           onTap: onTap,
-          child: Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.white, size: 32),
+          child: AnimatedBuilder(
+            animation: isAccept ? _pulseController : const AlwaysStoppedAnimation(1.0),
+            builder: (context, child) {
+              return Transform.scale(
+                scale: isAccept ? 1.0 + (_pulseController.value * 0.05) : 1.0,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        color,
+                        color.withOpacity(0.8),
+                      ],
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: shadowColor.withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    icon,
+                    color: Colors.white,
+                    size: 36,
+                  ),
+                ),
+              );
+            },
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Text(
           label,
           style: GoogleFonts.poppins(
             color: Colors.white70,
-            fontSize: 14,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
     );
+  }
+}
+
+class EnhancedRipplePainter extends CustomPainter {
+  final double animation;
+  final Color color;
+
+  EnhancedRipplePainter({
+    required this.animation,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    
+    for (int i = 0; i < 4; i++) {
+      final progress = ((animation + (i * 0.25)) % 1.0);
+      final radius = 50 + (progress * 90);
+      final opacity = (1 - progress) * 0.4;
+      
+      final paint = Paint()
+        ..color = color.withOpacity(opacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 + (2 * (1 - progress));
+
+      canvas.drawCircle(center, radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(EnhancedRipplePainter oldDelegate) {
+    return oldDelegate.animation != animation;
   }
 }
