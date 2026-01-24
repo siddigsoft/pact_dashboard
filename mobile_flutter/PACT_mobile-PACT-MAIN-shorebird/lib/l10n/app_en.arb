@@ -1411,5 +1411,53 @@
   "selectDate": "Select date",
   "@selectDate": {
     "description": "Select date placeholder"
+  },
+  "bulkStatePermitUpload": "Bulk State Permit Upload",
+  "@bulkStatePermitUpload": {
+    "description": "Title for bulk state permit upload dialog"
+  },
+  "bulkLocalityPermitUpload": "Bulk Locality Permit Upload",
+  "@bulkLocalityPermitUpload": {
+    "description": "Title for bulk locality permit upload dialog"
+  },
+  "statesSelected": "states selected",
+  "@statesSelected": {
+    "description": "Label for number of states selected"
+  },
+  "localitiesSelected": "localities selected",
+  "@localitiesSelected": {
+    "description": "Label for number of localities selected"
+  },
+  "bulkUploadInstructions": "Select files and dates for each state. Only states with complete information will be uploaded.",
+  "@bulkUploadInstructions": {
+    "description": "Instructions for bulk upload"
+  },
+  "bulkLocalityUploadInstructions": "Select files and dates for each locality. Only localities with complete information will be uploaded.",
+  "@bulkLocalityUploadInstructions": {
+    "description": "Instructions for bulk locality upload"
+  },
+  "noPermitsReady": "No permits ready for upload",
+  "@noPermitsReady": {
+    "description": "Error message when no permits are ready"
+  },
+  "ready": "Ready",
+  "@ready": {
+    "description": "Status label for ready items"
+  },
+  "uploaded": "Uploaded",
+  "@uploaded": {
+    "description": "Status label for uploaded items"
+  },
+  "failed": "Failed",
+  "@failed": {
+    "description": "Status label for failed items"
+  },
+  "uploadAll": "Upload All",
+  "@uploadAll": {
+    "description": "Button to upload all ready permits"
+  },
+  "selectFile": "Select File",
+  "@selectFile": {
+    "description": "Button to select a file"
   }
 }
