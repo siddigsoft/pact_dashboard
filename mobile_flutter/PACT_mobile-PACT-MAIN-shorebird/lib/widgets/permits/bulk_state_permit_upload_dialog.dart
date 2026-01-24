@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../theme/app_colors.dart';
 import '../../services/permit_upload_service.dart';
 import '../../l10n/app_localizations.dart';
+import 'permit_types.dart';
 
 class BulkStatePermitItem {
   final String state;
@@ -15,7 +16,7 @@ class BulkStatePermitItem {
   DateTime? issueDate;
   DateTime? expiryDate;
   String? comments;
-  UploadStatus status;
+  PermitUploadStatus status;
   String? errorMessage;
 
   BulkStatePermitItem({
@@ -25,15 +26,13 @@ class BulkStatePermitItem {
     this.issueDate,
     this.expiryDate,
     this.comments,
-    this.status = UploadStatus.pending,
+    this.status = PermitUploadStatus.pending,
     this.errorMessage,
   });
 
   bool get isReady =>
       file != null && issueDate != null && expiryDate != null;
 }
-
-enum UploadStatus { pending, uploading, success, error }
 
 class BulkStatePermitUploadDialog extends StatefulWidget {
   final List<String> states;
@@ -215,7 +214,7 @@ class _BulkStatePermitUploadDialogState
 
       setState(() {
         _currentUploadIndex = i;
-        _permitItems[i].status = UploadStatus.uploading;
+        _permitItems[i].status = PermitUploadStatus.uploading;
       });
 
       try {
@@ -258,12 +257,12 @@ class _BulkStatePermitUploadDialogState
         );
 
         setState(() {
-          _permitItems[i].status = UploadStatus.success;
+          _permitItems[i].status = PermitUploadStatus.success;
           _successCount++;
         });
       } catch (e) {
         setState(() {
-          _permitItems[i].status = UploadStatus.error;
+          _permitItems[i].status = PermitUploadStatus.error;
           _permitItems[i].errorMessage = e.toString();
           _errorCount++;
         });
@@ -467,15 +466,15 @@ class _BulkStatePermitUploadDialogState
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: item.status == UploadStatus.success
+          color: item.status == PermitUploadStatus.success
               ? Colors.green
-              : item.status == UploadStatus.error
+              : item.status == PermitUploadStatus.error
                   ? Colors.red
                   : item.isReady
                       ? Colors.green.shade200
                       : Colors.grey.shade300,
-          width: item.status == UploadStatus.success ||
-                  item.status == UploadStatus.error
+          width: item.status == PermitUploadStatus.success ||
+                  item.status == PermitUploadStatus.error
               ? 2
               : 1,
         ),
@@ -498,7 +497,7 @@ class _BulkStatePermitUploadDialogState
                     ),
                   ),
                 ),
-                if (item.isReady && item.status == UploadStatus.pending)
+                if (item.isReady && item.status == PermitUploadStatus.pending)
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -517,7 +516,7 @@ class _BulkStatePermitUploadDialogState
                   ),
               ],
             ),
-            if (item.status == UploadStatus.error && item.errorMessage != null)
+            if (item.status == PermitUploadStatus.error && item.errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
@@ -525,7 +524,7 @@ class _BulkStatePermitUploadDialogState
                   style: GoogleFonts.poppins(fontSize: 12, color: Colors.red),
                 ),
               ),
-            if (item.status != UploadStatus.success) ...[
+            if (item.status != PermitUploadStatus.success) ...[
               const SizedBox(height: 12),
               if (item.file == null)
                 InkWell(
@@ -616,7 +615,7 @@ class _BulkStatePermitUploadDialogState
     );
   }
 
-  Widget _buildStatusIcon(UploadStatus status, bool isCurrentlyUploading) {
+  Widget _buildStatusIcon(PermitUploadStatus status, bool isCurrentlyUploading) {
     if (isCurrentlyUploading) {
       return const SizedBox(
         width: 24,
@@ -626,11 +625,11 @@ class _BulkStatePermitUploadDialogState
     }
 
     switch (status) {
-      case UploadStatus.success:
+      case PermitUploadStatus.success:
         return const Icon(Icons.check_circle, color: Colors.green, size: 24);
-      case UploadStatus.error:
+      case PermitUploadStatus.error:
         return const Icon(Icons.error, color: Colors.red, size: 24);
-      case UploadStatus.uploading:
+      case PermitUploadStatus.uploading:
         return const SizedBox(
           width: 24,
           height: 24,
