@@ -1,0 +1,317 @@
+PS C:\Users\PC\PACT_mobile> & "C:\Users\PC\.shorebird\bin\shorebird.bat" patch android --flutter-version=3.27.0                        
+Could not find an option named "--flutter-version".
+To proxy an option to the flutter command, use the '--' --<option> syntax.
+
+Example:
+
+shorebird release android '--' --no-pub lib/main.dart
+
+Usage: shorebird patch [arguments]
+-h, --help                     Print this usage information.
+    --dart-define              Additional key-value pairs that will be available as constants from the String.fromEnvironment, bool.fromEnvironment, and int.fromEnvironment constructors.
+                               Multiple defines can be passed by repeating "--dart-define" multiple times.
+    --dart-define-from-file    The path of a .json or .env file containing key-value pairs that will be available as environment variables.
+                               These can be accessed using the String.fromEnvironment, bool.fromEnvironment, and int.fromEnvironment constructors.
+                               Multiple defines can be passed by repeating "--dart-define-from-file" multiple times.
+                               Entries from "--dart-define" with identical keys take precedence over entries from these files.
+-p, --platforms                The platform(s) to to build this release for.
+                               [aar, android, ios, linux, macos, ios-framework, windows]
+    --build-name               A "x.y.z" string used as the version number shown to users.
+                               For each new version of your app, you will provide a version number to differentiate it
+                               from previous versions.
+                               On Android it is used as "versionName".
+                               On Xcode builds it is used as "CFBundleShortVersionString".
+                               On Windows it is used as the major, minor, and patch parts of the product and file
+                               versions.
+    --build-number             An identifier used as an internal version number.
+                               Each build must have a unique identifier to differentiate it from previous builds.
+                               It is used to determine whether one build is more recent than another, with higher numbers indicating more recent build.
+                               On Android it is used as "versionCode".
+                               On Xcode builds it is used as "CFBundleVersion".
+                               (defaults to "1.0")
+-t, --target                   The main entrypoint file of the application.
+    --flavor                   The product flavor to use when building the app.
+    --release-version          The version of the associated release (e.g. "1.0.0").
+                               If you are building an xcframework or aar, this number needs to match the host app's release version.   
+                               To target the latest release (e.g. the release that was most recently updated) use --release-version=latest.
+    --allow-native-diffs       Patch even if native code diffs are detected.
+                               NOTE: this is not recommended. Native code changes cannot be included in a patch and attempting to do so can cause your app to crash or behave unexpectedly.
+    --allow-asset-diffs        Patch even if asset diffs are detected.
+                               NOTE: this is not recommended. Asset changes cannot be included in a patch can cause your app to behave unexpectedly.
+    --track                    The track to publish the patch to.
+                               (defaults to "stable")
+    --no-confirm               Bypass all confirmation messages. It's generally not advised to use this unless running from a script.  
+    --export-options-plist     Export an IPA with these options. See "xcodebuild -h" for available exportOptionsPlist keys (iOS only). 
+    --export-method            Specify how the IPA will be distributed (iOS only).
+
+          [app-store]          Upload to the App Store
+          [ad-hoc]             Test on designated devices that do not need to be registered with the Apple developer account.
+                                   Requires a distribution certificate.
+          [development]        Test only on development devices registered with the Apple developer account.
+          [enterprise]         Distribute an app registered with the Apple Developer Enterprise Program.
+
+    --[no-]codesign            Codesign the application bundle (iOS only).
+                               (defaults to on)
+-n, --dry-run                  Validate but do not upload the patch.
+    --private-key-path         The path for a private key .pem file that will be used to sign the patch artifact.
+    --public-key-path          The path for a public key .pem file that will be used to validate patch signatures.
+    --split-debug-info         In a release build, this flag reduces application size by storing Dart program symbols in a separate file on the host rather than
+                               in the application. The value of the flag should be a directory where program symbol files can be stored for later use. These
+                               symbol files contain the information needed to symbolize Dart stack traces. For an app built with this flag, the "flutter
+                               symbolize" command with the right program symbol file is required to obtain a human readable stack trace.
+    --min-link-percentage      The minimum link percentage (0-100) required in order to generate a patch (Apple platforms only).       
+
+                               Patches with a lower link percentage than what is provided here will fail.
+                               [0 (default), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]
+
+Run "shorebird help" to see global options.
+PS C:\Users\PC\PACT_mobile>  & "C:\Users\PC\.shorebird\bin\shorebird.bat" release android --flutter-version=3.27.0                     
+✓ Fetching apps (1.8s)
+Building Android app bundle with Flutter 3.27.0 (1e0e5760ee)
+Resolving dependencies... (20.5s)
+Downloading packages... (12.1s)
+  _fe_analyzer_shared 76.0.0 (93.0.0 available)
+  analyzer 6.11.0 (10.0.1 available)
+  app_links 6.4.1 (7.0.0 available)
+  async 2.11.0 (2.13.0 available)
+  boolean_selector 2.1.1 (2.1.2 available)
+  build 2.4.2 (4.0.4 available)
+  build_config 1.1.2 (1.2.0 available)
+  build_daemon 4.0.4 (4.1.1 available)
+  build_resolvers 2.4.4 (3.0.4 available)
+  build_runner 2.4.14 (2.10.5 available)
+  build_runner_core 8.0.0 (9.3.2 available)
+  cached_network_image 3.4.0 (3.4.1 available)
+  cached_network_image_web 1.3.0 (1.3.1 available)
+  characters 1.3.0 (1.4.1 available)
+  checked_yaml 2.0.3 (2.0.4 available)
+  clock 1.1.1 (1.1.2 available)
+  code_builder 4.10.1 (4.11.1 available)
+  collection 1.19.0 (1.19.1 available)
+  cross_file 0.3.4+2 (0.3.5+1 available)
+  dart_jsonwebtoken 2.17.0 (3.3.1 available)
+  dart_style 2.3.8 (3.1.4 available)
+  fake_async 1.3.1 (1.3.3 available)
+  ffi 2.1.3 (2.1.5 available)
+  file_selector_linux 0.9.3+2 (0.9.4 available)
+  file_selector_macos 0.9.4+3 (0.9.5 available)
+  file_selector_platform_interface 2.6.2 (2.7.0 available)
+  file_selector_windows 0.9.3+4 (0.9.3+5 available)
+  flat_buffers 23.5.26 (25.9.23 available)
+  flutter_lints 5.0.0 (6.0.0 available)
+  flutter_map_tile_caching 10.1.0 (10.1.1 available)
+  flutter_plugin_android_lifecycle 2.0.29 (2.0.33 available)
+  flutter_riverpod 2.6.1 (3.2.0 available)
+  flutter_svg 2.2.0 (2.2.3 available)
+  freezed 3.0.6 (3.2.4 available)
+  geocoding_platform_interface 3.2.0 (5.0.0 available)
+  google_fonts 6.3.0 (8.0.0 available)
+  image 4.5.4 (4.7.2 available)
+  image_picker 1.2.0 (1.2.1 available)
+  image_picker_android 0.8.13 (0.8.13+12 available)
+  image_picker_for_web 3.1.0 (3.1.1 available)
+  image_picker_ios 0.8.13 (0.8.13+3 available)
+  image_picker_macos 0.2.2 (0.2.2+1 available)
+  image_picker_platform_interface 2.11.0 (2.11.1 available)
+  intl 0.19.0 (0.20.2 available)
+  jiffy 6.3.2 (6.4.4 available)
+  js 0.6.7 (0.7.2 available)
+  json_serializable 6.9.5 (6.11.4 available)
+  leak_tracker 10.0.7 (11.0.2 available)
+  leak_tracker_flutter_testing 3.0.8 (3.0.10 available)
+  leak_tracker_testing 3.0.1 (3.0.2 available)
+  lints 5.1.1 (6.0.0 available)
+  local_auth 2.3.0 (3.0.0 available)
+  local_auth_android 1.0.51 (2.0.4 available)
+  local_auth_darwin 1.6.0 (2.0.1 available)
+  local_auth_platform_interface 1.0.10 (1.1.0 available)
+  local_auth_windows 1.0.11 (2.0.1 available)
+  matcher 0.12.16+1 (0.12.18 available)
+  material_color_utilities 0.11.1 (0.13.0 available)
+  meta 1.15.0 (1.18.0 available)
+  mgrs_dart 2.0.0 (3.0.0 available)
+  mime 1.0.6 (2.0.0 available)
+  objectbox 4.3.1 (5.1.0 available)
+  objectbox_flutter_libs 4.3.1 (5.1.0 available)
+  path 1.9.0 (1.9.1 available)
+  path_provider_android 2.2.17 (2.2.22 available)
+  path_provider_foundation 2.4.1 (2.6.0 available)
+  petitparser 6.0.2 (7.0.1 available)
+  pointycastle 3.9.1 (4.0.0 available)
+  proj4dart 2.1.0 (3.0.0 available)
+  riverpod 2.6.1 (3.2.0 available)
+  shared_preferences 2.5.3 (2.5.4 available)
+  shared_preferences_android 2.4.11 (2.4.18 available)
+  shared_preferences_foundation 2.5.4 (2.5.6 available)
+  shelf_web_socket 2.0.1 (3.0.0 available)
+  source_gen 2.0.0 (4.2.0 available)
+  source_helper 1.3.5 (1.3.10 available)
+  source_span 1.10.0 (1.10.1 available)
+  sqflite 2.4.1 (2.4.2 available)
+  sqflite_android 2.4.0 (2.4.2+2 available)
+  sqflite_common 2.5.4+6 (2.5.6 available)
+  sqflite_darwin 2.4.1+1 (2.4.2 available)
+  stack_trace 1.12.0 (1.12.1 available)
+  stream_channel 2.1.2 (2.1.4 available)
+  string_scanner 1.3.0 (1.4.1 available)
+  syncfusion_flutter_core 28.2.12 (32.1.24 available)
+  syncfusion_flutter_pdf 28.2.12 (32.1.24 available)
+  syncfusion_flutter_xlsio 28.2.12 (32.1.24 available)
+  syncfusion_officecore 28.2.12 (32.1.24 available)
+  synchronized 3.3.0+3 (3.4.0 available)
+  table_calendar 3.1.3 (3.2.0 available)
+  term_glyph 1.2.1 (1.2.2 available)
+  test 1.25.8 (1.29.0 available)
+  test_api 0.7.3 (0.7.9 available)
+  test_core 0.6.5 (0.6.15 available)
+  timezone 0.10.1 (0.11.0 available)
+  unicode 0.3.1 (1.1.9 available)
+  url_launcher_android 6.3.17 (6.3.28 available)
+  url_launcher_ios 6.3.3 (6.3.6 available)
+  url_launcher_linux 3.2.1 (3.2.2 available)
+  url_launcher_macos 3.2.2 (3.2.5 available)
+  url_launcher_web 2.4.1 (2.4.2 available)
+  url_launcher_windows 3.1.4 (3.1.5 available)
+  vector_graphics_compiler 1.1.18 (1.1.20 available)
+  vector_math 2.1.4 (2.2.0 available)
+  vm_service 14.3.0 (15.0.2 available)
+  webview_flutter 4.13.0 (4.13.1 available)
+  webview_flutter_android 4.10.0 (4.10.11 available)
+  webview_flutter_wkwebview 3.23.0 (3.23.5 available)
+  win32 5.10.1 (5.15.0 available)
+  workmanager 0.7.0 (0.9.0+3 available)
+  xml 6.5.0 (6.6.1 available)
+Got dependencies!
+111 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+e: Incompatible classes were found in dependencies. Remove them from the classpath or use '-Xskip-metadata-version-check' to suppress errors
+e: file:///C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib-jdk7.kotlin_moduleModule was compiled with an incompatible version of Kotlin. The binary version of its metadata is 2.2.0, expected version is 1.9.0.
+e: file:///C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib-jdk8.kotlin_moduleModule was compiled with an incompatible version of Kotlin. The binary version of its metadata is 2.2.0, expected version is 1.9.0.
+e: file:///C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/META-INF/kotlin-stdlib.kotlin_moduleModule was compiled with an incompatible version of Kotlin. The binary version of its metadata is 2.2.0, expected version is 1.9.0.
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:41:17 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:48:9 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:49:31 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:53:9 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:57:9 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:58:31 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:62:9 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:68:9 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:71:18 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:72:13 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:74:20 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:80:22 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:86:48 Unresolved reference: ArrayList
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:86:88 Unresolved reference: ArrayList
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:88:43 Unresolved reference: ArrayList
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:89:35 Unresolved reference: ArrayList
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:90:36 Unresolved reference: ArrayList
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:95:13 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:103:100 Unresolved reference: it
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:110:20 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:111:20 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:118:24 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:119:24 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:124:24 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:130:68 Unresolved reference: it
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:134:30 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:136:24 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:138:24 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:139:24 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:140:73 Unresolved reference: ArrayList
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:170:9 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:171:23 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:173:22 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:180:32 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:181:17 Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata version is 2.2.0, but the compiler version 1.9.0 can read versions up to 2.0.0.
+The class is loaded from C:/Users/PC/.gradle/caches/8.12/transforms/c55fac35c1ad9594766ac88d57db1ff4/transformed/jetified-kotlin-stdlib-2.2.0.jar!/kotlin/Unit.class
+e: file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_email_sender-8.0.0/android/src/main/kotlin/com/sidlatau/flutteremailsender/FlutterEmailSenderPlugin.kt:190:37 Unresolved reference: ArrayList
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':flutter_email_sender:compileReleaseKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 6m 50s
+Running Gradle task 'bundleRelease'...                            411.6s
+
+┌─ Flutter Fix ──────────────────────────────────────────────────────────────────────────────────────────┐
+│ [!] Your project requires a newer version of the Kotlin Gradle plugin.                                 │
+│ Find the latest version on https://kotlinlang.org/docs/releases.html#release-details, then update the  │
+│ version number of the plugin with id "org.jetbrains.kotlin.android" in the plugins block of            │
+│ C:\Users\PC\PACT_mobile\android\settings.gradle.                                                       │
+│                                                                                                        │
+│ Alternatively (if your project was created before Flutter 3.19), update                                │
+│ C:\Users\PC\PACT_mobile\android\build.gradle                                                           │
+│ ext.kotlin_version = '<latest-version>'                                                                │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+Gradle task bundleRelease failed with exit code 1
+Failed to build AAB.
+Command: flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+Reason: Exited with code 1.
+
+💡 Fix Recommendations
+
+• Check that running `flutter build` with the same command-line arguments
+completes successfully by running the following command:
+
+flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+
+If the above command fails, then this is likely not a Shorebird issue and
+the underlying `flutter build` failure must be resolved for Shorebird to
+build a release.
+
+• If `flutter build` completes successfully, please ensure that you are
+providing the desired flutter version to the release command via
+the `--flutter-version` option. If you do not specify a `--flutter-version`
+Shorebird will default to the latest stable version of Flutter.
+We strongly encourage always specifying an explicit Flutter version:
+
+shorebird release <platform> --flutter-version=3.29.0
+
+• If `flutter build` completes successfully and `shorebird release`
+fails when using the same flutter version, please file an issue:
+https://github.com/shorebirdtech/shorebird/issues/new
+
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1769274900357_shorebird.log
+
+PS C:\Users\PC\PACT_mobile> 
