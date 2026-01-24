@@ -9,6 +9,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/call_signal.dart';
 import '../models/call_state.dart';
+import 'bilingual_notification_service.dart';
+import 'user_notification_service.dart';
 
 /// WebRTC service for handling audio/video calls with improved reliability
 class WebRTCService {
@@ -817,6 +819,19 @@ class WebRTCService {
           isAudioOnly: signal.isAudioOnly ?? false,
         );
         _callStateController.add(_callState);
+        
+        // Show push notification for incoming call
+        await BilingualNotificationService.showIncomingCallNotification(
+          callerName: signal.fromName ?? 'Unknown',
+          callId: signal.callId ?? '',
+        );
+        
+        // Add to in-app notification bell
+        _addCallNotificationToBell(
+          callerName: signal.fromName ?? 'Unknown',
+          callId: signal.callId ?? '',
+          type: 'incoming_call',
+        );
         break;
 
       case CallSignalType.callAccept:
@@ -1044,14 +1059,63 @@ class WebRTCService {
   /// Start call timeout timer
   void _startCallTimeoutTimer() {
     _cancelCallTimeoutTimer();
-    _callTimeoutTimer = Timer(_callTimeoutDuration, () {
+    _callTimeoutTimer = Timer(_callTimeoutDuration, () async {
       if (_callState.status == CallStatus.calling ||
           _callState.status == CallStatus.ringing) {
         debugPrint('[WebRTC] Call timeout - no answer');
         _errorController.add('User is busy or unavailable');
+        
+        // Show missed call notification for the caller
+        if (_callState.remoteUserName != null) {
+          await BilingualNotificationService.showMissedCallNotification(
+            callerName: _callState.remoteUserName!,
+            callId: _callState.callId ?? '',
+          );
+          
+          _addCallNotificationToBell(
+            callerName: _callState.remoteUserName!,
+            callId: _callState.callId ?? '',
+            type: 'missed_call',
+          );
+        }
+        
         endCall();
       }
     });
+  }
+  
+  /// Add call notification to in-app notification bell
+  Future<void> _addCallNotificationToBell({
+    required String callerName,
+    required String callId,
+    required String type,
+  }) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final currentUser = supabase.auth.currentUser;
+      if (currentUser == null) return;
+      
+      final title = type == 'incoming_call' 
+          ? 'Incoming Call' 
+          : 'Missed Call';
+      final body = type == 'incoming_call'
+          ? '$callerName is calling you'
+          : 'You missed a call from $callerName';
+      
+      await supabase.from('notifications').insert({
+        'user_id': currentUser.id,
+        'title': title,
+        'body': body,
+        'type': type,
+        'link': 'call:$callId',
+        'is_read': false,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      
+      debugPrint('[WebRTC] Added $type notification to bell');
+    } catch (e) {
+      debugPrint('[WebRTC] Error adding notification to bell: $e');
+    }
   }
 
   /// Cancel call timeout timer
