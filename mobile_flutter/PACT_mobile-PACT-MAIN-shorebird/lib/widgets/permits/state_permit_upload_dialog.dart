@@ -1,6 +1,7 @@
 // lib/widgets/permits/state_permit_upload_dialog.dart
 
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -245,7 +246,7 @@ class _StatePermitUploadDialogState extends State<StatePermitUploadDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final isRtl = Directionality.of(context) == ui.TextDirection.rtl;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
