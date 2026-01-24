@@ -12,10 +12,11 @@ dependencies:
   flutter:
     sdk: flutter
   supabase_flutter: ^2.5.0
+  location: ^5.0.3
   geolocator: ^10.1.0
   latlong2: ^0.9.0
   http: ^1.2.0
-  workmanager: ^0.6.0
+  workmanager: ^0.7.0
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   shared_preferences: ^2.2.2
@@ -34,8 +35,7 @@ dependencies:
   geocoding: ^3.0.0
   permission_handler: ^11.0.1
   image_picker: ^1.0.7
-  file_picker: ^8.0.0
-  intl: ^0.20.2
+  intl: ^0.19.0
   flutter_localizations:
     sdk: flutter
   flutter_map: ^6.1.0
@@ -47,7 +47,10 @@ dependencies:
   flutter_animate: ^4.5.0
   cached_network_image: ^3.3.1
   pinput: ^4.0.0
+  open_file: ^3.5.10
+  file_picker: ^8.0.0
   rxdart: ^0.27.7
+  background_fetch: ^1.4.0
   sqflite: ^2.3.3
   provider: ^6.1.1
   flutter_map_tile_caching: ^9.0.1
@@ -58,14 +61,15 @@ dependencies:
   shorebird_code_push: ^1.1.0
   firebase_messaging: ^14.7.0
   flutter_webrtc: ^0.12.0
-  share_plus: ^10.0.0
+  excel: ^4.0.2
+  share_plus: ^7.2.2
   pdf: ^3.10.7
   printing: ^5.14.0
-  flutter_email_sender: ^7.0.0
+  flutter_email_sender: ^6.0.3
   json_annotation: ^4.9.0
   flutter_riverpod: ^2.4.9
   csv: ^5.0.2
-  audioplayers: ^6.0.0
+  audioplayers: ^5.2.1
   table_calendar: ^3.0.9
   freezed_annotation: ^2.4.1
   json_serializable: ^6.7.1
