@@ -56,6 +56,7 @@ class BulkLocalityPermitUploadDialog extends StatefulWidget {
   final String mmpFileId;
   final VoidCallback onPermitsUploaded;
   final VoidCallback? onCancel;
+  final String userType;
 
   const BulkLocalityPermitUploadDialog({
     super.key,
@@ -63,6 +64,7 @@ class BulkLocalityPermitUploadDialog extends StatefulWidget {
     required this.mmpFileId,
     required this.onPermitsUploaded,
     this.onCancel,
+    this.userType = 'coordinator',
   });
 
   @override
@@ -265,8 +267,8 @@ class _BulkLocalityPermitUploadDialogState
           'fileName': item.fileName,
           'fileUrl': result.fileUrl,
           'uploadedAt': DateTime.now().toIso8601String(),
-          'uploadedBy': 'coordinator',
-          'verified': false,
+          'uploadedBy': widget.userType,
+          'verified': widget.userType == 'fom',
           'issueDate': DateFormat('yyyy-MM-dd').format(item.issueDate!),
           'expiryDate': DateFormat('yyyy-MM-dd').format(item.expiryDate!),
           'comments': item.comments,
