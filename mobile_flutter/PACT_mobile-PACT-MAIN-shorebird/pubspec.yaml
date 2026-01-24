@@ -43,8 +43,8 @@ dependencies:
   shared_preferences: ^2.2.2  # For local storage
   flutter_secure_storage: ^9.0.0 # For storing encryption keys
   local_auth: ^2.3.0         # For biometric authentication
-  local_auth_android: ^1.0.48 # Platform-specific Android authentication
-  local_auth_darwin: ^1.4.1   # Platform-specific iOS/macOS authentication
+  local_auth_android: ^1.0.56 # Platform-specific Android authentication
+  local_auth_darwin: ^1.6.1   # Platform-specific iOS/macOS authentication
   flutter_local_notifications: ^19.4.2 # For local notifications
   connectivity_plus: ^7.0.0  # For network connectivity
   uuid: ^4.4.0              # For generating unique IDs
@@ -83,11 +83,11 @@ dependencies:
   provider: ^6.1.1           # For state management
   flutter_map_tile_caching: ^9.0.1 # For offline map tile caching
   flutter_map_marker_popup: ^6.1.2  # For marker popups
-  syncfusion_flutter_xlsio: ^28.1.36 # For Excel file handling
-  syncfusion_flutter_pdf: ^28.1.36 # For PDF viewing
+  syncfusion_flutter_xlsio: ^32.1.24 # For Excel file handling
+  syncfusion_flutter_pdf: ^32.1.24 # For PDF viewing
   webview_flutter: ^4.10.0 # For in-app document viewing
   shorebird_code_push: ^1.1.0 # For Shorebird OTA updates
-  firebase_messaging: ^15.1.6 # For push notifications (optional, for FCM)
+  firebase_messaging: ^15.2.10 # For push notifications (optional, for FCM)
   flutter_webrtc: ^1.2.1 # For WebRTC audio/video calls
   excel: ^4.0.2 # For reading Excel (.xlsx) files offline
   share_plus: ^10.0.2 # For sharing exported CSV or original Excel files
