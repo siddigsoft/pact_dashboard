@@ -15,7 +15,7 @@ dependencies:
   geolocator: ^10.1.0
   latlong2: ^0.9.0
   http: ^1.2.0
-  workmanager: ^0.5.1
+  workmanager: ^0.6.0
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   shared_preferences: ^2.2.2
@@ -31,7 +31,7 @@ dependencies:
   dio_smart_retry: ^6.0.0
   crypto: ^3.0.3
   path_provider: ^2.1.4
-  geocoding: ^2.1.0
+  geocoding: ^3.0.0
   permission_handler: ^11.0.1
   image_picker: ^1.0.7
   file_picker: ^8.0.0
@@ -65,7 +65,7 @@ dependencies:
   json_annotation: ^4.9.0
   flutter_riverpod: ^2.4.9
   csv: ^5.0.2
-  audioplayers: ^5.2.1
+  audioplayers: ^6.0.0
   table_calendar: ^3.0.9
   freezed_annotation: ^2.4.1
   json_serializable: ^6.7.1
