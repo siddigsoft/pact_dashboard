@@ -950,7 +950,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     
     if (user.isEmpty) return;
 
-    final webRtcService = WebRtcService();
+    final webRtcService = WebRTCService();
     final currentUser = Supabase.instance.client.auth.currentUser;
     
     if (currentUser == null) {

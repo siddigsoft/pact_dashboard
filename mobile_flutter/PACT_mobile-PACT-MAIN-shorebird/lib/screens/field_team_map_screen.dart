@@ -678,9 +678,9 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
     try {
       final webRtcService = WebRTCService();
       await webRtcService.initiateCall(
-        calleeId: member['id'],
-        calleeName: member['full_name'] ?? 'Team Member',
-        isVideoCall: false,
+        member['id'],
+        member['full_name'] ?? 'Team Member',
+        isAudioOnly: true,
       );
     } catch (e) {
       if (mounted) {
