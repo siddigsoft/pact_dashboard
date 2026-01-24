@@ -965,11 +965,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
 
     try {
       await webRtcService.initiateCall(
-        callerId: currentUser.id,
-        calleeId: userId,
-        callerName: currentUser.userMetadata?['full_name'] ?? 'User',
-        calleeName: user['full_name'] ?? 'Support',
-        isVideoCall: false,
+        userId,
+        user['full_name'] ?? 'Support',
+        isAudioOnly: true,
       );
       
       ScaffoldMessenger.of(context).showSnackBar(
