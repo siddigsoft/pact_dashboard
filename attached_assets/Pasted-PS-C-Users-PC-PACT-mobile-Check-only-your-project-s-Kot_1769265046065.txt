@@ -1,0 +1,197 @@
+PS C:\Users\PC\PACT_mobile> # Check only your project's Kotlin files (not .fvm)
+>> Get-ChildItem -Path "C:\Users\PC\PACT_mobile\android\app\src\main\kotlin" -Recurse -Filter "*.kt"
+>> 
+>> # Check for any Java files in your project
+>> Get-ChildItem -Path "C:\Users\PC\PACT_mobile\android\app\src\main\java" -Recurse -Filter "*.java" -ErrorAction SilentlyContinue
+>> 
+>> # Check for GeneratedPluginRegistrant
+>> Get-ChildItem -Path "C:\Users\PC\PACT_mobile\android" -Recurse -Filter "GeneratedPluginRegistrant.*" -ErrorAction SilentlyContinue
+
+    Directory: C:\Users\PC\PACT_mobile\android\app\src\main\kotlin\com\example\pact_mobile
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           1/13/2026  4:39 PM            432 MainActivity.kt
+
+    Directory: C:\Users\PC\PACT_mobile\android\app\src\main\java\io\flutter\plugins
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---           1/24/2026  4:25 PM           8334 GeneratedPluginRegistrant.java
+-a---           1/24/2026  4:25 PM           8334 GeneratedPluginRegistrant.java
+
+PS C:\Users\PC\PACT_mobile> Get-Content "C:\Users\PC\PACT_mobile\android\settings.gradle.kts"
+name: pact_mobile
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html   
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.6+16
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+  flutter: ">=3.0.0"
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.5.0
+  location: ^5.0.3
+  geolocator: ^10.1.0
+  latlong2: ^0.9.0
+  http: ^1.2.0
+  workmanager: ^0.5.1
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0
+  local_auth: ^2.1.8
+  local_auth_android: ^1.0.43
+  local_auth_darwin: ^1.3.1
+  flutter_local_notifications: ^16.3.0
+  connectivity_plus: ^6.0.5
+  uuid: ^4.4.0
+  encrypt: ^5.0.3
+  dio: ^5.4.1
+  dio_smart_retry: ^6.0.0
+  crypto: ^3.0.3
+  path_provider: ^2.1.4
+  geocoding: ^2.1.0
+  permission_handler: ^11.0.1
+  image_picker: ^1.0.7
+  intl: ^0.19.0
+  flutter_localizations:
+    sdk: flutter
+  flutter_map: ^6.1.0
+  flutter_map_marker_cluster: ^1.3.1
+  url_launcher: ^6.2.6
+
+  cupertino_icons: ^1.0.8
+
+  flutter_svg: ^2.0.10
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.5.0
+  cached_network_image: ^3.3.1
+  pinput: ^4.0.0
+  open_file: ^3.5.3
+  file_picker: ^6.2.1
+  rxdart: ^0.27.7
+  background_fetch: ^1.3.3
+  sqflite: ^2.3.3
+  provider: ^6.1.1
+  flutter_map_tile_caching: ^9.0.1
+  flutter_map_marker_popup: ^6.1.2
+  syncfusion_flutter_xlsio: ^24.2.9
+  syncfusion_flutter_pdf: ^24.2.9
+  webview_flutter: ^4.7.0
+  shorebird_code_push: ^1.1.0
+  firebase_messaging: ^14.7.0
+  flutter_webrtc: ^0.10.7
+  share_plus: ^7.2.2
+  pdf: ^3.10.7
+  printing: ^5.12.0
+  flutter_email_sender: ^6.0.3
+  json_annotation: ^4.9.0
+  flutter_riverpod: ^2.4.9
+  csv: ^5.0.2
+  audioplayers: ^5.2.1
+  table_calendar: ^3.0.9
+  freezed_annotation: ^2.4.1
+  json_serializable: ^6.7.1
+  package_info_plus: ^4.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+  mocktail: ^1.0.3
+  build_runner: ^2.4.8
+  json_serializable: ^6.7.1
+  freezed: ^2.4.1
+  flutter_launcher_icons: ^0.13.1
+  test: ^1.24.9
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# App icon configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/pact_consultancy_pact_cover.jpg"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/pact_consultancy_pact_cover.jpg"
+  web:
+    generate: true
+    image_path: "assets/images/pact_consultancy_pact_cover.jpg"
+  windows:
+    generate: true
+    image_path: "assets/images/pact_consultancy_pact_cover.jpg"
+  macos:
+    generate: true
+    image_path: "assets/images/pact_consultancy_pact_cover.jpg"
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # Assets for the application
+  assets:
+    - assets/images/
+    - assets/images/pact_consultancy_pact_cover.jpg
+    - assets/images/placeholders/
+    - assets/icons/
+    - assets/sounds/
+    - shorebird.yaml
+    - lib/l10n/
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+
+  # Internationalization
+  generate: true
+  # see https://flutter.dev/to/font-from-package
+PS C:\Users\PC\PACT_mobile> 
