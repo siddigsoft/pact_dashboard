@@ -1,0 +1,135 @@
+PS C:\Users\PC\PACT_mobile> & "C:\Users\PC\.shorebird\bin\shorebird.bat" patch android --flutter-version=3.27.0
+Could not find an option named "--flutter-version".
+To proxy an option to the flutter command, use the '--' --<option> syntax.
+
+Example:
+
+shorebird release android '--' --no-pub lib/main.dart
+
+Usage: shorebird patch [arguments]
+-h, --help                     Print this usage information.
+    --dart-define              Additional key-value pairs that will be available as constants from the String.fromEnvironment, bool.fromEnvironment, and int.fromEnvironment constructors.
+                               Multiple defines can be passed by repeating "--dart-define" multiple times.
+    --dart-define-from-file    The path of a .json or .env file containing key-value pairs that will be available as environment variables.
+                               These can be accessed using the String.fromEnvironment, bool.fromEnvironment, and int.fromEnvironment constructors.
+                               Multiple defines can be passed by repeating "--dart-define-from-file" multiple times.
+                               Entries from "--dart-define" with identical keys take precedence over entries from these files.
+-p, --platforms                The platform(s) to to build this release for.
+                               [aar, android, ios, linux, macos, ios-framework, windows]
+    --build-name               A "x.y.z" string used as the version number shown to users.
+                               For each new version of your app, you will provide a version number to differentiate it
+                               from previous versions.
+                               On Android it is used as "versionName".
+                               On Xcode builds it is used as "CFBundleShortVersionString".
+                               On Windows it is used as the major, minor, and patch parts of the product and file
+                               versions.
+    --build-number             An identifier used as an internal version number.
+                               Each build must have a unique identifier to differentiate it from previous builds.
+                               It is used to determine whether one build is more recent than another, with higher numbers indicating more recent build.
+                               On Android it is used as "versionCode".
+                               On Xcode builds it is used as "CFBundleVersion".
+                               (defaults to "1.0")
+-t, --target                   The main entrypoint file of the application.
+    --flavor                   The product flavor to use when building the app.
+    --release-version          The version of the associated release (e.g. "1.0.0").
+                               If you are building an xcframework or aar, this number needs to match the host app's release version.   
+                               To target the latest release (e.g. the release that was most recently updated) use --release-version=latest.
+    --allow-native-diffs       Patch even if native code diffs are detected.
+                               NOTE: this is not recommended. Native code changes cannot be included in a patch and attempting to do so can cause your app to crash or behave unexpectedly.
+    --allow-asset-diffs        Patch even if asset diffs are detected.
+                               NOTE: this is not recommended. Asset changes cannot be included in a patch can cause your app to behave unexpectedly.
+    --track                    The track to publish the patch to.
+                               (defaults to "stable")
+    --no-confirm               Bypass all confirmation messages. It's generally not advised to use this unless running from a script.  
+    --export-options-plist     Export an IPA with these options. See "xcodebuild -h" for available exportOptionsPlist keys (iOS only). 
+    --export-method            Specify how the IPA will be distributed (iOS only).
+
+          [app-store]          Upload to the App Store
+          [ad-hoc]             Test on designated devices that do not need to be registered with the Apple developer account.
+                                   Requires a distribution certificate.
+          [development]        Test only on development devices registered with the Apple developer account.
+          [enterprise]         Distribute an app registered with the Apple Developer Enterprise Program.
+
+    --[no-]codesign            Codesign the application bundle (iOS only).
+                               (defaults to on)
+-n, --dry-run                  Validate but do not upload the patch.
+    --private-key-path         The path for a private key .pem file that will be used to sign the patch artifact.
+    --public-key-path          The path for a public key .pem file that will be used to validate patch signatures.
+    --split-debug-info         In a release build, this flag reduces application size by storing Dart program symbols in a separate file on the host rather than
+                               in the application. The value of the flag should be a directory where program symbol files can be stored for later use. These
+                               symbol files contain the information needed to symbolize Dart stack traces. For an app built with this flag, the "flutter
+                               symbolize" command with the right program symbol file is required to obtain a human readable stack trace.
+    --min-link-percentage      The minimum link percentage (0-100) required in order to generate a patch (Apple platforms only).       
+
+                               Patches with a lower link percentage than what is provided here will fail.
+                               [0 (default), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]
+
+Run "shorebird help" to see global options.
+PS C:\Users\PC\PACT_mobile>  & "C:\Users\PC\.shorebird\bin\shorebird.bat" release android --flutter-version=3.27.0
+✓ Fetching apps (0.9s)
+✓ Installing Flutter 3.27.0 (1e0e5760ee) (75.9s)
+✓ Running flutter precache (3.0s)
+✓ Downloading aot-tools.dill... (1.0s)
+✓ Extracting aot-tools.dill... (9.4s)
+Building Android app bundle with Flutter 3.27.0 (1e0e5760ee)
+Checking Dart SDK version... 
+Downloading Dart SDK from Flutter engine ... 
+Expanding downloaded archive with PowerShell...
+Building flutter tool... 
+Running pub upgrade... 
+Resolving dependencies... (7.5s)
+Downloading packages... (2.6s)
+Got dependencies.
+Downloading Material fonts...                                       4.3s
+Downloading Gradle Wrapper...                                      501ms
+Downloading package sky_engine...                                1,433ms
+Downloading package flutter_gpu...                                 759ms
+Downloading flutter_patched_sdk tools...                         1,812ms
+Downloading flutter_patched_sdk_product tools...                 1,849ms
+Downloading windows-x64 tools...                                    7.6s
+Downloading windows-x64/font-subset tools...                     1,182ms
+Downloading android-arm-profile/windows-x64 tools...             1,624ms
+Downloading android-arm-release/windows-x64 tools...             1,593ms
+Downloading android-arm64-profile/windows-x64 tools...           1,595ms
+Downloading android-arm64-release/windows-x64 tools...           1,903ms
+Downloading android-x64-profile/windows-x64 tools...             1,598ms
+Downloading android-x64-release/windows-x64 tools...             1,837ms
+Build failed due to use of deleted Android v1 embedding.
+[WARN] Build was successful, but `flutter pub get` failed to run after the build completed. You may see unexpected behavior in VS Code.
+
+Either run `flutter pub get` manually, or follow the steps in https://docs.shorebird.dev/code-push/troubleshooting#cant-run-my-app-in-vs-code.
+
+Failed to build AAB.
+Command: flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+Reason: Exited with code 1.
+
+💡 Fix Recommendations
+
+• Check that running `flutter build` with the same command-line arguments
+completes successfully by running the following command:
+
+flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+
+If the above command fails, then this is likely not a Shorebird issue and
+the underlying `flutter build` failure must be resolved for Shorebird to
+build a release.
+
+• If `flutter build` completes successfully, please ensure that you are
+providing the desired flutter version to the release command via
+the `--flutter-version` option. If you do not specify a `--flutter-version`
+Shorebird will default to the latest stable version of Flutter.
+We strongly encourage always specifying an explicit Flutter version:
+
+shorebird release <platform> --flutter-version=3.29.0
+
+• If `flutter build` completes successfully and `shorebird release`
+fails when using the same flutter version, please file an issue:
+https://github.com/shorebirdtech/shorebird/issues/new
+
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1769271692253_shorebird.log
+
+PS C:\Users\PC\PACT_mobile> 
