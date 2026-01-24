@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:open_file/open_file.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/mmp_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -34,10 +34,12 @@ class MMPFileViewer extends StatelessWidget {
         await file.writeAsBytes(bytes);
       }
 
-      // Open the file with system default application
-      final result = await OpenFile.open(filePath);
-      if (result.type != ResultType.done) {
-        throw Exception('Could not open file: ${result.message}');
+      // Open the file with system default application using url_launcher
+      final uri = Uri.file(filePath);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        throw Exception('Could not open file: $filePath');
       }
     } catch (e) {
       debugPrint('Error opening file: $e');

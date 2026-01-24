@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:open_file/open_file.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -89,12 +88,14 @@ class _MMPPreviewContentState extends State<_MMPPreviewContent> {
       }
     }
 
-    // For mobile or local files, use open_file
-    final result = await OpenFile.open(widget.localPath);
-    if (result.type != ResultType.done && mounted) {
+    // For mobile or local files, use url_launcher
+    final uri = Uri.file(widget.localPath);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not open file: ${result.message}'),
+          content: Text('Could not open file: ${widget.localPath}'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -104,7 +105,7 @@ class _MMPPreviewContentState extends State<_MMPPreviewContent> {
   Future<void> _shareFile() async {
     // On web, if localPath is a URL, share the URL directly
     if (kIsWeb && widget.localPath.startsWith('http')) {
-      await Share.share('Check out this file: $widget.localPath', subject: _fileName);
+      await Share.share('Check out this file: ${widget.localPath}', subject: _fileName);
       return;
     }
 

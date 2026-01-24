@@ -8,7 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -434,22 +434,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pickDocument() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
+    // Document picking is currently disabled - use image picker instead
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please use gallery or camera to share files')),
       );
-
-      if (result != null && result.files.single.path != null) {
-        await _uploadFile(File(result.files.single.path!), 'document');
-      }
-    } catch (e) {
-      debugPrint('Error picking document: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to select document: $e')),
-        );
-      }
     }
   }
 
