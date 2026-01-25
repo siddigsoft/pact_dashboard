@@ -51,6 +51,7 @@ class AppColors {
   
   // Aliases for common use cases
   static const Color primary = primaryOrange;
+  static const Color primaryGreen = accentGreen; // Alias for call screens
   static const Color success = accentGreen;
   static const Color error = accentRed;
   static const Color shadowColor = Color(
