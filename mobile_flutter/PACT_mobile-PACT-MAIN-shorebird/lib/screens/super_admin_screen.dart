@@ -843,7 +843,268 @@ class _SuperAdminScreenState extends State<SuperAdminScreen>
             'Export user list to CSV',
             Icons.download,
             AppColors.primaryBlue,
-            () {},
+            _exportUsers,
+          ),
+          const SizedBox(height: 24),
+          _buildSystemSettingsSection(),
+          const SizedBox(height: 24),
+          _buildDatabaseManagementSection(),
+          const SizedBox(height: 24),
+          _buildNotificationSettingsSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSystemSettingsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.settings, color: Colors.indigo, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'System Settings',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.indigo,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildQuickActionCard(
+          'Auto-Release Settings',
+          'Configure auto-release timing for site visits',
+          Icons.timer,
+          Colors.teal,
+          _showAutoReleaseSettings,
+        ),
+        _buildQuickActionCard(
+          'Email Templates',
+          'Manage system email templates',
+          Icons.mail,
+          Colors.deepOrange,
+          _showEmailTemplates,
+        ),
+        _buildQuickActionCard(
+          'Permit Requirements',
+          'Configure locality permit settings',
+          Icons.assignment,
+          Colors.purple,
+          _showPermitRequirements,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDatabaseManagementSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.storage, color: Colors.blueGrey, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Database Management',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.blueGrey,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildQuickActionCard(
+          'Hub Management',
+          'Manage hubs and regions',
+          Icons.hub,
+          Colors.cyan,
+          _showHubManagement,
+        ),
+        _buildQuickActionCard(
+          'State/Locality Setup',
+          'Configure states and localities',
+          Icons.map,
+          Colors.amber.shade700,
+          _showStateLocalityManagement,
+        ),
+        _buildQuickActionCard(
+          'Site Registry',
+          'Manage master sites database',
+          Icons.business,
+          Colors.deepPurple,
+          _showSiteRegistry,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotificationSettingsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.notifications, color: Colors.red, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Notification Settings',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildQuickActionCard(
+          'Push Notifications',
+          'Configure push notification settings',
+          Icons.notifications_active,
+          Colors.red,
+          _showPushNotificationSettings,
+        ),
+        _buildQuickActionCard(
+          'Email Notifications',
+          'Manage email notification preferences',
+          Icons.email,
+          Colors.blue,
+          _showEmailNotificationSettings,
+        ),
+        _buildQuickActionCard(
+          'Broadcast Message',
+          'Send message to all users',
+          Icons.campaign,
+          Colors.orange,
+          _showBroadcastMessage,
+        ),
+      ],
+    );
+  }
+
+  void _exportUsers() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Exporting users...'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  void _showAutoReleaseSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Auto-Release Settings', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Release Timeout'),
+              subtitle: const Text('24 hours'),
+              trailing: const Icon(Icons.edit),
+            ),
+            ListTile(
+              title: const Text('Confirmation Deadline'),
+              subtitle: const Text('4 hours'),
+              trailing: const Icon(Icons.edit),
+            ),
+            ListTile(
+              title: const Text('Reminder Frequency'),
+              subtitle: const Text('Every 2 hours'),
+              trailing: const Icon(Icons.edit),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  void _showEmailTemplates() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Email templates management - Coming soon')),
+    );
+  }
+
+  void _showPermitRequirements() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Permit requirements settings - Coming soon')),
+    );
+  }
+
+  void _showHubManagement() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Hub management - Coming soon')),
+    );
+  }
+
+  void _showStateLocalityManagement() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('State/Locality management - Coming soon')),
+    );
+  }
+
+  void _showSiteRegistry() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Site registry management - Coming soon')),
+    );
+  }
+
+  void _showPushNotificationSettings() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Push notification settings - Coming soon')),
+    );
+  }
+
+  void _showEmailNotificationSettings() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Email notification settings - Coming soon')),
+    );
+  }
+
+  void _showBroadcastMessage() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Broadcast Message', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Message Title',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Message Content',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Message broadcast sent'), backgroundColor: Colors.green),
+              );
+            },
+            child: const Text('Send'),
           ),
         ],
       ),
