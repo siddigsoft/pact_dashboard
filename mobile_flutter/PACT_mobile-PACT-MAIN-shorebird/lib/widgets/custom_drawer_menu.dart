@@ -586,21 +586,7 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           widget.onClose();
                         },
                       ),
-                      _MenuItemData(
-                        icon: Icons.support_rounded,
-                        title: 'Support',
-                        subtitle: 'Contact support team',
-                        iconColor: Colors.teal,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SupportScreen(),
-                            ),
-                          );
-                          widget.onClose();
-                        },
-                      ),
+                      // Support Screen hidden - functionality merged into Help & Support screen
                       _MenuItemData(
                         icon: Icons.phone_in_talk_rounded,
                         title: 'Communications',

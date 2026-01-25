@@ -31,6 +31,13 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
   List<Map<String, dynamic>> _ictAdminUsers = [];
   bool _loadingIctUsers = false;
   String? _selectedRecipientId;
+  
+  // Field operations support
+  List<Map<String, dynamic>> _fieldSupervisors = [];
+  bool _loadingFieldSupervisors = false;
+  String? _currentUserHubId;
+  String? _currentUserStateId;
+  String? _currentUserLocalityId;
 
   @override
   void initState() {
@@ -38,6 +45,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     _tabController = TabController(length: 4, vsync: this);
     _loadSupportContacts();
     _loadIctAdminUsers();
+    _loadCurrentUserLocation();
   }
 
   @override
@@ -77,9 +85,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     try {
       final response = await Supabase.instance.client
           .from('profiles')
-          .select('id, full_name, email, role, phone')
-          .inFilter('role', ['admin', 'super_admin', 'ict'])
-          .eq('is_active', true)
+          .select('id, full_name, email, role, phone, avatar_url, availability')
+          .inFilter('role', ['admin', 'super_admin', 'ict', 'fom'])
           .order('full_name', ascending: true);
 
       if (mounted) {
@@ -92,6 +99,76 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       debugPrint('Error loading ICT/Admin users: $e');
       if (mounted) {
         setState(() => _loadingIctUsers = false);
+      }
+    }
+  }
+
+  Future<void> _loadCurrentUserLocation() async {
+    try {
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      if (currentUser == null) return;
+
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('hub_id, state_id, locality_id, hub, state, locality')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+
+      if (response != null && mounted) {
+        setState(() {
+          _currentUserHubId = response['hub_id'] ?? response['hub'];
+          _currentUserStateId = response['state_id'] ?? response['state'];
+          _currentUserLocalityId = response['locality_id'] ?? response['locality'];
+        });
+        // Load field supervisors after getting current user's location
+        _loadFieldSupervisors();
+      }
+    } catch (e) {
+      debugPrint('Error loading current user location: $e');
+    }
+  }
+
+  Future<void> _loadFieldSupervisors() async {
+    if (_currentUserHubId == null && _currentUserStateId == null) {
+      debugPrint('No hub or state ID available for field supervisors query');
+      return;
+    }
+
+    setState(() => _loadingFieldSupervisors = true);
+    try {
+      // Build query to find supervisors, coordinators, FOM in same hub or state
+      var query = Supabase.instance.client
+          .from('profiles')
+          .select('id, full_name, email, role, phone, avatar_url, availability, hub_id, state_id, hub, state')
+          .inFilter('role', ['supervisor', 'coordinator', 'fom', 'projectManager', 'admin']);
+
+      final response = await query.order('full_name', ascending: true);
+
+      // Filter to same hub or state
+      final filteredList = (response as List).where((user) {
+        final userHubId = user['hub_id'] ?? user['hub'];
+        final userStateId = user['state_id'] ?? user['state'];
+        
+        // Match by hub first, then by state
+        if (_currentUserHubId != null && userHubId == _currentUserHubId) {
+          return true;
+        }
+        if (_currentUserStateId != null && userStateId == _currentUserStateId) {
+          return true;
+        }
+        return false;
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _fieldSupervisors = List<Map<String, dynamic>>.from(filteredList);
+          _loadingFieldSupervisors = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading field supervisors: $e');
+      if (mounted) {
+        setState(() => _loadingFieldSupervisors = false);
       }
     }
   }
