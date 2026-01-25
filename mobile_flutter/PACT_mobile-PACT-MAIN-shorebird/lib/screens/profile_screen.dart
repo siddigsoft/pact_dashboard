@@ -93,51 +93,86 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       final supabase = Supabase.instance.client;
       
-      // Load hub name
-      if (profile.hubId != null && profile.hubId!.isNotEmpty) {
-        try {
-          final hubResponse = await supabase
-              .from('hubs')
-              .select('name')
-              .eq('id', profile.hubId!)
-              .maybeSingle();
-          if (hubResponse != null) {
-            _hubName = hubResponse['name'] as String?;
+      // Use direct name fields if available (some databases store names directly)
+      if (profile.hubName != null && profile.hubName!.isNotEmpty) {
+        _hubName = profile.hubName;
+      }
+      if (profile.stateName != null && profile.stateName!.isNotEmpty) {
+        _stateName = profile.stateName;
+      }
+      if (profile.localityName != null && profile.localityName!.isNotEmpty) {
+        _localityName = profile.localityName;
+      }
+      
+      // If still no names and we have IDs that look like UUIDs, try lookup
+      final uuidRegex = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      );
+      
+      // Load hub name if not already set
+      if (_hubName == null && profile.hubId != null && profile.hubId!.isNotEmpty) {
+        if (uuidRegex.hasMatch(profile.hubId!)) {
+          try {
+            final hubResponse = await supabase
+                .from('hubs')
+                .select('name')
+                .eq('id', profile.hubId!)
+                .maybeSingle();
+            if (hubResponse != null) {
+              _hubName = hubResponse['name'] as String?;
+            }
+          } catch (e) {
+            debugPrint('Error loading hub name: $e');
+            // If lookup fails, use the ID as fallback (it might be the name)
+            _hubName = profile.hubId;
           }
-        } catch (e) {
-          debugPrint('Error loading hub name: $e');
+        } else {
+          // Not a UUID, use it directly as the name
+          _hubName = profile.hubId;
         }
       }
       
-      // Load state name
-      if (profile.stateId != null && profile.stateId!.isNotEmpty) {
-        try {
-          final stateResponse = await supabase
-              .from('states')
-              .select('name')
-              .eq('id', profile.stateId!)
-              .maybeSingle();
-          if (stateResponse != null) {
-            _stateName = stateResponse['name'] as String?;
+      // Load state name if not already set
+      if (_stateName == null && profile.stateId != null && profile.stateId!.isNotEmpty) {
+        if (uuidRegex.hasMatch(profile.stateId!)) {
+          try {
+            final stateResponse = await supabase
+                .from('states')
+                .select('name')
+                .eq('id', profile.stateId!)
+                .maybeSingle();
+            if (stateResponse != null) {
+              _stateName = stateResponse['name'] as String?;
+            }
+          } catch (e) {
+            debugPrint('Error loading state name: $e');
+            _stateName = profile.stateId;
           }
-        } catch (e) {
-          debugPrint('Error loading state name: $e');
+        } else {
+          // Not a UUID, use it directly as the name
+          _stateName = profile.stateId;
         }
       }
       
-      // Load locality name
-      if (profile.localityId != null && profile.localityId!.isNotEmpty) {
-        try {
-          final localityResponse = await supabase
-              .from('localities')
-              .select('name')
-              .eq('id', profile.localityId!)
-              .maybeSingle();
-          if (localityResponse != null) {
-            _localityName = localityResponse['name'] as String?;
+      // Load locality name if not already set
+      if (_localityName == null && profile.localityId != null && profile.localityId!.isNotEmpty) {
+        if (uuidRegex.hasMatch(profile.localityId!)) {
+          try {
+            final localityResponse = await supabase
+                .from('localities')
+                .select('name')
+                .eq('id', profile.localityId!)
+                .maybeSingle();
+            if (localityResponse != null) {
+              _localityName = localityResponse['name'] as String?;
+            }
+          } catch (e) {
+            debugPrint('Error loading locality name: $e');
+            _localityName = profile.localityId;
           }
-        } catch (e) {
-          debugPrint('Error loading locality name: $e');
+        } else {
+          // Not a UUID, use it directly as the name
+          _localityName = profile.localityId;
         }
       }
       
@@ -499,26 +534,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       icon: Icons.business,
                       color: AppColors.primaryBlue,
                       children: [
-                        if (profile.hubId != null) ...[
+                        if (profile.hubId != null || profile.hubName != null) ...[
                           _buildInfoRow(
                             'Hub',
-                            _isLoadingLookups ? 'Loading...' : (_hubName ?? 'Not assigned'),
+                            _isLoadingLookups ? 'Loading...' : (_hubName ?? profile.hubName ?? 'Not assigned'),
                             icon: Icons.hub,
                           ),
                           const SizedBox(height: 12),
                         ],
-                        if (profile.stateId != null) ...[
+                        if (profile.stateId != null || profile.stateName != null) ...[
                           _buildInfoRow(
                             'State',
-                            _isLoadingLookups ? 'Loading...' : (_stateName ?? 'Not assigned'),
+                            _isLoadingLookups ? 'Loading...' : (_stateName ?? profile.stateName ?? 'Not assigned'),
                             icon: Icons.location_city,
                           ),
                           const SizedBox(height: 12),
                         ],
-                        if (profile.localityId != null) ...[
+                        if (profile.localityId != null || profile.localityName != null) ...[
                           _buildInfoRow(
                             'Locality',
-                            _isLoadingLookups ? 'Loading...' : (_localityName ?? 'Not assigned'),
+                            _isLoadingLookups ? 'Loading...' : (_localityName ?? profile.localityName ?? 'Not assigned'),
                             icon: Icons.location_on,
                           ),
                           const SizedBox(height: 12),
