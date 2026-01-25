@@ -8,6 +8,8 @@ import '../services/help_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_drawer_menu.dart';
 import '../services/webrtc_service.dart';
+import '../services/chat_service.dart';
+import 'communications_screen.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
@@ -708,8 +710,12 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
           _buildBusinessHoursCard(isArabic),
           const SizedBox(height: 16),
           _buildEmergencyContactCard(isArabic),
-          const SizedBox(height: 16),
-          _buildContactIctDropdown(isArabic),
+          const SizedBox(height: 24),
+          // Field Operations Support Section
+          _buildFieldOperationsSupportSection(isArabic),
+          const SizedBox(height: 24),
+          // ICT & Admin Support Section
+          _buildIctSupportSection(isArabic),
           const SizedBox(height: 24),
           Text(
             isArabic ? 'فريق الدعم' : 'Support Team',
@@ -727,6 +733,532 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
             ..._supportContacts.map((contact) => _buildContactCard(contact, isArabic)),
           const SizedBox(height: 24),
           _buildReportBugCard(isArabic),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldOperationsSupportSection(bool isArabic) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.orange.shade600, Colors.orange.shade400],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.groups, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isArabic ? 'دعم العمليات الميدانية' : 'Field Operations Support',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        isArabic ? 'المشرفين والمنسقين في منطقتك' : 'Supervisors & coordinators in your area',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: _loadingFieldSupervisors
+                ? const Center(child: CircularProgressIndicator())
+                : _fieldSupervisors.isEmpty
+                    ? _buildNoFieldSupervisorsMessage(isArabic)
+                    : Column(
+                        children: _fieldSupervisors
+                            .map((user) => _buildFieldSupportUserCard(user, isArabic))
+                            .toList(),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoFieldSupervisorsMessage(bool isArabic) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: Colors.grey.shade500, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isArabic
+                  ? 'لا يوجد مشرفين متاحين في منطقتك حالياً'
+                  : 'No supervisors available in your area currently',
+              style: GoogleFonts.poppins(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldSupportUserCard(Map<String, dynamic> user, bool isArabic) {
+    final isOnline = user['availability'] == 'online' || user['availability'] == 'available';
+    final avatarUrl = user['avatar_url'] as String?;
+    final fullName = user['full_name'] as String? ?? 'Unknown';
+    final role = user['role'] as String? ?? '';
+    final phone = user['phone'] as String?;
+    final email = user['email'] as String?;
+    final userId = user['id'] as String;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: Colors.orange.shade100,
+                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null
+                    ? Text(
+                        fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
+                        style: GoogleFonts.poppins(
+                          color: Colors.orange.shade700,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      )
+                    : null,
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: isOnline ? Colors.green : Colors.grey.shade400,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fullName,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  _getFieldRoleLabel(role, isArabic),
+                  style: GoogleFonts.poppins(
+                    color: Colors.grey.shade600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // In-app call button
+          IconButton(
+            onPressed: () => _initiateInAppCall(userId, fullName),
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryGreen.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.video_call, color: AppColors.primaryGreen, size: 18),
+            ),
+            tooltip: isArabic ? 'مكالمة داخلية' : 'In-app Call',
+          ),
+          // Phone call button
+          if (phone != null)
+            IconButton(
+              onPressed: () => _launchPhone(phone),
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.phone, color: Colors.blue, size: 18),
+              ),
+              tooltip: isArabic ? 'اتصال هاتفي' : 'Phone Call',
+            ),
+          // Message button
+          IconButton(
+            onPressed: () => _openMessaging(userId, fullName),
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.purple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.message, color: Colors.purple, size: 18),
+            ),
+            tooltip: isArabic ? 'رسالة' : 'Message',
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getFieldRoleLabel(String role, bool isArabic) {
+    switch (role.toLowerCase()) {
+      case 'supervisor':
+        return isArabic ? 'مشرف' : 'Supervisor';
+      case 'coordinator':
+        return isArabic ? 'منسق' : 'Coordinator';
+      case 'fom':
+        return isArabic ? 'مدير العمليات الميدانية' : 'Field Operations Manager';
+      case 'projectmanager':
+        return isArabic ? 'مدير المشروع' : 'Project Manager';
+      case 'admin':
+        return isArabic ? 'مدير' : 'Admin';
+      default:
+        return isArabic ? 'دعم' : 'Support';
+    }
+  }
+
+  Future<void> _initiateInAppCall(String userId, String userName) async {
+    final webRtcService = WebRTCService();
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_currentLocale == 'ar' ? 'يجب تسجيل الدخول' : 'Please login first'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await webRtcService.initiateCall(userId, userName, isAudioOnly: false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_currentLocale == 'ar' ? 'جاري الاتصال بـ $userName...' : 'Calling $userName...'),
+          backgroundColor: AppColors.primaryGreen,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_currentLocale == 'ar' ? 'فشل الاتصال: $e' : 'Call failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openMessaging(String userId, String userName) async {
+    // Navigate to communications screen to send message
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CommunicationsScreen(),
+      ),
+    );
+    
+    // Show hint about who to message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _currentLocale == 'ar' 
+              ? 'ابحث عن $userName لإرسال رسالة' 
+              : 'Search for $userName to send a message',
+        ),
+        backgroundColor: AppColors.primaryBlue,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Widget _buildIctSupportSection(bool isArabic) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.8)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.headset_mic, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isArabic ? 'فريق الدعم التقني والإداري' : 'ICT & Admin Support Team',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        isArabic ? 'للمشاكل التقنية والإدارية' : 'For technical and administrative issues',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: _loadingIctUsers
+                ? const Center(child: CircularProgressIndicator())
+                : _ictAdminUsers.isEmpty
+                    ? _buildNoIctUsersMessage(isArabic)
+                    : Column(
+                        children: _ictAdminUsers
+                            .map((user) => _buildIctSupportUserCard(user, isArabic))
+                            .toList(),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoIctUsersMessage(bool isArabic) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: Colors.grey.shade500, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isArabic
+                  ? 'لا يوجد فريق دعم تقني متاح حالياً'
+                  : 'No ICT support team available currently',
+              style: GoogleFonts.poppins(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIctSupportUserCard(Map<String, dynamic> user, bool isArabic) {
+    final isOnline = user['availability'] == 'online' || user['availability'] == 'available';
+    final avatarUrl = user['avatar_url'] as String?;
+    final fullName = user['full_name'] as String? ?? 'Unknown';
+    final role = user['role'] as String? ?? '';
+    final phone = user['phone'] as String?;
+    final email = user['email'] as String?;
+    final userId = user['id'] as String;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null
+                    ? Text(
+                        fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
+                        style: GoogleFonts.poppins(
+                          color: AppColors.primaryBlue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      )
+                    : null,
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: isOnline ? Colors.green : Colors.grey.shade400,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fullName,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  _getRoleLabel(role, isArabic),
+                  style: GoogleFonts.poppins(
+                    color: Colors.grey.shade600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // In-app call button
+          IconButton(
+            onPressed: () => _initiateInAppCall(userId, fullName),
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryGreen.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.video_call, color: AppColors.primaryGreen, size: 18),
+            ),
+            tooltip: isArabic ? 'مكالمة داخلية' : 'In-app Call',
+          ),
+          // Phone call button
+          if (phone != null)
+            IconButton(
+              onPressed: () => _launchPhone(phone),
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.phone, color: Colors.blue, size: 18),
+              ),
+              tooltip: isArabic ? 'اتصال هاتفي' : 'Phone Call',
+            ),
+          // Email button
+          if (email != null)
+            IconButton(
+              onPressed: () => _launchEmail(email),
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.email, color: Colors.orange, size: 18),
+              ),
+              tooltip: isArabic ? 'بريد إلكتروني' : 'Email',
+            ),
+          // Message button
+          IconButton(
+            onPressed: () => _openMessaging(userId, fullName),
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.purple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.message, color: Colors.purple, size: 18),
+            ),
+            tooltip: isArabic ? 'رسالة' : 'Message',
+          ),
         ],
       ),
     );
@@ -800,7 +1332,6 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
 
   Widget _buildEmergencyContactCard(bool isArabic) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [Colors.red.shade600, Colors.red.shade400],
@@ -809,48 +1340,77 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.emergency, color: Colors.white, size: 28),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Text(
-                  isArabic ? 'الدعم الطارئ' : 'Emergency Support',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: const Icon(Icons.emergency, color: Colors.white, size: 28),
                 ),
-                Text(
-                  isArabic ? 'للمشاكل العاجلة في الميدان' : 'For urgent field issues',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 12,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isArabic ? 'الدعم الطارئ' : 'Emergency Support',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        isArabic ? 'للمشاكل العاجلة في الميدان' : 'For urgent field issues',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: _initiateEmergencyCall,
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.phone, color: Colors.red.shade600),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildEmergencyButton(
+                    icon: Icons.phone,
+                    label: isArabic ? 'اتصال هاتفي' : 'Phone Call',
+                    onPressed: _initiateEmergencyPhoneCall,
+                    isArabic: isArabic,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildEmergencyButton(
+                    icon: Icons.video_call,
+                    label: isArabic ? 'مكالمة داخلية' : 'In-App Call',
+                    onPressed: _initiateEmergencyInAppCall,
+                    isArabic: isArabic,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildEmergencyButton(
+                    icon: Icons.message,
+                    label: isArabic ? 'رسالة' : 'Message',
+                    onPressed: _initiateEmergencyMessage,
+                    isArabic: isArabic,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -858,115 +1418,39 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     );
   }
 
-  Widget _buildContactIctDropdown(bool isArabic) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryBlue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.headset_mic, color: AppColors.primaryBlue),
+  Widget _buildEmergencyButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    required bool isArabic,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
               ),
-              const SizedBox(width: 12),
-              Text(
-                isArabic ? 'تواصل مع فريق الدعم التقني' : 'Contact ICT Support Team',
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_loadingIctUsers)
-            const Center(child: CircularProgressIndicator())
-          else ...[
-            DropdownButtonFormField<String>(
-              value: _selectedRecipientId,
-              decoration: InputDecoration(
-                labelText: isArabic ? 'اختر جهة الاتصال' : 'Select Contact',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.grey.shade50,
-              ),
-              items: [
-                DropdownMenuItem<String>(
-                  value: 'all',
-                  child: Text(isArabic ? 'جميع فريق الدعم التقني' : 'All ICT Support Team'),
-                ),
-                ..._ictAdminUsers.map((user) => DropdownMenuItem<String>(
-                  value: user['id'] as String,
-                  child: Text(
-                    '${user['full_name'] ?? 'Unknown'} (${_getRoleLabel(user['role'] as String?, isArabic)})',
-                  ),
-                )),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedRecipientId = value;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _selectedRecipientId != null ? () => _sendEmailToSelected(isArabic) : null,
-                    icon: const Icon(Icons.email),
-                    label: Text(isArabic ? 'إرسال بريد' : 'Send Email'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _selectedRecipientId != null && _selectedRecipientId != 'all'
-                        ? () => _initiateDirectCall(_selectedRecipientId!)
-                        : null,
-                    icon: const Icon(Icons.call),
-                    label: Text(isArabic ? 'اتصال مباشر' : 'Direct Call'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryGreen,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1065,6 +1549,33 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
   }
 
   Future<void> _initiateEmergencyCall() async {
+    _initiateEmergencyPhoneCall();
+  }
+
+  Future<void> _initiateEmergencyPhoneCall() async {
+    // Priority: Field supervisors > ICT/Admin users > Support contacts
+    if (_fieldSupervisors.isNotEmpty) {
+      final supervisor = _fieldSupervisors.firstWhere(
+        (u) => u['phone'] != null,
+        orElse: () => _fieldSupervisors.first,
+      );
+      if (supervisor['phone'] != null) {
+        await _launchPhone(supervisor['phone'] as String);
+        return;
+      }
+    }
+    
+    if (_ictAdminUsers.isNotEmpty) {
+      final firstAdmin = _ictAdminUsers.firstWhere(
+        (u) => u['phone'] != null,
+        orElse: () => _ictAdminUsers.first,
+      );
+      if (firstAdmin['phone'] != null) {
+        await _launchPhone(firstAdmin['phone'] as String);
+        return;
+      }
+    }
+    
     if (_supportContacts.isNotEmpty) {
       final emergencyContact = _supportContacts.firstWhere(
         (c) => c.phone != null,
@@ -1072,17 +1583,79 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
       );
       if (emergencyContact.phone != null) {
         await _launchPhone(emergencyContact.phone!);
+        return;
       }
+    }
+
+    // No phone number available - show error
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _currentLocale == 'ar'
+              ? 'لا يوجد رقم هاتف طوارئ متاح'
+              : 'No emergency phone number available',
+        ),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  Future<void> _initiateEmergencyInAppCall() async {
+    // Priority: Field supervisors > ICT/Admin users
+    String? userId;
+    String? userName;
+
+    if (_fieldSupervisors.isNotEmpty) {
+      // Find first online supervisor, or fallback to first supervisor
+      final onlineSupervisor = _fieldSupervisors.firstWhere(
+        (u) => u['availability'] == 'online' || u['availability'] == 'available',
+        orElse: () => _fieldSupervisors.first,
+      );
+      userId = onlineSupervisor['id'] as String?;
+      userName = onlineSupervisor['full_name'] as String? ?? 'Supervisor';
     } else if (_ictAdminUsers.isNotEmpty) {
-      final firstAdmin = _ictAdminUsers.firstWhere(
-        (u) => u['phone'] != null,
+      final onlineAdmin = _ictAdminUsers.firstWhere(
+        (u) => u['availability'] == 'online' || u['availability'] == 'available',
         orElse: () => _ictAdminUsers.first,
       );
-      if (firstAdmin['phone'] != null) {
-        await _launchPhone(firstAdmin['phone'] as String);
-      } else {
-        _initiateDirectCall(firstAdmin['id'] as String);
-      }
+      userId = onlineAdmin['id'] as String?;
+      userName = onlineAdmin['full_name'] as String? ?? 'Support';
+    }
+
+    if (userId != null && userName != null) {
+      await _initiateInAppCall(userId, userName);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _currentLocale == 'ar'
+                ? 'لا يوجد جهة اتصال طوارئ متاحة'
+                : 'No emergency contact available',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _initiateEmergencyMessage() async {
+    // Navigate to communications screen for emergency messaging
+    if (_fieldSupervisors.isNotEmpty) {
+      final supervisor = _fieldSupervisors.first;
+      final userName = supervisor['full_name'] as String? ?? 'Supervisor';
+      _openMessaging(supervisor['id'] as String, userName);
+    } else if (_ictAdminUsers.isNotEmpty) {
+      final admin = _ictAdminUsers.first;
+      final userName = admin['full_name'] as String? ?? 'Support';
+      _openMessaging(admin['id'] as String, userName);
+    } else {
+      // Just navigate to communications
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const CommunicationsScreen(),
+        ),
+      );
     }
   }
 
