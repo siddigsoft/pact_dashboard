@@ -48,7 +48,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   final List<String> _tabs = ['All', 'Online', 'Coordinators', 'Data Collectors', 'Admins'];
 
   // Roles that can call anyone in the system
-  static const List<String> _unrestrictedRoles = ['admin', 'super_admin', 'fom', 'super admin'];
+  static const List<String> _unrestrictedRoles = ['admin', 'super_admin', 'fom', 'super admin', 'supervisor'];
   
   // Roles that can be called by anyone (supervisory roles)
   static const List<String> _supervisoryRoles = ['admin', 'super_admin', 'coordinator', 'supervisor', 'hub coordinator', 'fom', 'super admin'];
