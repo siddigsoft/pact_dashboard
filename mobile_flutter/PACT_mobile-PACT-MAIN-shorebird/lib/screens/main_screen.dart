@@ -36,6 +36,32 @@ class _MainScreenState extends State<MainScreen> {
     _checkUserRole();
     _initializeWebRTC();
     _showWhatsNewIfNeeded();
+    
+    // Check for active call from notification tap after a short delay
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForActiveCall();
+    });
+  }
+  
+  void _checkForActiveCall() {
+    // Check if there's an active incoming call that needs to be shown
+    final currentState = WebRTCService().callState;
+    if (currentState.status == CallStatus.ringing &&
+        currentState.remoteUserId != null &&
+        currentState.callId != null &&
+        currentState.callToken != null &&
+        mounted) {
+      debugPrint('📞 Found active incoming call, showing dialog');
+      showIncomingCallDialog(
+        context,
+        callerId: currentState.remoteUserId!,
+        callerName: currentState.remoteUserName ?? 'Unknown',
+        callerAvatar: null,
+        callId: currentState.callId!,
+        callToken: currentState.callToken!,
+        isAudioOnly: currentState.isAudioOnly,
+      );
+    }
   }
 
   Future<void> _showWhatsNewIfNeeded() async {

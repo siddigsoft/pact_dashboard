@@ -153,6 +153,14 @@ void main() async {
           // Navigate to specific chat
           final chatId = payload.substring(5);
           navigatorKey.currentState?.pushNamed('/chat', arguments: chatId);
+        } else if (payload.startsWith('call:')) {
+          // Navigate to main screen and show call UI
+          // The WebRTC service will handle showing the call dialog
+          navigatorKey.currentState?.pushNamedAndRemoveUntil(
+            '/main',
+            (route) => false,
+            arguments: {'activeCall': true},
+          );
         }
         // MMP code commented out
         // else if (payload.startsWith('mmp:')) {
