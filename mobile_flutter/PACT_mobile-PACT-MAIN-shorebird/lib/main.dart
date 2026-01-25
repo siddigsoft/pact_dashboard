@@ -6,10 +6,13 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider, Consumer;
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    hide ChangeNotifierProvider, Consumer;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'services/authentication_service.dart';
-import '../services/biometric_auth_service.dart';
+import 'services/biometric_auth_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'authentication/login_screen.dart';
 import 'authentication/improved_register_screen.dart';
 import 'authentication/forgot_password_screen.dart';
@@ -26,12 +29,13 @@ import 'providers/sync_provider.dart';
 import 'services/connectivity_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/data_migration_service.dart';
-import 'services/offline_data_service.dart';
 import 'services/notification_service.dart';
+import 'services/bilingual_notification_service.dart';
 import 'services/update_service.dart';
 import 'services/map_tile_cache_service.dart'
     if (dart.library.html) 'services/map_tile_cache_service_web.dart';
 import 'services/offline/hive_adapters.dart';
+import 'services/offline/offline_db.dart';
 
 // Conditionally import web plugins only when needed
 // This prevents errors on non-web platforms
@@ -54,8 +58,58 @@ Future<void> _requestLocationPermission() async {
   }
 }
 
+// Top-level background message handler for Firebase Messaging.
+// Must be a top-level function to work with FCM background isolate.
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    // Try to initialize the bilingual/local notification plugin in background.
+    await BilingualNotificationService.initialize();
+
+    final data = message.data;
+    final type = (data['type'] ?? '').toString().toLowerCase();
+
+    if (type == 'incoming_call' ||
+        data['call_id'] != null ||
+        data['callId'] != null) {
+      final callerName = data['caller_name'] ??
+          data['fromName'] ??
+          message.notification?.title ??
+          'Unknown';
+      final callId = data['call_id'] ?? data['callId'] ?? '';
+      await BilingualNotificationService.showIncomingCallNotification(
+        callerName: callerName,
+        callId: callId,
+      );
+      return;
+    }
+
+    // Fallback: show a simple bilingual notification for generic messages
+    if (message.notification != null) {
+      final title = message.notification?.title ?? '';
+      final body = message.notification?.body ?? '';
+      await BilingualNotificationService.showBilingualNotification(
+        titleKey: 'new_message',
+        bodyKey: 'tap_to_view_details',
+        payload: data['payload'] ?? 'payload',
+        bodyParams: {'name': title},
+      );
+    }
+  } catch (e) {
+    debugPrint('[FCM background] Error handling background message: $e');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase (if present) and register background message handler
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase.initializeApp() failed or not configured: $e');
+  }
+
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // Request location permission
   await _requestLocationPermission();
@@ -76,11 +130,11 @@ void main() async {
 
   // Initialize Hive for local storage
   await Hive.initFlutter();
-  
+
   // Register Hive type adapters for offline data models
   // CRITICAL: Must be done BEFORE opening typed boxes
   registerHiveAdapters();
-  
+
   // Open boxes for offline data storage
   await Hive.openBox('tasks');
   await Hive.openBox('equipments');
@@ -96,6 +150,9 @@ void main() async {
   await Hive.openBox('safetyChecklists_sync');
   await Hive.openBox('userProfiles_sync');
 
+  // Initialize OfflineDb which opens typed Hive boxes used by offline services
+  await OfflineDb().init();
+
   // Initialize web-specific configuration and URL strategy
   configureApp();
 
@@ -107,7 +164,8 @@ void main() async {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: Colors.transparent, // Make navigation bar transparent
+      systemNavigationBarColor:
+          Colors.transparent, // Make navigation bar transparent
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
@@ -130,9 +188,6 @@ void main() async {
   final localStorageService = LocalStorageService();
   final connectivityService = ConnectivityService(Connectivity());
   await connectivityService.initialize();
-
-  // Initialize offline data services
-  await OfflineDataService.initialize();
 
   // Initialize map tile cache service (mobile only, not supported on web)
   if (!kIsWeb) {
@@ -161,36 +216,38 @@ void main() async {
             (route) => false,
             arguments: {'activeCall': true},
           );
-        }
-        // MMP code commented out
-        // else if (payload.startsWith('mmp:')) {
-        //   // Navigate to MMP file details
-        //   final fileId = payload.substring(4);
-        //   navigatorKey.currentState
-        //       ?.pushNamed('/mmp-detail', arguments: fileId);
-        // }
-        else if (payload.startsWith('notif:')) {
+        } else if (payload.startsWith('notif:')) {
           final notificationId = payload.substring(6);
           navigatorKey.currentState?.pushNamed(
             '/main',
             arguments: {'notificationId': notificationId},
-          );        } else if (payload.startsWith('cost_submission_approved:')) {
+          );
+        } else if (payload.startsWith('cost_submission_approved:')) {
           final submissionId = payload.substring(24);
           navigatorKey.currentState?.pushNamed(
             '/main',
-            arguments: {'costSubmissionId': submissionId, 'tab': 'cost_submissions'},
+            arguments: {
+              'costSubmissionId': submissionId,
+              'tab': 'cost_submissions'
+            },
           );
         } else if (payload.startsWith('cost_submission_rejected:')) {
           final submissionId = payload.substring(24);
           navigatorKey.currentState?.pushNamed(
             '/main',
-            arguments: {'costSubmissionId': submissionId, 'tab': 'cost_submissions'},
+            arguments: {
+              'costSubmissionId': submissionId,
+              'tab': 'cost_submissions'
+            },
           );
         } else if (payload.startsWith('cost_submission_revision:')) {
           final submissionId = payload.substring(23);
           navigatorKey.currentState?.pushNamed(
             '/main',
-            arguments: {'costSubmissionId': submissionId, 'tab': 'cost_submissions'},
+            arguments: {
+              'costSubmissionId': submissionId,
+              'tab': 'cost_submissions'
+            },
           );
         } else if (payload.startsWith('budget_alert:')) {
           final siteVisitId = payload.substring(13);
@@ -202,7 +259,8 @@ void main() async {
           navigatorKey.currentState?.pushNamed(
             '/main',
             arguments: {'tab': 'cost_submissions'},
-          );        } else if (payload.startsWith('update:')) {
+          );
+        } else if (payload.startsWith('update:')) {
           // Handle update notification tap
           UpdateService().downloadAndInstallUpdate();
         }
@@ -233,7 +291,8 @@ void main() async {
     if (isBiometricEnabled && isBiometricAvailable) {
       // Show biometric prompt screen for authentication
       initialRoute = '/biometric-prompt';
-      debugPrint('🔐 Biometric authentication enabled, showing biometric prompt');
+      debugPrint(
+          '🔐 Biometric authentication enabled, showing biometric prompt');
     } else if (currentUser != null) {
       // User is logged in but no biometrics, go to main
       initialRoute = '/main';
@@ -241,7 +300,8 @@ void main() async {
     } else {
       // No biometrics and not logged in, go to login
       initialRoute = '/login';
-      debugPrint('🔑 No biometrics enabled and user not logged in, showing login screen');
+      debugPrint(
+          '🔑 No biometrics enabled and user not logged in, showing login screen');
     }
   } catch (e) {
     debugPrint('❌ Error checking biometric status: $e');
