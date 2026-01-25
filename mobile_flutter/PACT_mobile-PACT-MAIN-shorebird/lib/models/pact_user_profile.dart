@@ -183,6 +183,16 @@ class BankAccount {
   };
 }
 
+/// Helper function to check if a string looks like a UUID
+bool _isUuid(String? value) {
+  if (value == null || value.isEmpty) return false;
+  // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  final uuidRegex = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+  );
+  return uuidRegex.hasMatch(value);
+}
+
 /// Complete user profile model matching the database schema
 class PACTUserProfile {
   final String id;
@@ -201,10 +211,15 @@ class PACTUserProfile {
   // Avatar
   final String? avatarUrl;
   
-  // Organizational assignment
+  // Organizational assignment (can be IDs or names depending on database)
   final String? hubId;
   final String? stateId;
   final String? localityId;
+  
+  // Direct name fields (some databases store names directly)
+  final String? hubName;
+  final String? stateName;
+  final String? localityName;
   
   // Employment info
   final String? employeeId;
@@ -236,6 +251,9 @@ class PACTUserProfile {
     this.hubId,
     this.stateId,
     this.localityId,
+    this.hubName,
+    this.stateName,
+    this.localityName,
     this.employeeId,
     this.bankAccount,
     this.location,
@@ -292,9 +310,12 @@ class PACTUserProfile {
       status: json['status'] ?? 'pending',
       availability: UserAvailability.fromString(json['availability']),
       avatarUrl: json['avatar_url'] ?? json['avatarUrl'],
-      hubId: json['hub_id'] ?? json['hubId'],
-      stateId: json['state_id'] ?? json['stateId'],
-      localityId: json['locality_id'] ?? json['localityId'],
+      hubId: json['hub_id'] ?? json['hubId'] ?? json['hub'],
+      stateId: json['state_id'] ?? json['stateId'] ?? json['state'],
+      localityId: json['locality_id'] ?? json['localityId'] ?? json['locality'],
+      hubName: json['hub_name'] ?? json['hubName'] ?? (json['hub'] is String && !_isUuid(json['hub']) ? json['hub'] : null),
+      stateName: json['state_name'] ?? json['stateName'] ?? (json['state'] is String && !_isUuid(json['state']) ? json['state'] : null),
+      localityName: json['locality_name'] ?? json['localityName'] ?? (json['locality'] is String && !_isUuid(json['locality']) ? json['locality'] : null),
       employeeId: json['employee_id'] ?? json['employeeId'],
       bankAccount: parsedBankAccount,
       location: parsedLocation,
@@ -326,6 +347,9 @@ class PACTUserProfile {
     'hub_id': hubId,
     'state_id': stateId,
     'locality_id': localityId,
+    'hub_name': hubName,
+    'state_name': stateName,
+    'locality_name': localityName,
     'employee_id': employeeId,
     'bank_account': bankAccount?.toJson(),
     'location': location?.toJson(),
@@ -391,6 +415,9 @@ class PACTUserProfile {
     String? hubId,
     String? stateId,
     String? localityId,
+    String? hubName,
+    String? stateName,
+    String? localityName,
     String? employeeId,
     BankAccount? bankAccount,
     UserLocation? location,
@@ -414,6 +441,9 @@ class PACTUserProfile {
       hubId: hubId ?? this.hubId,
       stateId: stateId ?? this.stateId,
       localityId: localityId ?? this.localityId,
+      hubName: hubName ?? this.hubName,
+      stateName: stateName ?? this.stateName,
+      localityName: localityName ?? this.localityName,
       employeeId: employeeId ?? this.employeeId,
       bankAccount: bankAccount ?? this.bankAccount,
       location: location ?? this.location,
