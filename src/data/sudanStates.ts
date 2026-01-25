@@ -9,13 +9,14 @@ export interface SudanState {
 }
 
 /**
- * Complete list of Sudan's 18 states and 189 localities
+ * Complete list of Sudan's 18 states and localities
  * Source: OCHA COD-AB (Common Operational Dataset - Administrative Boundaries)
- * Last Updated: August 2024
+ * Last Updated: January 2026
  * Reference: https://data.humdata.org/dataset/cod-ab-sdn
+ * Note: Includes alternative spellings and names to match MMP data
  */
 export const sudanStates: SudanState[] = [
-  // 1. Khartoum State - 7 localities
+  // 1. Khartoum State - 8 localities
   { 
     id: 'khartoum', 
     name: 'Khartoum', 
@@ -23,6 +24,7 @@ export const sudanStates: SudanState[] = [
     localities: [
       { id: 'kh-khartoum', name: 'Khartoum', nameAr: 'الخرطوم' },
       { id: 'kh-bahri', name: 'Bahri', nameAr: 'بحري' },
+      { id: 'kh-bahri-khartoum-north', name: 'Bahri (Khartoum North)', nameAr: 'بحري (الخرطوم شمال)' }, // Alternative name
       { id: 'kh-omdurman', name: 'Um Durman', nameAr: 'أم درمان' },
       { id: 'kh-jebel-awlia', name: 'Jebel Awlia', nameAr: 'جبل أولياء' },
       { id: 'kh-karrari', name: 'Karrari', nameAr: 'كرري' },
@@ -48,7 +50,7 @@ export const sudanStates: SudanState[] = [
     ]
   },
 
-  // 3. Red Sea State - 10 localities
+  // 3. Red Sea State - 11 localities
   { 
     id: 'red-sea', 
     name: 'Red Sea', 
@@ -59,35 +61,44 @@ export const sudanStates: SudanState[] = [
       { id: 'rs-agig', name: 'Agig', nameAr: 'عقيق' },
       { id: 'rs-al-ganab', name: 'Al Ganab', nameAr: 'القنب' },
       { id: 'rs-dordieb', name: 'Dordieb', nameAr: 'درديب' },
+      { id: 'rs-gunb-awlib', name: 'Gunb-Awlib', nameAr: 'قنب أوليب' },
       { id: 'rs-halaib', name: "Hala'ib", nameAr: 'حلايب' },
+      { id: 'rs-halaieb', name: 'Halaieb', nameAr: 'حلايب' }, // Alternative spelling
       { id: 'rs-haya', name: 'Haya', nameAr: 'هيا' },
       { id: 'rs-jubayt-elmaadin', name: "Jubayt Elma'aadin", nameAr: 'جبيت المعادن' },
       { id: 'rs-sinkat', name: 'Sinkat', nameAr: 'سنكات' },
       { id: 'rs-tawkar', name: 'Tawkar', nameAr: 'طوكر' },
+      { id: 'rs-tokar', name: 'Tokar', nameAr: 'طوكر' }, // Alternative spelling
     ]
   },
 
-  // 4. Kassala State - 11 localities
+  // 4. Kassala State - 17 localities
   { 
     id: 'kassala', 
     name: 'Kassala', 
     code: 'KS', 
     localities: [
       { id: 'ks-madeinat-kassala', name: 'Madeinat Kassala', nameAr: 'مدينة كسلا' },
+      { id: 'ks-kassala', name: 'Kassala', nameAr: 'كسلا' }, // Simplified name
       { id: 'ks-halfa-aj-jadeedah', name: 'Halfa Aj Jadeedah', nameAr: 'حلفا الجديدة' },
       { id: 'ks-reifi-aroma', name: 'Reifi Aroma', nameAr: 'ريفى أروما' },
       { id: 'ks-reifi-gharb-kassala', name: 'Reifi Gharb Kassala', nameAr: 'ريفى غرب كسلا' },
+      { id: 'ks-west-kassala', name: 'West Kassala', nameAr: 'غرب كسلا' }, // Alternative name
       { id: 'ks-reifi-hamashkureib', name: 'Reifi Hamashkureib', nameAr: 'ريفى همش كوريب' },
       { id: 'ks-reifi-kassla', name: 'Reifi Kassla', nameAr: 'ريفى كسلا' },
+      { id: 'ks-rural-kassala', name: 'Rural Kassala', nameAr: 'ريفى كسلا' }, // Alternative name
       { id: 'ks-reifi-khashm-elgirba', name: 'Reifi Khashm Elgirba', nameAr: 'ريفى خشم القربة' },
+      { id: 'ks-khasm-el-girba', name: 'Khasm El Girba', nameAr: 'خشم القربة' }, // Alternative name
       { id: 'ks-reifi-nahr-atbara', name: 'Reifi Nahr Atbara', nameAr: 'ريفى نهر عطبرة' },
+      { id: 'ks-nahr-atbara', name: 'Nahr Atbara', nameAr: 'نهر عطبرة' }, // Alternative name
       { id: 'ks-reifi-shamal-ad-delta', name: 'Reifi Shamal Ad Delta', nameAr: 'ريفى شمال الدلتا' },
       { id: 'ks-reifi-telkok', name: 'Reifi Telkok', nameAr: 'ريفى تلكوك' },
       { id: 'ks-reifi-wad-elhilaiw', name: 'Reifi Wad Elhilaiw', nameAr: 'ريفى ود الحليو' },
+      { id: 'ks-wad-elheliew', name: 'Wad Elheliew', nameAr: 'ود الحليو' }, // Alternative spelling
     ]
   },
 
-  // 5. Gedaref (Al Qadarif) State - 12 localities
+  // 5. Gedaref (Al Qadarif) State - 13 localities
   { 
     id: 'gedaref', 
     name: 'Gedaref', 
@@ -96,11 +107,13 @@ export const sudanStates: SudanState[] = [
       { id: 'gd-madeinat-al-gedaref', name: 'Madeinat Al Gedaref', nameAr: 'مدينة القضارف' },
       { id: 'gd-wasat-al-gedaref', name: 'Wasat Al Gedaref', nameAr: 'وسط القضارف' },
       { id: 'gd-al-butanah', name: 'Al Butanah', nameAr: 'البطانة' },
+      { id: 'gd-al-butana', name: 'Al Butana', nameAr: 'البطانة' }, // Alternative spelling
       { id: 'gd-al-fao', name: 'Al Fao', nameAr: 'الفاو' },
       { id: 'gd-al-fashaga', name: 'Al Fashaga', nameAr: 'الفشقة' },
       { id: 'gd-al-galabat-al-gharbyah', name: 'Al Galabat Al Gharbyah - Kassab', nameAr: 'القلابات الغربية - كساب' },
       { id: 'gd-al-mafaza', name: 'Al Mafaza', nameAr: 'المفازة' },
       { id: 'gd-al-qureisha', name: 'Al Qureisha', nameAr: 'القريشة' },
+      { id: 'gd-al-guraisha', name: 'Al Guraisha', nameAr: 'القريشة' }, // Alternative spelling
       { id: 'gd-ar-rahad', name: 'Ar Rahad', nameAr: 'الرهد' },
       { id: 'gd-basundah', name: 'Basundah', nameAr: 'باسندة' },
       { id: 'gd-galaa-al-nahal', name: "Gala'a Al Nahal", nameAr: 'قلع النحل' },
@@ -108,7 +121,7 @@ export const sudanStates: SudanState[] = [
     ]
   },
 
-  // 6. White Nile State - 9 localities
+  // 6. White Nile State - 12 localities
   { 
     id: 'white-nile', 
     name: 'White Nile', 
@@ -117,16 +130,20 @@ export const sudanStates: SudanState[] = [
       { id: 'wn-rabak', name: 'Rabak', nameAr: 'ربك' },
       { id: 'wn-kosti', name: 'Kosti', nameAr: 'كوستي' },
       { id: 'wn-ad-diwaim', name: 'Ad Diwaim', nameAr: 'الدويم' },
+      { id: 'wn-el-duim', name: 'El Duim', nameAr: 'الدويم' }, // Alternative spelling
       { id: 'wn-aj-jabalain', name: 'Aj Jabalain', nameAr: 'الجبلين' },
+      { id: 'wn-al-jabalain', name: 'Al Jabalain', nameAr: 'الجبلين' }, // Alternative spelling
       { id: 'wn-al-gitaina', name: 'Al Gitaina', nameAr: 'القطينة' },
       { id: 'wn-as-salam-ar-rawat', name: 'As Salam / Ar Rawat', nameAr: 'السلام / الراوات' },
+      { id: 'wn-el-salam', name: 'El Salam', nameAr: 'السلام' }, // Alternative name
       { id: 'wn-guli', name: 'Guli', nameAr: 'قلي' },
       { id: 'wn-tendalti', name: 'Tendalti', nameAr: 'تندلتي' },
+      { id: 'wn-tandalti', name: 'Tandalti', nameAr: 'تندلتي' }, // Alternative spelling
       { id: 'wn-um-rimta', name: 'Um Rimta', nameAr: 'أم رمتة' },
     ]
   },
 
-  // 7. Blue Nile State - 7 localities
+  // 7. Blue Nile State - 12 localities
   { 
     id: 'blue-nile', 
     name: 'Blue Nile', 
@@ -134,10 +151,15 @@ export const sudanStates: SudanState[] = [
     localities: [
       { id: 'bn-ed-damazine', name: 'Ed Damazine', nameAr: 'الدمازين' },
       { id: 'bn-ar-rusayris', name: 'Ar Rusayris', nameAr: 'الروصيرص' },
+      { id: 'bn-alroseries', name: 'Alroseries', nameAr: 'الروصيرص' }, // Alternative spelling
       { id: 'bn-al-kurmuk', name: 'Al Kurmuk', nameAr: 'الكرمك' },
+      { id: 'bn-alkurmouk', name: 'Alkurmouk', nameAr: 'الكرمك' }, // Alternative spelling
+      { id: 'bn-kurmuk', name: 'Kurmuk', nameAr: 'الكرمك' }, // Simplified name
       { id: 'bn-at-tadamon', name: 'At Tadamon - BN', nameAr: 'التضامن - ن ق' },
+      { id: 'bn-tadamon', name: 'Tadamon', nameAr: 'التضامن' }, // Alternative name
       { id: 'bn-baw', name: 'Baw', nameAr: 'باو' },
       { id: 'bn-geisan', name: 'Geisan', nameAr: 'قيسان' },
+      { id: 'bn-giessan', name: 'Giessan', nameAr: 'قيسان' }, // Alternative spelling
       { id: 'bn-wad-al-mahi', name: 'Wad Al Mahi', nameAr: 'ود الماحي' },
     ]
   },
@@ -158,7 +180,7 @@ export const sudanStates: SudanState[] = [
     ]
   },
 
-  // 9. North Kordofan State - 8 localities
+  // 9. North Kordofan State - 11 localities
   { 
     id: 'north-kordofan', 
     name: 'North Kordofan', 
@@ -167,11 +189,14 @@ export const sudanStates: SudanState[] = [
       { id: 'nk-sheikan', name: 'Sheikan', nameAr: 'شيكان' },
       { id: 'nk-bara', name: 'Bara', nameAr: 'بارا' },
       { id: 'nk-ar-rahad', name: 'Ar Rahad', nameAr: 'الرهد' },
+      { id: 'nk-al-rahad', name: 'Al Rahad', nameAr: 'الرهد' }, // Alternative spelling
+      { id: 'nk-el-rahad', name: 'El Rahad', nameAr: 'الرهد' }, // Alternative spelling
       { id: 'nk-gebrat-al-sheikh', name: 'Gebrat Al Sheikh', nameAr: 'جبرة الشيخ' },
       { id: 'nk-gharb-bara', name: 'Gharb Bara', nameAr: 'غرب بارا' },
       { id: 'nk-soudari', name: 'Soudari', nameAr: 'سودري' },
       { id: 'nk-um-dam-haj-ahmed', name: 'Um Dam Haj Ahmed', nameAr: 'أم دم حاج أحمد' },
       { id: 'nk-um-rawaba', name: 'Um Rawaba', nameAr: 'أم روابة' },
+      { id: 'nk-um-ruwaba', name: 'Um Ruwaba', nameAr: 'أم روابة' }, // Alternative spelling
     ]
   },
 
@@ -201,13 +226,14 @@ export const sudanStates: SudanState[] = [
     ]
   },
 
-  // 11. West Kordofan State - 14 localities
+  // 11. West Kordofan State - 18 localities
   { 
     id: 'west-kordofan', 
     name: 'West Kordofan', 
     code: 'WK', 
     localities: [
       { id: 'wk-an-nuhud', name: 'An Nuhud', nameAr: 'النهود' },
+      { id: 'wk-al-nuhod', name: 'Al Nuhod', nameAr: 'النهود' }, // Alternative spelling
       { id: 'wk-babanusa', name: 'Babanusa', nameAr: 'بابنوسة' },
       { id: 'wk-abu-zabad', name: 'Abu Zabad', nameAr: 'أبو زبد' },
       { id: 'wk-abyei', name: 'Abyei', nameAr: 'أبيي' },
@@ -216,11 +242,14 @@ export const sudanStates: SudanState[] = [
       { id: 'wk-al-khiwai', name: 'Al Khiwai', nameAr: 'الخوي' },
       { id: 'wk-al-lagowa', name: 'Al Lagowa', nameAr: 'لقاوة' },
       { id: 'wk-al-meiram', name: 'Al Meiram', nameAr: 'الميرم' },
+      { id: 'wk-al-muglad', name: 'Al Muglad', nameAr: 'المقلد' },
       { id: 'wk-as-salam', name: 'As Salam - WK', nameAr: 'السلام - غ ك' },
       { id: 'wk-as-sunut', name: 'As Sunut', nameAr: 'السنوط' },
+      { id: 'wk-el-sunut', name: 'El Sunut', nameAr: 'السنوط' }, // Alternative spelling
       { id: 'wk-ghubaish', name: 'Ghubaish', nameAr: 'غبيش' },
       { id: 'wk-keilak', name: 'Keilak', nameAr: 'كيلك' },
       { id: 'wk-wad-bandah', name: 'Wad Bandah', nameAr: 'ود بندة' },
+      { id: 'wk-wad-banda', name: 'Wad Banda', nameAr: 'ود بندة' }, // Alternative spelling
     ]
   },
 
@@ -280,13 +309,14 @@ export const sudanStates: SudanState[] = [
     ]
   },
 
-  // 14. West Darfur State - 8 localities
+  // 14. West Darfur State - 9 localities
   { 
     id: 'west-darfur', 
     name: 'West Darfur', 
     code: 'WD', 
     localities: [
       { id: 'wd-ag-geneina', name: 'Ag Geneina', nameAr: 'الجنينة' },
+      { id: 'wd-geneina', name: 'Geneina', nameAr: 'الجنينة' }, // Alternative name
       { id: 'wd-beida', name: 'Beida', nameAr: 'بيضا' },
       { id: 'wd-foro-baranga', name: 'Foro Baranga', nameAr: 'فور برنقا' },
       { id: 'wd-habila', name: 'Habila - WD', nameAr: 'هبيلة - غ د' },
@@ -333,23 +363,25 @@ export const sudanStates: SudanState[] = [
     ]
   },
 
-  // 17. River Nile State - 7 localities
+  // 17. River Nile State - 8 localities
   { 
     id: 'river-nile', 
     name: 'River Nile', 
     code: 'RN', 
     localities: [
       { id: 'rn-ad-damar', name: 'Al Damar', nameAr: 'الدامر' },
+      { id: 'rn-al-damar', name: 'Al Damar', nameAr: 'الدامر' }, // Alternative spelling
       { id: 'rn-atbara', name: 'Atbara', nameAr: 'عطبرة' },
       { id: 'rn-abu-hamad', name: 'Abu Hamad', nameAr: 'أبو حمد' },
       { id: 'rn-al-buhaira', name: 'Al Buhaira', nameAr: 'البحيرة' },
       { id: 'rn-al-matama', name: 'Al Matama', nameAr: 'المتمة' },
+      { id: 'rn-almatama', name: 'Almatama', nameAr: 'المتمة' }, // Alternative spelling
       { id: 'rn-barbar', name: 'Barbar', nameAr: 'بربر' },
       { id: 'rn-shandi', name: 'Shandi', nameAr: 'شندي' },
     ]
   },
 
-  // 18. Northern State - 8 localities
+  // 18. Northern State - 12 localities
   { 
     id: 'northern', 
     name: 'Northern', 
@@ -357,12 +389,16 @@ export const sudanStates: SudanState[] = [
     localities: [
       { id: 'no-dongola', name: 'Dongola', nameAr: 'دنقلا' },
       { id: 'no-halfa', name: 'Halfa', nameAr: 'حلفا' },
+      { id: 'no-wadi-halfa', name: 'Wadi Halfa', nameAr: 'وادي حلفا' }, // Alternative name
       { id: 'no-ad-dabbah', name: 'Ad Dabbah', nameAr: 'الدبة' },
+      { id: 'no-aldaba', name: 'Aldaba', nameAr: 'الدبة' }, // Alternative spelling
       { id: 'no-al-burgaig', name: 'Al Burgaig', nameAr: 'البرقيق' },
       { id: 'no-al-borgag', name: 'Al Borgag', nameAr: 'البرقيق' },
       { id: 'no-al-golid', name: 'Al Golid', nameAr: 'القولد' },
+      { id: 'no-algolid', name: 'Algolid', nameAr: 'القولد' }, // Alternative spelling
       { id: 'no-delgo', name: 'Delgo', nameAr: 'دلقو' },
       { id: 'no-merwoe', name: 'Merwoe', nameAr: 'مروي' },
+      { id: 'no-marawai', name: 'Marawai', nameAr: 'مروي' }, // Alternative spelling
     ]
   },
 ];
