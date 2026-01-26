@@ -10,6 +10,7 @@ import '../widgets/custom_drawer_menu.dart';
 import '../services/webrtc_service.dart';
 import '../services/chat_service.dart';
 import 'communications_screen.dart';
+import 'call_screen.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
@@ -990,13 +991,49 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
     }
 
     try {
-      await webRtcService.initiateCall(userId, userName, isAudioOnly: false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_currentLocale == 'ar' ? 'جاري الاتصال بـ $userName...' : 'Calling $userName...'),
-          backgroundColor: AppColors.primaryGreen,
-        ),
-      );
+      // Initialize WebRTC service if not already initialized
+      if (!webRtcService.isInitialized) {
+        final supabase = Supabase.instance.client;
+        final profileResponse = await supabase
+            .from('profiles')
+            .select('id, full_name, avatar_url')
+            .eq('id', currentUser.id)
+            .maybeSingle();
+        
+        final callerName = profileResponse?['full_name'] as String? ?? 'User';
+        final callerAvatar = profileResponse?['avatar_url'] as String?;
+        
+        await webRtcService.initialize(
+          currentUser.id,
+          callerName,
+          userAvatar: callerAvatar,
+        );
+      }
+      
+      final success = await webRtcService.initiateCall(userId, userName, isAudioOnly: false);
+      
+      if (success && mounted) {
+        // Navigate to the call screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CallScreen(
+              callId: webRtcService.callState.callId ?? '',
+              remoteUserId: userId,
+              remoteUserName: userName,
+              isIncoming: false,
+              isAudioOnly: false,
+            ),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_currentLocale == 'ar' ? 'فشل بدء المكالمة' : 'Failed to start call'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1149,117 +1186,138 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
+          Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
-                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl == null
-                    ? Text(
-                        fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
-                        style: GoogleFonts.poppins(
-                          color: AppColors.primaryBlue,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      )
-                    : null,
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: isOnline ? Colors.green : Colors.grey.shade400,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                    backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                    child: avatarUrl == null
+                        ? Text(
+                            fullName.isNotEmpty ? fullName[0].toUpperCase() : '?',
+                            style: GoogleFonts.poppins(
+                              color: AppColors.primaryBlue,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          )
+                        : null,
                   ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: isOnline ? Colors.green : Colors.grey.shade400,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fullName,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      _getRoleLabel(role, isArabic),
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fullName,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                Text(
-                  _getRoleLabel(role, isArabic),
-                  style: GoogleFonts.poppins(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // In-app call button
-          IconButton(
-            onPressed: () => _initiateInAppCall(userId, fullName),
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.primaryGreen.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildCompactActionButton(
+                icon: Icons.video_call,
+                color: AppColors.primaryGreen,
+                label: isArabic ? 'مكالمة' : 'Call',
+                onPressed: () => _initiateInAppCall(userId, fullName),
               ),
-              child: Icon(Icons.video_call, color: AppColors.primaryGreen, size: 18),
-            ),
-            tooltip: isArabic ? 'مكالمة داخلية' : 'In-app Call',
-          ),
-          // Phone call button
-          if (phone != null)
-            IconButton(
-              onPressed: () => _launchPhone(phone),
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+              if (phone != null)
+                _buildCompactActionButton(
+                  icon: Icons.phone,
+                  color: Colors.blue,
+                  label: isArabic ? 'هاتف' : 'Phone',
+                  onPressed: () => _launchPhone(phone),
                 ),
-                child: const Icon(Icons.phone, color: Colors.blue, size: 18),
-              ),
-              tooltip: isArabic ? 'اتصال هاتفي' : 'Phone Call',
-            ),
-          // Email button
-          if (email != null)
-            IconButton(
-              onPressed: () => _launchEmail(email),
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+              if (email != null)
+                _buildCompactActionButton(
+                  icon: Icons.email,
+                  color: Colors.orange,
+                  label: isArabic ? 'بريد' : 'Email',
+                  onPressed: () => _launchEmail(email),
                 ),
-                child: const Icon(Icons.email, color: Colors.orange, size: 18),
+              _buildCompactActionButton(
+                icon: Icons.message,
+                color: Colors.purple,
+                label: isArabic ? 'رسالة' : 'Chat',
+                onPressed: () => _openMessaging(userId, fullName),
               ),
-              tooltip: isArabic ? 'بريد إلكتروني' : 'Email',
-            ),
-          // Message button
-          IconButton(
-            onPressed: () => _openMessaging(userId, fullName),
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.message, color: Colors.purple, size: 18),
-            ),
-            tooltip: isArabic ? 'رسالة' : 'Message',
+            ],
           ),
         ],
+      ),
+    );
+  }
+  
+  Widget _buildCompactActionButton({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
