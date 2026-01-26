@@ -85,7 +85,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
       <SidebarProvider>
         <div className={`min-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
           {!isMobile && !isTablet && <AppSidebar />}
-          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden min-h-0`}>
+          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-hidden h-screen`}>
             {/* Realtime Connection Banner - Shows when offline/reconnecting */}
             <RealtimeBanner 
               onRefresh={handleGlobalRefresh}
