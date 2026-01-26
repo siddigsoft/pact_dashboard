@@ -811,8 +811,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     const SizedBox(width: 8),
                                     Text(
                                       _patchNumber != null
-                                          ? 'Version $_appVersion (Build $_buildNumber, Patch $_patchNumber)'
-                                          : 'Version $_appVersion (Build $_buildNumber)',
+                                          ? 'PACT Mobile v$_appVersion (Build $_buildNumber, Patch $_patchNumber)'
+                                          : 'PACT Mobile v$_appVersion (Build $_buildNumber)',
                                       style: GoogleFonts.poppins(
                                         fontSize: 13,
                                         color: AppColors.textLight,
