@@ -1,0 +1,97 @@
+PS C:\Users\PC\PACT_mobile> flutter pub get
+Resolving dependencies... 
+Error on line 3, column 10 of pubspec.yaml: Invalid version number: Could not parse "2026.01.25.0001+1".
+  ╷
+3 │ version: 2026.01.25.0001+1
+  │          ^^^^^^^^^^^^^^^^^
+  ╵
+Failed to update packages.
+PS C:\Users\PC\PACT_mobile> flutter pub get
+Resolving dependencies... 
+Downloading packages... 
+  _fe_analyzer_shared 91.0.0 (93.0.0 available)
+  analyzer 8.4.1 (10.0.1 available)
+  app_links 6.4.1 (7.0.0 available)
+  archive 3.6.1 (4.0.7 available)
+  characters 1.4.0 (1.4.1 available)
+  dart_jsonwebtoken 3.1.1 (3.3.1 available)
+  dart_style 3.1.3 (3.1.4 available)
+  flat_buffers 23.5.26 (25.9.23 available)
+  flutter_map 6.2.1 (8.2.2 available)
+  flutter_map_marker_cluster 1.3.6 (8.2.2 available)
+  flutter_map_marker_popup 6.1.2 (8.1.0 available)
+  flutter_map_tile_caching 9.0.1 (10.1.1 available)
+  flutter_riverpod 2.6.1 (3.2.0 available)
+  freezed 3.2.3 (3.2.4 available)
+  geocoding_platform_interface 3.2.0 (5.0.0 available)
+  geolocator 11.1.0 (14.0.2 available)
+  geolocator_android 4.6.2 (5.0.2 available)
+  geolocator_web 3.0.0 (4.1.3 available)
+  image 4.3.0 (4.7.2 available)
+  js 0.6.7 (0.7.2 available)
+  json_serializable 6.11.2 (6.11.4 available)
+  local_auth 2.3.0 (3.0.0 available)
+  local_auth_android 1.0.51 (2.0.4 available)
+  local_auth_darwin 1.6.0 (2.0.1 available)
+  local_auth_windows 1.0.11 (2.0.1 available)
+  location 5.0.3 (8.0.1 available)
+  location_platform_interface 3.1.2 (6.0.1 available)
+  location_web 4.2.0 (6.0.1 available)
+  matcher 0.12.17 (0.12.18 available)
+  material_color_utilities 0.11.1 (0.13.0 available)
+  meta 1.17.0 (1.18.0 available)
+  mgrs_dart 2.0.0 (3.0.0 available)
+  objectbox 2.5.1 (5.1.0 available)
+  objectbox_flutter_libs 2.5.1 (5.1.0 available)
+  pointycastle 3.9.1 (4.0.0 available)
+  proj4dart 2.1.0 (3.0.0 available)
+  riverpod 2.6.1 (3.2.0 available)
+  shorebird_code_push 1.1.6 (2.0.5 available)
+  source_helper 1.3.8 (1.3.10 available)
+  syncfusion_flutter_core 29.2.11 (32.1.24 available)
+  syncfusion_flutter_pdf 29.2.11 (32.1.24 available)
+  syncfusion_flutter_xlsio 29.2.11 (32.1.24 available)
+  syncfusion_officecore 29.2.11 (32.1.24 available)
+  test 1.26.3 (1.29.0 available)
+  test_api 0.7.7 (0.7.9 available)
+  test_core 0.6.12 (0.6.15 available)
+  timezone 0.10.1 (0.11.0 available)
+  unicode 0.3.1 (1.1.9 available)
+Got dependencies!
+48 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+PS C:\Users\PC\PACT_mobile> flutter build appbundle --release
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 35524 bytes (97.8% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+Running Gradle task 'bundleRelease'...                          30669.7s
+√ Built build\app\outputs\bundle\release\app-release.aab (68.5MB)
+PS C:\Users\PC\PACT_mobile> shorebird release android
