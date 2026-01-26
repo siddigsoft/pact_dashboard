@@ -209,8 +209,7 @@ class PresenceService {
 
       final response = await _supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, role, phone, email, state, hub, updated_at')
-          .eq('status', 'approved')
+          .select('id, full_name, avatar_url, role, phone, email, state, hub, updated_at, status')
           .order('full_name');
 
       _allUsers = (response as List).map((item) {
