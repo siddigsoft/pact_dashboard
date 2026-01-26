@@ -334,13 +334,20 @@ PACT Mobile User
                   color: AppColors.textDark,
                 ),
               ),
-              Text(
-                "Version 1.0.0",
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.textLight,
-                ),
+              FutureBuilder<PackageInfo>(
+                future: PackageInfo.fromPlatform(),
+                builder: (context, snapshot) {
+                  final version = snapshot.data?.version ?? '1.0.6';
+                  final build = snapshot.data?.buildNumber ?? '9';
+                  return Text(
+                    'v$version ($build)',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.textLight,
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -430,13 +437,20 @@ PACT Mobile User
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Version 1.0.0',
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-                color: AppColors.textLight,
-              ),
+            FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snapshot) {
+                final version = snapshot.data?.version ?? '1.0.6';
+                final build = snapshot.data?.buildNumber ?? '9';
+                return Text(
+                  'v$version ($build)',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.textLight,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             Text(
@@ -448,7 +462,7 @@ PACT Mobile User
             ),
             const SizedBox(height: 8),
             Text(
-              '© 2025 PACT Consultancy. All rights reserved.',
+              '© 2026 PACT Consultancy. All rights reserved.',
               style: GoogleFonts.poppins(
                 fontSize: 12,
                 fontWeight: FontWeight.w400,
