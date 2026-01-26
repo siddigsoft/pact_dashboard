@@ -2,7 +2,7 @@ name: pact_mobile
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.6+16
+version: 2026.01.25.0001+1
 
 environment:
   sdk: '>=3.6.0 <4.0.0'
