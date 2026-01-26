@@ -9,6 +9,8 @@ enum CallStatus {
   ended,
   rejected,
   busy,
+  unreachable,
+  failed,
 }
 
 /// Call state model
@@ -45,6 +47,15 @@ class CallState {
       status == CallStatus.calling ||
       status == CallStatus.ringing ||
       status == CallStatus.connected;
+
+  bool get shouldShowCallScreen =>
+      status == CallStatus.calling ||
+      status == CallStatus.ringing ||
+      status == CallStatus.connected ||
+      status == CallStatus.unreachable ||
+      status == CallStatus.failed ||
+      status == CallStatus.busy ||
+      status == CallStatus.rejected;
 
   CallState copyWith({
     CallStatus? status,

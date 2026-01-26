@@ -124,7 +124,19 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       if (state.status == CallStatus.connected && _durationTimer == null) {
         _startDurationTimer();
         HapticFeedback.mediumImpact();
-      } else if (!state.isInCall) {
+      } else if (state.status == CallStatus.unreachable || 
+                 state.status == CallStatus.failed ||
+                 state.status == CallStatus.busy ||
+                 state.status == CallStatus.rejected) {
+        _durationTimer?.cancel();
+        _durationTimer = null;
+        HapticFeedback.heavyImpact();
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+      } else if (!state.shouldShowCallScreen) {
         _durationTimer?.cancel();
         _durationTimer = null;
         Navigator.of(context).pop();
@@ -179,6 +191,10 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         return 'Call declined';
       case CallStatus.ended:
         return 'Call ended';
+      case CallStatus.unreachable:
+        return 'User is offline';
+      case CallStatus.failed:
+        return 'Connection failed';
       default:
         return '';
     }
@@ -191,9 +207,167 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       case CallStatus.busy:
       case CallStatus.rejected:
         return Colors.orange;
+      case CallStatus.unreachable:
+      case CallStatus.failed:
+        return Colors.red;
       default:
         return Colors.white70;
     }
+  }
+
+  void _showCallSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _buildSettingsSheet(),
+    );
+  }
+
+  Widget _buildSettingsSheet() {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.8),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(
+              top: BorderSide(color: Colors.white.withOpacity(0.1)),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white38,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Call Settings',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              _buildSettingsOption(
+                icon: Icons.volume_up_rounded,
+                title: 'Speaker',
+                subtitle: _callState.isSpeakerOn ? 'On' : 'Off',
+                trailing: Switch(
+                  value: _callState.isSpeakerOn,
+                  onChanged: (value) {
+                    _webrtcService.toggleSpeaker();
+                    Navigator.pop(context);
+                  },
+                  activeColor: AppColors.primaryBlue,
+                ),
+              ),
+              _buildSettingsOption(
+                icon: Icons.bluetooth_audio_rounded,
+                title: 'Bluetooth Audio',
+                subtitle: 'Use Bluetooth device if available',
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  _webrtcService.toggleSpeaker();
+                  Navigator.pop(context);
+                },
+              ),
+              _buildSettingsOption(
+                icon: Icons.hearing_rounded,
+                title: 'Earpiece',
+                subtitle: 'Use phone earpiece',
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  if (_callState.isSpeakerOn) {
+                    _webrtcService.toggleSpeaker();
+                  }
+                  Navigator.pop(context);
+                },
+              ),
+              if (!_callState.isAudioOnly) ...[
+                const Divider(color: Colors.white24, height: 32),
+                _buildSettingsOption(
+                  icon: Icons.flip_camera_ios_rounded,
+                  title: 'Switch Camera',
+                  subtitle: 'Toggle front/back camera',
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    _webrtcService.switchCamera();
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: Colors.white70, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (trailing != null) trailing,
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -611,6 +785,23 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   ],
                 ),
               ),
+            if (_callState.status == CallStatus.unreachable || _callState.status == CallStatus.failed)
+              Container(
+                width: 10,
+                height: 10,
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.5),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+              ),
             Text(
               _getStatusText(),
               style: GoogleFonts.poppins(
@@ -737,6 +928,16 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
+                if (isConnected)
+                  _buildControlButton(
+                    icon: Icons.settings_rounded,
+                    label: 'Settings',
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      _showCallSettings();
+                    },
+                    isActive: true,
+                  ),
                 if (isConnected)
                   _buildControlButton(
                     icon: _callState.isSpeakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
