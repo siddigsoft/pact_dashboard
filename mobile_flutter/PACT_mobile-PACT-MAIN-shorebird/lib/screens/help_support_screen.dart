@@ -1018,11 +1018,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen>
           context,
           MaterialPageRoute(
             builder: (context) => CallScreen(
-              callId: webRtcService.callState.callId ?? '',
-              remoteUserId: userId,
               remoteUserName: userName,
-              isIncoming: false,
-              isAudioOnly: false,
             ),
           ),
         );
