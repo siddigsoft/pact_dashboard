@@ -374,7 +374,7 @@ class MyApp extends StatelessWidget {
               primary: AppColors.primaryOrange,
               secondary: AppColors.primaryBlue,
               surface: AppColors.primaryWhite,
-              background: AppColors.backgroundGray,
+              surfaceContainerHighest: AppColors.backgroundGray,
               brightness: Brightness.light,
             ),
             appBarTheme: const AppBarTheme(

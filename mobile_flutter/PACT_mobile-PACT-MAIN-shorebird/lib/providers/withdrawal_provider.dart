@@ -2,15 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/wallet_models.dart';
 import '../repositories/wallet_repository.dart';
+import 'auth_provider.dart';
 
 // Withdrawal repository provider
 final withdrawalRepositoryProvider = Provider<WalletRepository>((ref) {
   return WalletRepository();
-});
-
-// Current user ID provider
-final currentUserIdProvider = Provider<String?>((ref) {
-  return Supabase.instance.client.auth.currentUser?.id;
 });
 
 // Provider for user's withdrawal requests
@@ -109,4 +105,97 @@ final pendingWithdrawalRequestsProvider = FutureProvider.autoDispose<List<Withdr
     print('[pendingWithdrawalRequestsProvider] Error: $e');
     return [];
   }
+});
+
+// Withdrawal approval notifier for supervisor and finance approval
+class WithdrawalApprovalNotifier extends StateNotifier<AsyncValue<void>> {
+  final Ref ref;
+
+  WithdrawalApprovalNotifier(this.ref) : super(const AsyncValue.data(null));
+
+  Future<void> supervisorApproveWithdrawal({
+    required String requestId,
+    required bool approve,
+    String? notes,
+  }) async {
+    state = const AsyncValue.loading();
+
+    try {
+      final userId = ref.read(currentUserIdProvider);
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final supabase = Supabase.instance.client;
+      
+      final updateData = {
+        'status': approve ? 'supervisor_approved' : 'rejected',
+        'supervisor_notes': notes,
+        'supervisor_approved_at': approve ? DateTime.now().toIso8601String() : null,
+        'reviewed_by': userId,
+        'reviewed_at': DateTime.now().toIso8601String(),
+      };
+      
+      await supabase
+          .from('wallet_transactions')
+          .update(updateData)
+          .eq('id', requestId);
+
+      state = const AsyncValue.data(null);
+      
+      // Invalidate related providers
+      ref.invalidate(pendingWithdrawalRequestsProvider);
+      ref.invalidate(userWithdrawalRequestsProvider);
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+      rethrow;
+    }
+  }
+
+  Future<void> finalApproveWithdrawal({
+    required String requestId,
+    required bool approve,
+    String? notes,
+  }) async {
+    state = const AsyncValue.loading();
+
+    try {
+      final userId = ref.read(currentUserIdProvider);
+      if (userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final supabase = Supabase.instance.client;
+      
+      final updateData = {
+        'status': approve ? 'approved' : 'rejected',
+        'admin_notes': notes,
+        'approved_at': approve ? DateTime.now().toIso8601String() : null,
+        'final_approved_by': userId,
+        'final_approved_at': DateTime.now().toIso8601String(),
+      };
+      
+      await supabase
+          .from('wallet_transactions')
+          .update(updateData)
+          .eq('id', requestId);
+
+      state = const AsyncValue.data(null);
+      
+      // Invalidate related providers
+      ref.invalidate(pendingWithdrawalRequestsProvider);
+      ref.invalidate(userWithdrawalRequestsProvider);
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+      rethrow;
+    }
+  }
+
+  void reset() {
+    state = const AsyncValue.data(null);
+  }
+}
+
+final withdrawalApprovalProvider = StateNotifierProvider.autoDispose<WithdrawalApprovalNotifier, AsyncValue<void>>((ref) {
+  return WithdrawalApprovalNotifier(ref);
 });

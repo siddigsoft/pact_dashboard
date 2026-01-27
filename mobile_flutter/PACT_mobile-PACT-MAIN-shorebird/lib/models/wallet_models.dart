@@ -1,5 +1,101 @@
 import 'package:json_annotation/json_annotation.dart';
 
+enum WithdrawalStatus {
+  pending,
+  supervisorApproved,
+  approved,
+  rejected,
+  processed,
+  cancelled;
+
+  static WithdrawalStatus fromString(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'pending':
+        return WithdrawalStatus.pending;
+      case 'supervisor_approved':
+        return WithdrawalStatus.supervisorApproved;
+      case 'approved':
+        return WithdrawalStatus.approved;
+      case 'rejected':
+        return WithdrawalStatus.rejected;
+      case 'processed':
+        return WithdrawalStatus.processed;
+      case 'cancelled':
+        return WithdrawalStatus.cancelled;
+      default:
+        return WithdrawalStatus.pending;
+    }
+  }
+
+  String toDbString() {
+    switch (this) {
+      case WithdrawalStatus.pending:
+        return 'pending';
+      case WithdrawalStatus.supervisorApproved:
+        return 'supervisor_approved';
+      case WithdrawalStatus.approved:
+        return 'approved';
+      case WithdrawalStatus.rejected:
+        return 'rejected';
+      case WithdrawalStatus.processed:
+        return 'processed';
+      case WithdrawalStatus.cancelled:
+        return 'cancelled';
+    }
+  }
+
+  String get displayName {
+    switch (this) {
+      case WithdrawalStatus.pending:
+        return 'Pending Supervisor';
+      case WithdrawalStatus.supervisorApproved:
+        return 'Pending Finance';
+      case WithdrawalStatus.approved:
+        return 'Approved';
+      case WithdrawalStatus.rejected:
+        return 'Rejected';
+      case WithdrawalStatus.processed:
+        return 'Processed';
+      case WithdrawalStatus.cancelled:
+        return 'Cancelled';
+    }
+  }
+}
+
+class PaymentMethod {
+  final String id;
+  final String name;
+  final String type;
+  final String? accountNumber;
+  final String? bankName;
+
+  const PaymentMethod({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.accountNumber,
+    this.bankName,
+  });
+
+  String get displayName => '$name${bankName != null ? ' ($bankName)' : ''}';
+
+  factory PaymentMethod.fromJson(Map<String, dynamic> json) => PaymentMethod(
+    id: json['id'] as String? ?? 'unknown',
+    name: json['name'] as String? ?? 'Unknown',
+    type: json['type'] as String? ?? 'bank',
+    accountNumber: json['account_number'] as String?,
+    bankName: json['bank_name'] as String?,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'type': type,
+    'account_number': accountNumber,
+    'bank_name': bankName,
+  };
+}
+
 @JsonSerializable()
 class Wallet {
   final String id;
@@ -192,11 +288,13 @@ class WithdrawalRequest {
   @JsonKey(defaultValue: 'SDG')
   final String currency;
   @JsonKey(defaultValue: 'pending')
-  final String status; // pending, supervisor_approved, approved, rejected, cancelled
+  final String statusString;
   @JsonKey(name: 'created_at')
   final DateTime createdAt;
   @JsonKey(name: 'approved_at')
   final DateTime? approvedAt;
+  @JsonKey(name: 'supervisor_approved_at')
+  final DateTime? supervisorApprovedAt;
   @JsonKey(name: 'request_reason')
   final String? requestReason;
   @JsonKey(name: 'supervisor_notes')
@@ -204,7 +302,13 @@ class WithdrawalRequest {
   @JsonKey(name: 'admin_notes')
   final String? adminNotes;
   @JsonKey(name: 'payment_method')
-  final String? paymentMethod;
+  final String? paymentMethodString;
+  @JsonKey(name: 'payment_method_details')
+  final Map<String, dynamic>? paymentMethodDetails;
+  @JsonKey(name: 'requester_name')
+  final String? requesterName;
+  @JsonKey(name: 'reference_id')
+  final String? referenceId;
 
   WithdrawalRequest({
     required this.id,
@@ -212,13 +316,17 @@ class WithdrawalRequest {
     required this.userId,
     required this.amount,
     this.currency = 'SDG',
-    this.status = 'pending',
+    this.statusString = 'pending',
     required this.createdAt,
     this.approvedAt,
+    this.supervisorApprovedAt,
     this.requestReason,
     this.supervisorNotes,
     this.adminNotes,
-    this.paymentMethod,
+    this.paymentMethodString,
+    this.paymentMethodDetails,
+    this.requesterName,
+    this.referenceId,
   });
 
   factory WithdrawalRequest.fromJson(Map<String, dynamic> json) => WithdrawalRequest(
@@ -227,51 +335,58 @@ class WithdrawalRequest {
     userId: json['user_id'] is String ? json['user_id'] as String : 'unknown',
     amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
     currency: json['currency'] is String ? json['currency'] as String : 'SDG',
-    status: json['status'] is String ? json['status'] as String : 'pending',
+    statusString: json['status'] is String ? json['status'] as String : 'pending',
     createdAt: json['created_at'] is String ? DateTime.parse(json['created_at'] as String) : DateTime.now(),
     approvedAt: json['approved_at'] is String ? DateTime.parse(json['approved_at'] as String) : null,
+    supervisorApprovedAt: json['supervisor_approved_at'] is String ? DateTime.parse(json['supervisor_approved_at'] as String) : null,
     requestReason: json['request_reason'] as String?,
     supervisorNotes: json['supervisor_notes'] as String?,
     adminNotes: json['admin_notes'] as String?,
-    paymentMethod: json['payment_method'] as String?,
+    paymentMethodString: json['payment_method'] as String?,
+    paymentMethodDetails: json['payment_method_details'] as Map<String, dynamic>?,
+    requesterName: json['requester_name'] as String? ?? 
+        (json['profiles'] is Map ? (json['profiles'] as Map)['full_name'] as String? : null),
+    referenceId: json['reference_id'] as String?,
   );
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'wallet_id': walletId,
     'user_id': userId,
     'amount': amount,
     'currency': currency,
-    'status': status,
+    'status': statusString,
     'created_at': createdAt.toIso8601String(),
     'approved_at': approvedAt?.toIso8601String(),
+    'supervisor_approved_at': supervisorApprovedAt?.toIso8601String(),
     'request_reason': requestReason,
     'supervisor_notes': supervisorNotes,
     'admin_notes': adminNotes,
-    'payment_method': paymentMethod,
+    'payment_method': paymentMethodString,
+    'payment_method_details': paymentMethodDetails,
+    'requester_name': requesterName,
+    'reference_id': referenceId,
   };
 
-  // Helper getters
-  String get statusLabel {
-    switch (status) {
-      case 'pending':
-        return 'Pending Supervisor';
-      case 'supervisor_approved':
-        return 'Pending Finance';
-      case 'approved':
-        return 'Approved';
-      case 'rejected':
-        return 'Rejected';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return status;
+  WithdrawalStatus get status => WithdrawalStatus.fromString(statusString);
+
+  PaymentMethod? get paymentMethod {
+    if (paymentMethodDetails != null) {
+      return PaymentMethod.fromJson(paymentMethodDetails!);
     }
+    if (paymentMethodString != null) {
+      return PaymentMethod(id: 'default', name: paymentMethodString!, type: 'bank');
+    }
+    return null;
   }
 
-  bool get canCancel => status == 'pending';
-  bool get isSettled => ['approved', 'rejected', 'cancelled'].contains(status);
-  
-  // Getter for reason (uses requestReason internally)
+  String? get notes => requestReason;
+
+  String get statusLabel => status.displayName;
+
+  bool get canCancel => statusString == 'pending';
+  bool get isSettled => ['approved', 'rejected', 'cancelled', 'processed'].contains(statusString);
+
   String? get reason => requestReason;
 }
 

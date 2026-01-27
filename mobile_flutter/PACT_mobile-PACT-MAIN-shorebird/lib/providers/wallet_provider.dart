@@ -4,6 +4,7 @@ import '../models/wallet_models.dart';
 import '../models/wallet_transaction.dart';
 import '../repositories/wallet_repository.dart';
 import '../services/wallet_service.dart';
+import 'auth_provider.dart';
 
 // Repository provider
 final walletRepositoryProvider = Provider<WalletRepository>((ref) {
@@ -13,11 +14,6 @@ final walletRepositoryProvider = Provider<WalletRepository>((ref) {
 // Service provider
 final walletServiceProvider = Provider<WalletService>((ref) {
   return WalletService();
-});
-
-// Current user ID provider
-final currentUserIdProvider = Provider<String?>((ref) {
-  return Supabase.instance.client.auth.currentUser?.id;
 });
 
 // Wallet provider - gets current user's wallet
