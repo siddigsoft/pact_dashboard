@@ -39,7 +39,12 @@
     FileText,
     Map,
     ScrollText,
-    Mail
+    Mail,
+    Smartphone,
+    HelpCircle,
+    PenTool,
+    PhoneCall,
+    RefreshCw
   } from "lucide-react";
   import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
@@ -321,6 +326,21 @@
       }
       if (!isHidden('/email-management')) {
         superAdminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 6, isPinned: isPinned('/email-management') });
+      }
+      if (!isHidden('/mobile-support-tickets')) {
+        superAdminItems.push({ id: 'mobile-support-tickets', title: "Mobile Support Tickets", url: "/mobile-support-tickets", icon: Smartphone, priority: 7, isPinned: isPinned('/mobile-support-tickets') });
+      }
+      if (!isHidden('/mobile-help-articles')) {
+        superAdminItems.push({ id: 'mobile-help-articles', title: "Mobile Help Articles", url: "/mobile-help-articles", icon: HelpCircle, priority: 8, isPinned: isPinned('/mobile-help-articles') });
+      }
+      if (!isHidden('/mobile-signatures')) {
+        superAdminItems.push({ id: 'mobile-signatures', title: "Mobile Signatures", url: "/mobile-signatures", icon: PenTool, priority: 9, isPinned: isPinned('/mobile-signatures') });
+      }
+      if (!isHidden('/mobile-call-scheduling')) {
+        superAdminItems.push({ id: 'mobile-call-scheduling', title: "Mobile Call Scheduling", url: "/mobile-call-scheduling", icon: PhoneCall, priority: 10, isPinned: isPinned('/mobile-call-scheduling') });
+      }
+      if (!isHidden('/mobile-document-sync')) {
+        superAdminItems.push({ id: 'mobile-document-sync', title: "Mobile Document Sync", url: "/mobile-document-sync", icon: RefreshCw, priority: 11, isPinned: isPinned('/mobile-document-sync') });
       }
       if (superAdminItems.length) groups.push({ id: 'super-admin', label: "Super Admin", order: 8, items: superAdminItems });
     }
