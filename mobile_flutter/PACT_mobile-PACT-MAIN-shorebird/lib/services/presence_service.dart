@@ -207,15 +207,27 @@ class PresenceService {
         return _allUsers;
       }
 
-      final response = await _supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, role, phone, email, state, hub, updated_at, status')
-          .neq('id', _currentUserId ?? '')
-          .order('full_name');
+      // Get current user ID - use auth directly if not initialized yet
+      final currentUserId = _currentUserId ?? _supabase.auth.currentUser?.id;
 
-      _allUsers = (response as List).map((item) {
+      // Build query - fetch all users with proper filtering
+      var query = _supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, role, phone, email, state, hub, updated_at, status');
+      
+      // Only exclude current user if we have a valid ID
+      if (currentUserId != null && currentUserId.isNotEmpty) {
+        query = query.neq('id', currentUserId);
+      }
+      
+      final response = await query.order('full_name');
+
+      debugPrint('[PresenceService] Fetched ${(response as List).length} profiles from database');
+
+      _allUsers = response.map((item) {
         final map = item as Map<String, dynamic>;
         final odId = map['id'] as String? ?? '';
+        
         return UserPresence(
           odId: odId,
           userName: map['full_name'] as String? ?? 'Unknown',
@@ -233,7 +245,7 @@ class PresenceService {
       await _cacheUsers(_allUsers);
       _allUsersController.add(_allUsers);
       
-      debugPrint('[PresenceService] Fetched ${_allUsers.length} users');
+      debugPrint('[PresenceService] Loaded ${_allUsers.length} users');
       return _allUsers;
     } catch (e) {
       debugPrint('[PresenceService] Error fetching users: $e');
