@@ -378,7 +378,7 @@ class WebRTCService {
 
       debugPrint('[WebRTC] Initiating call to $targetUserName ($targetUserId)');
 
-      // Update call state
+      // Update call state immediately for faster UI feedback
       _callState = _callState.copyWith(
         status: CallStatus.calling,
         callId: callId,
@@ -391,12 +391,15 @@ class WebRTCService {
       );
       _callStateController.add(_callState);
 
-      // Update presence
-      await _updatePresence(inCall: true, callId: callId, callToken: callToken);
+      // Pre-warm the signaling channel for faster signal delivery
+      _prewarmChannel(targetUserId);
 
-      // Setup local media - this may fail if permissions are denied
+      // Run presence update and media setup in parallel for faster call start
       try {
-        await _setupLocalMedia(isAudioOnly: isAudioOnly);
+        await Future.wait([
+          _updatePresence(inCall: true, callId: callId, callToken: callToken),
+          _setupLocalMedia(isAudioOnly: isAudioOnly),
+        ]);
       } catch (mediaError) {
         // _setupLocalMedia already handles cleanup and state reset for permission errors
         debugPrint('[WebRTC] Media setup failed: $mediaError');
@@ -882,6 +885,7 @@ class WebRTCService {
   }
 
   /// Send signal with retry logic for reliability
+  /// Uses faster retry delays for quicker call establishment
   Future<bool> _sendSignalWithRetry(CallSignal signal, {int maxRetries = 3}) async {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -890,7 +894,8 @@ class WebRTCService {
       } catch (e) {
         debugPrint('[WebRTC] Signal send attempt ${attempt + 1} failed: $e');
         if (attempt < maxRetries - 1) {
-          await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+          // Faster retry with 200ms base delay for quicker call start
+          await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
         }
       }
     }
@@ -921,9 +926,9 @@ class WebRTCService {
         }
       });
       
-      // Wait for subscription with timeout
+      // Wait for subscription with reduced timeout for faster call start
       await completer.future.timeout(
-        const Duration(seconds: 5),
+        const Duration(seconds: 3),
         onTimeout: () => throw Exception('Channel subscription timeout'),
       );
     }
@@ -934,6 +939,31 @@ class WebRTCService {
     );
     
     debugPrint('[WebRTC] Signal sent: ${signal.type} to ${signal.to}');
+  }
+
+  /// Pre-warm a signaling channel for faster call initiation
+  /// This starts the channel subscription in the background before it's needed
+  void _prewarmChannel(String targetUserId) {
+    final channelName = 'calls:user:$targetUserId';
+    
+    // Skip if already warmed
+    if (_outboundChannels.containsKey(channelName)) {
+      return;
+    }
+    
+    // Create and subscribe to channel in background
+    final channel = _supabase.channel(channelName);
+    _outboundChannels[channelName] = channel;
+    
+    channel.subscribe((status, [error]) {
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        debugPrint('[WebRTC] Channel pre-warmed for $targetUserId');
+      } else if (status == RealtimeSubscribeStatus.closed || error != null) {
+        // Remove failed channel so it can be retried
+        _outboundChannels.remove(channelName);
+        debugPrint('[WebRTC] Channel pre-warm failed for $targetUserId');
+      }
+    });
   }
 
   /// Play ringing sound
