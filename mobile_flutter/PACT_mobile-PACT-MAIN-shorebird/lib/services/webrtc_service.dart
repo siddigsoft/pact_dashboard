@@ -135,11 +135,12 @@ class WebRTCService {
     _userName = userName;
     _userAvatar = userAvatar;
 
-    // Load custom TURN credentials from Supabase config
-    await _loadTurnCredentials();
-    
-    await _setupSignalingChannel();
-    await _setupPresenceChannel();
+    // Run all initialization tasks in parallel for faster startup
+    await Future.wait([
+      _loadTurnCredentials(),
+      _setupSignalingChannel(),
+      _setupPresenceChannel(),
+    ]);
     
     debugPrint('[WebRTC] Initialized for user: $userName ($userId)');
   }
