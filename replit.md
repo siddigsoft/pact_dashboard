@@ -49,6 +49,17 @@ The frontend utilizes React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, prov
 *   **Permission Handler Service:** Centralized permission management for requesting camera, microphone, location, storage, notification, phone, and bluetooth permissions with platform-specific handling.
 *   **Comprehensive Help & Support System:** Mobile bilingual Help & Support screen with tabbed interface covering Getting Started, Troubleshooting, Field Operations, and Contact Support, featuring expandable FAQ sections.
 *   **Unified Communications Screen:** Mobile Communications screen consolidating calls and messages into a single interface. Features real-time online presence indicators, WebRTC audio calls, and direct messaging.
+*   **Enhanced WebRTC Call Features:** Comprehensive call enhancements including:
+    - **Call Quality Monitoring:** Real-time packet loss, latency, and bitrate tracking with 5-bar quality indicator display.
+    - **Auto-Reconnect:** Automatic reconnection attempts (max 5) when connection drops during active calls.
+    - **Hold/Resume:** Pause and resume calls with remote user notification via signaling channel.
+    - **Call Recording:** Framework for recording calls with status indicators (requires native implementation).
+    - **Call Notes:** Take notes during or after calls with local storage and Supabase sync.
+    - **Call History Service:** Persistent call logs stored in Hive (max 100 entries) with Supabase synchronization.
+    - **Proximity Sensor:** Screen turns off when phone is near ear during audio calls to prevent accidental touches.
+    - **Wakelock:** Screen stays on during calls to prevent timeout during active conversations.
+    - **Haptic Feedback:** Vibration patterns for call start, connect, and end events.
+    - **Noise Suppression:** Enhanced audio processing for clearer voice communication.
 *   **Shorebird OTA Updates:** Integration with Shorebird code push for over-the-air updates. Settings screen and drawer menu display current version, build number, and patch number.
 *   **Mobile Digital Signatures:** Flutter Digital Signatures screen with canvas-based signature drawing, PNG export, signature management, and signing history.
 *   **Mobile Field Team Map:** Admin-only Field Team Map screen for monitoring field team locations in real-time. Features flutter_map integration, color-coded online status, auto-refresh, filtering, and direct call/message actions via WebRTC.

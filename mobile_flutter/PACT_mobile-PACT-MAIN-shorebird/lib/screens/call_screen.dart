@@ -4,11 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:proximity_sensor/proximity_sensor.dart';
+import 'package:vibration/vibration.dart';
 import '../services/webrtc_service.dart';
+import '../services/call_history_service.dart';
 import '../models/call_state.dart';
 import '../theme/app_colors.dart';
 import '../widgets/floating_call_overlay.dart';
 import 'dart:async';
+import 'package:uuid/uuid.dart';
 
 class CallScreen extends StatefulWidget {
   final String? remoteUserName;
@@ -28,16 +33,25 @@ class CallScreen extends StatefulWidget {
 
 class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   final WebRTCService _webrtcService = WebRTCService();
+  final CallHistoryService _callHistoryService = CallHistoryService();
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
 
   StreamSubscription<CallState>? _callStateSubscription;
   StreamSubscription<MediaStream?>? _localStreamSubscription;
   StreamSubscription<MediaStream?>? _remoteStreamSubscription;
+  StreamSubscription<dynamic>? _proximitySubscription;
 
   CallState _callState = CallState();
   Duration _callDuration = Duration.zero;
   Timer? _durationTimer;
+  
+  // Call notes
+  final TextEditingController _notesController = TextEditingController();
+  bool _showNotesPanel = false;
+  
+  // Proximity sensor state
+  bool _isNear = false;
 
   late AnimationController _pulseController;
   late AnimationController _waveController;
@@ -56,6 +70,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _initRenderers();
     _subscribeToStreams();
     _initAnimations();
+    _initCallEnhancements();
     
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -63,6 +78,61 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         statusBarIconBrightness: Brightness.light,
       ),
     );
+  }
+  
+  void _initCallEnhancements() {
+    // Initialize call history service
+    _callHistoryService.initialize();
+    
+    // Keep screen on during call
+    WakelockPlus.enable();
+    
+    // Setup proximity sensor for earpiece mode
+    _setupProximitySensor();
+    
+    // Vibrate on call start
+    _vibrateOnEvent('call_start');
+  }
+  
+  void _setupProximitySensor() {
+    try {
+      _proximitySubscription = ProximitySensor.events.listen((int event) {
+        if (!mounted) return;
+        setState(() {
+          _isNear = event > 0;
+        });
+        
+        // Turn off screen when near ear (audio call only)
+        if (_callState.isAudioOnly && _isNear) {
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+        } else {
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        }
+      });
+    } catch (e) {
+      debugPrint('[CallScreen] Proximity sensor error: $e');
+    }
+  }
+  
+  Future<void> _vibrateOnEvent(String event) async {
+    try {
+      final hasVibrator = await Vibration.hasVibrator() ?? false;
+      if (!hasVibrator) return;
+      
+      switch (event) {
+        case 'call_start':
+          Vibration.vibrate(duration: 100);
+          break;
+        case 'call_connected':
+          Vibration.vibrate(pattern: [0, 100, 50, 100]);
+          break;
+        case 'call_ended':
+          Vibration.vibrate(duration: 200);
+          break;
+      }
+    } catch (e) {
+      debugPrint('[CallScreen] Vibration error: $e');
+    }
   }
 
   void _initAnimations() {
@@ -101,12 +171,21 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     _callStateSubscription?.cancel();
     _localStreamSubscription?.cancel();
     _remoteStreamSubscription?.cancel();
+    _proximitySubscription?.cancel();
     _localRenderer.dispose();
     _remoteRenderer.dispose();
     _pulseController.dispose();
     _waveController.dispose();
     _particleController.dispose();
     _glowController.dispose();
+    _notesController.dispose();
+    
+    // Disable wakelock when leaving call
+    WakelockPlus.disable();
+    
+    // Restore system UI
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    
     super.dispose();
   }
 
@@ -118,25 +197,38 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   void _subscribeToStreams() {
     _callStateSubscription = _webrtcService.callStateStream.listen((state) {
       if (!mounted) return;
+      
+      final previousStatus = _callState.status;
       setState(() {
         _callState = state;
       });
 
       if (state.status == CallStatus.connected && _durationTimer == null) {
         _startDurationTimer();
+        _vibrateOnEvent('call_connected');
         HapticFeedback.mediumImpact();
+      } else if (state.status == CallStatus.reconnecting) {
+        HapticFeedback.lightImpact();
       } else if (state.status == CallStatus.unreachable || 
                  state.status == CallStatus.failed ||
                  state.status == CallStatus.busy ||
                  state.status == CallStatus.rejected) {
         _durationTimer?.cancel();
         _durationTimer = null;
+        _vibrateOnEvent('call_ended');
         HapticFeedback.heavyImpact();
+        
+        // Save to call history
+        _saveCallToHistory(state, previousStatus);
+        
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) {
             Navigator.of(context).pop();
           }
         });
+      } else if (state.status == CallStatus.ended) {
+        _vibrateOnEvent('call_ended');
+        _saveCallToHistory(state, previousStatus);
       } else if (!state.shouldShowCallScreen) {
         _durationTimer?.cancel();
         _durationTimer = null;
@@ -166,6 +258,179 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
       });
     });
   }
+  
+  void _saveCallToHistory(CallState state, CallStatus previousStatus) {
+    if (state.remoteUserId == null) return;
+    
+    final entry = CallHistoryEntry(
+      id: const Uuid().v4(),
+      callId: state.callId,
+      remoteUserId: state.remoteUserId!,
+      remoteUserName: state.remoteUserName ?? widget.remoteUserName ?? 'Unknown',
+      remoteUserAvatar: state.remoteUserAvatar ?? widget.remoteUserAvatar,
+      isOutgoing: true,
+      isVideoCall: !state.isAudioOnly,
+      endStatus: state.status,
+      startTime: state.startTime ?? DateTime.now(),
+      endTime: DateTime.now(),
+      duration: _callDuration,
+      notes: state.callNotes,
+      wasRecorded: state.isRecording,
+    );
+    
+    _callHistoryService.addEntry(entry);
+  }
+  
+  Widget _buildCallQualityIndicator() {
+    final bars = _callState.qualityBars;
+    if (bars == 0) return const SizedBox.shrink();
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ...List.generate(5, (index) {
+            final isActive = index < bars;
+            final height = 4.0 + (index * 3);
+            return Container(
+              width: 3,
+              height: height,
+              margin: const EdgeInsets.symmetric(horizontal: 1),
+              decoration: BoxDecoration(
+                color: isActive 
+                    ? (bars >= 4 ? AppColors.primaryGreen : bars >= 2 ? Colors.orange : Colors.red)
+                    : Colors.white24,
+                borderRadius: BorderRadius.circular(1),
+              ),
+            );
+          }),
+          const SizedBox(width: 6),
+          Text(
+            '${_callState.latencyMs ?? 0}ms',
+            style: GoogleFonts.poppins(
+              fontSize: 10,
+              color: Colors.white70,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _showNotesDialog() {
+    _notesController.text = _callState.callNotes ?? '';
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.8),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white38,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Call Notes',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _notesController,
+                    maxLines: 5,
+                    style: GoogleFonts.poppins(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Add notes about this call...',
+                      hintStyle: GoogleFonts.poppins(color: Colors.white38),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.1),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        _webrtcService.updateCallNotes(_notesController.text);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Notes saved', style: GoogleFonts.poppins()),
+                            backgroundColor: AppColors.primaryGreen,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Save Notes',
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   String _formatDuration() {
     final hours = _callDuration.inHours;
@@ -179,6 +444,16 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
   }
 
   String _getStatusText() {
+    // Show reconnecting status
+    if (_callState.reconnectAttempts > 0) {
+      return 'Reconnecting (${_callState.reconnectAttempts}/5)...';
+    }
+    
+    // Show hold status
+    if (_callState.isOnHold) {
+      return 'On Hold - ${_formatDuration()}';
+    }
+    
     switch (_callState.status) {
       case CallStatus.calling:
         return 'Calling';
@@ -186,6 +461,8 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         return 'Ringing';
       case CallStatus.connected:
         return _formatDuration();
+      case CallStatus.reconnecting:
+        return 'Reconnecting...';
       case CallStatus.busy:
         return 'User is busy';
       case CallStatus.rejected:
@@ -538,32 +815,13 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
-                  _buildConnectionQualityIndicator(),
+                  _buildCallQualityIndicator(),
                 ],
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildConnectionQualityIndicator() {
-    return Row(
-      children: List.generate(4, (index) {
-        final isActive = index < _connectionQuality;
-        return Container(
-          width: 4,
-          height: 6 + (index * 4).toDouble(),
-          margin: const EdgeInsets.only(left: 2),
-          decoration: BoxDecoration(
-            color: isActive 
-                ? (_connectionQuality >= 3 ? AppColors.primaryGreen : Colors.orange)
-                : Colors.white24,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        );
-      }),
     );
   }
 
@@ -939,6 +1197,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 if (isConnected) ...[
+                  // First row - main audio/video controls
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -972,13 +1231,14 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                           isActive: true,
                         ),
                       _buildSmallControlButton(
-                        icon: Icons.screen_share_rounded,
-                        label: 'Share',
+                        icon: _callState.isOnHold ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                        label: _callState.isOnHold ? 'Resume' : 'Hold',
                         onPressed: () {
                           HapticFeedback.lightImpact();
-                          _showScreenShareDialog();
+                          _webrtcService.toggleHold();
                         },
-                        isActive: false,
+                        isActive: _callState.isOnHold,
+                        activeColor: Colors.orange,
                       ),
                       _buildSmallControlButton(
                         icon: Icons.more_horiz_rounded,
@@ -988,6 +1248,41 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                           _showCallSettings();
                         },
                         isActive: true,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Second row - additional controls
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildSmallControlButton(
+                        icon: _callState.isRecording ? Icons.stop_circle_rounded : Icons.fiber_manual_record_rounded,
+                        label: _callState.isRecording ? 'Stop Rec' : 'Record',
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _webrtcService.toggleRecording();
+                        },
+                        isActive: _callState.isRecording,
+                        activeColor: Colors.red,
+                      ),
+                      _buildSmallControlButton(
+                        icon: Icons.note_add_rounded,
+                        label: 'Notes',
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _showNotesDialog();
+                        },
+                        isActive: _callState.callNotes != null && _callState.callNotes!.isNotEmpty,
+                      ),
+                      _buildSmallControlButton(
+                        icon: Icons.screen_share_rounded,
+                        label: 'Share',
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _showScreenShareDialog();
+                        },
+                        isActive: false,
                       ),
                     ],
                   ),
@@ -1177,7 +1472,9 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
     required String label,
     required VoidCallback onPressed,
     bool isActive = true,
+    Color? activeColor,
   }) {
+    final color = activeColor ?? Colors.white;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1187,16 +1484,20 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(isActive ? 0.15 : 0.08),
+              color: isActive && activeColor != null 
+                  ? activeColor.withOpacity(0.2) 
+                  : Colors.white.withOpacity(isActive ? 0.15 : 0.08),
               shape: BoxShape.circle,
               border: Border.all(
-                color: Colors.white.withOpacity(0.2),
+                color: isActive && activeColor != null 
+                    ? activeColor.withOpacity(0.5) 
+                    : Colors.white.withOpacity(0.2),
                 width: 1,
               ),
             ),
             child: Icon(
               icon,
-              color: isActive ? Colors.white : Colors.white54,
+              color: isActive ? color : Colors.white54,
               size: 22,
             ),
           ),
