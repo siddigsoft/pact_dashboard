@@ -1,7 +1,9 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../theme/app_colors.dart';
 
 class IncomingCallOverlay extends StatefulWidget {
@@ -35,12 +37,32 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
   late Animation<double> _pulseAnimation;
   late Animation<double> _slideAnimation;
   late Animation<double> _glowAnimation;
+  
+  final AudioPlayer _ringtonePlayer = AudioPlayer();
+  Timer? _vibrationTimer;
+  Duration _ringingDuration = Duration.zero;
+  Timer? _ringingTimer;
 
   @override
   void initState() {
     super.initState();
     _initAnimations();
+    _startRinging();
     HapticFeedback.heavyImpact();
+  }
+
+  void _startRinging() {
+    _vibrationTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
+      HapticFeedback.mediumImpact();
+    });
+    
+    _ringingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          _ringingDuration = Duration(seconds: _ringingDuration.inSeconds + 1);
+        });
+      }
+    });
   }
 
   void _initAnimations() {
@@ -84,6 +106,9 @@ class _IncomingCallOverlayState extends State<IncomingCallOverlay>
     _rippleController.dispose();
     _slideController.dispose();
     _glowController.dispose();
+    _vibrationTimer?.cancel();
+    _ringingTimer?.cancel();
+    _ringtonePlayer.dispose();
     super.dispose();
   }
 
@@ -488,4 +513,359 @@ class EnhancedRipplePainter extends CustomPainter {
   bool shouldRepaint(EnhancedRipplePainter oldDelegate) {
     return oldDelegate.animation != animation;
   }
+}
+
+class IncomingCallPopup extends StatefulWidget {
+  final String callerName;
+  final String? callerAvatar;
+  final String? callerRole;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+  final VoidCallback? onTap;
+  final bool isVideoCall;
+
+  const IncomingCallPopup({
+    super.key,
+    required this.callerName,
+    this.callerAvatar,
+    this.callerRole,
+    required this.onAccept,
+    required this.onDecline,
+    this.onTap,
+    this.isVideoCall = false,
+  });
+
+  @override
+  State<IncomingCallPopup> createState() => _IncomingCallPopupState();
+}
+
+class _IncomingCallPopupState extends State<IncomingCallPopup>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
+  Timer? _vibrationTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, -1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.elasticOut,
+    ));
+    _slideController.forward();
+    
+    _vibrationTimer = Timer.periodic(const Duration(milliseconds: 2000), (_) {
+      HapticFeedback.mediumImpact();
+    });
+    HapticFeedback.heavyImpact();
+  }
+
+  @override
+  void dispose() {
+    _slideController.dispose();
+    _vibrationTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final userInitial = widget.callerName.isNotEmpty
+        ? widget.callerName[0].toUpperCase()
+        : '?';
+
+    return SlideTransition(
+      position: _slideAnimation,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.black.withOpacity(0.85),
+                        Colors.black.withOpacity(0.75),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: widget.isVideoCall
+                                    ? [AppColors.primaryBlue, AppColors.primaryBlue.withOpacity(0.7)]
+                                    : [AppColors.primaryGreen, AppColors.primaryGreen.withOpacity(0.7)],
+                              ),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.3),
+                                width: 2,
+                              ),
+                            ),
+                            child: widget.callerAvatar != null
+                                ? ClipOval(
+                                    child: Image.network(
+                                      widget.callerAvatar!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Center(
+                                        child: Text(
+                                          userInitial,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 24,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : Center(
+                                    child: Text(
+                                      userInitial,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 24,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.callerName,
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      widget.isVideoCall ? Icons.videocam : Icons.phone,
+                                      color: widget.isVideoCall 
+                                          ? AppColors.primaryBlue 
+                                          : AppColors.primaryGreen,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      widget.isVideoCall 
+                                          ? 'Incoming video call...' 
+                                          : 'Incoming voice call...',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white70,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (widget.callerRole != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.callerRole!,
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white54,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                HapticFeedback.mediumImpact();
+                                widget.onDecline();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.red.withOpacity(0.3),
+                                      blurRadius: 10,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.call_end, color: Colors.white, size: 22),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Decline',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                HapticFeedback.mediumImpact();
+                                widget.onAccept();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF43A047), Color(0xFF2E7D32)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.green.withOpacity(0.3),
+                                      blurRadius: 10,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      widget.isVideoCall ? Icons.videocam : Icons.call,
+                                      color: Colors.white,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Accept',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class IncomingCallOverlayManager {
+  static final IncomingCallOverlayManager _instance = IncomingCallOverlayManager._internal();
+  factory IncomingCallOverlayManager() => _instance;
+  IncomingCallOverlayManager._internal();
+
+  OverlayEntry? _overlayEntry;
+
+  void showPopup(
+    BuildContext context, {
+    required String callerName,
+    String? callerAvatar,
+    String? callerRole,
+    required VoidCallback onAccept,
+    required VoidCallback onDecline,
+    VoidCallback? onTapExpand,
+    bool isVideoCall = false,
+  }) {
+    hidePopup();
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        child: IncomingCallPopup(
+          callerName: callerName,
+          callerAvatar: callerAvatar,
+          callerRole: callerRole,
+          onAccept: () {
+            hidePopup();
+            onAccept();
+          },
+          onDecline: () {
+            hidePopup();
+            onDecline();
+          },
+          onTap: onTapExpand,
+          isVideoCall: isVideoCall,
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void hidePopup() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  bool get isShowing => _overlayEntry != null;
 }
