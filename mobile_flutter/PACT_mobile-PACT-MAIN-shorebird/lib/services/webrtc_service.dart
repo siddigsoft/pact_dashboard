@@ -1278,7 +1278,7 @@ class WebRTCService {
         }
       }
       
-      final avgPacketLoss = packetLossCount > 0 ? totalPacketLoss / packetLossCount : 0;
+      final double avgPacketLoss = packetLossCount > 0 ? totalPacketLoss / packetLossCount : 0.0;
       final quality = _calculateQuality(avgPacketLoss, latency);
       
       _callState = _callState.copyWith(
