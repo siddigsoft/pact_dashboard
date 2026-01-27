@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/site_visit.dart';
 import '../services/site_visit_service.dart';
-import 'withdrawal_provider.dart' show currentUserIdProvider;
+import 'auth_provider.dart';
 
 /// Provider for site visit service
 final siteVisitServiceProvider = Provider<SiteVisitService>((ref) {

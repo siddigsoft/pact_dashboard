@@ -197,13 +197,20 @@ class _CostSubmissionsTabState extends ConsumerState<_CostSubmissionsTab> {
   }
 }
 
-class _CostSubmissionCard extends ConsumerWidget {
+class _CostSubmissionCard extends ConsumerStatefulWidget {
   final CostSubmission submission;
 
   const _CostSubmissionCard({required this.submission});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CostSubmissionCard> createState() => _CostSubmissionCardState();
+}
+
+class _CostSubmissionCardState extends ConsumerState<_CostSubmissionCard> {
+  CostSubmission get submission => widget.submission;
+
+  @override
+  Widget build(BuildContext context) {
     final currencyFormat = NumberFormat.currency(
       symbol: 'SDG ',
       decimalDigits: 2,
@@ -250,20 +257,20 @@ class _CostSubmissionCard extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
-                  onPressed: () => _showDetailsDialog(context, ref),
+                  onPressed: () => _showDetailsDialog(context),
                   child: const Text('View Details'),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: submission.status == CostSubmissionStatus.pending
-                      ? () => _showApprovalDialog(context, ref, true)
+                      ? () => _showApprovalDialog(context, true)
                       : null,
                   child: const Text('Approve'),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton(
                   onPressed: submission.status == CostSubmissionStatus.pending
-                      ? () => _showApprovalDialog(context, ref, false)
+                      ? () => _showApprovalDialog(context, false)
                       : null,
                   child: const Text('Reject'),
                 ),
@@ -302,7 +309,7 @@ class _CostSubmissionCard extends ConsumerWidget {
     );
   }
 
-  void _showDetailsDialog(BuildContext context, WidgetRef ref) {
+  void _showDetailsDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -340,12 +347,12 @@ class _CostSubmissionCard extends ConsumerWidget {
     );
   }
 
-  void _showApprovalDialog(BuildContext context, WidgetRef ref, bool approve) {
+  void _showApprovalDialog(BuildContext context, bool approve) {
     final controller = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(
           approve ? 'Approve Cost Submission' : 'Reject Cost Submission',
         ),
@@ -370,13 +377,13 @@ class _CostSubmissionCard extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
-              await _processApproval(ref, approve, controller.text);
+              Navigator.of(dialogContext).pop();
+              await _processApproval(approve, controller.text);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: approve ? Colors.green : Colors.red,
@@ -388,11 +395,7 @@ class _CostSubmissionCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _processApproval(
-    WidgetRef ref,
-    bool approve,
-    String notes,
-  ) async {
+  Future<void> _processApproval(bool approve, String notes) async {
     try {
       final notifier = ref.read(costSubmissionApprovalProvider.notifier);
       await notifier.approveCostSubmission(
@@ -412,9 +415,9 @@ class _CostSubmissionCard extends ConsumerWidget {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
       }
     }
   }
@@ -449,13 +452,20 @@ class _WithdrawalRequestsTab extends ConsumerWidget {
   }
 }
 
-class _WithdrawalRequestCard extends ConsumerWidget {
+class _WithdrawalRequestCard extends ConsumerStatefulWidget {
   final WithdrawalRequest request;
 
   const _WithdrawalRequestCard({required this.request});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_WithdrawalRequestCard> createState() => _WithdrawalRequestCardState();
+}
+
+class _WithdrawalRequestCardState extends ConsumerState<_WithdrawalRequestCard> {
+  WithdrawalRequest get request => widget.request;
+
+  @override
+  Widget build(BuildContext context) {
     final currencyFormat = NumberFormat.currency(
       symbol: 'SDG ',
       decimalDigits: 2,
@@ -491,7 +501,7 @@ class _WithdrawalRequestCard extends ConsumerWidget {
               ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             Text(
-              'Payment Method: ${request.paymentMethod.displayName}',
+              'Payment Method: ${request.paymentMethod?.displayName ?? 'Not specified'}',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             Text(
@@ -516,19 +526,18 @@ class _WithdrawalRequestCard extends ConsumerWidget {
                 const SizedBox(width: 8),
                 if (request.status == WithdrawalStatus.pending) ...[
                   ElevatedButton(
-                    onPressed: () => _showApprovalDialog(context, ref, true),
+                    onPressed: () => _showApprovalDialog(context, true),
                     child: const Text('Approve'),
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton(
-                    onPressed: () => _showApprovalDialog(context, ref, false),
+                    onPressed: () => _showApprovalDialog(context, false),
                     child: const Text('Reject'),
                   ),
                 ] else if (request.status ==
                     WithdrawalStatus.supervisorApproved) ...[
                   ElevatedButton(
-                    onPressed: () =>
-                        _showFinalApprovalDialog(context, ref, true),
+                    onPressed: () => _showFinalApprovalDialog(context, true),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                     ),
@@ -536,8 +545,7 @@ class _WithdrawalRequestCard extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton(
-                    onPressed: () =>
-                        _showFinalApprovalDialog(context, ref, false),
+                    onPressed: () => _showFinalApprovalDialog(context, false),
                     child: const Text('Final Reject'),
                   ),
                 ],
@@ -552,16 +560,16 @@ class _WithdrawalRequestCard extends ConsumerWidget {
   void _showDetailsDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Withdrawal Request Details'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Reference: ${request.referenceId}'),
+              Text('Reference: ${request.referenceId ?? 'N/A'}'),
               Text('Amount: SDG ${request.amount}'),
-              Text('Payment Method: ${request.paymentMethod.displayName}'),
+              Text('Payment Method: ${request.paymentMethod?.displayName ?? 'Not specified'}'),
               if (request.paymentMethodDetails?.isNotEmpty ?? false)
                 Text('Details: ${request.paymentMethodDetails}'),
               Text(
@@ -580,7 +588,7 @@ class _WithdrawalRequestCard extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Close'),
           ),
         ],
@@ -588,12 +596,12 @@ class _WithdrawalRequestCard extends ConsumerWidget {
     );
   }
 
-  void _showApprovalDialog(BuildContext context, WidgetRef ref, bool approve) {
+  void _showApprovalDialog(BuildContext context, bool approve) {
     final controller = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(approve ? 'Supervisor Approve' : 'Supervisor Reject'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -616,13 +624,13 @@ class _WithdrawalRequestCard extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
-              await _processSupervisorApproval(ref, approve, controller.text);
+              Navigator.of(dialogContext).pop();
+              await _processSupervisorApproval(approve, controller.text);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: approve ? Colors.green : Colors.red,
@@ -634,16 +642,12 @@ class _WithdrawalRequestCard extends ConsumerWidget {
     );
   }
 
-  void _showFinalApprovalDialog(
-    BuildContext context,
-    WidgetRef ref,
-    bool approve,
-  ) {
+  void _showFinalApprovalDialog(BuildContext context, bool approve) {
     final controller = TextEditingController();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(
           approve ? 'Final Approve Withdrawal' : 'Final Reject Withdrawal',
         ),
@@ -668,13 +672,13 @@ class _WithdrawalRequestCard extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
-              await _processFinalApproval(ref, approve, controller.text);
+              Navigator.of(dialogContext).pop();
+              await _processFinalApproval(approve, controller.text);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: approve ? Colors.green : Colors.red,
@@ -686,11 +690,7 @@ class _WithdrawalRequestCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _processSupervisorApproval(
-    WidgetRef ref,
-    bool approve,
-    String notes,
-  ) async {
+  Future<void> _processSupervisorApproval(bool approve, String notes) async {
     try {
       final notifier = ref.read(withdrawalApprovalProvider.notifier);
       await notifier.supervisorApproveWithdrawal(
@@ -712,18 +712,14 @@ class _WithdrawalRequestCard extends ConsumerWidget {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
       }
     }
   }
 
-  Future<void> _processFinalApproval(
-    WidgetRef ref,
-    bool approve,
-    String notes,
-  ) async {
+  Future<void> _processFinalApproval(bool approve, String notes) async {
     try {
       final notifier = ref.read(withdrawalApprovalProvider.notifier);
       await notifier.finalApproveWithdrawal(
@@ -745,9 +741,9 @@ class _WithdrawalRequestCard extends ConsumerWidget {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
       }
     }
   }

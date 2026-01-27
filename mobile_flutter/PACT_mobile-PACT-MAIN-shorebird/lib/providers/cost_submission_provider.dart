@@ -7,11 +7,7 @@ import '../services/cost_submission_service.dart';
 import '../services/budget_restriction_service.dart';
 import '../services/cache_service.dart';
 import '../services/notification_service.dart';
-
-// Supabase client provider
-final supabaseClientProvider = Provider<SupabaseClient>((ref) {
-  return Supabase.instance.client;
-});
+import 'auth_provider.dart';
 
 // Cost submission repository provider
 final costSubmissionRepositoryProvider = Provider<CostSubmissionRepository>((ref) {
@@ -29,18 +25,12 @@ final budgetRestrictionServiceProvider = Provider<BudgetRestrictionService>((ref
   return BudgetRestrictionService();
 });
 
-// Current user ID provider (assumes user is authenticated)
-final currentUserIdProvider = Provider<String>((ref) {
-  final supabase = ref.watch(supabaseClientProvider);
-  return supabase.auth.currentUser?.id ?? '';
-});
-
 // Stream provider for user's cost submissions (real-time)
 final userCostSubmissionsStreamProvider = StreamProvider.autoDispose<List<CostSubmission>>((ref) {
   final repository = ref.watch(costSubmissionRepositoryProvider);
   final userId = ref.watch(currentUserIdProvider);
   
-  if (userId.isEmpty) {
+  if (userId == null || userId.isEmpty) {
     return Stream.value([]);
   }
   
@@ -52,7 +42,7 @@ final userCostSubmissionsProvider = FutureProvider.autoDispose<List<CostSubmissi
   final repository = ref.watch(costSubmissionRepositoryProvider);
   final userId = ref.watch(currentUserIdProvider);
   
-  if (userId.isEmpty) {
+  if (userId == null || userId.isEmpty) {
     return [];
   }
   
@@ -64,7 +54,7 @@ final costSubmissionsByStatusProvider = FutureProvider.autoDispose.family<List<C
   final repository = ref.watch(costSubmissionRepositoryProvider);
   final userId = ref.watch(currentUserIdProvider);
   
-  if (userId.isEmpty) {
+  if (userId == null || userId.isEmpty) {
     return [];
   }
   
@@ -86,7 +76,7 @@ final costSubmissionStatsProvider = FutureProvider.autoDispose<CostSubmissionSta
   final repository = ref.watch(costSubmissionRepositoryProvider);
   final userId = ref.watch(currentUserIdProvider);
   
-  if (userId.isEmpty) {
+  if (userId == null || userId.isEmpty) {
     return CostSubmissionStats();
   }
   
@@ -191,7 +181,7 @@ class CreateCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
       final userId = ref.read(currentUserIdProvider);
       final budgetService = ref.read(budgetRestrictionServiceProvider);
 
-      if (userId.isEmpty) {
+      if (userId == null || userId.isEmpty) {
         throw CostSubmissionException('User not authenticated');
       }
 
@@ -506,7 +496,7 @@ final revisionRequestedProvider = FutureProvider.autoDispose<List<CostSubmission
   final repository = ref.watch(costSubmissionRepositoryProvider);
   final userId = ref.watch(currentUserIdProvider);
   
-  if (userId.isEmpty) {
+  if (userId == null || userId.isEmpty) {
     return [];
   }
   
@@ -532,7 +522,7 @@ class ReviewCostSubmissionNotifier extends StateNotifier<AsyncValue<CostSubmissi
       final repository = ref.read(costSubmissionRepositoryProvider);
       final userId = ref.read(currentUserIdProvider);
 
-      if (userId.isEmpty) {
+      if (userId == null || userId.isEmpty) {
         throw CostSubmissionException('User not authenticated');
       }
 
