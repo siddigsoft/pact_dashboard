@@ -135,7 +135,10 @@ class PresenceService {
   Stream<UserPresence> get userStatusStream => _userStatusController.stream;
 
   bool _isInitialized = false;
+  bool _presenceChannelReady = false;
+  
   bool get isInitialized => _isInitialized;
+  bool get isPresenceChannelReady => _presenceChannelReady;
   String? get currentUserId => _currentUserId;
 
   Future<void> initialize({
@@ -255,6 +258,7 @@ class PresenceService {
 
   Future<void> _setupPresenceChannel() async {
     try {
+      _presenceChannelReady = false;
       _presenceChannel?.unsubscribe();
       
       _presenceChannel = _supabase.channel(
@@ -272,11 +276,21 @@ class PresenceService {
 
       await _presenceChannel!.subscribe((status, [error]) async {
         if (status == RealtimeSubscribeStatus.subscribed) {
+          _presenceChannelReady = true;
           await _trackPresence();
-          debugPrint('[PresenceService] Subscribed to presence channel');
+          debugPrint('[PresenceService] Presence channel ready');
+        } else if (status == RealtimeSubscribeStatus.closed ||
+                   status == RealtimeSubscribeStatus.timedOut) {
+          _presenceChannelReady = false;
+          debugPrint('[PresenceService] Presence channel closed/timed out');
+        }
+        if (error != null) {
+          _presenceChannelReady = false;
+          debugPrint('[PresenceService] Presence channel error: $error');
         }
       });
     } catch (e) {
+      _presenceChannelReady = false;
       debugPrint('[PresenceService] Error setting up presence channel: $e');
     }
   }

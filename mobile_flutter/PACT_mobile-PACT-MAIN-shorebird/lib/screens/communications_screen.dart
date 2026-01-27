@@ -497,6 +497,13 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       }
     }
     
+    // Check if signaling channel is ready for calls
+    if (!_webrtcService.isSignalingReady) {
+      debugPrint('[CommunicationsScreen] Signaling channel not ready');
+      _showMessage('Connecting... Please wait a moment and try again.', isError: true);
+      return;
+    }
+    
     final success = await _webrtcService.initiateCall(
       user.odId,
       user.userName,
