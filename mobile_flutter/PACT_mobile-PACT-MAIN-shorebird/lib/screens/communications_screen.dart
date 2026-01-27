@@ -200,7 +200,6 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         debugPrint('[CommunicationsScreen] Offline - loading cached users');
         _allUsers = _presenceService.getAllUsersList();
         if (_allUsers.isEmpty) {
-          // Try loading from cache
           await _presenceService.loadCachedUsers();
           _allUsers = _presenceService.getAllUsersList();
         }
@@ -209,23 +208,28 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         return;
       }
       
-      // ONLINE: Initialize services and fetch users
+      // ONLINE: Initialize services first for presence tracking
       await _initializeWebRTCService();
       
-      // Fetch users directly if PresenceService fetch fails
+      // Fetch users via PresenceService (which handles caching and presence)
       final users = await _presenceService.fetchAllUsers();
-      debugPrint('[CommunicationsScreen] Fetched ${users.length} users from PresenceService');
+      debugPrint('[CommunicationsScreen] PresenceService returned ${users.length} users');
       
-      // If still empty, try direct fetch
-      if (users.isEmpty) {
-        debugPrint('[CommunicationsScreen] PresenceService returned empty, trying direct fetch');
-        await _fetchUsersDirect();
-      } else {
+      if (users.isNotEmpty) {
         _allUsers = _presenceService.getAllUsersList();
+      } else {
+        // Fallback: Direct fetch if PresenceService fails
+        debugPrint('[CommunicationsScreen] Trying direct fetch as fallback');
+        await _fetchUsersDirect();
       }
       
       _filterUsers();
-      debugPrint('[CommunicationsScreen] Total users after load: ${_allUsers.length}');
+      debugPrint('[CommunicationsScreen] Total users loaded: ${_allUsers.length}');
+      
+      // Show warning if no users
+      if (_allUsers.isEmpty && mounted) {
+        _showMessage('No contacts found. Check your connection and try again.', isError: true);
+      }
       
       // Sync any pending messages
       final syncedCount = await _chatService.syncPendingMessages();
@@ -251,20 +255,24 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
   Future<void> _fetchUsersDirect() async {
     try {
       final currentUserId = _chatService.getCurrentUserId();
-      if (currentUserId == null) return;
       
       final supabase = Supabase.instance.client;
       
-      // Fetch all approved users from profiles
-      final response = await supabase
+      // Build query for all users from profiles
+      var query = supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, role, phone, email, state, hub, status')
-          .neq('id', currentUserId)
-          .order('full_name');
+          .select('id, full_name, avatar_url, role, phone, email, state, hub, status');
       
-      debugPrint('[CommunicationsScreen] Direct fetch returned ${response.length} profiles');
+      // Only exclude current user if we have a valid ID
+      if (currentUserId != null && currentUserId.isNotEmpty) {
+        query = query.neq('id', currentUserId);
+      }
       
-      _allUsers = (response as List).map((item) {
+      final response = await query.order('full_name');
+      
+      debugPrint('[CommunicationsScreen] Direct fetch returned ${(response as List).length} profiles');
+      
+      _allUsers = response.map((item) {
         final map = item as Map<String, dynamic>;
         return UserPresence(
           odId: map['id'] as String? ?? '',
