@@ -117,8 +117,16 @@ class WebRTCService {
   String? _customTurnUrl;
   String? _customTurnUsername;
   String? _customTurnCredential;
+  
+  // Channel subscription state tracking
+  bool _signalingChannelReady = false;
+  bool _presenceChannelReady = false;
+  
+  bool get isSignalingReady => _signalingChannelReady;
+  bool get isPresenceReady => _presenceChannelReady;
 
   bool get isInitialized => _userId != null && _signalingChannel != null;
+  bool get isFullyReady => isInitialized && _signalingChannelReady;
 
   /// Initialize the service with user information
   Future<void> initialize(
@@ -263,6 +271,7 @@ class WebRTCService {
   Future<void> _setupSignalingChannel() async {
     if (_userId == null) return;
 
+    _signalingChannelReady = false;
     await _signalingChannel?.unsubscribe();
     _signalingChannel = _supabase.channel('calls:user:$_userId');
 
@@ -276,7 +285,16 @@ class WebRTCService {
         )
         .subscribe((status, [error]) {
           debugPrint('[WebRTC] Signaling channel status: $status');
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            _signalingChannelReady = true;
+            debugPrint('[WebRTC] Signaling channel ready');
+          } else if (status == RealtimeSubscribeStatus.closed || 
+                     status == RealtimeSubscribeStatus.timedOut) {
+            _signalingChannelReady = false;
+            debugPrint('[WebRTC] Signaling channel closed/timed out');
+          }
           if (error != null) {
+            _signalingChannelReady = false;
             debugPrint('[WebRTC] Signaling channel error: $error');
           }
         });
@@ -284,15 +302,22 @@ class WebRTCService {
 
   /// Setup presence channel for call status tracking
   Future<void> _setupPresenceChannel() async {
+    _presenceChannelReady = false;
     await _presenceChannel?.unsubscribe();
     _presenceChannel = _supabase.channel('user-call-presence');
 
     _presenceChannel!.subscribe((status, [error]) {
       if (status == RealtimeSubscribeStatus.subscribed) {
+        _presenceChannelReady = true;
         _updatePresence(inCall: false);
-        debugPrint('[WebRTC] Presence channel subscribed');
+        debugPrint('[WebRTC] Presence channel ready');
+      } else if (status == RealtimeSubscribeStatus.closed || 
+                 status == RealtimeSubscribeStatus.timedOut) {
+        _presenceChannelReady = false;
+        debugPrint('[WebRTC] Presence channel closed/timed out');
       }
       if (error != null) {
+        _presenceChannelReady = false;
         debugPrint('[WebRTC] Presence channel error: $error');
       }
     });
@@ -381,6 +406,24 @@ class WebRTCService {
     if (_callState.isInCall) {
       _errorController.add('Already in a call');
       return false;
+    }
+    
+    // Check signaling channel readiness - retry setup if not ready
+    if (!_signalingChannelReady) {
+      debugPrint('[WebRTC] Signaling channel not ready, attempting to reconnect...');
+      try {
+        await _setupSignalingChannel();
+        // Wait briefly for subscription to complete
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!_signalingChannelReady) {
+          _errorController.add('Connection not ready. Please check your internet and try again.');
+          return false;
+        }
+      } catch (e) {
+        debugPrint('[WebRTC] Failed to setup signaling channel: $e');
+        _errorController.add('Connection error. Please check your internet and try again.');
+        return false;
+      }
     }
 
     // Check if target user is busy
