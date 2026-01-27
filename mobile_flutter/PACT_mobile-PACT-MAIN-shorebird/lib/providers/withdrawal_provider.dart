@@ -69,3 +69,44 @@ class CreateWithdrawalNotifier extends StateNotifier<AsyncValue<WithdrawalReques
 final createWithdrawalProvider = StateNotifierProvider.autoDispose<CreateWithdrawalNotifier, AsyncValue<WithdrawalRequest?>>((ref) {
   return CreateWithdrawalNotifier(ref);
 });
+
+// Provider for pending withdrawal requests (for approval dashboard)
+final pendingWithdrawalRequestsProvider = FutureProvider.autoDispose<List<WithdrawalRequest>>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  
+  if (userId == null) {
+    return [];
+  }
+  
+  try {
+    final supabase = Supabase.instance.client;
+    
+    // Check user role
+    final profileResponse = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+    
+    final userRole = profileResponse?['role']?.toString().toLowerCase() ?? '';
+    
+    // Only admins, super admins, and finance roles can see pending withdrawals
+    if (userRole.contains('admin') || userRole.contains('super') || userRole.contains('finance')) {
+      final response = await supabase
+          .from('wallet_transactions')
+          .select()
+          .eq('status', 'pending')
+          .eq('transaction_type', 'withdrawal')
+          .order('created_at', ascending: false);
+      
+      return (response as List)
+          .map((json) => WithdrawalRequest.fromJson(json as Map<String, dynamic>))
+          .toList();
+    }
+    
+    return [];
+  } catch (e) {
+    print('[pendingWithdrawalRequestsProvider] Error: $e');
+    return [];
+  }
+});

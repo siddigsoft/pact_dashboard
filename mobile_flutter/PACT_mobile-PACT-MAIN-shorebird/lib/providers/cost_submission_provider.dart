@@ -99,6 +99,56 @@ final selectedStatusFilterProvider = StateProvider.autoDispose<CostSubmissionSta
 // State provider for search query
 final costSubmissionSearchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
+// Provider for pending cost submissions (for approval dashboard)
+final pendingCostSubmissionsProvider = FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
+  final supabase = ref.watch(supabaseClientProvider);
+  final currentUserId = supabase.auth.currentUser?.id;
+  
+  if (currentUserId == null) {
+    return [];
+  }
+  
+  try {
+    // Fetch pending cost submissions for approvers
+    final profileResponse = await supabase
+        .from('profiles')
+        .select('role, state, hub')
+        .eq('id', currentUserId)
+        .maybeSingle();
+    
+    final userRole = profileResponse?['role']?.toString().toLowerCase() ?? '';
+    
+    // Admin/Super Admin can see all pending submissions
+    if (userRole.contains('admin') || userRole.contains('super')) {
+      final response = await supabase
+          .from('site_visit_cost_submissions')
+          .select()
+          .eq('status', 'pending')
+          .order('submitted_at', ascending: false);
+      
+      return (response as List)
+          .map((json) => CostSubmission.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } else if (userRole.contains('coordinator') || userRole.contains('fom')) {
+      // Coordinators and FOM can see pending submissions
+      final response = await supabase
+          .from('site_visit_cost_submissions')
+          .select()
+          .eq('status', 'pending')
+          .order('submitted_at', ascending: false);
+      
+      return (response as List)
+          .map((json) => CostSubmission.fromJson(json as Map<String, dynamic>))
+          .toList();
+    }
+    
+    return [];
+  } catch (e) {
+    print('[pendingCostSubmissionsProvider] Error: $e');
+    return [];
+  }
+});
+
 // Provider for filtered and searched cost submissions
 final filteredCostSubmissionsProvider = FutureProvider.autoDispose<List<CostSubmission>>((ref) async {
   final submissions = await ref.watch(userCostSubmissionsProvider.future);
