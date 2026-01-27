@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useUser } from '@/context/user/UserContext';
+import { useProjectContext } from '@/context/project/ProjectContext';
 import { User } from '@/types';
+import { Project, ProjectRole, ProjectTeamMember } from '@/types/project';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -39,7 +41,9 @@ import {
   UserX,
   Eye,
   Settings,
-  AlertCircle
+  AlertCircle,
+  FolderPlus,
+  Briefcase
 } from 'lucide-react';
 import {
   Dialog,
@@ -69,6 +73,7 @@ import RoleBadge from '@/components/user/RoleBadge';
 const Users = () => {
   const { currentUser, users, approveUser, rejectUser, refreshUsers, sendPasswordRecoveryEmail } = useUser();
   const { roles: allRoles, getUserRolesByUserId } = useRoleManagement();
+  const { projects, updateProjectTeam, fetchProjects } = useProjectContext();
   const { canManageRoles } = useAuthorization();
   const { toast } = useToast();
   const { roles } = useAppContext();
@@ -90,6 +95,11 @@ const Users = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; userId?: string; action?: 'delete' | 'deactivate' }>({ open: false });
+  
+  const [addToProjectDialog, setAddToProjectDialog] = useState<{ open: boolean; user?: User }>({ open: false });
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProjectRole, setSelectedProjectRole] = useState<ProjectRole>('dataCollector');
+  const [isAddingToProject, setIsAddingToProject] = useState(false);
 
   const primaryRole = currentUser?.role?.toLowerCase() || '';
   const isAdminOrICT = 
@@ -211,6 +221,13 @@ const Users = () => {
     }
   }, [users]);
 
+  // Fetch projects on mount for the add to project dialog
+  useEffect(() => {
+    if (projects.length === 0) {
+      fetchProjects();
+    }
+  }, []);
+
   // Get unique roles for filter
   const availableRoles = useMemo(() => {
     const rolesSet = new Set<string>();
@@ -238,12 +255,82 @@ const Users = () => {
     try {
       await approveUser(userId);
       toast({ title: "User approved", description: "User has been approved successfully" });
+      
+      const approvedUser = users.find(u => u.id === userId);
+      if (approvedUser && projects.length > 0) {
+        setAddToProjectDialog({ open: true, user: approvedUser });
+        setSelectedProjectId('');
+        setSelectedProjectRole('dataCollector');
+      }
     } catch (error) {
       toast({ title: "Approval failed", description: "Could not approve user", variant: "destructive" });
     } finally {
       setIsLoadingApproval(null);
     }
   };
+
+  const handleAddToProject = async () => {
+    if (!addToProjectDialog.user || !selectedProjectId) return;
+    
+    const project = projects.find(p => p.id === selectedProjectId);
+    if (!project) {
+      toast({ title: "Project not found", variant: "destructive" });
+      return;
+    }
+    
+    setIsAddingToProject(true);
+    try {
+      const newMember: ProjectTeamMember = {
+        userId: addToProjectDialog.user.id,
+        name: addToProjectDialog.user.name || addToProjectDialog.user.email || 'Unknown',
+        role: selectedProjectRole,
+        joinedAt: new Date().toISOString(),
+        assignedActivities: [],
+        workload: 0
+      };
+      
+      const existingTeam = project.team?.teamComposition || [];
+      const isAlreadyMember = existingTeam.some(m => m.userId === addToProjectDialog.user!.id);
+      
+      if (isAlreadyMember) {
+        toast({ title: "Already a member", description: "This user is already part of this project team" });
+        setAddToProjectDialog({ open: false });
+        return;
+      }
+      
+      const updatedTeam = {
+        ...project.team,
+        teamComposition: [...existingTeam, newMember]
+      };
+      
+      await updateProjectTeam(project.id, updatedTeam);
+      
+      toast({ 
+        title: "Added to project", 
+        description: `${addToProjectDialog.user.name || 'User'} has been added to ${project.name}` 
+      });
+      setAddToProjectDialog({ open: false });
+    } catch (error) {
+      toast({ title: "Failed to add to project", description: "Could not add user to project team", variant: "destructive" });
+    } finally {
+      setIsAddingToProject(false);
+    }
+  };
+
+  const projectRoleOptions: { value: ProjectRole; label: string }[] = [
+    { value: 'projectManager', label: 'Project Manager' },
+    { value: 'fieldAssistant', label: 'Field Assistant' },
+    { value: 'dataCollector', label: 'Data Collector' },
+    { value: 'supervisor', label: 'Supervisor' },
+    { value: 'coordinator', label: 'Coordinator' },
+    { value: 'analyst', label: 'Analyst' },
+    { value: 'reviewer', label: 'Reviewer' },
+    { value: 'other', label: 'Other' }
+  ];
+
+  const activeProjects = useMemo(() => {
+    return projects.filter(p => p.status === 'active' || p.status === 'draft');
+  }, [projects]);
 
   const handleRejectUser = async (userId: string) => {
     setIsLoadingApproval(userId);
@@ -791,6 +878,108 @@ const Users = () => {
               {deletingUserId ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {confirmDialog.action === 'delete' ? 'Delete' : 'Deactivate'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add to Project Dialog */}
+      <Dialog open={addToProjectDialog.open} onOpenChange={(open) => { 
+        if (!open) setAddToProjectDialog({ open: false }); 
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderPlus className="h-5 w-5 text-primary" />
+              Add User to Project Team
+            </DialogTitle>
+            <DialogDescription>
+              Would you like to add {addToProjectDialog.user?.name || 'this user'} to a project team?
+            </DialogDescription>
+          </DialogHeader>
+          
+          {activeProjects.length === 0 ? (
+            <div className="py-6 text-center">
+              <Briefcase className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">No active projects available.</p>
+              <p className="text-xs text-muted-foreground mt-1">Create a project first to add team members.</p>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={addToProjectDialog.user?.avatar} />
+                  <AvatarFallback className="bg-primary/10 text-primary">
+                    {getInitials(addToProjectDialog.user?.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">{addToProjectDialog.user?.name || 'Unnamed User'}</p>
+                  <p className="text-xs text-muted-foreground">{addToProjectDialog.user?.email}</p>
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Select Project</label>
+                <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                  <SelectTrigger data-testid="select-project">
+                    <SelectValue placeholder="Choose a project..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeProjects.map(project => (
+                      <SelectItem key={project.id} value={project.id}>
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span>{project.name}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-1">
+                            {project.status}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Role in Project</label>
+                <Select value={selectedProjectRole} onValueChange={(val) => setSelectedProjectRole(val as ProjectRole)}>
+                  <SelectTrigger data-testid="select-project-role">
+                    <SelectValue placeholder="Select role..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projectRoleOptions.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button 
+              variant="outline" 
+              onClick={() => setAddToProjectDialog({ open: false })}
+              data-testid="button-skip-project"
+            >
+              Skip
+            </Button>
+            {activeProjects.length > 0 && (
+              <Button 
+                onClick={handleAddToProject} 
+                disabled={!selectedProjectId || isAddingToProject}
+                data-testid="button-add-to-project"
+              >
+                {isAddingToProject ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <UserPlus className="h-4 w-4 mr-2" />
+                )}
+                Add to Team
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
