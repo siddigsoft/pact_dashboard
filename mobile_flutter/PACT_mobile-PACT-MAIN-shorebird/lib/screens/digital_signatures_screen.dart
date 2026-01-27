@@ -751,9 +751,11 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _points.isNotEmpty && !_isSaving ? _saveSignature : null,
+              onPressed: _isSaving ? null : () => _saveSignature(),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryBlue,
+                backgroundColor: _points.where((p) => p != null).isNotEmpty 
+                    ? AppColors.primaryBlue 
+                    : Colors.grey,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -770,7 +772,7 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
                     )
                   : Text(
                       widget.isArabic ? 'حفظ التوقيع' : 'Save Signature',
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                     ),
             ),
           ),
@@ -781,47 +783,71 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
   }
 
   Future<void> _saveSignature() async {
-    if (_points.isEmpty) return;
+    final hasDrawnPoints = _points.where((p) => p != null).isNotEmpty;
+    
+    if (!hasDrawnPoints) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(widget.isArabic 
+              ? 'يرجى رسم توقيعك أولاً' 
+              : 'Please draw your signature first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isSaving = true);
 
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw Exception('Not authenticated');
+      if (userId == null) {
+        throw Exception(widget.isArabic ? 'غير مصرح' : 'Not authenticated');
+      }
+
+      debugPrint('Saving signature for user: $userId');
 
       String signatureData;
       
       try {
         final boundary = _canvasKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
         if (boundary != null) {
+          debugPrint('Capturing signature image...');
           final image = await boundary.toImage(pixelRatio: 2.0);
           final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
           if (byteData != null) {
             final bytes = byteData.buffer.asUint8List();
             signatureData = 'data:image/png;base64,${base64Encode(bytes)}';
+            debugPrint('Signature captured as PNG image');
           } else {
+            debugPrint('Failed to get byte data, using points');
             signatureData = _points
                 .map((p) => p != null ? '${p.dx},${p.dy}' : 'null')
                 .join(';');
           }
         } else {
+          debugPrint('No render boundary found, using points');
           signatureData = _points
               .map((p) => p != null ? '${p.dx},${p.dy}' : 'null')
               .join(';');
         }
       } catch (e) {
+        debugPrint('Error capturing image: $e, using points fallback');
         signatureData = _points
             .map((p) => p != null ? '${p.dx},${p.dy}' : 'null')
             .join(';');
       }
 
+      debugPrint('Checking existing signatures...');
       final existingSignatures = await Supabase.instance.client
           .from('user_signatures')
           .select('id')
           .eq('user_id', userId);
       
       final isFirstSignature = (existingSignatures as List).isEmpty;
+      debugPrint('Is first signature: $isFirstSignature');
 
+      debugPrint('Inserting signature into database...');
       await Supabase.instance.client.from('user_signatures').insert({
         'user_id': userId,
         'name': _nameController.text.isNotEmpty
@@ -832,22 +858,36 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
         'is_default': isFirstSignature,
       });
 
+      debugPrint('Signature saved successfully!');
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(widget.isArabic ? 'تم حفظ التوقيع بنجاح' : 'Signature saved successfully'),
             backgroundColor: AppColors.primaryGreen,
+            duration: const Duration(seconds: 2),
           ),
         );
       }
 
       widget.onSignatureCreated();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error saving signature: $e');
+      debugPrint('Stack trace: $stackTrace');
+      
       if (mounted) {
+        String errorMessage = e.toString();
+        if (errorMessage.contains('user_signatures')) {
+          errorMessage = widget.isArabic 
+              ? 'خطأ في قاعدة البيانات: تحقق من إعداد الجدول'
+              : 'Database error: Check table setup';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text(widget.isArabic ? 'خطأ: $errorMessage' : 'Error: $errorMessage'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
