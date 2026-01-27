@@ -996,6 +996,17 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
+                    // Show speaker control during dialing too
+                    if (!isConnected)
+                      _buildControlButton(
+                        icon: _callState.isSpeakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                        label: 'Speaker',
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _webrtcService.toggleSpeaker();
+                        },
+                        isActive: _callState.isSpeakerOn,
+                      ),
                     if (isConnected)
                       _buildControlButton(
                         icon: Icons.open_in_new_rounded,

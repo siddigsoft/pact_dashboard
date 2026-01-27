@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -816,51 +817,171 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final chatTitle = _getChatTitle();
+    final initial = chatTitle.isNotEmpty ? chatTitle[0].toUpperCase() : 'U';
+    
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Light background
+      backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+        elevation: 0,
+        backgroundColor: const Color(0xFF1976D2),
+        foregroundColor: Colors.white,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
         ),
-        title: Text(
-          _getChatTitle(),
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1565C0), Color(0xFF1976D2), Color(0xFF2196F3)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
           ),
         ),
-        backgroundColor: const Color(0xFF1976D2), // Deep blue
-        elevation: 0,
-        foregroundColor: Colors.white,
-        actions: [
-          // Audio call button (only for private chats)
-          if (widget.chat.chatType == 'private' && widget.chat.otherParticipantId != null)
-            IconButton(
-              icon: const Icon(Icons.phone, color: Colors.white),
-              onPressed: () => _initiateCall(isAudioOnly: true),
-              tooltip: 'Audio call',
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [Colors.orange.shade400, Colors.deepOrange.shade400],
+                ),
+                border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
             ),
-          // Video call button (only for private chats)
-          if (widget.chat.chatType == 'private' && widget.chat.otherParticipantId != null)
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    chatTitle,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    widget.chat.chatType == 'private' ? 'Tap for contact info' : 'Group Chat',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (widget.chat.chatType == 'private' && widget.chat.otherParticipantId != null) ...[
             IconButton(
-              icon: const Icon(Icons.videocam, color: Colors.white),
+              icon: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.videocam_rounded, color: Colors.white, size: 20),
+              ),
               onPressed: () => _initiateCall(isAudioOnly: false),
               tooltip: 'Video call',
             ),
-          // Edit contact name button (only for private chats)
-          if (widget.chat.chatType == 'private')
             IconButton(
-              icon: const Icon(Icons.edit, color: Colors.white),
-              onPressed: _editContactName,
-              tooltip: 'Edit contact name',
+              icon: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.call_rounded, color: Colors.white, size: 20),
+              ),
+              onPressed: () => _initiateCall(isAudioOnly: true),
+              tooltip: 'Audio call',
             ),
-          // Delete chat button
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.white),
-            onPressed: _confirmDeleteChat,
-            tooltip: 'Delete chat',
+          ],
+          PopupMenuButton<String>(
+            icon: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+            ),
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (value) {
+              switch (value) {
+                case 'edit':
+                  _editContactName();
+                  break;
+                case 'delete':
+                  _confirmDeleteChat();
+                  break;
+                case 'search':
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Search in chat coming soon')),
+                  );
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              if (widget.chat.chatType == 'private')
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_rounded, color: Colors.grey[700], size: 20),
+                      const SizedBox(width: 12),
+                      const Text('Edit contact name'),
+                    ],
+                  ),
+                ),
+              PopupMenuItem(
+                value: 'search',
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded, color: Colors.grey[700], size: 20),
+                    const SizedBox(width: 12),
+                    const Text('Search in chat'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                    const SizedBox(width: 12),
+                    const Text('Delete chat', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
