@@ -458,6 +458,90 @@ const MMPDetailView = () => {
         </Card>
       </div>
 
+      {/* Approval Workflow & Comments */}
+      {(mmpFile?.approvalWorkflow || mmpFile?.workflow?.comments || mmpFile?.comprehensiveVerification?.cpVerification?.finalVerification?.comments) && (
+        <Card className="shadow-md bg-gradient-to-r from-blue-50/50 to-white dark:from-blue-900/10 dark:to-background" data-testid="card-approval-comments">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5 text-blue-600" />
+              Approval Workflow & Comments
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Workflow Comments */}
+            {mmpFile?.workflow?.comments && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800" data-testid="text-workflow-comment">
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-1">Workflow Comment</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{mmpFile.workflow.comments}</p>
+              </div>
+            )}
+
+            {/* CP Verification Comments */}
+            {mmpFile?.comprehensiveVerification?.cpVerification?.finalVerification?.comments && (
+              <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800" data-testid="text-cp-verification-comment">
+                <p className="text-sm font-medium text-purple-700 dark:text-purple-400 mb-1">
+                  CP Verification Comment
+                  {mmpFile.comprehensiveVerification.cpVerification.finalVerification.completedBy && (
+                    <span className="font-normal text-muted-foreground ml-2">
+                      by {mmpFile.comprehensiveVerification.cpVerification.finalVerification.completedBy}
+                    </span>
+                  )}
+                </p>
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  {mmpFile.comprehensiveVerification.cpVerification.finalVerification.comments}
+                </p>
+              </div>
+            )}
+
+            {/* First Approval */}
+            {mmpFile?.approvalWorkflow?.firstApproval && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800" data-testid="text-first-approval-comment">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <p className="text-sm font-medium text-green-700 dark:text-green-400">First Approval</p>
+                  {mmpFile.approvalWorkflow.firstApproval.approvedBy && (
+                    <span className="text-xs text-muted-foreground">
+                      by {mmpFile.approvalWorkflow.firstApproval.approvedBy}
+                      {mmpFile.approvalWorkflow.firstApproval.approvedAt && (
+                        <> on {format(new Date(mmpFile.approvalWorkflow.firstApproval.approvedAt), 'MMM d, yyyy')}</>
+                      )}
+                    </span>
+                  )}
+                </div>
+                {mmpFile.approvalWorkflow.firstApproval.comments && (
+                  <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                    {mmpFile.approvalWorkflow.firstApproval.comments}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Final Approval */}
+            {mmpFile?.approvalWorkflow?.finalApproval && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800" data-testid="text-final-approval-comment">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Final Approval</p>
+                  {mmpFile.approvalWorkflow.finalApproval.approvedBy && (
+                    <span className="text-xs text-muted-foreground">
+                      by {mmpFile.approvalWorkflow.finalApproval.approvedBy}
+                      {mmpFile.approvalWorkflow.finalApproval.approvedAt && (
+                        <> on {format(new Date(mmpFile.approvalWorkflow.finalApproval.approvedAt), 'MMM d, yyyy')}</>
+                      )}
+                    </span>
+                  )}
+                </div>
+                {mmpFile.approvalWorkflow.finalApproval.comments && (
+                  <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                    {mmpFile.approvalWorkflow.finalApproval.comments}
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Coordinator Summary */}
       <CoordinatorSummaryCard siteEntries={siteEntries} mmpId={mmpFile?.id} />
 
