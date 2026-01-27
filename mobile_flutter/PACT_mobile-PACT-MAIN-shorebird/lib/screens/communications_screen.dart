@@ -208,34 +208,58 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         return;
       }
       
-      // ONLINE: Initialize services first for presence tracking
-      await _initializeWebRTCService();
+      // ONLINE: Always try direct fetch first for reliability
+      debugPrint('[CommunicationsScreen] Fetching contacts directly from database...');
+      await _fetchUsersDirect();
       
-      // Fetch users via PresenceService (which handles caching and presence)
-      final users = await _presenceService.fetchAllUsers();
-      debugPrint('[CommunicationsScreen] PresenceService returned ${users.length} users');
-      
-      if (users.isNotEmpty) {
-        _allUsers = _presenceService.getAllUsersList();
+      if (_allUsers.isNotEmpty) {
+        debugPrint('[CommunicationsScreen] Direct fetch successful: ${_allUsers.length} users');
+        _filterUsers();
+        
+        // Initialize WebRTC in background (don't block on it)
+        _initializeWebRTCService().catchError((e) {
+          debugPrint('[CommunicationsScreen] Background WebRTC init error: $e');
+        });
       } else {
-        // Fallback: Direct fetch if PresenceService fails
-        debugPrint('[CommunicationsScreen] Trying direct fetch as fallback');
-        await _fetchUsersDirect();
+        // Direct fetch failed, try PresenceService as fallback
+        debugPrint('[CommunicationsScreen] Direct fetch returned empty, trying PresenceService...');
+        
+        try {
+          await _initializeWebRTCService();
+          final users = await _presenceService.fetchAllUsers();
+          if (users.isNotEmpty) {
+            _allUsers = _presenceService.getAllUsersList();
+            debugPrint('[CommunicationsScreen] PresenceService fallback: ${_allUsers.length} users');
+          }
+        } catch (e) {
+          debugPrint('[CommunicationsScreen] PresenceService fallback failed: $e');
+        }
+        
+        // Also try loading cached users as last resort
+        if (_allUsers.isEmpty) {
+          debugPrint('[CommunicationsScreen] Trying cached users...');
+          await _presenceService.loadCachedUsers();
+          _allUsers = _presenceService.getAllUsersList();
+        }
+        
+        _filterUsers();
       }
       
-      _filterUsers();
       debugPrint('[CommunicationsScreen] Total users loaded: ${_allUsers.length}');
       
-      // Show warning if no users
+      // Show clear feedback to user based on result
       if (_allUsers.isEmpty && mounted) {
-        _showMessage('No contacts found. Check your connection and try again.', isError: true);
+        _showMessage('No contacts found. Please check your internet connection and try refreshing.', isError: true);
       }
       
-      // Sync any pending messages
-      final syncedCount = await _chatService.syncPendingMessages();
-      if (syncedCount > 0 && mounted) {
-        _showMessage('Synced $syncedCount pending messages');
-      }
+      // Sync any pending messages in background
+      _chatService.syncPendingMessages().then((syncedCount) {
+        if (syncedCount > 0 && mounted) {
+          _showMessage('Synced $syncedCount pending messages');
+        }
+      }).catchError((e) {
+        debugPrint('[CommunicationsScreen] Message sync error: $e');
+      });
     } catch (e) {
       debugPrint('[CommunicationsScreen] Error loading users: $e');
       // Fallback to cached data

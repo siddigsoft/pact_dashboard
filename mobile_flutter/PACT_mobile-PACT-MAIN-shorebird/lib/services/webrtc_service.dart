@@ -135,12 +135,23 @@ class WebRTCService {
     _userName = userName;
     _userAvatar = userAvatar;
 
-    // Run all initialization tasks in parallel for faster startup
-    await Future.wait([
-      _loadTurnCredentials(),
-      _setupSignalingChannel(),
-      _setupPresenceChannel(),
-    ]);
+    // Run initialization tasks in parallel with error handling
+    // Each task is independent so failures are handled individually
+    try {
+      await Future.wait([
+        _loadTurnCredentials().catchError((e) {
+          debugPrint('[WebRTC] TURN credentials load failed (using defaults): $e');
+        }),
+        _setupSignalingChannel().catchError((e) {
+          debugPrint('[WebRTC] Signaling channel setup failed: $e');
+        }),
+        _setupPresenceChannel().catchError((e) {
+          debugPrint('[WebRTC] Presence channel setup failed: $e');
+        }),
+      ]);
+    } catch (e) {
+      debugPrint('[WebRTC] Initialization error (continuing anyway): $e');
+    }
     
     debugPrint('[WebRTC] Initialized for user: $userName ($userId)');
   }
@@ -314,13 +325,17 @@ class WebRTCService {
   /// Check if user is online (in presence channel)
   Future<bool> isUserOnline(String userId) async {
     try {
-      final presence = _presenceChannel?.presenceState();
-      if (presence == null || presence.isEmpty) return false;
+      final presences = _presenceChannel?.presenceState();
+      if (presences == null || presences.isEmpty) return false;
 
-      for (final presenceState in presence) {
-        final state = presenceState as Map<String, dynamic>;
-        if (state['user_id'] == userId) {
-          return true;
+      // presenceState() returns List<SinglePresenceState>
+      // Each SinglePresenceState has .presences which is List<Presence>
+      for (final singleState in presences) {
+        for (final presence in singleState.presences) {
+          final data = presence.payload;
+          if (data['user_id'] == userId) {
+            return true;
+          }
         }
       }
       return false;
@@ -333,13 +348,16 @@ class WebRTCService {
   /// Check if user is busy (in another call)
   Future<bool> _checkUserBusy(String userId) async {
     try {
-      final presence = _presenceChannel?.presenceState();
-      if (presence == null || presence.isEmpty) return false;
+      final presences = _presenceChannel?.presenceState();
+      if (presences == null || presences.isEmpty) return false;
 
-      for (final presenceState in presence) {
-        final state = presenceState as Map<String, dynamic>;
-        if (state['user_id'] == userId && state['in_call'] == true) {
-          return true;
+      // presenceState() returns List<SinglePresenceState>
+      for (final singleState in presences) {
+        for (final presence in singleState.presences) {
+          final data = presence.payload;
+          if (data['user_id'] == userId && data['in_call'] == true) {
+            return true;
+          }
         }
       }
       return false;

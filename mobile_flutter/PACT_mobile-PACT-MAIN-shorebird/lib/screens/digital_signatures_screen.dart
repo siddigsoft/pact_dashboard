@@ -854,7 +854,6 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
             ? _nameController.text
             : (widget.isArabic ? 'توقيعي' : 'My Signature'),
         'signature_data': signatureData,
-        'signature_type': 'handwritten',
         'is_default': isFirstSignature,
       });
 
