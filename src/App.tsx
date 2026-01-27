@@ -95,6 +95,11 @@ const PermissionsManagement = lazy(() => import('./pages/PermissionsManagement')
 const CostPredictions = lazy(() => import('./pages/CostPredictions'));
 const ExchangeRates = lazy(() => import('./pages/ExchangeRates'));
 const SupportContacts = lazy(() => import('./pages/SupportContacts'));
+const MobileSupportTickets = lazy(() => import('./pages/MobileSupportTickets'));
+const MobileHelpArticles = lazy(() => import('./pages/MobileHelpArticles'));
+const MobileSignatureAdmin = lazy(() => import('./pages/MobileSignatureAdmin'));
+const MobileCallScheduling = lazy(() => import('./pages/MobileCallScheduling'));
+const MobileDocumentSync = lazy(() => import('./pages/MobileDocumentSync'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -270,6 +275,11 @@ const AppRoutes = () => {
         <Route path="/email-management" element={<EmailManagement />} />
         <Route path="/permissions-management" element={<PermissionsManagement />} />
         <Route path="/support-contacts" element={<SupportContacts />} />
+        <Route path="/mobile-support-tickets" element={<MobileSupportTickets />} />
+        <Route path="/mobile-help-articles" element={<MobileHelpArticles />} />
+        <Route path="/mobile-signatures" element={<MobileSignatureAdmin />} />
+        <Route path="/mobile-call-scheduling" element={<MobileCallScheduling />} />
+        <Route path="/mobile-document-sync" element={<MobileDocumentSync />} />
       </Route>
 
       {/* Redirects */}

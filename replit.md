@@ -64,6 +64,12 @@ The frontend utilizes React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, prov
 *   **Mobile Digital Signatures:** Flutter Digital Signatures screen with canvas-based signature drawing, PNG export, signature management, and signing history.
 *   **Mobile Field Team Map:** Admin-only Field Team Map screen for monitoring field team locations in real-time. Features flutter_map integration, color-coded online status, auto-refresh, filtering, and direct call/message actions via WebRTC.
 *   **Bilingual Notification Service:** Mobile notification service with comprehensive Arabic/English translations for all notification types.
+*   **Mobile-Web Integration Pages:** Web admin pages for managing mobile features:
+    - MobileSupportTickets: View/respond to support tickets from mobile users
+    - MobileHelpArticles: Manage bilingual help articles for mobile app
+    - MobileSignatureAdmin: View/verify digital signatures from mobile
+    - MobileCallScheduling: Monitor scheduled calls from mobile users
+    - MobileDocumentSync: Track document sync status from mobile devices
 
 ### System Design Choices
 The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.
