@@ -748,11 +748,20 @@ class WebRTCService {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         _updateCallState(CallStatus.connected);
         _retryCount = 0;
+        _stopAutoReconnect();
+        _startStatsCollection();
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        _stopStatsCollection();
         _handleConnectionFailure();
-      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
-        if (_callState.status == CallStatus.connected) {
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        // Try auto-reconnect first before ending
+        _stopStatsCollection();
+        _startAutoReconnect();
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+        _stopStatsCollection();
+        _stopAutoReconnect();
+        if (_callState.status == CallStatus.connected || 
+            _callState.status == CallStatus.reconnecting) {
           endCall();
         }
       }
@@ -1215,6 +1224,296 @@ class WebRTCService {
     _callTimeoutTimer?.cancel();
     _callTimeoutTimer = null;
   }
+  
+  // ==================== ENHANCED CALL FEATURES ====================
+  
+  Timer? _statsTimer;
+  Timer? _reconnectTimer;
+  bool _wasConnectedBeforeDisconnect = false;
+  
+  /// Start collecting call statistics for quality monitoring
+  void _startStatsCollection() {
+    _statsTimer?.cancel();
+    _statsTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      await _collectStats();
+    });
+  }
+  
+  /// Stop collecting call statistics
+  void _stopStatsCollection() {
+    _statsTimer?.cancel();
+    _statsTimer = null;
+  }
+  
+  /// Collect WebRTC stats and update call quality
+  Future<void> _collectStats() async {
+    if (_peerConnection == null || _callState.status != CallStatus.connected) return;
+    
+    try {
+      final stats = await _peerConnection!.getStats();
+      double totalPacketLoss = 0;
+      int packetLossCount = 0;
+      int latency = 0;
+      int bitrate = 0;
+      int jitter = 0;
+      
+      for (final report in stats) {
+        final values = report.values;
+        
+        if (report.type == 'inbound-rtp') {
+          final packetsLost = values['packetsLost'] as int? ?? 0;
+          final packetsReceived = values['packetsReceived'] as int? ?? 1;
+          if (packetsReceived > 0) {
+            totalPacketLoss += (packetsLost / (packetsLost + packetsReceived)) * 100;
+            packetLossCount++;
+          }
+          bitrate = values['bytesReceived'] as int? ?? 0;
+          // Jitter is reported in seconds, convert to ms
+          final jitterSeconds = values['jitter'] as double? ?? 0;
+          jitter = (jitterSeconds * 1000).round();
+        }
+        
+        if (report.type == 'candidate-pair' && values['state'] == 'succeeded') {
+          latency = (values['currentRoundTripTime'] as double? ?? 0) * 1000 ~/ 1;
+        }
+      }
+      
+      final avgPacketLoss = packetLossCount > 0 ? totalPacketLoss / packetLossCount : 0;
+      final quality = _calculateQuality(avgPacketLoss, latency);
+      
+      _callState = _callState.copyWith(
+        callQuality: quality,
+        packetLoss: avgPacketLoss,
+        latencyMs: latency,
+        bitrate: bitrate,
+        jitterMs: jitter,
+      );
+      _callStateController.add(_callState);
+    } catch (e) {
+      debugPrint('[WebRTC] Error collecting stats: $e');
+    }
+  }
+  
+  /// Calculate call quality based on metrics
+  CallQuality _calculateQuality(double packetLoss, int latencyMs) {
+    if (packetLoss > 10 || latencyMs > 500) return CallQuality.veryPoor;
+    if (packetLoss > 5 || latencyMs > 300) return CallQuality.poor;
+    if (packetLoss > 2 || latencyMs > 150) return CallQuality.fair;
+    if (packetLoss > 0.5 || latencyMs > 50) return CallQuality.good;
+    return CallQuality.excellent;
+  }
+  
+  /// Put the current call on hold
+  Future<void> holdCall() async {
+    if (_callState.status != CallStatus.connected) return;
+    
+    debugPrint('[WebRTC] Putting call on hold');
+    
+    // Mute audio and video
+    _localStream?.getAudioTracks().forEach((track) => track.enabled = false);
+    _localStream?.getVideoTracks().forEach((track) => track.enabled = false);
+    
+    // Notify remote user
+    if (_callState.remoteUserId != null) {
+      await _sendSignalWithRetry(CallSignal(
+        type: CallSignalType.callEnd, // Using callEnd as hold signal
+        from: _userId!,
+        to: _callState.remoteUserId!,
+        fromName: _userName ?? '',
+        callId: _callState.callId,
+        payload: {'action': 'hold'},
+      ));
+    }
+    
+    _callState = _callState.copyWith(
+      status: CallStatus.onHold,
+      isOnHold: true,
+    );
+    _callStateController.add(_callState);
+  }
+  
+  /// Resume a call that was on hold
+  Future<void> resumeCall() async {
+    if (_callState.status != CallStatus.onHold) return;
+    
+    debugPrint('[WebRTC] Resuming call from hold');
+    
+    // Unmute audio and video
+    _localStream?.getAudioTracks().forEach((track) => track.enabled = true);
+    if (!_callState.isAudioOnly) {
+      _localStream?.getVideoTracks().forEach((track) => track.enabled = true);
+    }
+    
+    // Notify remote user
+    if (_callState.remoteUserId != null) {
+      await _sendSignalWithRetry(CallSignal(
+        type: CallSignalType.callEnd, // Using callEnd as resume signal
+        from: _userId!,
+        to: _callState.remoteUserId!,
+        fromName: _userName ?? '',
+        callId: _callState.callId,
+        payload: {'action': 'resume'},
+      ));
+    }
+    
+    _callState = _callState.copyWith(
+      status: CallStatus.connected,
+      isOnHold: false,
+    );
+    _callStateController.add(_callState);
+  }
+  
+  /// Toggle hold state
+  Future<void> toggleHold() async {
+    if (_callState.isOnHold) {
+      await resumeCall();
+    } else {
+      await holdCall();
+    }
+  }
+  
+  /// Start call recording (placeholder - requires native implementation)
+  Future<bool> startRecording() async {
+    if (_callState.status != CallStatus.connected) return false;
+    
+    debugPrint('[WebRTC] Starting call recording');
+    
+    // Note: Actual recording requires native platform implementation
+    // This is a placeholder that updates state
+    _callState = _callState.copyWith(isRecording: true);
+    _callStateController.add(_callState);
+    
+    _errorController.add('Recording started');
+    return true;
+  }
+  
+  /// Stop call recording
+  Future<String?> stopRecording() async {
+    if (!_callState.isRecording) return null;
+    
+    debugPrint('[WebRTC] Stopping call recording');
+    
+    _callState = _callState.copyWith(isRecording: false);
+    _callStateController.add(_callState);
+    
+    _errorController.add('Recording stopped');
+    // Return path to recording file (would be set by native implementation)
+    return null;
+  }
+  
+  /// Toggle recording
+  Future<void> toggleRecording() async {
+    if (_callState.isRecording) {
+      await stopRecording();
+    } else {
+      await startRecording();
+    }
+  }
+  
+  /// Toggle noise suppression
+  void toggleNoiseSuppression() {
+    final newValue = !_callState.isNoiseSuppressed;
+    debugPrint('[WebRTC] Toggling noise suppression: $newValue');
+    
+    // Note: Noise suppression is typically set at stream creation time
+    // This updates state for UI feedback
+    _callState = _callState.copyWith(isNoiseSuppressed: newValue);
+    _callStateController.add(_callState);
+  }
+  
+  /// Set audio output device
+  Future<void> setAudioDevice(AudioOutputDevice device) async {
+    debugPrint('[WebRTC] Setting audio device: $device');
+    
+    switch (device) {
+      case AudioOutputDevice.speaker:
+        await Helper.setSpeakerphoneOn(true);
+        _callState = _callState.copyWith(
+          isSpeakerOn: true,
+          audioDevice: device,
+        );
+        break;
+      case AudioOutputDevice.earpiece:
+        await Helper.setSpeakerphoneOn(false);
+        _callState = _callState.copyWith(
+          isSpeakerOn: false,
+          audioDevice: device,
+        );
+        break;
+      case AudioOutputDevice.bluetooth:
+      case AudioOutputDevice.wiredHeadset:
+        // These would require native bluetooth/wired headset APIs
+        _callState = _callState.copyWith(audioDevice: device);
+        break;
+    }
+    
+    _callStateController.add(_callState);
+  }
+  
+  /// Update call notes
+  void updateCallNotes(String notes) {
+    _callState = _callState.copyWith(callNotes: notes);
+    _callStateController.add(_callState);
+  }
+  
+  /// Get current call notes
+  String? getCallNotes() => _callState.callNotes;
+  
+  /// Handle auto-reconnect when connection is lost
+  void _startAutoReconnect() {
+    if (_reconnectTimer != null) return;
+    
+    _wasConnectedBeforeDisconnect = _callState.status == CallStatus.connected;
+    if (!_wasConnectedBeforeDisconnect) return;
+    
+    debugPrint('[WebRTC] Starting auto-reconnect');
+    
+    _callState = _callState.copyWith(
+      status: CallStatus.reconnecting,
+      reconnectAttempts: 0,
+    );
+    _callStateController.add(_callState);
+    
+    _reconnectTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      final attempts = _callState.reconnectAttempts + 1;
+      
+      if (attempts > 5) {
+        debugPrint('[WebRTC] Max reconnect attempts reached');
+        timer.cancel();
+        _reconnectTimer = null;
+        _errorController.add('Connection lost. Call ended.');
+        await endCall();
+        return;
+      }
+      
+      debugPrint('[WebRTC] Reconnect attempt $attempts/5');
+      
+      _callState = _callState.copyWith(reconnectAttempts: attempts);
+      _callStateController.add(_callState);
+      
+      try {
+        if (_peerConnection != null) {
+          await _peerConnection!.restartIce();
+        }
+      } catch (e) {
+        debugPrint('[WebRTC] Reconnect attempt failed: $e');
+      }
+    });
+  }
+  
+  /// Stop auto-reconnect timer
+  void _stopAutoReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    
+    if (_callState.status == CallStatus.reconnecting) {
+      _callState = _callState.copyWith(
+        status: CallStatus.connected,
+        reconnectAttempts: 0,
+      );
+      _callStateController.add(_callState);
+    }
+  }
 
   /// Reset call state without full cleanup (for fixing stuck states)
   void resetCallState() {
@@ -1254,6 +1553,8 @@ class WebRTCService {
     debugPrint('[WebRTC] Cleaning up resources');
     
     _cancelCallTimeoutTimer();
+    _stopStatsCollection();
+    _stopAutoReconnect();
     _retryTimer?.cancel();
     _retryTimer = null;
     _retryCount = 0;
