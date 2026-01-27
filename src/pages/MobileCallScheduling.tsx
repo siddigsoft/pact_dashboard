@@ -6,6 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Phone, 
@@ -18,8 +23,24 @@ import {
   XCircle,
   Bell,
   Search,
-  RefreshCw
+  RefreshCw,
+  PhoneCall,
+  PhoneOff,
+  PlayCircle,
+  Timer,
+  MapPin,
+  MessageSquare,
+  MoreVertical,
+  CalendarClock,
+  AlertCircle
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface ScheduledCall {
   id: string;
@@ -48,6 +69,9 @@ export default function MobileCallScheduling() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState('upcoming');
+  const [selectedCall, setSelectedCall] = useState<ScheduledCall | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -99,6 +123,7 @@ export default function MobileCallScheduling() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-calls'] });
       toast({ title: 'Call updated', description: 'Call status has been updated.' });
+      setIsDetailOpen(false);
     },
   });
 
@@ -112,37 +137,47 @@ export default function MobileCallScheduling() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduled-calls'] });
-      toast({ title: 'Reminder sent', description: 'Reminder notification sent to participants.' });
+      toast({ title: 'Reminder sent', description: 'Reminder notification sent to all participants.' });
     },
   });
 
-  const filteredCalls = scheduledCalls.filter((c: ScheduledCall) =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.organizer_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const getFilteredCalls = () => {
+    let filtered = scheduledCalls.filter((c: ScheduledCall) =>
+      c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.organizer_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    
+    const now = new Date();
+    if (activeTab === 'upcoming') {
+      filtered = filtered.filter((c: ScheduledCall) => 
+        c.status === 'scheduled' && new Date(c.scheduled_time) > now
+      );
+    } else if (activeTab === 'past') {
+      filtered = filtered.filter((c: ScheduledCall) => 
+        c.status === 'completed' || c.status === 'cancelled' || new Date(c.scheduled_time) <= now
+      );
+    }
+    
+    return filtered;
+  };
 
-  const upcomingCalls = filteredCalls.filter((c: ScheduledCall) => 
-    c.status === 'scheduled' && new Date(c.scheduled_time) > new Date()
-  );
-  const pastCalls = filteredCalls.filter((c: ScheduledCall) => 
-    c.status === 'completed' || new Date(c.scheduled_time) <= new Date()
-  );
+  const filteredCalls = getFilteredCalls();
 
-  const getCallTypeIcon = (type: string) => {
+  const getCallTypeConfig = (type: string) => {
     switch (type) {
-      case 'video': return <Video className="w-4 h-4" />;
-      case 'group': return <Users className="w-4 h-4" />;
-      default: return <Phone className="w-4 h-4" />;
+      case 'video': return { icon: Video, color: 'bg-blue-500/10 text-blue-600 border-blue-500/20', label: 'Video Call' };
+      case 'group': return { icon: Users, color: 'bg-purple-500/10 text-purple-600 border-purple-500/20', label: 'Group Call' };
+      default: return { icon: Phone, color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20', label: 'Audio Call' };
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'scheduled': return 'bg-blue-500';
-      case 'in_progress': return 'bg-green-500';
-      case 'completed': return 'bg-gray-500';
-      case 'cancelled': return 'bg-red-500';
-      default: return 'bg-gray-500';
+      case 'scheduled': return { icon: CalendarClock, color: 'bg-blue-500', label: 'Scheduled' };
+      case 'in_progress': return { icon: PlayCircle, color: 'bg-emerald-500', label: 'In Progress' };
+      case 'completed': return { icon: CheckCircle, color: 'bg-gray-500', label: 'Completed' };
+      case 'cancelled': return { icon: XCircle, color: 'bg-red-500', label: 'Cancelled' };
+      default: return { icon: Clock, color: 'bg-gray-500', label: status };
     }
   };
 
@@ -153,219 +188,406 @@ export default function MobileCallScheduling() {
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   };
 
+  const getTimeUntil = (date: string) => {
+    const now = new Date();
+    const then = new Date(date);
+    const diffMs = then.getTime() - now.getTime();
+    
+    if (diffMs < 0) return 'Past';
+    
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 60) return `In ${diffMins}m`;
+    if (diffHours < 24) return `In ${diffHours}h`;
+    return `In ${diffDays}d`;
+  };
+
   const stats = {
     total: scheduledCalls.length,
-    upcoming: scheduledCalls.filter((c: ScheduledCall) => c.status === 'scheduled').length,
+    upcoming: scheduledCalls.filter((c: ScheduledCall) => c.status === 'scheduled' && new Date(c.scheduled_time) > new Date()).length,
     completed: scheduledCalls.filter((c: ScheduledCall) => c.status === 'completed').length,
     cancelled: scheduledCalls.filter((c: ScheduledCall) => c.status === 'cancelled').length,
+    todayCalls: scheduledCalls.filter((c: ScheduledCall) => {
+      const callDate = new Date(c.scheduled_time).toDateString();
+      return callDate === new Date().toDateString() && c.status === 'scheduled';
+    }).length,
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6" data-testid="mobile-call-scheduling-page">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">Mobile Call Scheduling</h1>
-          <p className="text-muted-foreground">Manage scheduled calls from mobile app</p>
-        </div>
-        <Button onClick={() => refetch()} variant="outline" data-testid="button-refresh">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20" data-testid="mobile-call-scheduling-page">
+      <div className="bg-gradient-to-r from-cyan-600 via-teal-700 to-emerald-800 text-white">
+        <div className="container mx-auto px-6 py-8">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <PhoneCall className="w-6 h-6" />
+                </div>
+                <h1 className="text-3xl font-bold" data-testid="text-page-title">Mobile Call Scheduling</h1>
+              </div>
+              <p className="text-cyan-100">Manage and monitor scheduled calls from mobile app</p>
+            </div>
+            <Button onClick={() => refetch()} variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-0" data-testid="button-refresh">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card data-testid="card-stat-total">
-          <CardContent className="p-4 flex items-center gap-4">
-            <Calendar className="w-8 h-8 text-blue-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.total}</p>
-              <p className="text-sm text-muted-foreground">Total Calls</p>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-8">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/10 rounded-lg">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.total}</p>
+                  <p className="text-sm text-cyan-100">Total Calls</p>
+                </div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="card-stat-upcoming">
-          <CardContent className="p-4 flex items-center gap-4">
-            <Clock className="w-8 h-8 text-green-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.upcoming}</p>
-              <p className="text-sm text-muted-foreground">Upcoming</p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.todayCalls}</p>
+                  <p className="text-sm text-cyan-100">Today</p>
+                </div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="card-stat-completed">
-          <CardContent className="p-4 flex items-center gap-4">
-            <CheckCircle className="w-8 h-8 text-gray-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.completed}</p>
-              <p className="text-sm text-muted-foreground">Completed</p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-500/20 rounded-lg">
+                  <CalendarClock className="w-5 h-5 text-blue-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.upcoming}</p>
+                  <p className="text-sm text-cyan-100">Upcoming</p>
+                </div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="card-stat-cancelled">
-          <CardContent className="p-4 flex items-center gap-4">
-            <XCircle className="w-8 h-8 text-red-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.cancelled}</p>
-              <p className="text-sm text-muted-foreground">Cancelled</p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/20 rounded-lg">
+                  <CheckCircle className="w-5 h-5 text-emerald-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.completed}</p>
+                  <p className="text-sm text-cyan-100">Completed</p>
+                </div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex flex-wrap gap-4">
-        <div className="flex-1 min-w-[200px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search calls..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-              data-testid="input-search"
-            />
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-500/20 rounded-lg">
+                  <XCircle className="w-5 h-5 text-red-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.cancelled}</p>
+                  <p className="text-sm text-cyan-100">Cancelled</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="scheduled">Scheduled</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[150px]" data-testid="select-type-filter">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="audio">Audio</SelectItem>
-            <SelectItem value="video">Video</SelectItem>
-            <SelectItem value="group">Group</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
-      {isLoading ? (
-        <p>Loading scheduled calls...</p>
-      ) : filteredCalls.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center text-muted-foreground">
-            <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No scheduled calls found</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {upcomingCalls.length > 0 && (
-            <div>
-              <h2 className="text-lg font-semibold mb-3">Upcoming Calls</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {upcomingCalls.map((call: ScheduledCall) => (
-                  <Card key={call.id} data-testid={`card-call-${call.id}`}>
-                    <CardHeader className="pb-2">
+      <div className="container mx-auto px-6 py-6">
+        <div className="flex flex-wrap gap-4 mb-6">
+          <div className="flex-1 min-w-[280px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                placeholder="Search calls by title or organizer..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-11"
+                data-testid="input-search"
+              />
+            </div>
+          </div>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-[150px] h-11" data-testid="select-type-filter">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="audio">Audio</SelectItem>
+              <SelectItem value="video">Video</SelectItem>
+              <SelectItem value="group">Group</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="bg-muted/50 p-1">
+            <TabsTrigger value="all" className="data-[state=active]:bg-background">
+              All ({scheduledCalls.length})
+            </TabsTrigger>
+            <TabsTrigger value="upcoming" className="data-[state=active]:bg-background">
+              Upcoming ({stats.upcoming})
+            </TabsTrigger>
+            <TabsTrigger value="past" className="data-[state=active]:bg-background">
+              Past ({stats.completed + stats.cancelled})
+            </TabsTrigger>
+          </TabsList>
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <Card key={i} className="p-4">
+                  <div className="space-y-3">
+                    <Skeleton className="h-5 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-8 w-full" />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : filteredCalls.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="p-16 text-center text-muted-foreground">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                  <Calendar className="w-8 h-8 opacity-50" />
+                </div>
+                <p className="font-medium mb-1">No scheduled calls found</p>
+                <p className="text-sm">Calls scheduled from mobile app will appear here</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredCalls.map((call: ScheduledCall) => {
+                const typeConfig = getCallTypeConfig(call.call_type);
+                const statusConfig = getStatusConfig(call.status);
+                const TypeIcon = typeConfig.icon;
+                const StatusIcon = statusConfig.icon;
+                const isUpcoming = call.status === 'scheduled' && new Date(call.scheduled_time) > new Date();
+                
+                return (
+                  <Card 
+                    key={call.id} 
+                    className={`group hover:shadow-lg transition-all cursor-pointer ${!isUpcoming ? 'opacity-75' : ''}`}
+                    onClick={() => {
+                      setSelectedCall(call);
+                      setIsDetailOpen(true);
+                    }}
+                    data-testid={`card-call-${call.id}`}
+                  >
+                    <CardHeader className="pb-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          {getCallTypeIcon(call.call_type)}
-                          <CardTitle className="text-base">{call.title}</CardTitle>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className={`p-2 rounded-lg ${typeConfig.color.split(' ')[0]}`}>
+                            <TypeIcon className={`w-4 h-4 ${typeConfig.color.split(' ')[1]}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <CardTitle className="text-base line-clamp-1">{call.title}</CardTitle>
+                            <CardDescription className="flex items-center gap-1 text-xs">
+                              <User className="w-3 h-3" />
+                              {call.organizer_name}
+                            </CardDescription>
+                          </div>
                         </div>
-                        <Badge className={getStatusColor(call.status)} variant="secondary">
-                          {call.status}
-                        </Badge>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {isUpcoming && !call.reminder_sent && (
+                              <DropdownMenuItem onClick={(e) => {
+                                e.stopPropagation();
+                                sendReminderMutation.mutate(call.id);
+                              }}>
+                                <Bell className="w-4 h-4 mr-2" />
+                                Send Reminder
+                              </DropdownMenuItem>
+                            )}
+                            {isUpcoming && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateStatusMutation.mutate({ callId: call.id, status: 'cancelled' });
+                                  }}
+                                >
+                                  <XCircle className="w-4 h-4 mr-2" />
+                                  Cancel Call
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <CardDescription className="flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        Organized by {call.organizer_name}
-                      </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4 text-muted-foreground" />
-                          <span>{new Date(call.scheduled_time).toLocaleDateString()}</span>
+                    
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                        <Calendar className="w-4 h-4 text-muted-foreground" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">
+                            {new Date(call.scheduled_time).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(call.scheduled_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {' • '}{formatDuration(call.duration_minutes)}
+                          </p>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                          <span>{new Date(call.scheduled_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
+                        {isUpcoming && (
+                          <Badge variant="outline" className="text-xs bg-primary/5">
+                            {getTimeUntil(call.scheduled_time)}
+                          </Badge>
+                        )}
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        Duration: {formatDuration(call.duration_minutes)}
+                      
+                      <div className="flex items-center justify-between">
+                        <Badge className={statusConfig.color}>
+                          <StatusIcon className="w-3 h-3 mr-1" />
+                          {statusConfig.label}
+                        </Badge>
+                        
+                        {call.participants && call.participants.length > 0 && (
+                          <div className="flex items-center gap-1">
+                            <div className="flex -space-x-2">
+                              {call.participants.slice(0, 3).map((p, i) => (
+                                <Avatar key={p.id} className="h-6 w-6 border-2 border-background">
+                                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                    {p.user_name?.charAt(0) || '?'}
+                                  </AvatarFallback>
+                                </Avatar>
+                              ))}
+                            </div>
+                            {call.participants.length > 3 && (
+                              <span className="text-xs text-muted-foreground ml-1">
+                                +{call.participants.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      {call.participants && call.participants.length > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-sm">{call.participants.length} participants</span>
+                      
+                      {call.reminder_sent && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Bell className="w-3 h-3" />
+                          Reminder sent
                         </div>
                       )}
-                      <div className="flex items-center gap-2 pt-2">
-                        {!call.reminder_sent && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => sendReminderMutation.mutate(call.id)}
-                            disabled={sendReminderMutation.isPending}
-                            data-testid={`button-remind-${call.id}`}
-                          >
-                            <Bell className="w-3 h-3 mr-1" />
-                            Send Reminder
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => updateStatusMutation.mutate({ callId: call.id, status: 'cancelled' })}
-                          disabled={updateStatusMutation.isPending}
-                          data-testid={`button-cancel-${call.id}`}
-                        >
-                          <XCircle className="w-3 h-3 mr-1" />
-                          Cancel
-                        </Button>
-                      </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
+                );
+              })}
             </div>
           )}
+        </Tabs>
+      </div>
 
-          {pastCalls.length > 0 && (
-            <div>
-              <h2 className="text-lg font-semibold mb-3">Past Calls</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pastCalls.map((call: ScheduledCall) => (
-                  <Card key={call.id} className="opacity-75" data-testid={`card-past-call-${call.id}`}>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-2">
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PhoneCall className="w-5 h-5" />
+              Call Details
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedCall && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-lg">{selectedCall.title}</h3>
+                {selectedCall.description && (
+                  <p className="text-sm text-muted-foreground mt-1">{selectedCall.description}</p>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Date</p>
+                    <p className="text-sm font-medium">{new Date(selectedCall.scheduled_time).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Time</p>
+                    <p className="text-sm font-medium">{new Date(selectedCall.scheduled_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Timer className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Duration</p>
+                    <p className="text-sm font-medium">{formatDuration(selectedCall.duration_minutes)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Organizer</p>
+                    <p className="text-sm font-medium">{selectedCall.organizer_name}</p>
+                  </div>
+                </div>
+              </div>
+              
+              {selectedCall.participants && selectedCall.participants.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2">Participants ({selectedCall.participants.length})</p>
+                  <div className="space-y-2">
+                    {selectedCall.participants.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                         <div className="flex items-center gap-2">
-                          {getCallTypeIcon(call.call_type)}
-                          <CardTitle className="text-base">{call.title}</CardTitle>
+                          <Avatar className="h-7 w-7">
+                            <AvatarFallback className="text-xs">{p.user_name?.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm">{p.user_name}</span>
                         </div>
-                        <Badge className={getStatusColor(call.status)} variant="secondary">
-                          {call.status}
+                        <Badge variant="outline" className={
+                          p.status === 'accepted' ? 'bg-emerald-500/10 text-emerald-600' :
+                          p.status === 'declined' ? 'bg-red-500/10 text-red-600' :
+                          'bg-amber-500/10 text-amber-600'
+                        }>
+                          {p.status}
                         </Badge>
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{new Date(call.scheduled_time).toLocaleDateString()}</span>
-                        <span>{formatDuration(call.duration_minutes)}</span>
-                        {call.participants && (
-                          <span>{call.participants.length} participants</span>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <DialogFooter>
+                {selectedCall.status === 'scheduled' && new Date(selectedCall.scheduled_time) > new Date() && (
+                  <>
+                    {!selectedCall.reminder_sent && (
+                      <Button
+                        variant="outline"
+                        onClick={() => sendReminderMutation.mutate(selectedCall.id)}
+                        disabled={sendReminderMutation.isPending}
+                      >
+                        <Bell className="w-4 h-4 mr-2" />
+                        Send Reminder
+                      </Button>
+                    )}
+                    <Button
+                      variant="destructive"
+                      onClick={() => updateStatusMutation.mutate({ callId: selectedCall.id, status: 'cancelled' })}
+                      disabled={updateStatusMutation.isPending}
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </>
+                )}
+              </DialogFooter>
             </div>
           )}
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -7,6 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { 
   FileText, 
@@ -21,7 +25,17 @@ import {
   AlertTriangle,
   Folder,
   Image,
-  File
+  File,
+  HardDrive,
+  Activity,
+  Clock,
+  User,
+  RotateCcw,
+  ExternalLink,
+  FileImage,
+  FileType,
+  Zap,
+  Database
 } from 'lucide-react';
 
 interface SyncedDocument {
@@ -43,6 +57,7 @@ export default function MobileDocumentSync() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState('all');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -84,43 +99,57 @@ export default function MobileDocumentSync() {
     },
   });
 
-  const filteredDocuments = documents.filter((d: SyncedDocument) => {
-    const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.user_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = typeFilter === 'all' || d.file_type.includes(typeFilter);
-    return matchesSearch && matchesType;
-  });
+  const getFilteredDocuments = () => {
+    let filtered = documents.filter((d: SyncedDocument) => {
+      const matchesSearch = d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        d.user_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = typeFilter === 'all' || d.file_type.includes(typeFilter);
+      return matchesSearch && matchesType;
+    });
+    
+    if (activeTab !== 'all') {
+      filtered = filtered.filter((d: SyncedDocument) => d.sync_status === activeTab);
+    }
+    
+    return filtered;
+  };
+
+  const filteredDocuments = getFilteredDocuments();
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
   const getFileIcon = (fileType: string) => {
-    if (fileType.includes('image')) return <Image className="w-4 h-4" />;
-    if (fileType.includes('pdf')) return <FileText className="w-4 h-4" />;
-    return <File className="w-4 h-4" />;
+    if (fileType.includes('image')) return FileImage;
+    if (fileType.includes('pdf')) return FileText;
+    return FileType;
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'synced': return <Cloud className="w-4 h-4 text-green-500" />;
-      case 'pending': return <Upload className="w-4 h-4 text-yellow-500" />;
-      case 'failed': return <CloudOff className="w-4 h-4 text-red-500" />;
-      case 'uploading': return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />;
-      default: return <Cloud className="w-4 h-4" />;
+      case 'synced': return { icon: Cloud, color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20', bgColor: 'bg-emerald-500', label: 'Synced' };
+      case 'pending': return { icon: Clock, color: 'bg-amber-500/10 text-amber-600 border-amber-500/20', bgColor: 'bg-amber-500', label: 'Pending' };
+      case 'failed': return { icon: CloudOff, color: 'bg-red-500/10 text-red-600 border-red-500/20', bgColor: 'bg-red-500', label: 'Failed' };
+      case 'uploading': return { icon: Upload, color: 'bg-blue-500/10 text-blue-600 border-blue-500/20', bgColor: 'bg-blue-500', label: 'Uploading' };
+      default: return { icon: Cloud, color: 'bg-gray-500/10 text-gray-600 border-gray-500/20', bgColor: 'bg-gray-500', label: status };
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'synced': return 'bg-green-500';
-      case 'pending': return 'bg-yellow-500';
-      case 'failed': return 'bg-red-500';
-      case 'uploading': return 'bg-blue-500';
-      default: return 'bg-gray-500';
-    }
+  const getTimeAgo = (date: string) => {
+    const now = new Date();
+    const then = new Date(date);
+    const diffMs = now.getTime() - then.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
   };
 
   const stats = {
@@ -129,194 +158,289 @@ export default function MobileDocumentSync() {
     pending: documents.filter((d: SyncedDocument) => d.sync_status === 'pending' || d.sync_status === 'uploading').length,
     failed: documents.filter((d: SyncedDocument) => d.sync_status === 'failed').length,
     totalSize: documents.reduce((acc: number, d: SyncedDocument) => acc + d.file_size, 0),
+    images: documents.filter((d: SyncedDocument) => d.file_type.includes('image')).length,
+    pdfs: documents.filter((d: SyncedDocument) => d.file_type.includes('pdf')).length,
   };
 
   const syncProgress = stats.total > 0 ? (stats.synced / stats.total) * 100 : 0;
 
   return (
-    <div className="container mx-auto p-6 space-y-6" data-testid="mobile-document-sync-page">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">Mobile Document Sync</h1>
-          <p className="text-muted-foreground">Monitor documents synced from mobile devices</p>
-        </div>
-        <Button onClick={() => refetch()} variant="outline" data-testid="button-refresh">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
-      </div>
-
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20" data-testid="mobile-document-sync-page">
+      <div className="bg-gradient-to-r from-indigo-600 via-blue-700 to-cyan-800 text-white">
+        <div className="container mx-auto px-6 py-8">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <p className="text-sm font-medium">Sync Progress</p>
-              <p className="text-2xl font-bold">{stats.synced} / {stats.total} documents</p>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <Database className="w-6 h-6" />
+                </div>
+                <h1 className="text-3xl font-bold" data-testid="text-page-title">Mobile Document Sync</h1>
+              </div>
+              <p className="text-indigo-100">Monitor and manage document synchronization from mobile devices</p>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Total Storage</p>
-              <p className="text-lg font-medium">{formatFileSize(stats.totalSize)}</p>
-            </div>
+            <Button onClick={() => refetch()} variant="secondary" className="bg-white/10 hover:bg-white/20 text-white border-0" data-testid="button-refresh">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
           </div>
-          <Progress value={syncProgress} className="h-2" data-testid="progress-sync" />
-          <div className="flex items-center justify-between mt-2 text-sm text-muted-foreground">
-            <span>{syncProgress.toFixed(0)}% synced</span>
-            {stats.failed > 0 && (
-              <span className="text-red-500 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                {stats.failed} failed
-              </span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card data-testid="card-stat-total">
-          <CardContent className="p-4 flex items-center gap-4">
-            <Folder className="w-8 h-8 text-blue-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.total}</p>
-              <p className="text-sm text-muted-foreground">Total Documents</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="card-stat-synced">
-          <CardContent className="p-4 flex items-center gap-4">
-            <Check className="w-8 h-8 text-green-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.synced}</p>
-              <p className="text-sm text-muted-foreground">Synced</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="card-stat-pending">
-          <CardContent className="p-4 flex items-center gap-4">
-            <Upload className="w-8 h-8 text-yellow-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.pending}</p>
-              <p className="text-sm text-muted-foreground">Pending</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card data-testid="card-stat-failed">
-          <CardContent className="p-4 flex items-center gap-4">
-            <CloudOff className="w-8 h-8 text-red-500" />
-            <div>
-              <p className="text-2xl font-bold">{stats.failed}</p>
-              <p className="text-sm text-muted-foreground">Failed</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex flex-wrap gap-4">
-        <div className="flex-1 min-w-[200px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search documents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-              data-testid="input-search"
-            />
-          </div>
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="synced">Synced</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="uploading">Uploading</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[150px]" data-testid="select-type-filter">
-            <SelectValue placeholder="File Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="image">Images</SelectItem>
-            <SelectItem value="pdf">PDFs</SelectItem>
-            <SelectItem value="document">Documents</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {isLoading ? (
-        <p>Loading documents...</p>
-      ) : filteredDocuments.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center text-muted-foreground">
-            <Folder className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No synced documents found</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {filteredDocuments.map((doc: SyncedDocument) => (
-            <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
-              <CardContent className="p-4">
+          <Card className="mt-6 bg-white/10 border-white/10 backdrop-blur-sm text-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                    {getFileIcon(doc.file_type)}
+                  <div className="p-3 bg-white/10 rounded-xl">
+                    <Zap className="w-6 h-6" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium truncate">{doc.name}</p>
-                      <Badge className={getStatusColor(doc.sync_status)} variant="secondary">
-                        {getStatusIcon(doc.sync_status)}
-                        <span className="ml-1">{doc.sync_status}</span>
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Smartphone className="w-3 h-3" />
-                        {doc.user_name}
-                      </span>
-                      <span>{formatFileSize(doc.file_size)}</span>
-                      <span>v{doc.version}</span>
-                      <span>Last synced: {new Date(doc.last_synced_at).toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {doc.sync_status === 'failed' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => retrySyncMutation.mutate(doc.id)}
-                        disabled={retrySyncMutation.isPending}
-                        data-testid={`button-retry-${doc.id}`}
-                      >
-                        <RefreshCw className="w-3 h-3 mr-1" />
-                        Retry
-                      </Button>
-                    )}
-                    {doc.sync_status === 'synced' && doc.storage_path && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          window.open(doc.storage_path, '_blank');
-                        }}
-                        data-testid={`button-download-${doc.id}`}
-                      >
-                        <Download className="w-3 h-3 mr-1" />
-                        Download
-                      </Button>
-                    )}
+                  <div>
+                    <p className="text-sm text-indigo-100">Sync Progress</p>
+                    <p className="text-2xl font-bold">{stats.synced} / {stats.total} documents</p>
                   </div>
                 </div>
+                <div className="text-right">
+                  <p className="text-sm text-indigo-100">Total Storage Used</p>
+                  <p className="text-xl font-bold">{formatFileSize(stats.totalSize)}</p>
+                </div>
+              </div>
+              <div className="relative">
+                <Progress value={syncProgress} className="h-3 bg-white/20" data-testid="progress-sync" />
+                <div className="flex items-center justify-between mt-2 text-sm">
+                  <span className="text-indigo-100">{syncProgress.toFixed(0)}% synced</span>
+                  {stats.failed > 0 && (
+                    <span className="text-red-300 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      {stats.failed} failed
+                    </span>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-6">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/10 rounded-lg">
+                  <Folder className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.total}</p>
+                  <p className="text-xs text-indigo-100">Total</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/20 rounded-lg">
+                  <Check className="w-5 h-5 text-emerald-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.synced}</p>
+                  <p className="text-xs text-indigo-100">Synced</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-lg">
+                  <Upload className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.pending}</p>
+                  <p className="text-xs text-indigo-100">Pending</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-500/20 rounded-lg">
+                  <CloudOff className="w-5 h-5 text-red-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.failed}</p>
+                  <p className="text-xs text-indigo-100">Failed</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-pink-500/20 rounded-lg">
+                  <FileImage className="w-5 h-5 text-pink-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.images}</p>
+                  <p className="text-xs text-indigo-100">Images</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-500/20 rounded-lg">
+                  <FileText className="w-5 h-5 text-orange-300" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stats.pdfs}</p>
+                  <p className="text-xs text-indigo-100">PDFs</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-6 py-6">
+        <div className="flex flex-wrap gap-4 mb-6">
+          <div className="flex-1 min-w-[280px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                placeholder="Search documents by name or user..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-11"
+                data-testid="input-search"
+              />
+            </div>
+          </div>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="w-[150px] h-11" data-testid="select-type-filter">
+              <SelectValue placeholder="File Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="image">Images</SelectItem>
+              <SelectItem value="pdf">PDFs</SelectItem>
+              <SelectItem value="document">Documents</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="bg-muted/50 p-1">
+            <TabsTrigger value="all" className="data-[state=active]:bg-background">
+              All ({stats.total})
+            </TabsTrigger>
+            <TabsTrigger value="synced" className="data-[state=active]:bg-background">
+              Synced ({stats.synced})
+            </TabsTrigger>
+            <TabsTrigger value="pending" className="data-[state=active]:bg-background">
+              Pending ({stats.pending})
+            </TabsTrigger>
+            <TabsTrigger value="failed" className="data-[state=active]:bg-background">
+              Failed ({stats.failed})
+            </TabsTrigger>
+          </TabsList>
+
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Card key={i} className="p-4">
+                  <div className="flex items-center gap-4">
+                    <Skeleton className="h-12 w-12 rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-1/3" />
+                      <Skeleton className="h-3 w-1/2" />
+                    </div>
+                    <Skeleton className="h-8 w-20" />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : filteredDocuments.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="p-16 text-center text-muted-foreground">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                  <Folder className="w-8 h-8 opacity-50" />
+                </div>
+                <p className="font-medium mb-1">No documents found</p>
+                <p className="text-sm">Documents synced from mobile devices will appear here</p>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="space-y-2">
+              {filteredDocuments.map((doc: SyncedDocument) => {
+                const statusConfig = getStatusConfig(doc.sync_status);
+                const StatusIcon = statusConfig.icon;
+                const FileIcon = getFileIcon(doc.file_type);
+                
+                return (
+                  <Card key={doc.id} className="group hover:shadow-md transition-all" data-testid={`card-document-${doc.id}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-xl ${doc.file_type.includes('image') ? 'bg-pink-500/10' : 'bg-blue-500/10'} flex items-center justify-center`}>
+                          <FileIcon className={`w-6 h-6 ${doc.file_type.includes('image') ? 'text-pink-500' : 'text-blue-500'}`} />
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-1">
+                            <p className="font-medium truncate">{doc.name}</p>
+                            <Badge variant="outline" className={statusConfig.color}>
+                              <StatusIcon className={`w-3 h-3 mr-1 ${doc.sync_status === 'uploading' ? 'animate-spin' : ''}`} />
+                              {statusConfig.label}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <User className="w-3 h-3" />
+                              {doc.user_name}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <HardDrive className="w-3 h-3" />
+                              {formatFileSize(doc.file_size)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Activity className="w-3 h-3" />
+                              v{doc.version}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {getTimeAgo(doc.last_synced_at)}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {doc.sync_status === 'failed' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => retrySyncMutation.mutate(doc.id)}
+                              disabled={retrySyncMutation.isPending}
+                              data-testid={`button-retry-${doc.id}`}
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              Retry
+                            </Button>
+                          )}
+                          {doc.sync_status === 'synced' && doc.storage_path && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(doc.storage_path, '_blank')}
+                              data-testid={`button-download-${doc.id}`}
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Download
+                            </Button>
+                          )}
+                          {doc.sync_status === 'synced' && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => window.open(doc.storage_path, '_blank')}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </Tabs>
+      </div>
     </div>
   );
 }
