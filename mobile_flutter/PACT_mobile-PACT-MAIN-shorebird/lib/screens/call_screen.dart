@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/webrtc_service.dart';
 import '../models/call_state.dart';
 import '../theme/app_colors.dart';
+import '../widgets/floating_call_overlay.dart';
 import 'dart:async';
 
 class CallScreen extends StatefulWidget {
@@ -907,7 +908,7 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 30),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -925,55 +926,280 @@ class _CallScreenState extends State<CallScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (isConnected)
-                  _buildControlButton(
-                    icon: Icons.settings_rounded,
-                    label: 'Settings',
-                    onPressed: () {
-                      HapticFeedback.lightImpact();
-                      _showCallSettings();
-                    },
-                    isActive: true,
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white30,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                if (isConnected)
-                  _buildControlButton(
-                    icon: _callState.isSpeakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                    label: 'Speaker',
-                    onPressed: () {
-                      HapticFeedback.lightImpact();
-                      _webrtcService.toggleSpeaker();
-                    },
-                    isActive: _callState.isSpeakerOn,
-                  ),
-                if (!_callState.isAudioOnly && isConnected)
-                  _buildControlButton(
-                    icon: _callState.isVideoEnabled ? Icons.videocam_rounded : Icons.videocam_off_rounded,
-                    label: 'Camera',
-                    onPressed: () async {
-                      HapticFeedback.lightImpact();
-                      await _webrtcService.toggleVideo();
-                    },
-                    isActive: _callState.isVideoEnabled,
-                  ),
-                _buildControlButton(
-                  icon: _callState.isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                  label: _callState.isMuted ? 'Unmute' : 'Mute',
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    _webrtcService.toggleMute();
-                  },
-                  isActive: !_callState.isMuted,
-                  isWarning: _callState.isMuted,
                 ),
-                _buildEndCallButton(),
+                if (isConnected) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildSmallControlButton(
+                        icon: _callState.isSpeakerOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                        label: 'Speaker',
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _webrtcService.toggleSpeaker();
+                        },
+                        isActive: _callState.isSpeakerOn,
+                      ),
+                      if (!_callState.isAudioOnly)
+                        _buildSmallControlButton(
+                          icon: _callState.isVideoEnabled ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                          label: 'Video',
+                          onPressed: () async {
+                            HapticFeedback.lightImpact();
+                            await _webrtcService.toggleVideo();
+                          },
+                          isActive: _callState.isVideoEnabled,
+                        ),
+                      if (!_callState.isAudioOnly)
+                        _buildSmallControlButton(
+                          icon: Icons.flip_camera_ios_rounded,
+                          label: 'Flip',
+                          onPressed: () {
+                            HapticFeedback.lightImpact();
+                            _webrtcService.switchCamera();
+                          },
+                          isActive: true,
+                        ),
+                      _buildSmallControlButton(
+                        icon: Icons.screen_share_rounded,
+                        label: 'Share',
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _showScreenShareDialog();
+                        },
+                        isActive: false,
+                      ),
+                      _buildSmallControlButton(
+                        icon: Icons.more_horiz_rounded,
+                        label: 'More',
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _showCallSettings();
+                        },
+                        isActive: true,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    if (isConnected)
+                      _buildControlButton(
+                        icon: Icons.open_in_new_rounded,
+                        label: 'Minimize',
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          _minimizeCall();
+                        },
+                        isActive: true,
+                      ),
+                    _buildControlButton(
+                      icon: _callState.isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                      label: _callState.isMuted ? 'Unmute' : 'Mute',
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _webrtcService.toggleMute();
+                      },
+                      isActive: !_callState.isMuted,
+                      isWarning: _callState.isMuted,
+                    ),
+                    _buildEndCallButton(),
+                  ],
+                ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  void _showScreenShareDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.8),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white38,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Icon(
+                  Icons.screen_share_rounded,
+                  color: AppColors.primaryBlue,
+                  size: 48,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Screen Sharing',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Screen sharing is available for video calls. The other participant will see your screen.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white60,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'Cancel',
+                          style: GoogleFonts.poppins(color: Colors.white70),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _startScreenShare();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryBlue,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Start Sharing',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startScreenShare() async {
+    try {
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Screen sharing started',
+            style: GoogleFonts.poppins(),
+          ),
+          backgroundColor: AppColors.primaryGreen,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[CallScreen] Screen share error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not start screen sharing',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _minimizeCall() {
+    CallOverlayManager().showOverlay(
+      context,
+      remoteUserName: widget.remoteUserName ?? _callState.remoteUserName,
+      remoteUserAvatar: widget.remoteUserAvatar,
+    );
+    Navigator.of(context).pop();
+  }
+
+  Widget _buildSmallControlButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    bool isActive = true,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: onPressed,
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(isActive ? 0.15 : 0.08),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: isActive ? Colors.white : Colors.white54,
+              size: 22,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 
