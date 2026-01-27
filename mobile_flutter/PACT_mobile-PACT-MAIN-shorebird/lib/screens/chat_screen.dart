@@ -490,7 +490,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _startRecording() async {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Voice recording coming soon!')),
+        const SnackBar(
+          content: Text('Voice messages will be available in the next update. Please use text or photo messages for now.'),
+          duration: Duration(seconds: 3),
+        ),
       );
     }
   }
