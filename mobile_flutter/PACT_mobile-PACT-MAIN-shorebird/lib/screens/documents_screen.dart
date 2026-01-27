@@ -28,12 +28,14 @@ class _DocumentsScreenState extends State<DocumentsScreen>
   final List<String> _categories = [
     'all',
     'mmp_file',
+    'cost_receipt',
     'federal_permit',
     'state_permit',
     'local_permit',
-    'cost_receipt',
     'site_visit_photo',
+    'transaction_receipt',
     'report',
+    'other',
   ];
 
   @override
@@ -54,68 +56,98 @@ class _DocumentsScreenState extends State<DocumentsScreen>
 
     try {
       final List<Map<String, dynamic>> allDocs = [];
+      final Set<String> seenIds = {};
 
-      final mmpFiles = await Supabase.instance.client
-          .from('mmp_files')
-          .select('id, name, file_url, created_at, state, locality')
-          .order('created_at', ascending: false)
-          .limit(50);
-      
-      for (var doc in (mmpFiles ?? [])) {
-        allDocs.add({
-          'id': doc['id'],
-          'fileName': doc['name'] ?? 'MMP File',
-          'fileUrl': doc['file_url'],
-          'category': 'mmp_file',
-          'uploadedAt': doc['created_at'],
-          'state': doc['state'],
-          'locality': doc['locality'],
-        });
-      }
-
-      final permits = await Supabase.instance.client
-          .from('permits')
-          .select('id, permit_type, file_url, created_at, state, locality, status')
-          .order('created_at', ascending: false)
-          .limit(50);
-      
-      for (var doc in (permits ?? [])) {
-        String category = 'local_permit';
-        if (doc['permit_type']?.toString().toLowerCase().contains('federal') == true) {
-          category = 'federal_permit';
-        } else if (doc['permit_type']?.toString().toLowerCase().contains('state') == true) {
-          category = 'state_permit';
-        }
+      // Try to fetch from document_index first (persistent index)
+      try {
+        final indexedDocs = await Supabase.instance.client
+            .from('document_index')
+            .select('*')
+            .order('uploaded_at', ascending: false)
+            .limit(100);
         
-        allDocs.add({
-          'id': doc['id'],
-          'fileName': doc['permit_type'] ?? 'Permit',
-          'fileUrl': doc['file_url'],
-          'category': category,
-          'uploadedAt': doc['created_at'],
-          'state': doc['state'],
-          'locality': doc['locality'],
-          'status': doc['status'],
-        });
+        for (var doc in (indexedDocs ?? [])) {
+          final docId = 'idx-${doc['id']}';
+          if (seenIds.contains(docId)) continue;
+          seenIds.add(docId);
+          
+          allDocs.add({
+            'id': docId,
+            'fileName': doc['file_name'] ?? 'Document',
+            'fileUrl': doc['file_url'],
+            'category': doc['category'] ?? 'other',
+            'uploadedAt': doc['uploaded_at'],
+            'state': doc['state'],
+            'locality': doc['locality'],
+            'status': doc['status'],
+          });
+        }
+        debugPrint('Loaded ${indexedDocs?.length ?? 0} documents from index');
+      } catch (e) {
+        debugPrint('document_index table may not exist: $e');
       }
 
-      final costReceipts = await Supabase.instance.client
-          .from('cost_submissions')
-          .select('id, cost_type, receipt_url, created_at, amount, status')
-          .not('receipt_url', 'is', null)
-          .order('created_at', ascending: false)
-          .limit(50);
-      
-      for (var doc in (costReceipts ?? [])) {
-        allDocs.add({
-          'id': doc['id'],
-          'fileName': '${doc['cost_type'] ?? 'Receipt'} - ${doc['amount']} SDG',
-          'fileUrl': doc['receipt_url'],
-          'category': 'cost_receipt',
-          'uploadedAt': doc['created_at'],
-          'status': doc['status'],
-        });
+      // Fetch MMP files
+      try {
+        final mmpFiles = await Supabase.instance.client
+            .from('mmp_files')
+            .select('id, name, original_filename, file_url, created_at, project_name')
+            .order('created_at', ascending: false)
+            .limit(50);
+        
+        for (var doc in (mmpFiles ?? [])) {
+          final docId = 'mmp-${doc['id']}';
+          if (seenIds.contains(docId)) continue;
+          seenIds.add(docId);
+          
+          allDocs.add({
+            'id': docId,
+            'fileName': doc['original_filename'] ?? doc['name'] ?? 'MMP File',
+            'fileUrl': doc['file_url'],
+            'category': 'mmp_file',
+            'uploadedAt': doc['created_at'],
+            'projectName': doc['project_name'],
+          });
+        }
+        debugPrint('Loaded ${mmpFiles?.length ?? 0} MMP files');
+      } catch (e) {
+        debugPrint('Error loading MMP files: $e');
       }
+
+      // Fetch cost receipts
+      try {
+        final costReceipts = await Supabase.instance.client
+            .from('cost_submissions')
+            .select('id, cost_type, receipt_url, created_at, amount, status')
+            .not('receipt_url', 'is', null)
+            .order('created_at', ascending: false)
+            .limit(50);
+        
+        for (var doc in (costReceipts ?? [])) {
+          final docId = 'cost-${doc['id']}';
+          if (seenIds.contains(docId)) continue;
+          seenIds.add(docId);
+          
+          allDocs.add({
+            'id': docId,
+            'fileName': '${doc['cost_type'] ?? 'Receipt'} - ${doc['amount']} SDG',
+            'fileUrl': doc['receipt_url'],
+            'category': 'cost_receipt',
+            'uploadedAt': doc['created_at'],
+            'status': doc['status'],
+          });
+        }
+        debugPrint('Loaded ${costReceipts?.length ?? 0} cost receipts');
+      } catch (e) {
+        debugPrint('Error loading cost receipts: $e');
+      }
+
+      // Sort by date (newest first)
+      allDocs.sort((a, b) {
+        final dateA = DateTime.tryParse(a['uploadedAt']?.toString() ?? '') ?? DateTime(1970);
+        final dateB = DateTime.tryParse(b['uploadedAt']?.toString() ?? '') ?? DateTime(1970);
+        return dateB.compareTo(dateA);
+      });
 
       if (mounted) {
         setState(() {
@@ -165,10 +197,14 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         return isArabic ? 'تصريح محلي' : 'Local Permit';
       case 'cost_receipt':
         return isArabic ? 'إيصال تكلفة' : 'Cost Receipt';
+      case 'transaction_receipt':
+        return isArabic ? 'إيصال معاملة' : 'Transaction';
       case 'site_visit_photo':
         return isArabic ? 'صورة زيارة' : 'Site Photo';
       case 'report':
         return isArabic ? 'تقرير' : 'Report';
+      case 'other':
+        return isArabic ? 'أخرى' : 'Other';
       default:
         return category;
     }
@@ -184,10 +220,14 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         return Icons.security;
       case 'cost_receipt':
         return Icons.receipt_long;
+      case 'transaction_receipt':
+        return Icons.account_balance_wallet;
       case 'site_visit_photo':
         return Icons.photo_camera;
       case 'report':
         return Icons.description;
+      case 'other':
+        return Icons.folder_open;
       default:
         return Icons.insert_drive_file;
     }
@@ -205,10 +245,14 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         return Colors.deepPurple;
       case 'cost_receipt':
         return Colors.green;
+      case 'transaction_receipt':
+        return Colors.teal;
       case 'site_visit_photo':
         return Colors.cyan;
       case 'report':
         return Colors.amber;
+      case 'other':
+        return Colors.blueGrey;
       default:
         return Colors.grey;
     }

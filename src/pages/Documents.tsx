@@ -1280,12 +1280,32 @@ const DocumentsPage = () => {
               {filteredDocuments.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                  <p className="text-muted-foreground">No documents found</p>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-muted-foreground font-medium">No documents found</p>
+                  <p className="text-sm text-muted-foreground mt-1 mb-4">
                     {searchTerm || categoryFilter !== 'all' || statusFilter !== 'all' 
                       ? 'Try adjusting your filters' 
-                      : 'Documents will appear here when uploaded'}
+                      : 'Documents will appear here when uploaded. If you have uploaded documents, try syncing the index.'}
                   </p>
+                  {!searchTerm && categoryFilter === 'all' && statusFilter === 'all' && (
+                    <Button 
+                      variant="outline" 
+                      onClick={handleSyncDocuments}
+                      disabled={syncing}
+                      data-testid="button-sync-empty"
+                    >
+                      {syncing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        <>
+                          <Database className="h-4 w-4 mr-2" />
+                          Rebuild Document Index
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
