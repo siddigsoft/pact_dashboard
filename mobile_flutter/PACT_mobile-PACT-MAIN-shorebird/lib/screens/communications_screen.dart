@@ -184,6 +184,17 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       // Check connectivity first
       await _checkConnectivity();
       
+      // Check if user is authenticated
+      final currentUserId = _chatService.getCurrentUserId();
+      if (currentUserId == null) {
+        debugPrint('[CommunicationsScreen] User not authenticated');
+        if (mounted) {
+          _showMessage('Please log in to view contacts', isError: true);
+          setState(() => _isLoading = false);
+        }
+        return;
+      }
+      
       if (!_isOnline) {
         // OFFLINE: Load cached users
         debugPrint('[CommunicationsScreen] Offline - loading cached users');
@@ -201,9 +212,20 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       // ONLINE: Initialize services and fetch users
       await _initializeWebRTCService();
       
-      await _presenceService.fetchAllUsers();
-      _allUsers = _presenceService.getAllUsersList();
+      // Fetch users directly if PresenceService fetch fails
+      final users = await _presenceService.fetchAllUsers();
+      debugPrint('[CommunicationsScreen] Fetched ${users.length} users from PresenceService');
+      
+      // If still empty, try direct fetch
+      if (users.isEmpty) {
+        debugPrint('[CommunicationsScreen] PresenceService returned empty, trying direct fetch');
+        await _fetchUsersDirect();
+      } else {
+        _allUsers = _presenceService.getAllUsersList();
+      }
+      
       _filterUsers();
+      debugPrint('[CommunicationsScreen] Total users after load: ${_allUsers.length}');
       
       // Sync any pending messages
       final syncedCount = await _chatService.syncPendingMessages();
@@ -215,9 +237,52 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       // Fallback to cached data
       _allUsers = _presenceService.getAllUsersList();
       _filterUsers();
+      if (mounted && _allUsers.isEmpty) {
+        _showMessage('Could not load contacts. Please try again.', isError: true);
+      }
     }
     
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+  
+  /// Direct fetch from profiles as fallback
+  Future<void> _fetchUsersDirect() async {
+    try {
+      final currentUserId = _chatService.getCurrentUserId();
+      if (currentUserId == null) return;
+      
+      final supabase = Supabase.instance.client;
+      
+      // Fetch all approved users from profiles
+      final response = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, role, phone, email, state, hub, status')
+          .neq('id', currentUserId)
+          .order('full_name');
+      
+      debugPrint('[CommunicationsScreen] Direct fetch returned ${response.length} profiles');
+      
+      _allUsers = (response as List).map((item) {
+        final map = item as Map<String, dynamic>;
+        return UserPresence(
+          odId: map['id'] as String? ?? '',
+          userName: map['full_name'] as String? ?? 'Unknown User',
+          userAvatar: map['avatar_url'] as String?,
+          role: map['role'] as String?,
+          phone: map['phone'] as String?,
+          email: map['email'] as String?,
+          state: map['state'] as String?,
+          hub: map['hub'] as String?,
+          isOnline: false,
+        );
+      }).where((u) => u.odId.isNotEmpty).toList();
+      
+      debugPrint('[CommunicationsScreen] Loaded ${_allUsers.length} users via direct fetch');
+    } catch (e) {
+      debugPrint('[CommunicationsScreen] Error in direct fetch: $e');
+    }
   }
   
   Future<void> _initializeWebRTCService() async {
@@ -678,12 +743,42 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
             Text(
               _searchQuery.isNotEmpty
                   ? 'No users found for "$_searchQuery"'
-                  : 'No users in this category',
+                  : _allUsers.isEmpty
+                      ? 'No contacts available'
+                      : 'No users in this category',
               style: GoogleFonts.poppins(
                 color: Colors.grey[600],
                 fontSize: 16,
+                fontWeight: FontWeight.w500,
               ),
             ),
+            if (_allUsers.isEmpty && _searchQuery.isEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Tap refresh to load contacts',
+                style: GoogleFonts.poppins(
+                  color: Colors.grey[500],
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: _loadUsers,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text(
+                  'Refresh Contacts',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       );
