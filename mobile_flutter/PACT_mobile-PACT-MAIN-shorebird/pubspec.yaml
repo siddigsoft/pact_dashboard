@@ -47,7 +47,7 @@ dependencies:
   cached_network_image: ^3.4.1
   pinput: ^6.0.1
   open_file: ^3.5.10
-  file_picker: ^10.3.3
+  file_picker: ^8.0.0+1
   rxdart: ^0.28.0
   background_fetch: ^1.4.0
   sqflite: ^2.4.2
