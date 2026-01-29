@@ -81,17 +81,18 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       if (currentUserId == null) return;
 
       final supabase = Supabase.instance.client;
+      // Note: Database uses state_id and hub_id columns (not state/hub)
       final profileResponse = await supabase
           .from('profiles')
-          .select('role, state, hub')
+          .select('role, state_id, hub_id')
           .eq('id', currentUserId)
           .maybeSingle();
 
       if (profileResponse != null) {
         setState(() {
           _currentUserRole = profileResponse['role'] as String?;
-          _currentUserState = profileResponse['state'] as String?;
-          _currentUserHub = profileResponse['hub'] as String?;
+          _currentUserState = profileResponse['state_id'] as String?;
+          _currentUserHub = profileResponse['hub_id'] as String?;
         });
         debugPrint('[CommunicationsScreen] Loaded user info: role=$_currentUserRole, state=$_currentUserState, hub=$_currentUserHub');
       }
@@ -283,9 +284,10 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       final supabase = Supabase.instance.client;
       
       // Build query for all users from profiles
+      // Note: Database uses state_id and hub_id columns (not state/hub)
       var query = supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, role, phone, email, state, hub, status');
+          .select('id, full_name, avatar_url, role, phone, email, state_id, hub_id, status');
       
       // Only exclude current user if we have a valid ID
       if (currentUserId != null && currentUserId.isNotEmpty) {
@@ -305,8 +307,8 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
           role: map['role'] as String?,
           phone: map['phone'] as String?,
           email: map['email'] as String?,
-          state: map['state'] as String?,
-          hub: map['hub'] as String?,
+          state: map['state_id'] as String?,
+          hub: map['hub_id'] as String?,
           isOnline: false,
         );
       }).where((u) => u.odId.isNotEmpty).toList();

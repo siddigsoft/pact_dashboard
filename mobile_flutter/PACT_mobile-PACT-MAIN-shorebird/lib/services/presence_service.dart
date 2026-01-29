@@ -214,9 +214,10 @@ class PresenceService {
       final currentUserId = _currentUserId ?? _supabase.auth.currentUser?.id;
 
       // Build query - fetch all users with proper filtering
+      // Note: Database uses state_id and hub_id columns (not state/hub)
       var query = _supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, role, phone, email, state, hub, updated_at, status');
+          .select('id, full_name, avatar_url, role, phone, email, state_id, hub_id, updated_at, status');
       
       // Only exclude current user if we have a valid ID
       if (currentUserId != null && currentUserId.isNotEmpty) {
@@ -238,8 +239,8 @@ class PresenceService {
           role: map['role'] as String?,
           phone: map['phone'] as String?,
           email: map['email'] as String?,
-          state: map['state'] as String?,
-          hub: map['hub'] as String?,
+          state: map['state_id'] as String?,
+          hub: map['hub_id'] as String?,
           isOnline: _onlineUsers.containsKey(odId),
           isInCall: _onlineUsers[odId]?.isInCall ?? false,
         );
