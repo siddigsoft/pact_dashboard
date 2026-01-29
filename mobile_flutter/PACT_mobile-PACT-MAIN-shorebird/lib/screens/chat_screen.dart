@@ -14,6 +14,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:record/record.dart';
+import 'package:uuid/uuid.dart';
 import '../models/chat.dart';
 import '../models/chat_message.dart';
 import '../models/chat_participant.dart';
@@ -41,6 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final AudioRecorder _audioRecorder = AudioRecorder();
   List<ChatMessage> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
@@ -82,6 +85,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
     _recordingTimer?.cancel();
     _audioPlayer.dispose();
+    _audioRecorder.dispose();
     super.dispose();
   }
 
@@ -489,18 +493,197 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _startRecording() async {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Voice messages will be available in the next update. Please use text or photo messages for now.'),
-          duration: Duration(seconds: 3),
+    try {
+      // Check microphone permission
+      final micPermission = await Permission.microphone.request();
+      if (!micPermission.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Microphone permission is required to record voice messages'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check if recorder can record
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unable to access microphone'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get temp directory for recording
+      final directory = await getTemporaryDirectory();
+      final fileName = 'voice_${const Uuid().v4()}.m4a';
+      _recordingPath = '${directory.path}/$fileName';
+
+      // Start recording with AAC encoder
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
         ),
+        path: _recordingPath!,
       );
+
+      setState(() {
+        _isRecording = true;
+        _recordingDuration = Duration.zero;
+      });
+
+      // Start duration timer
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted) {
+          setState(() {
+            _recordingDuration = Duration(seconds: timer.tick);
+          });
+        }
+      });
+
+      debugPrint('[ChatScreen] Voice recording started: $_recordingPath');
+    } catch (e) {
+      debugPrint('[ChatScreen] Error starting recording: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to start recording: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _stopRecording() async {
-    setState(() => _isRecording = false);
+    try {
+      _recordingTimer?.cancel();
+      
+      if (!_isRecording || _recordingPath == null) {
+        if (mounted) setState(() => _isRecording = false);
+        return;
+      }
+
+      // Capture duration before resetting
+      final recordedDuration = _recordingDuration;
+      
+      // Stop recording and get the path
+      final path = await _audioRecorder.stop();
+      
+      if (path != null && path.isNotEmpty) {
+        debugPrint('[ChatScreen] Recording stopped, uploading: $path');
+        
+        // Store duration temporarily for upload
+        _recordingDuration = recordedDuration;
+        
+        // Upload the voice message
+        await _uploadVoiceMessage(path);
+      }
+      
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+          _recordingPath = null;
+          _recordingDuration = Duration.zero;
+        });
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Error stopping recording: $e');
+      if (mounted) {
+        setState(() => _isRecording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save recording: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  Future<void> _uploadVoiceMessage(String filePath) async {
+    try {
+      setState(() => _isSending = true);
+      
+      final file = File(filePath);
+      if (!await file.exists()) {
+        throw Exception('Recording file not found');
+      }
+      
+      final bytes = await file.readAsBytes();
+      final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final storagePath = 'chat_audio/${widget.chat.id}/$fileName';
+      
+      // Upload to Supabase Storage using the same bucket as other attachments
+      await Supabase.instance.client.storage
+          .from('chat-attachments')
+          .uploadBinary(storagePath, bytes, fileOptions: const FileOptions(contentType: 'audio/mp4'));
+      
+      // Get signed URL (same approach as existing file uploads)
+      final signedUrl = await Supabase.instance.client.storage
+          .from('chat-attachments')
+          .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
+      
+      // Send as audio message
+      final durationSeconds = _recordingDuration.inSeconds;
+      final metadata = {
+        'duration': durationSeconds,
+        'mimeType': 'audio/mp4',
+        'fileName': fileName,
+        'storagePath': storagePath,
+      };
+      
+      await _chatService.sendMessage(
+        chatId: widget.chat.id,
+        content: 'Voice message (${_formatDuration(_recordingDuration)})',
+        messageType: 'audio',
+        attachmentUrl: signedUrl,
+        metadata: metadata,
+      );
+      
+      // Delete temp file
+      try {
+        await file.delete();
+      } catch (e) {
+        debugPrint('[ChatScreen] Failed to delete temp file: $e');
+      }
+      
+      debugPrint('[ChatScreen] Voice message uploaded successfully');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Voice message sent'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Error uploading voice message: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send voice message: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
+    }
   }
 
   Future<void> _cancelRecording() async {
