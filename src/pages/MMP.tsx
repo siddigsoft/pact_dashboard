@@ -4571,7 +4571,10 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : (
-                  <WorkflowTrackerTab mmpFiles={mmpFiles} />
+                  <WorkflowTrackerTab 
+                    mmpFiles={mmpFiles} 
+                    coordinators={coordinatorsList.map(c => ({ id: c.id, name: c.fullName || c.email || 'Unknown' }))}
+                  />
                 )}
               </TabsContent>
             )}
