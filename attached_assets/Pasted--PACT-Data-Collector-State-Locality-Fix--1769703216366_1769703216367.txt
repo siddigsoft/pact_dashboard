@@ -1,0 +1,141 @@
+-- =====================================================
+-- PACT Data Collector State/Locality Fix Script
+-- =====================================================
+
+-- STEP 1: View all mismatched profiles (preview before fix)
+SELECT 
+  id, 
+  full_name, 
+  role,
+  state_id, 
+  locality_id, 
+  hub_id,
+  CASE 
+    WHEN locality_id LIKE 'rn-%' THEN 'river-nile'
+    WHEN locality_id LIKE 'no-%' THEN 'northern'
+    WHEN locality_id LIKE 'kh-%' THEN 'khartoum'
+    WHEN locality_id LIKE 'gz-%' THEN 'gezira'
+    WHEN locality_id LIKE 'rs-%' THEN 'red-sea'
+    WHEN locality_id LIKE 'ks-%' THEN 'kassala'
+    WHEN locality_id LIKE 'gd-%' THEN 'gedarif'
+    WHEN locality_id LIKE 'wn-%' THEN 'white-nile'
+    WHEN locality_id LIKE 'bn-%' THEN 'blue-nile'
+    WHEN locality_id LIKE 'sn-%' THEN 'sennar'
+    WHEN locality_id LIKE 'nk-%' THEN 'north-kordofan'
+    WHEN locality_id LIKE 'sk-%' THEN 'south-kordofan'
+    WHEN locality_id LIKE 'wk-%' THEN 'west-kordofan'
+    WHEN locality_id LIKE 'nd-%' THEN 'north-darfur'
+    WHEN locality_id LIKE 'sd-%' THEN 'south-darfur'
+    WHEN locality_id LIKE 'wd-%' THEN 'west-darfur'
+    WHEN locality_id LIKE 'ed-%' THEN 'east-darfur'
+    WHEN locality_id LIKE 'cd-%' THEN 'central-darfur'
+    ELSE NULL
+  END AS correct_state_id
+FROM profiles
+WHERE locality_id IS NOT NULL 
+  AND state_id IS NOT NULL
+  AND (
+    (locality_id LIKE 'rn-%' AND state_id != 'river-nile') OR
+    (locality_id LIKE 'no-%' AND state_id != 'northern') OR
+    (locality_id LIKE 'kh-%' AND state_id != 'khartoum') OR
+    (locality_id LIKE 'gz-%' AND state_id != 'gezira') OR
+    (locality_id LIKE 'rs-%' AND state_id != 'red-sea') OR
+    (locality_id LIKE 'ks-%' AND state_id != 'kassala') OR
+    (locality_id LIKE 'gd-%' AND state_id != 'gedarif') OR
+    (locality_id LIKE 'wn-%' AND state_id != 'white-nile') OR
+    (locality_id LIKE 'bn-%' AND state_id != 'blue-nile') OR
+    (locality_id LIKE 'sn-%' AND state_id != 'sennar') OR
+    (locality_id LIKE 'nk-%' AND state_id != 'north-kordofan') OR
+    (locality_id LIKE 'sk-%' AND state_id != 'south-kordofan') OR
+    (locality_id LIKE 'wk-%' AND state_id != 'west-kordofan') OR
+    (locality_id LIKE 'nd-%' AND state_id != 'north-darfur') OR
+    (locality_id LIKE 'sd-%' AND state_id != 'south-darfur') OR
+    (locality_id LIKE 'wd-%' AND state_id != 'west-darfur') OR
+    (locality_id LIKE 'ed-%' AND state_id != 'east-darfur') OR
+    (locality_id LIKE 'cd-%' AND state_id != 'central-darfur')
+  )
+ORDER BY state_id, locality_id;
+
+-- =====================================================
+-- STEP 2: Fix state_id based on locality_id prefix
+-- Run this AFTER reviewing the results above
+-- =====================================================
+
+UPDATE profiles
+SET state_id = CASE 
+    WHEN locality_id LIKE 'rn-%' THEN 'river-nile'
+    WHEN locality_id LIKE 'no-%' THEN 'northern'
+    WHEN locality_id LIKE 'kh-%' THEN 'khartoum'
+    WHEN locality_id LIKE 'gz-%' THEN 'gezira'
+    WHEN locality_id LIKE 'rs-%' THEN 'red-sea'
+    WHEN locality_id LIKE 'ks-%' THEN 'kassala'
+    WHEN locality_id LIKE 'gd-%' THEN 'gedarif'
+    WHEN locality_id LIKE 'wn-%' THEN 'white-nile'
+    WHEN locality_id LIKE 'bn-%' THEN 'blue-nile'
+    WHEN locality_id LIKE 'sn-%' THEN 'sennar'
+    WHEN locality_id LIKE 'nk-%' THEN 'north-kordofan'
+    WHEN locality_id LIKE 'sk-%' THEN 'south-kordofan'
+    WHEN locality_id LIKE 'wk-%' THEN 'west-kordofan'
+    WHEN locality_id LIKE 'nd-%' THEN 'north-darfur'
+    WHEN locality_id LIKE 'sd-%' THEN 'south-darfur'
+    WHEN locality_id LIKE 'wd-%' THEN 'west-darfur'
+    WHEN locality_id LIKE 'ed-%' THEN 'east-darfur'
+    WHEN locality_id LIKE 'cd-%' THEN 'central-darfur'
+    ELSE state_id
+  END
+WHERE locality_id IS NOT NULL 
+  AND (
+    (locality_id LIKE 'rn-%' AND state_id != 'river-nile') OR
+    (locality_id LIKE 'no-%' AND state_id != 'northern') OR
+    (locality_id LIKE 'kh-%' AND state_id != 'khartoum') OR
+    (locality_id LIKE 'gz-%' AND state_id != 'gezira') OR
+    (locality_id LIKE 'rs-%' AND state_id != 'red-sea') OR
+    (locality_id LIKE 'ks-%' AND state_id != 'kassala') OR
+    (locality_id LIKE 'gd-%' AND state_id != 'gedarif') OR
+    (locality_id LIKE 'wn-%' AND state_id != 'white-nile') OR
+    (locality_id LIKE 'bn-%' AND state_id != 'blue-nile') OR
+    (locality_id LIKE 'sn-%' AND state_id != 'sennar') OR
+    (locality_id LIKE 'nk-%' AND state_id != 'north-kordofan') OR
+    (locality_id LIKE 'sk-%' AND state_id != 'south-kordofan') OR
+    (locality_id LIKE 'wk-%' AND state_id != 'west-kordofan') OR
+    (locality_id LIKE 'nd-%' AND state_id != 'north-darfur') OR
+    (locality_id LIKE 'sd-%' AND state_id != 'south-darfur') OR
+    (locality_id LIKE 'wd-%' AND state_id != 'west-darfur') OR
+    (locality_id LIKE 'ed-%' AND state_id != 'east-darfur') OR
+    (locality_id LIKE 'cd-%' AND state_id != 'central-darfur')
+  );
+
+-- =====================================================
+-- STEP 3: Fix hub_id based on corrected state_id
+-- =====================================================
+
+UPDATE profiles
+SET hub_id = CASE 
+    -- Country Office (Khartoum, Red Sea)
+    WHEN state_id IN ('khartoum', 'red-sea') THEN 'country-office'
+    -- Dongola Hub (Northern, River Nile)
+    WHEN state_id IN ('northern', 'river-nile') THEN 'dongola-hub'
+    -- Forchana Hub (West Darfur, Central Darfur)
+    WHEN state_id IN ('west-darfur', 'central-darfur') THEN 'forchana-hub'
+    -- Kassala Hub (Kassala, Gedarif, Gezira, Sennar, Blue Nile)
+    WHEN state_id IN ('kassala', 'gedarif', 'gezira', 'sennar', 'blue-nile') THEN 'kassala-hub'
+    -- Kosti Hub (White Nile, Kordofan states, North/South/East Darfur)
+    WHEN state_id IN ('white-nile', 'north-kordofan', 'south-kordofan', 'west-kordofan', 
+                      'north-darfur', 'south-darfur', 'east-darfur') THEN 'kosti-hub'
+    ELSE hub_id
+  END
+WHERE state_id IS NOT NULL AND hub_id IS NULL;
+
+-- =====================================================
+-- STEP 4: Verify the fix - Run after update
+-- =====================================================
+
+SELECT 
+  state_id,
+  hub_id,
+  COUNT(*) as collector_count,
+  array_agg(DISTINCT locality_id) as localities
+FROM profiles
+WHERE role IN ('dataCollector', 'datacollector', 'coordinator')
+GROUP BY state_id, hub_id
+ORDER BY state_id;
