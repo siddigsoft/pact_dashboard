@@ -100,9 +100,10 @@ final pendingCostSubmissionsProvider = FutureProvider.autoDispose<List<CostSubmi
   
   try {
     // Fetch pending cost submissions for approvers
+    // Note: Database uses state_id and hub_id columns (not state/hub)
     final profileResponse = await supabase
         .from('profiles')
-        .select('role, state, hub')
+        .select('role, state_id, hub_id')
         .eq('id', currentUserId)
         .maybeSingle();
     

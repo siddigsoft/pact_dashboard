@@ -89,10 +89,12 @@ class _FieldTeamMapScreenState extends State<FieldTeamMapScreen> {
 
   Future<void> _loadTeamLocations() async {
     try {
+      // Note: Database uses state_id, hub_id, location (jsonb), and status columns
+      // location column stores lat/lng as JSON: {lat: number, lng: number, timestamp: string}
       final response = await Supabase.instance.client
           .from('profiles')
-          .select('id, full_name, email, role, avatar_url, last_location_lat, last_location_lng, last_location_updated, state, hub, is_active, location_sharing')
-          .eq('is_active', true)
+          .select('id, full_name, email, role, avatar_url, location, state_id, hub_id, status, location_sharing')
+          .not('status', 'eq', 'pending')
           .not('role', 'eq', 'admin')
           .not('role', 'eq', 'super_admin');
 
