@@ -32,6 +32,7 @@ import { useUser } from "@/context/user/UserContext";
 import { useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useToast } from "@/hooks/use-toast";
 import { AppRole } from "@/types";
+import { CostSubmissionSignature } from "@/components/cost-submission/CostSubmissionSignature";
 
 interface CostSubmissionHistoryProps {
   submissions: SiteVisitCostSubmission[];
@@ -621,7 +622,28 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                     </div>
                   </div>
                 </div>
-                {getStatusBadge(submission.status)}
+                <div className="flex items-center gap-2">
+                  {getStatusBadge(submission.status)}
+                  {canApprove && currentUser && (submission.status === 'pending' || submission.status === 'under_review') && (
+                    <CostSubmissionSignature
+                      submission={{
+                        id: submission.id,
+                        type: 'site_visit_cost',
+                        amount: submission.totalCostCents / 100,
+                        currency: submission.currency || 'SDG',
+                        description: submission.submissionNotes || `Cost submission for site visit`,
+                        status: submission.status,
+                        signatureStatus: (submission as any).signatureStatus,
+                      }}
+                      userId={currentUser.id}
+                      userName={currentUser.name || currentUser.email || 'User'}
+                      userEmail={currentUser.email}
+                      userRole={currentUser.role}
+                      isApprover={canApprove}
+                      showBadgeOnly
+                    />
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
