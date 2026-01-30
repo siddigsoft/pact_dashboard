@@ -54,7 +54,7 @@ class SignatureConfirmationDialog extends StatefulWidget {
   final String? userRole;
   final List<SignatureMethod> allowedMethods;
   final bool isArabic;
-  final Future<SignatureResult> Function(SignatureMethod method, String? signatureData, String? otpCode) onSign;
+  final Future<SignatureResult> Function(SignatureMethod method, String? signatureData, String? otpCode) onSignatureComplete;
 
   const SignatureConfirmationDialog({
     super.key,
@@ -66,7 +66,7 @@ class SignatureConfirmationDialog extends StatefulWidget {
     this.userRole,
     this.allowedMethods = const [SignatureMethod.uuid, SignatureMethod.handwriting],
     this.isArabic = false,
-    required this.onSign,
+    required this.onSignatureComplete,
   });
 
   @override
@@ -156,7 +156,7 @@ class _SignatureConfirmationDialogState extends State<SignatureConfirmationDialo
     setState(() => _isSubmitting = true);
 
     try {
-      final result = await widget.onSign(
+      final result = await widget.onSignatureComplete(
         _selectedMethod,
         _signatureData,
         _otpCode.isNotEmpty ? _otpCode : null,
