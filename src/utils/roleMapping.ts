@@ -9,11 +9,15 @@
 export type RoleCode = 
   | 'superAdmin'
   | 'admin'
+  | 'countryDirector'
   | 'ict'
   | 'fom'
   | 'financialAdmin'
+  | 'projectManager'
+  | 'seniorOperationsLead'
   | 'supervisor'
   | 'coordinator'
+  | 'dataTeam'
   | 'dataCollector'
   | 'reviewer';
 
@@ -21,11 +25,15 @@ export type RoleCode =
 export type RoleLabel =
   | 'Super Admin'
   | 'Admin'
+  | 'Country Director'
   | 'ICT'
   | 'Field Operation Manager (FOM)'
   | 'FinancialAdmin'
+  | 'Project Manager'
+  | 'Senior Operations Lead'
   | 'Supervisor'
   | 'Coordinator'
+  | 'Data Team'
   | 'DataCollector'
   | 'Reviewer';
 
@@ -50,6 +58,11 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     label: 'Admin',
     legacy: ['Admin', 'admin']
   },
+  countryDirector: {
+    code: 'countryDirector',
+    label: 'Country Director',
+    legacy: ['CountryDirector', 'countryDirector', 'country_director', 'Country Director']
+  },
   ict: {
     code: 'ict',
     label: 'ICT',
@@ -65,6 +78,16 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     label: 'FinancialAdmin',
     legacy: ['FinancialAdmin', 'financialAdmin', 'financial_admin']
   },
+  projectManager: {
+    code: 'projectManager',
+    label: 'Project Manager',
+    legacy: ['ProjectManager', 'projectManager', 'project_manager', 'Project Manager']
+  },
+  seniorOperationsLead: {
+    code: 'seniorOperationsLead',
+    label: 'Senior Operations Lead',
+    legacy: ['SeniorOperationsLead', 'seniorOperationsLead', 'senior_operations_lead', 'Senior Operations Lead']
+  },
   supervisor: {
     code: 'supervisor',
     label: 'Supervisor',
@@ -74,6 +97,11 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
     code: 'coordinator',
     label: 'Coordinator',
     legacy: ['Coordinator', 'coordinator']
+  },
+  dataTeam: {
+    code: 'dataTeam',
+    label: 'Data Team',
+    legacy: ['DataTeam', 'dataTeam', 'data_team', 'Data Team']
   },
   dataCollector: {
     code: 'dataCollector',
