@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import { DEFAULT_CURRENCY } from '@/types/wallet';
+import { WalletSignatureIntegration } from '@/components/wallet/WalletSignatureIntegration';
 
 const formatCurrency = (amount: number, currency: string = DEFAULT_CURRENCY) => {
   return new Intl.NumberFormat('en-SD', {
@@ -1102,8 +1103,27 @@ const WalletPage = () => {
                     {displayWithdrawals.map((request) => (
                       <div key={request.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
                         <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {getWithdrawalStatusBadge(request.status)}
+                            {currentUser && (request.status === 'pending' || request.status === 'supervisor_approved') && (
+                              <WalletSignatureIntegration
+                                transaction={{
+                                  id: request.id,
+                                  walletId: wallet?.id,
+                                  type: 'withdrawal',
+                                  amount: request.amount,
+                                  currency: request.currency || DEFAULT_CURRENCY,
+                                  description: request.requestReason,
+                                  createdAt: request.createdAt,
+                                  signatureStatus: (request as any).signatureStatus,
+                                }}
+                                userId={currentUser.id}
+                                userName={currentUser.name || currentUser.email || 'User'}
+                                userEmail={currentUser.email}
+                                userRole={currentUser.role}
+                                showBadgeOnly
+                              />
+                            )}
                           </div>
                           <div className="text-right">
                             <p className="text-lg font-bold tabular-nums text-slate-200">
@@ -1170,7 +1190,30 @@ const WalletPage = () => {
                       <TableBody>
                         {displayWithdrawals.map((request) => (
                           <TableRow key={request.id} data-testid={`row-withdrawal-${request.id}`}>
-                            <TableCell>{getWithdrawalStatusBadge(request.status)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {getWithdrawalStatusBadge(request.status)}
+                                {currentUser && (request.status === 'pending' || request.status === 'supervisor_approved') && (
+                                  <WalletSignatureIntegration
+                                    transaction={{
+                                      id: request.id,
+                                      walletId: wallet?.id,
+                                      type: 'withdrawal',
+                                      amount: request.amount,
+                                      currency: request.currency || DEFAULT_CURRENCY,
+                                      description: request.requestReason,
+                                      createdAt: request.createdAt,
+                                      signatureStatus: (request as any).signatureStatus,
+                                    }}
+                                    userId={currentUser.id}
+                                    userName={currentUser.name || currentUser.email || 'User'}
+                                    userEmail={currentUser.email}
+                                    userRole={currentUser.role}
+                                    showBadgeOnly
+                                  />
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell className="font-semibold tabular-nums">
                               {formatCurrency(request.amount, request.currency)}
                             </TableCell>
