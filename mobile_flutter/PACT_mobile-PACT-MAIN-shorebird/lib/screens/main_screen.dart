@@ -27,8 +27,10 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   StreamSubscription<CallState>? _callStateSubscription;
+  StreamSubscription? _connectivitySubscription;
   bool _isCoordinator = false;
   bool _isLoadingRole = true;
+  bool _servicesInitialized = false;
 
   @override
   void initState() {
@@ -36,10 +38,24 @@ class _MainScreenState extends State<MainScreen> {
     _checkUserRole();
     _initializeWebRTC();
     _showWhatsNewIfNeeded();
+    _setupConnectivityListener();
     
     // Check for active call from notification tap after a short delay
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkForActiveCall();
+    });
+  }
+  
+  /// Listen for connectivity changes to initialize presence when internet becomes available
+  void _setupConnectivityListener() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) async {
+      final hasInternet = !results.contains(ConnectivityResult.none);
+      
+      if (hasInternet && !_servicesInitialized) {
+        debugPrint('🌐 Internet connection restored - initializing WebRTC/Presence');
+        await _initializeWebRTC();
+      }
     });
   }
   
@@ -74,6 +90,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     _callStateSubscription?.cancel();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
@@ -232,6 +249,9 @@ class _MainScreenState extends State<MainScreen> {
       );
 
       debugPrint('✅ Presence service initialized for user: $userName');
+      
+      // Mark services as initialized so connectivity listener doesn't re-initialize
+      _servicesInitialized = true;
 
       // Listen for incoming calls
       _callStateSubscription = WebRTCService().callStateStream.listen((state) {
