@@ -7,7 +7,6 @@ import { useAuditLog } from "@/hooks/use-audit-log";
 import { SupportingDocument } from "@/types/cost-submission";
 import { TransferReceiptDetails } from "@/types/receipt-details";
 import { supabase } from "@/integrations/supabase/client";
-import { safeUploadFile } from "@/lib/safeUpload";
 import { useUser } from "@/context/user/UserContext";
 import { ReceiptDetailsDialog } from "./ReceiptDetailsDialog";
 import { 
@@ -72,29 +71,50 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
 
     try {
       const uploadedDocs: ExtendedSupportingDocument[] = [];
+      const maxFileSize = 10 * 1024 * 1024; // 10MB
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // Use the safe upload utility with connection testing and better error handling
-        const uploadResult = await safeUploadFile(file, {
-          bucket: 'uploads',
-          path: 'cost-receipts',
-          maxSizeBytes: 10 * 1024 * 1024, // 10MB max
-          allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']
-        });
-
-        if (!uploadResult.success) {
-          console.error('Upload error:', uploadResult.error);
-          throw new Error(uploadResult.error || `Failed to upload ${file.name}`);
+        // Quick validation
+        if (file.size > maxFileSize) {
+          throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
         }
+        if (!allowedTypes.includes(file.type)) {
+          throw new Error(`File type "${file.type}" is not allowed.`);
+        }
+        
+        // Generate safe filename - remove special characters
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = file.name.split('.').pop()?.toLowerCase() || 'file';
+        const safeFileName = `${timestamp}_${random}.${extension}`;
+        const filePath = `cost-receipts/${safeFileName}`;
+
+        // Direct upload without connection test for speed
+        const { data, error } = await supabase.storage
+          .from('uploads')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) {
+          console.error('Upload error:', error);
+          throw new Error(`Failed to upload ${file.name}: ${error.message}`);
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from('uploads')
+          .getPublicUrl(filePath);
 
         const isImage = file.type.startsWith('image/');
         const isPDF = file.type === 'application/pdf';
         const documentType = isImage ? 'receipt_photo' : isPDF ? 'receipt_pdf' : 'other';
 
         const newDoc: ExtendedSupportingDocument = {
-          url: uploadResult.url!,
+          url: publicUrlData.publicUrl,
           type: documentType,
           filename: file.name,
           uploadedAt: new Date().toISOString(),
