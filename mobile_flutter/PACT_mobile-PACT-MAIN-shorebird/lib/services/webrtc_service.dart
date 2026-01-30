@@ -413,12 +413,22 @@ class WebRTCService {
       debugPrint('[WebRTC] Signaling channel not ready, attempting to reconnect...');
       try {
         await _setupSignalingChannel();
-        // Wait briefly for subscription to complete
-        await Future.delayed(const Duration(milliseconds: 500));
+        
+        // Wait for subscription to complete with polling (up to 3 seconds)
+        int attempts = 0;
+        const maxAttempts = 6;
+        while (!_signalingChannelReady && attempts < maxAttempts) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          attempts++;
+          debugPrint('[WebRTC] Waiting for signaling channel... attempt $attempts/$maxAttempts');
+        }
+        
         if (!_signalingChannelReady) {
+          debugPrint('[WebRTC] Signaling channel still not ready after $maxAttempts attempts');
           _errorController.add('Connection not ready. Please check your internet and try again.');
           return false;
         }
+        debugPrint('[WebRTC] Signaling channel ready after $attempts attempts');
       } catch (e) {
         debugPrint('[WebRTC] Failed to setup signaling channel: $e');
         _errorController.add('Connection error. Please check your internet and try again.');

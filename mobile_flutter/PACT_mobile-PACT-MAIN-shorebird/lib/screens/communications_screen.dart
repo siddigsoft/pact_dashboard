@@ -490,6 +490,7 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     // Ensure WebRTC is initialized before making call
     if (!_webrtcService.isInitialized) {
       debugPrint('[CommunicationsScreen] WebRTC not initialized, initializing now...');
+      _showMessage('Connecting call service...', isError: false);
       await _initializeWebRTCService();
       
       // Check again after initialization
@@ -499,11 +500,12 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
       }
     }
     
-    // Check if signaling channel is ready for calls
+    // If signaling not ready, let initiateCall handle the setup/retry internally
+    // initiateCall has built-in logic to setup signaling if not ready
     if (!_webrtcService.isSignalingReady) {
-      debugPrint('[CommunicationsScreen] Signaling channel not ready');
-      _showMessage('Connecting... Please wait a moment and try again.', isError: true);
-      return;
+      debugPrint('[CommunicationsScreen] Signaling channel not ready, initiateCall will handle setup');
+      _showMessage('Connecting...', isError: false);
+      // Don't block here - let initiateCall attempt to setup signaling
     }
     
     final success = await _webrtcService.initiateCall(
@@ -661,6 +663,36 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
         ],
       ),
       actions: [
+        // Call readiness indicator
+        Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: _webrtcService.isFullyReady 
+                ? Colors.green.withOpacity(0.2) 
+                : Colors.orange.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _webrtcService.isFullyReady ? Icons.phone_enabled : Icons.phone_disabled,
+                color: _webrtcService.isFullyReady ? Colors.greenAccent : Colors.orangeAccent,
+                size: 14,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _webrtcService.isFullyReady ? 'Ready' : 'Connecting',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
         IconButton(
           icon: const Icon(Icons.refresh, color: Colors.white),
           onPressed: _loadUsers,
