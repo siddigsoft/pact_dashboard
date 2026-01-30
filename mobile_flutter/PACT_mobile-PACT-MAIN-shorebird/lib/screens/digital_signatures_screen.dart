@@ -7,6 +7,10 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import '../theme/app_colors.dart';
 import '../widgets/custom_drawer_menu.dart';
+import '../widgets/signature_pad_widget.dart';
+import '../widgets/signature_verification_badge.dart';
+import '../widgets/signature_confirmation_dialog.dart';
+import '../widgets/signature_history_widget.dart';
 
 class DigitalSignaturesScreen extends StatefulWidget {
   const DigitalSignaturesScreen({super.key});
