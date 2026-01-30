@@ -545,7 +545,7 @@ class WebRTCService {
       // Setup local media
       await _setupLocalMedia(isAudioOnly: _callState.isAudioOnly);
 
-      // Send accept signal
+      // Send accept signal - caller will create and send the offer
       await _sendSignalWithRetry(
         CallSignal(
           type: CallSignalType.callAccept,
@@ -558,9 +558,9 @@ class WebRTCService {
         ),
       );
 
-      // Create peer connection and send offer
-      await _createPeerConnection();
-      await _createOffer();
+      // DO NOT create offer here - wait for caller to send offer
+      // The caller will create the offer after receiving our callAccept signal
+      debugPrint('[WebRTC] Call accepted, waiting for offer from caller...');
     } catch (e) {
       debugPrint('[WebRTC] Error accepting call: $e');
       _errorController.add('Failed to accept call: ${e.toString()}');
