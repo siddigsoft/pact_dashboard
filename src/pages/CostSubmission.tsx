@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield } from "lucide-react";
+import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, Briefcase } from "lucide-react";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
@@ -13,6 +13,7 @@ import { useUserProjects } from "@/hooks/useUserProjects";
 import { AppRole } from "@/types";
 import CostSubmissionForm from "@/components/cost-submission/CostSubmissionForm";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
+import OperationalCostForm from "@/components/cost-submission/OperationalCostForm";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const CostSubmission = () => {
@@ -29,11 +30,29 @@ const CostSubmission = () => {
                        currentUser?.role === 'hubSupervisor' || 
                        currentUser?.role === 'supervisor';
   
-  // Admins and supervisors can see team submissions and approval status
-  const canViewTeamSubmissions = isAdmin || isSupervisor;
+  // Check if user is FOM or Coordinator (can submit operational costs)
+  const isFOM = roles?.includes('Field Operation Manager (FOM)' as AppRole) || 
+                currentUser?.role === 'Field Operation Manager (FOM)';
+  const isCoordinator = roles?.includes('Coordinator' as AppRole) || 
+                        currentUser?.role === 'Coordinator' ||
+                        currentUser?.role === 'coordinator';
+  const canSubmitOperationalCosts = isFOM || isCoordinator || isAdmin;
   
-  // Admins and supervisors default to history tab (they review), data collectors default to submit tab
-  const [activeTab, setActiveTab] = useState<"submit" | "history">(canViewTeamSubmissions ? "history" : "submit");
+  // Check if user is Country Director (oversight only)
+  const isCountryDirector = roles?.includes('CountryDirector' as AppRole) || 
+                            currentUser?.role === 'CountryDirector';
+  
+  // Admins and supervisors can see team submissions and approval status
+  const canViewTeamSubmissions = isAdmin || isSupervisor || isCountryDirector;
+  
+  // Determine default tab based on role
+  const getDefaultTab = () => {
+    if (canViewTeamSubmissions) return "history";
+    if (canSubmitOperationalCosts && !isSupervisor) return "operational";
+    return "submit";
+  };
+  
+  const [activeTab, setActiveTab] = useState<"submit" | "operational" | "history">(getDefaultTab());
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
   // - Admins/Supervisors: Fetch all submissions (enabled), skip user-specific query (empty userId)
@@ -280,16 +299,22 @@ const CostSubmission = () => {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           {!canViewTeamSubmissions && (
             <TabsTrigger value="submit" data-testid="tab-submit">
               <Plus className="h-4 w-4 mr-2" />
-              Submit Costs
+              Site Visit Costs
+            </TabsTrigger>
+          )}
+          {canSubmitOperationalCosts && (
+            <TabsTrigger value="operational" data-testid="tab-operational">
+              <Receipt className="h-4 w-4 mr-2" />
+              Operational Costs
             </TabsTrigger>
           )}
           <TabsTrigger value="history" data-testid="tab-history">
             <Clock className="h-4 w-4 mr-2" />
-            {isAdmin ? "All Submissions" : isSupervisor ? "Team Submissions" : "My Submissions"}
+            {isAdmin ? "All Submissions" : isSupervisor ? "Team Submissions" : isCountryDirector ? "Overview" : "My Submissions"}
           </TabsTrigger>
         </TabsList>
 
@@ -316,6 +341,14 @@ const CostSubmission = () => {
             ) : (
               <CostSubmissionForm siteVisits={availableSiteVisits} />
             )}
+          </TabsContent>
+        )}
+
+        {canSubmitOperationalCosts && (
+          <TabsContent value="operational" className="space-y-4">
+            <OperationalCostForm 
+              onSuccess={() => setActiveTab("history")}
+            />
           </TabsContent>
         )}
 

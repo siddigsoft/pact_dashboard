@@ -2,6 +2,7 @@
 export type AppRole = 
   | 'SuperAdmin'
   | 'Admin'
+  | 'CountryDirector'
   | 'ICT'
   | 'Field Operation Manager (FOM)'
   | 'FinancialAdmin'
@@ -197,6 +198,32 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     // Audit logs - can read
     { resource: 'audit_logs', action: 'read' },
     // NOTE: Admin cannot: manage super_admins, delete audit_logs, restore records, override system, delete wallets
+  ],
+  // Country Director: Operations oversight role - READ ONLY, no approvals
+  // Position: Above FOM, below Admin. Focus on monitoring and oversight.
+  CountryDirector: [
+    // Users - read only
+    { resource: 'users', action: 'read' },
+    // Roles - read only
+    { resource: 'roles', action: 'read' },
+    // Permissions - read only
+    { resource: 'permissions', action: 'read' },
+    // Projects - read only
+    { resource: 'projects', action: 'read' },
+    // MMP - read only
+    { resource: 'mmp', action: 'read' },
+    // Site visits - read only
+    { resource: 'site_visits', action: 'read' },
+    // Finances - read only (oversight, no approvals)
+    { resource: 'finances', action: 'read' },
+    // Reports - read only (oversight)
+    { resource: 'reports', action: 'read' },
+    // Settings - read only
+    { resource: 'settings', action: 'read' },
+    // Wallets - read only (oversight)
+    { resource: 'wallets', action: 'read' },
+    // Audit logs - read (for compliance oversight)
+    { resource: 'audit_logs', action: 'read' },
   ],
   ICT: [
     { resource: 'users', action: 'create' },
