@@ -13,6 +13,28 @@ export interface RoleTemplate {
 
 export const roleTemplates: RoleTemplate[] = [
   {
+    id: 'country_director',
+    name: 'Country Director',
+    displayName: 'Country Director',
+    description: 'Senior leadership role for operations oversight. Monitors all field operations, projects, finances, and team activities. Read-only access for oversight purposes - no approval authority.',
+    category: 'administrative',
+    icon: 'Eye',
+    recommended: true,
+    permissions: [
+      { resource: 'users', action: 'read' },
+      { resource: 'roles', action: 'read' },
+      { resource: 'permissions', action: 'read' },
+      { resource: 'projects', action: 'read' },
+      { resource: 'mmp', action: 'read' },
+      { resource: 'site_visits', action: 'read' },
+      { resource: 'finances', action: 'read' },
+      { resource: 'reports', action: 'read' },
+      { resource: 'settings', action: 'read' },
+      { resource: 'wallets', action: 'read' },
+      { resource: 'audit_logs', action: 'read' },
+    ],
+  },
+  {
     id: 'project_manager',
     name: 'Project Manager',
     displayName: 'Project Manager',
