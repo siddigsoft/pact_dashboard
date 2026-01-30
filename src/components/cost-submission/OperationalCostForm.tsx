@@ -147,7 +147,9 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
         </CardTitle>
         <CardDescription>
           Submit operational expenses for permits, training, communications, and other field operation costs.
-          All submissions require two-tier approval (Supervisor/FOM, then Admin).
+          {currentUser?.role === 'country_director' 
+            ? ' Submissions require two-tier approval (Admin, then Super Admin).'
+            : ' Submissions require two-tier approval (Supervisor/FOM, then Admin).'}
         </CardDescription>
       </CardHeader>
 
