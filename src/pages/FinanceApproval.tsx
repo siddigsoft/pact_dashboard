@@ -49,6 +49,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { FinanceApprovalSignature, SignatureRequirementAlert } from '@/components/finance/FinanceSignatureIntegration';
 
 export default function FinanceApproval() {
   const { adminListWithdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
@@ -776,6 +777,11 @@ export default function FinanceApproval() {
           </CardDescription>
         </CardHeader>
       </Card>
+
+      <SignatureRequirementAlert 
+        pendingCount={supervisorApprovedRequests.length} 
+        requiresSignature={true}
+      />
 
       <Tabs defaultValue="ready" className="space-y-4">
         <TabsList className="w-full sm:w-auto grid grid-cols-4 sm:inline-flex">
