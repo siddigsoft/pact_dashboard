@@ -14,81 +14,85 @@ interface RoleSelectionProps {
 const RoleSelection = ({ role, onRoleChange, isManagementTab }: RoleSelectionProps) => {
   const roles = isManagementTab ? [
     {
-  value: 'Admin',
+      value: 'Admin',
       title: 'System Administrator',
       description: [
         'Full system access and configuration control',
         'Manage user roles and permissions',
-        'Monitor system performance and security',
-        'Oversee system updates and maintenance',
-        'Provide technical support and troubleshooting'
+        'Oversee system updates and maintenance'
       ]
     },
     {
-  value: 'ICT',
+      value: 'CountryDirector',
+      title: 'Country Director',
+      description: [
+        'Senior leadership oversight across all operations',
+        'Monitor field activities, finances, and team performance',
+        'Submit operational costs for admin approval'
+      ]
+    },
+    {
+      value: 'ICT',
       title: 'ICT Team Member',
       description: [
-        'Maintain and optimize technical infrastructure',
-        'Implement robust data security measures',
+        'Maintain technical infrastructure and security',
         'Manage system integrations and APIs',
-        'Support mobile and web application deployment',
-        'Handle technical incident response'
+        'Support application deployment'
       ]
     },
     {
-  value: 'Supervisor',
+      value: 'Supervisor',
       title: 'Regional Supervisor',
       description: [
-        'Oversee all operations within assigned hub region',
-        'Manage and coordinate field teams across multiple states',
-        'Ensure compliance with procedures and standards',
-        'Review and validate collected data',
-        'Generate comprehensive performance reports'
+        'Oversee operations within assigned hub region',
+        'Manage and coordinate field teams',
+        'Review and validate collected data'
       ]
     },
     {
-  value: 'Field Operation Manager (FOM)',
+      value: 'Field Operation Manager (FOM)',
       title: 'Field Operations Manager',
       description: [
         'Strategic planning of field operations',
-        'Resource allocation and team optimization',
         'Quality control and performance monitoring',
-        'Stakeholder communication and reporting',
-        'Process improvement and standardization'
+        'Submit operational costs and reports'
       ]
     },
     {
-  value: 'FinancialAdmin',
+      value: 'FinancialAdmin',
       title: 'Financial Administrator',
       description: [
         'Manage budgets and financial operations',
-        'Process payments and expense reports',
-        'Monitor financial compliance',
-        'Generate financial analytics and forecasts',
-        'Coordinate with external financial partners'
+        'Process payments and approve expenses',
+        'Generate financial analytics'
+      ]
+    },
+    {
+      value: 'DataTeam',
+      title: 'Data Team',
+      description: [
+        'Analytics and reporting focus',
+        'View projects, MMPs, site visits, and finances',
+        'Create and export reports for analysis'
       ]
     }
   ] : [
     {
-  value: 'DataCollector',
+      value: 'DataCollector',
       title: 'Data Collector',
       description: [
         'Conduct on-site data collection and verification',
-        'Document site conditions and gather required information',
         'Use mobile tools for real-time data capture',
-        'Submit accurate and timely site visit reports',
-        'Follow assigned schedules and location-based tasks'
+        'Submit site visit reports and cost submissions'
       ]
     },
     {
-  value: 'Coordinator',
+      value: 'Coordinator',
       title: 'Coordinator',
       description: [
         'Manage and oversee data collection teams',
-        'Review and validate submitted data',
         'Coordinate site visit schedules and assignments',
-        'Ensure quality control of collected information',
-        'Provide support and guidance to data collectors'
+        'Submit operational costs and reports'
       ]
     }
   ];

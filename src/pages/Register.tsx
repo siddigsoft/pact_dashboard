@@ -44,7 +44,7 @@ const Register = () => {
   const [localities, setLocalities] = useState<{ id: string; name: string; }[]>([]);
 
   const { sendNotification } = useNotificationManager();
-  const managementRoles = ['admin', 'ict', 'supervisor', 'fom', 'financialAdmin'];
+  const managementRoles = ['admin', 'ict', 'supervisor', 'fom', 'financialAdmin', 'countryDirector', 'dataTeam', 'Admin', 'ICT', 'Supervisor', 'Field Operation Manager (FOM)', 'FinancialAdmin', 'CountryDirector', 'DataTeam'];
 
   if (isMobileView && !isDeviceLoading) {
     return <MobileRegisterScreen />;
