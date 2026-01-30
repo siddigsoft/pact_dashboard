@@ -107,15 +107,16 @@ CREATE POLICY "Admins can view all operational cost submissions"
     )
   );
 
--- FOM and Coordinators can create submissions
-CREATE POLICY "FOM and Coordinators can create operational cost submissions"
+-- FOM, Coordinators, and Country Directors can create submissions
+-- Country Director submissions require Admin → Super Admin approval chain
+CREATE POLICY "Authorized roles can create operational cost submissions"
   ON operational_cost_submissions FOR INSERT
   WITH CHECK (
     auth.uid() = submitted_by
     AND EXISTS (
       SELECT 1 FROM profiles p
       WHERE p.id = auth.uid()
-      AND p.role IN ('Field Operation Manager (FOM)', 'Coordinator', 'coordinator')
+      AND p.role IN ('Field Operation Manager (FOM)', 'Coordinator', 'coordinator', 'CountryDirector')
     )
   );
 
