@@ -7,6 +7,7 @@ import { useAuditLog } from "@/hooks/use-audit-log";
 import { SupportingDocument } from "@/types/cost-submission";
 import { TransferReceiptDetails } from "@/types/receipt-details";
 import { supabase } from "@/integrations/supabase/client";
+import { safeUploadFile } from "@/lib/safeUpload";
 import { useUser } from "@/context/user/UserContext";
 import { ReceiptDetailsDialog } from "./ReceiptDetailsDialog";
 import { 
@@ -75,29 +76,25 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-        const filePath = `cost-receipts/${fileName}`;
+        // Use the safe upload utility with connection testing and better error handling
+        const uploadResult = await safeUploadFile(file, {
+          bucket: 'uploads',
+          path: 'cost-receipts',
+          maxSizeBytes: 10 * 1024 * 1024, // 10MB max
+          allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']
+        });
 
-        const { data, error } = await supabase.storage
-          .from('uploads')
-          .upload(filePath, file);
-
-        if (error) {
-          console.error('Upload error:', error);
-          throw new Error(`Failed to upload ${file.name}`);
+        if (!uploadResult.success) {
+          console.error('Upload error:', uploadResult.error);
+          throw new Error(uploadResult.error || `Failed to upload ${file.name}`);
         }
-
-        const { data: publicUrlData } = supabase.storage
-          .from('uploads')
-          .getPublicUrl(filePath);
 
         const isImage = file.type.startsWith('image/');
         const isPDF = file.type === 'application/pdf';
         const documentType = isImage ? 'receipt_photo' : isPDF ? 'receipt_pdf' : 'other';
 
         const newDoc: ExtendedSupportingDocument = {
-          url: publicUrlData.publicUrl,
+          url: uploadResult.url!,
           type: documentType,
           filename: file.name,
           uploadedAt: new Date().toISOString(),
