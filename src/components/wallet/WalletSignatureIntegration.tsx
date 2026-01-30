@@ -9,6 +9,14 @@ import {
 } from '@/components/signatures';
 import { SignatureService } from '@/services/signature.service';
 import type { TransactionSignature, SignatureStatus as SigStatus, SignatureMethod } from '@/types/signature';
+
+// Simplified signature result from modal
+interface SignatureResult {
+  signatureId: string;
+  signatureHash: string;
+  method: SignatureMethod;
+  signedAt: string;
+}
 import { useToast } from '@/hooks/use-toast';
 
 interface WalletTransaction {
@@ -30,7 +38,7 @@ interface WalletSignatureIntegrationProps {
   userEmail?: string;
   userPhone?: string;
   userRole?: string;
-  onSignatureComplete?: (signature: TransactionSignature) => void;
+  onSignatureComplete?: (signature: SignatureResult) => void;
   showBadgeOnly?: boolean;
 }
 
@@ -129,6 +137,9 @@ export function WalletSignatureIntegration({
             description: 'Your signature has been recorded successfully.',
           });
           setIsModalOpen(false);
+          if (onSignatureComplete && result) {
+            onSignatureComplete(result);
+          }
         }}
       />
     </div>
