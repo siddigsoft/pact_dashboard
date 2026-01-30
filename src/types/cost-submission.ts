@@ -1,19 +1,49 @@
 /**
  * Cost Submission Types
  * 
- * Types for the actual cost-based transport fee system with approval workflow.
- * Enumerators submit real costs after site visits, which require admin/finance approval.
+ * Enhanced two-phase cost submission workflow supporting:
+ * - ADVANCE PAYMENTS: Request → Approve → Disburse → Reconcile → Close
+ * - REIMBURSEMENTS: Request with Receipts → Approve → Pay → Close
  * 
+ * Features project and budget line integration for financial tracking.
  * Extended to support Operational Cost Submissions for FOM/Coordinators.
  */
 
+// Request type distinguishes advance payments from reimbursements
+export type CostRequestType = 'advance' | 'reimbursement';
+
 export type CostSubmissionStatus = 
-  | 'pending'        // Just submitted, awaiting review
-  | 'under_review'   // Finance is reviewing
-  | 'approved'       // Approved, awaiting payment
-  | 'rejected'       // Rejected by finance
-  | 'paid'          // Payment processed
-  | 'cancelled';     // Cancelled by submitter
+  | 'pending'                    // Just submitted, awaiting review
+  | 'under_review'               // Finance is reviewing
+  | 'approved'                   // Approved, awaiting payment/disbursement
+  | 'rejected'                   // Rejected by finance
+  | 'disbursed'                  // Money sent to requester (advance only) - BALANCE OPEN
+  | 'reconciliation_pending'     // User submitted receipts, awaiting verification
+  | 'reconciled'                 // Receipts verified, balance settled
+  | 'paid'                       // Payment processed (reimbursement complete)
+  | 'closed'                     // Final state - fully reconciled
+  | 'cancelled';                 // Cancelled by submitter
+
+// Balance status for advance payments
+export type BalanceStatus = 
+  | 'not_applicable'   // Reimbursement - no balance tracking
+  | 'open'             // Money disbursed, awaiting reconciliation
+  | 'settled'          // Exact amount spent
+  | 'underspent'       // Spent less than received, returning balance
+  | 'overspent';       // Spent more than received, needs top-up
+
+export const COST_REQUEST_TYPE_LABELS: Record<CostRequestType, { en: string; ar: string }> = {
+  advance: { en: 'Advance Payment', ar: 'دفعة مقدمة' },
+  reimbursement: { en: 'Reimbursement', ar: 'استرداد' },
+};
+
+export const BALANCE_STATUS_LABELS: Record<BalanceStatus, { en: string; ar: string }> = {
+  not_applicable: { en: 'N/A', ar: 'غير قابل للتطبيق' },
+  open: { en: 'Open Balance', ar: 'رصيد مفتوح' },
+  settled: { en: 'Settled', ar: 'تمت التسوية' },
+  underspent: { en: 'Underspent', ar: 'إنفاق أقل' },
+  overspent: { en: 'Overspent', ar: 'إنفاق زائد' },
+};
 
 // Two-tier approval status for operational costs
 export type TierOneApprovalStatus = 
@@ -439,4 +469,278 @@ export interface CostSubmissionStatistics {
   avgCostPerSubmissionCents: number;
   approvalRate: number; // Percentage
   rejectionRate: number; // Percentage
+}
+
+// ============================================================
+// ENHANCED TWO-PHASE COST REQUEST SYSTEM
+// ============================================================
+
+/**
+ * Budget Line Categories for Cost Requests
+ * Links expenses to specific budget categories for tracking
+ */
+export type BudgetLineCategory = 
+  | 'transportation_and_visit_fees'
+  | 'permit_fee'
+  | 'internet_and_communication_fees'
+  | 'training_and_capacity_building'
+  | 'equipment_and_supplies'
+  | 'office_and_admin'
+  | 'personnel_allowances'
+  | 'other';
+
+export const BUDGET_LINE_LABELS: Record<BudgetLineCategory, { en: string; ar: string }> = {
+  transportation_and_visit_fees: { en: 'Transportation & Visit Fees', ar: 'رسوم النقل والزيارة' },
+  permit_fee: { en: 'Permit Fees', ar: 'رسوم التصاريح' },
+  internet_and_communication_fees: { en: 'Internet & Communications', ar: 'الإنترنت والاتصالات' },
+  training_and_capacity_building: { en: 'Training & Capacity Building', ar: 'التدريب وبناء القدرات' },
+  equipment_and_supplies: { en: 'Equipment & Supplies', ar: 'المعدات واللوازم' },
+  office_and_admin: { en: 'Office & Admin', ar: 'المكتب والإدارة' },
+  personnel_allowances: { en: 'Personnel Allowances', ar: 'بدلات الموظفين' },
+  other: { en: 'Other', ar: 'أخرى' },
+};
+
+/**
+ * Enhanced Cost Request
+ * 
+ * Two-phase workflow:
+ * - ADVANCE: Request → Approve → Disburse → [User Spends] → Upload Receipts → Reconcile → Close
+ * - REIMBURSEMENT: Request + Receipts → Approve → Pay → Close
+ */
+export interface EnhancedCostRequest {
+  id: string;
+  
+  // Request Type
+  requestType: CostRequestType;
+  
+  // Project & Budget Linking (REQUIRED)
+  projectId: string;
+  projectName?: string;
+  budgetLineCategory: BudgetLineCategory;
+  budgetLineId?: string;
+  
+  // Submitter Information
+  submittedBy: string;
+  submitterName?: string;
+  submitterRole?: string;
+  submittedAt: string;
+  
+  // Request Details
+  requestedAmountCents: number;
+  currency: string;
+  title: string;
+  description: string;
+  justification: string;
+  
+  // Phase 1: Justification Documents (quotes, estimates, approvals)
+  justificationDocuments: SupportingDocument[];
+  
+  // Approval Workflow
+  status: CostSubmissionStatus;
+  
+  // Tier 1 Approval (Supervisor/FOM)
+  tier1Status: TierOneApprovalStatus;
+  tier1ReviewedBy?: string;
+  tier1ReviewedAt?: string;
+  tier1Notes?: string;
+  
+  // Tier 2 Approval (Admin)
+  tier2Status: TierTwoApprovalStatus;
+  tier2ReviewedBy?: string;
+  tier2ReviewedAt?: string;
+  tier2Notes?: string;
+  approvedAmountCents?: number;
+  
+  // Disbursement (Advance Payments Only)
+  disbursedAmountCents?: number;
+  disbursedAt?: string;
+  disbursedBy?: string;
+  disbursementMethod?: 'bank_transfer' | 'cash' | 'mobile_money' | 'wallet';
+  disbursementReference?: string;
+  
+  // Balance Tracking (Advance Payments Only)
+  balanceStatus: BalanceStatus;
+  balanceCents?: number;
+  
+  // Phase 2: Reconciliation (Advance) / Receipts (Reimbursement)
+  actualSpentCents?: number;
+  reconciliationDocuments: SupportingDocument[];
+  reconciliationNotes?: string;
+  reconciliationSubmittedAt?: string;
+  
+  // Reconciliation Review
+  reconciledBy?: string;
+  reconciledAt?: string;
+  reconciliationVerified?: boolean;
+  balanceReturnedCents?: number;
+  additionalPaymentCents?: number;
+  
+  // Final Payment (Reimbursement) / Top-up (Overspent Advance)
+  paidAmountCents?: number;
+  paidAt?: string;
+  paidBy?: string;
+  paymentMethod?: 'bank_transfer' | 'cash' | 'mobile_money' | 'wallet';
+  paymentReference?: string;
+  
+  // Optional Linkages
+  hubId?: string;
+  mmpFileId?: string;
+  siteVisitId?: string;
+  
+  // Audit & Metadata
+  walletTransactionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Create Enhanced Cost Request
+ */
+export interface CreateEnhancedCostRequest {
+  requestType: CostRequestType;
+  projectId: string;
+  budgetLineCategory: BudgetLineCategory;
+  requestedAmountCents: number;
+  currency?: string;
+  title: string;
+  description: string;
+  justification: string;
+  justificationDocuments?: SupportingDocument[];
+  reconciliationDocuments?: SupportingDocument[];
+  hubId?: string;
+  mmpFileId?: string;
+  siteVisitId?: string;
+}
+
+/**
+ * Submit Reconciliation Request
+ */
+export interface SubmitReconciliationRequest {
+  requestId: string;
+  actualSpentCents: number;
+  reconciliationDocuments: SupportingDocument[];
+  reconciliationNotes?: string;
+}
+
+/**
+ * Review Enhanced Cost Request
+ */
+export interface ReviewEnhancedCostRequest {
+  requestId: string;
+  tier: 1 | 2;
+  action: 'approve' | 'reject' | 'request_changes';
+  notes?: string;
+  adjustedAmountCents?: number;
+}
+
+/**
+ * Disburse Funds Request (Admin/Finance)
+ */
+export interface DisburseFundsRequest {
+  requestId: string;
+  disbursedAmountCents: number;
+  disbursementMethod: 'bank_transfer' | 'cash' | 'mobile_money' | 'wallet';
+  disbursementReference?: string;
+  notes?: string;
+}
+
+/**
+ * Verify Reconciliation Request (Admin/Finance)
+ */
+export interface VerifyReconciliationRequest {
+  requestId: string;
+  verified: boolean;
+  notes?: string;
+  balanceReturnedCents?: number;
+  additionalPaymentCents?: number;
+}
+
+/**
+ * Enriched Cost Request with related data
+ */
+export interface EnrichedCostRequest extends EnhancedCostRequest {
+  submitter?: {
+    id: string;
+    fullName?: string;
+    email?: string;
+    avatar?: string;
+  };
+  project?: {
+    id: string;
+    name: string;
+    budgetRemaining?: number;
+  };
+  budgetLine?: {
+    category: BudgetLineCategory;
+    allocated: number;
+    spent: number;
+    remaining: number;
+  };
+  history?: CostApprovalHistory[];
+}
+
+/**
+ * Cost Request Filters
+ */
+export interface CostRequestFilters {
+  requestType?: CostRequestType;
+  status?: CostSubmissionStatus | CostSubmissionStatus[];
+  balanceStatus?: BalanceStatus;
+  submittedBy?: string;
+  projectId?: string;
+  budgetLineCategory?: BudgetLineCategory;
+  dateFrom?: string;
+  dateTo?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  requiresReconciliation?: boolean;
+}
+
+/**
+ * Outstanding Advances Summary
+ * For tracking open balances that need reconciliation
+ */
+export interface OutstandingAdvancesSummary {
+  totalOpenAdvances: number;
+  totalDisbursedCents: number;
+  totalReconciledCents: number;
+  totalOpenBalanceCents: number;
+  overdueCount: number;
+  byUser: Array<{
+    userId: string;
+    userName: string;
+    openCount: number;
+    totalOpenCents: number;
+    oldestDisbursementDate?: string;
+  }>;
+  byProject: Array<{
+    projectId: string;
+    projectName: string;
+    openCount: number;
+    totalOpenCents: number;
+  }>;
+}
+
+/**
+ * Cost Report Data for Export
+ */
+export interface CostReportData {
+  id: string;
+  requestType: CostRequestType;
+  title: string;
+  projectName: string;
+  budgetLine: string;
+  submitterName: string;
+  requestedAmount: number;
+  approvedAmount?: number;
+  disbursedAmount?: number;
+  actualSpent?: number;
+  balance?: number;
+  status: string;
+  balanceStatus: string;
+  submittedDate: string;
+  approvedDate?: string;
+  disbursedDate?: string;
+  reconciledDate?: string;
+  currency: string;
 }
