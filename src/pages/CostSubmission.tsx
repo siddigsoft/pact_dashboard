@@ -36,11 +36,13 @@ const CostSubmission = () => {
   const isCoordinator = roles?.includes('Coordinator' as AppRole) || 
                         currentUser?.role === 'Coordinator' ||
                         currentUser?.role === 'coordinator';
-  const canSubmitOperationalCosts = isFOM || isCoordinator || isAdmin;
   
-  // Check if user is Country Director (oversight only)
+  // Check if user is Country Director (can submit operational costs - approved by Admin → Super Admin)
   const isCountryDirector = roles?.includes('CountryDirector' as AppRole) || 
                             currentUser?.role === 'CountryDirector';
+  
+  // Country Directors, FOM, Coordinators, and Admins can submit operational costs
+  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin;
   
   // Admins and supervisors can see team submissions and approval status
   const canViewTeamSubmissions = isAdmin || isSupervisor || isCountryDirector;

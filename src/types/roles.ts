@@ -10,6 +10,7 @@ export type AppRole =
   | 'SeniorOperationsLead'
   | 'Supervisor'
   | 'Coordinator'
+  | 'DataTeam'
   | 'DataCollector'
   | 'Reviewer';
 
@@ -337,6 +338,18 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'update' },
     { resource: 'mmp', action: 'read' },
     { resource: 'reports', action: 'read' }
+  ],
+  // Data Team: Analytics and reporting focus
+  // Can view all operational data, create reports and exports
+  DataTeam: [
+    { resource: 'projects', action: 'read' },
+    { resource: 'mmp', action: 'read' },
+    { resource: 'site_visits', action: 'read' },
+    { resource: 'finances', action: 'read' },
+    { resource: 'reports', action: 'read' },
+    { resource: 'reports', action: 'create' },
+    { resource: 'users', action: 'read' },
+    { resource: 'audit_logs', action: 'read' },
   ],
   DataCollector: [
     { resource: 'site_visits', action: 'read' },
