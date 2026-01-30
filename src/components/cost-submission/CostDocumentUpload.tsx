@@ -92,9 +92,9 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
         const safeFileName = `${timestamp}_${random}.${extension}`;
         const filePath = `cost-receipts/${safeFileName}`;
 
-        // Direct upload without connection test for speed
+        // Direct upload to mmp-files bucket (the main storage bucket)
         const { data, error } = await supabase.storage
-          .from('uploads')
+          .from('mmp-files')
           .upload(filePath, file, {
             cacheControl: '3600',
             upsert: false
@@ -106,7 +106,7 @@ const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, exist
         }
 
         const { data: publicUrlData } = supabase.storage
-          .from('uploads')
+          .from('mmp-files')
           .getPublicUrl(filePath);
 
         const isImage = file.type.startsWith('image/');
