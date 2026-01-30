@@ -13,13 +13,15 @@ import { useToast } from '@/hooks/use-toast';
 
 interface CostSubmission {
   id: string;
+  type?: string;
   siteVisitId?: string;
   projectId?: string;
-  submittedBy: string;
+  submittedBy?: string;
   amount: number;
   currency?: string;
   status: string;
-  createdAt: string;
+  createdAt?: string;
+  description?: string;
   approvalNotes?: string;
   signatureStatus?: SigStatus;
   signatureId?: string;
@@ -34,6 +36,7 @@ interface CostSubmissionSignatureProps {
   isApprover?: boolean;
   onSignatureComplete?: (signature: DocumentSignature) => void;
   variant?: 'inline' | 'card';
+  showBadgeOnly?: boolean;
 }
 
 export function CostSubmissionSignature({
@@ -45,6 +48,7 @@ export function CostSubmissionSignature({
   isApprover = false,
   onSignatureComplete,
   variant = 'inline',
+  showBadgeOnly = false,
 }: CostSubmissionSignatureProps) {
   const { toast } = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -53,11 +57,23 @@ export function CostSubmissionSignature({
   );
 
   // Approvers need to sign when approving, submitters sign when submitting
-  const needsApproverSignature = isApprover && submission.status === 'pending';
+  const needsApproverSignature = isApprover && (submission.status === 'pending' || submission.status === 'under_review');
   const needsSubmitterSignature = !isApprover && submission.status === 'draft';
   const requiresSignature = needsApproverSignature || needsSubmitterSignature;
   const hasSigned = signatureStatus === 'signed' || signatureStatus === 'verified';
 
+  // Badge only mode for compact display in lists
+  if (showBadgeOnly) {
+    if (!requiresSignature && !hasSigned) return null;
+    
+    return (
+      <SignatureVerificationBadge
+        status={signatureStatus || 'pending'}
+        size="sm"
+        showDetails={false}
+      />
+    );
+  }
 
   if (!requiresSignature && !hasSigned) return null;
 
