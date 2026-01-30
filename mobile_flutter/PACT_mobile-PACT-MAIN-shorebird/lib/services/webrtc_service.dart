@@ -520,6 +520,13 @@ class WebRTCService {
     String callToken,
   ) async {
     if (_userId == null) return;
+    
+    // Guard: Prevent double-accept
+    if (_callState.status == CallStatus.connected || 
+        _callState.status == CallStatus.calling) {
+      debugPrint('[WebRTC] Ignoring acceptCall - already in state: ${_callState.status}');
+      return;
+    }
 
     try {
       debugPrint('[WebRTC] Accepting call from $callerId');
@@ -565,6 +572,14 @@ class WebRTCService {
   /// Reject an incoming call
   Future<void> rejectCall(String callerId, String callId) async {
     if (_userId == null) return;
+    
+    // Guard: Prevent multiple rejects
+    if (_callState.status == CallStatus.idle || 
+        _callState.status == CallStatus.rejected ||
+        _callState.status == CallStatus.ended) {
+      debugPrint('[WebRTC] Ignoring rejectCall - already in state: ${_callState.status}');
+      return;
+    }
 
     await _sendSignalWithRetry(
       CallSignal(
@@ -893,6 +908,25 @@ class WebRTCService {
     
     switch (signal.type) {
       case CallSignalType.callRequest:
+        // Guard: Ignore if we're already in an active call or ringing state
+        if (_callState.status != CallStatus.idle) {
+          debugPrint('[WebRTC] Ignoring callRequest - already in state: ${_callState.status}');
+          // Send busy signal if we're in an active call
+          if (_callState.status == CallStatus.connected || 
+              _callState.status == CallStatus.calling ||
+              _callState.status == CallStatus.ringing) {
+            await _sendSignal(CallSignal(
+              type: CallSignalType.callBusy,
+              from: _userId!,
+              to: signal.from,
+              fromName: _userName ?? '',
+              callId: signal.callId,
+              callToken: signal.callToken,
+            ));
+          }
+          break;
+        }
+        
         _callState = _callState.copyWith(
           status: CallStatus.ringing,
           callId: signal.callId,
