@@ -1,0 +1,653 @@
+PS C:\Users\PC\PACT_mobile> flutter pub get                  
+Resolving dependencies... 
+Downloading packages... 
+  _fe_analyzer_shared 85.0.0 (94.0.0 available)
+  analyzer 7.7.1 (10.0.2 available)
+  app_links 6.4.1 (7.0.0 available)
+  archive 3.6.1 (4.0.7 available)
+  build 3.0.1 (4.0.4 available)
+  build_config 1.1.2 (1.2.0 available)
+  build_resolvers 3.0.1 (3.0.4 available)
+  build_runner 2.6.1 (2.10.5 available)
+  build_runner_core 9.2.1 (9.3.2 available)
+  characters 1.4.0 (1.4.1 available)
+  dart_jsonwebtoken 3.1.1 (3.3.1 available)
+  dart_style 3.1.1 (3.1.5 available)
+  device_info_plus 11.5.0 (12.3.0 available)
+  dio 5.9.0 (5.9.1 available)
+  file_picker 8.3.7 (10.3.10 available)
+  flat_buffers 23.5.26 (25.9.23 available)
+  flutter_local_notifications 19.5.0 (20.0.0 available)
+  flutter_local_notifications_linux 6.0.0 (7.0.0 available)
+  flutter_local_notifications_platform_interface 9.1.0 (10.0.0 available)
+  flutter_local_notifications_windows 1.0.3 (2.0.0 available)
+  flutter_map 6.2.1 (8.2.2 available)
+  flutter_map_marker_cluster 1.3.6 (8.2.2 available)
+  flutter_map_marker_popup 6.1.2 (8.1.0 available)
+  flutter_map_tile_caching 9.0.1 (10.1.1 available)
+  flutter_riverpod 2.6.1 (3.2.0 available)
+  freezed 3.2.3 (3.2.4 available)
+  geocoding_platform_interface 3.2.0 (5.0.0 available)
+  geolocator 11.1.0 (14.0.2 available)
+  geolocator_android 4.6.2 (5.0.2 available)
+  geolocator_web 3.0.0 (4.1.3 available)
+  image 4.3.0 (4.7.2 available)
+  image_picker_android 0.8.13+12 (0.8.13+13 available)
+  image_picker_ios 0.8.13+3 (0.8.13+5 available)
+  js 0.6.7 (0.7.2 available)
+  json_annotation 4.9.0 (4.10.0 available)
+  json_serializable 6.11.2 (6.12.0 available)
+  local_auth 2.3.0 (3.0.0 available)
+  local_auth_android 1.0.51 (2.0.4 available)
+  local_auth_darwin 1.6.0 (2.0.1 available)
+  local_auth_windows 1.0.11 (2.0.1 available)
+  location 5.0.3 (8.0.1 available)
+  location_platform_interface 3.1.2 (6.0.1 available)
+  location_web 4.2.0 (6.0.1 available)
+  matcher 0.12.17 (0.12.18 available)
+  material_color_utilities 0.11.1 (0.13.0 available)
+  meta 1.17.0 (1.18.1 available)
+  mgrs_dart 2.0.0 (3.0.0 available)
+  mime 1.0.6 (2.0.0 available)
+  objectbox 2.5.1 (5.2.0 available)
+  objectbox_flutter_libs 2.5.1 (5.2.0 available)
+  objective_c 9.2.4 (9.2.5 available)
+  pointycastle 3.9.1 (4.0.0 available)
+  proj4dart 2.1.0 (3.0.0 available)
+  riverpod 2.6.1 (3.2.0 available)
+  shared_preferences_android 2.4.18 (2.4.20 available)
+  shorebird_code_push 1.1.6 (2.0.5 available)
+  source_gen 4.0.0 (4.2.0 available)
+  source_helper 1.3.8 (1.3.10 available)
+  syncfusion_flutter_core 29.2.11 (32.1.25 available)
+  syncfusion_flutter_pdf 29.2.11 (32.1.25 available)
+  syncfusion_flutter_xlsio 29.2.11 (32.1.25 available)
+  syncfusion_officecore 29.2.11 (32.1.25 available)
+  test 1.26.3 (1.29.0 available)
+  test_api 0.7.7 (0.7.9 available)
+  test_core 0.6.12 (0.6.15 available)
+  timezone 0.10.1 (0.11.0 available)
+  unicode 0.3.1 (1.1.9 available)
+  vibration 2.1.0 (3.1.5 available)
+  vibration_platform_interface 0.0.3 (0.1.1 available)
+Got dependencies!
+69 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+PS C:\Users\PC\PACT_mobile> flutter run -d chrome
+>> 
+Launching lib\main.dart on Chrome in debug mode...
+Waiting for connection from debug service on Chrome...             97.0s
+
+Flutter run key commands.
+r Hot reload.
+R Hot restart.
+h List all available interactive commands.
+d Detach (terminate "flutter run" but leave application running).
+c Clear the screen
+q Quit (terminate the application on the device).
+
+This app is linked to the debug service: ws://127.0.0.1:50400/UiLgKWKK9dA=/ws
+Debug service listening on ws://127.0.0.1:50400/UiLgKWKK9dA=/ws
+A Dart VM Service on Chrome is available at: http://127.0.0.1:50400/UiLgKWKK9dA=
+The Flutter DevTools debugger and profiler on Chrome is available at:
+http://127.0.0.1:50400/UiLgKWKK9dA=/devtools/?uri=ws://127.0.0.1:50400/UiLgKWKK9dA=/ws
+Starting application from main method in: org-dartlang-app:/web_entrypoint.dart.
+Firebase.initializeApp() failed or not configured: Assertion failed:
+file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_core_web-3.4.0/lib/src/firebase_core_web.dart:320:11     
+options != null
+"FirebaseOptions cannot be null when creating the default app."
+Running on web - location permissions not requested
+supabase.supabase_flutter: INFO: ***** Supabase init completed ***** 
+[AuthenticationService] Auth state changed: AuthChangeEvent.initialSession at 2026-01-30T23:46:51.278
+[AuthenticationService] Auth user for event AuthChangeEvent.initialSession: null
+Got object store box in database tasks.
+Got object store box in database equipments.
+Got object store box in database incidentreports.
+Got object store box in database safetychecklists.
+Got object store box in database userprofiles.
+Got object store box in database appsettings.
+Got object store box in database mapdata.
+Got object store box in database tasks_sync.
+Got object store box in database equipments_sync.
+Got object store box in database incidentreports_sync.
+Got object store box in database safetychecklists_sync.
+Got object store box in database userprofiles_sync.
+Got object store box in database pending_sync.
+Got object store box in database site_visits.
+Got object store box in database locations.
+Got object store box in database offline_requests.
+Got object store box in database site_cache.
+Got object store box in database mmp_cache.
+Got object store box in database notifications_cache.
+Got object store box in database chat_cache.
+Got object store box in database projects_cache.
+Got object store box in database wallet_cache.
+Got object store box in database budget_cache.
+Got object store box in database reports_cache.
+Got object store box in database profile_cache.
+Got object store box in database offline_metadata.
+🌐 Web platform detected: Path URL strategy configured
+🚀 Starting PACT Consultancy app
+Connectivity changed: true
+Starting data migration from SharedPreferences to Hive...
+Data migration completed successfully
+[ShorebirdCodePush]: Shorebird Engine not available, using no-op implementation.
+This occurs when using package:shorebird_code_push in an app that does not
+contain the Shorebird Engine. Most commonly this is due to building with
+`flutter build` or `flutter run` instead of `shorebird release`.
+
+Shorebird is not available on this platform
+📱 Notification services initialized
+🔑 No biometrics enabled and user not logged in, showing login screen
+📱 Biometric Check Results:
+  Available: false
+  Enabled: false
+  Has Enrolled: false
+  Device Credentials: Available via fallback in authentication
+❌ Biometrics not available on this device
+📱 Biometric Check Results:
+  Available: false
+  Enabled: false
+  Has Enrolled: false
+  Device Credentials: Available via fallback in authentication
+❌ Biometrics not available on this device
+ReferenceError: serviceWorkerVersion is not defined
+. 150:77                                                                          <fn>
+lib/_engine/engine/dom.dart 311:8                                                 DomEventTarget.dispatchEvent
+lib/_engine/engine/platform_dispatcher.dart 557:19                                [_sendPlatformMessage]
+lib/_engine/engine/platform_dispatcher.dart 368:5                                 sendPlatformMessage
+package:flutter/src/services/binding.dart 637:27                                  send
+package:flutter/src/services/platform_channel.dart 360:33                         <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 542:3                _asyncStartSync
+package:flutter/src/services/platform_channel.dart 352:14                         [_invokeMethod]
+package:flutter/src/services/platform_channel.dart 540:12                         invokeMethod
+package:flutter/src/rendering/binding.dart 491:18                                 [_handleWebFirstFrame]
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+package:flutter/src/scheduler/binding.dart 1434:7                                 [_invokeFrameCallback]
+package:flutter/src/scheduler/binding.dart 1361:11                                handleDrawFrame
+package:flutter/src/scheduler/binding.dart 1057:9                                 <fn>
+lib/_engine/engine/frame_service.dart 163:9                                       <fn>
+dart-sdk/lib/_internal/js_dev_runtime/private/isolate_helper.dart 47:11           internalCallback
+[AuthenticationService] Auth state changed: AuthChangeEvent.signedIn at 2026-01-30T23:47:21.176
+[AuthenticationService] Auth user for event AuthChangeEvent.signedIn: eeaf10a4-84ad-42d7-8042-ab0a42e69e5b
+[AuthenticationService] Session expired: false
+[AuthenticationService] Session expires at: 1769809645
+Auth data stored locally
+Note: Could not update last_active (column may not exist): PostgrestException(message: Could not find the 'last_active'
+column of 'profiles' in the schema cache, code: PGRST204, details: , hint: null)
+Failed to assign worker role: PostgrestException(message: new row for relation "user_roles" violates check constraint
+"user_roles_role_check", code: 23514, details: , hint: null)
+══╡ EXCEPTION CAUGHT BY RENDERING LIBRARY ╞═════════════════════════════════════════════════════════
+The following assertion was thrown during layout:
+A RenderFlex overflowed by 1.00 pixels on the bottom.
+
+The relevant error-causing widget was:
+  Column Column:file:///C:/Users/PC/PACT_mobile/lib/widgets/professional_movable_toggle.dart:737:25
+
+The overflowing RenderFlex has an orientation of Axis.vertical.
+The edge of the RenderFlex that is overflowing has been marked in the rendering with a yellow and
+black striped pattern. This is usually caused by the contents being too big for the RenderFlex.
+Consider applying a flex factor (e.g. using an Expanded widget) to force the children of the
+RenderFlex to fit within the available space instead of being sized to their natural size.
+This is considered an error condition because it indicates that there is content that cannot be
+seen. If the content is legitimately bigger than the available space, consider clipping it with a
+ClipRect widget before putting it in the flex, or using a scrollable container rather than a Flex,
+like a ListView.
+The specific RenderFlex in question is: RenderFlex#50903 relayoutBoundary=up24 OVERFLOWING:
+  creator: Column ← Row ← Padding ← DecoratedBox ← Container ← Listener ← _GestureSemantics ←
+    RawGestureDetector ← GestureDetector ← Row ← DefaultTextStyle ← AnimatedDefaultTextStyle ← ⋯
+  parentData: offset=Offset(42.0, 0.0); flex=null; fit=null (can use size)
+  constraints: BoxConstraints(0.0<=w<=Infinity, 0.0<=h<=31.0)
+  size: Size(62.3, 31.0)
+  direction: vertical
+  mainAxisAlignment: start
+  mainAxisSize: min
+  crossAxisAlignment: start
+  textDirection: ltr
+  verticalDirection: down
+  spacing: 0.0
+◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤
+════════════════════════════════════════════════════════════════════════════════════════════════════
+Got object store box in database user_profile_cache.
+[_fetchUserProjectMemberships] Fetching projects for user: eeaf10a4-84ad-42d7-8042-ab0a42e69e5b
+📦 Loaded cached profile for WebRTC: siddigsoft123
+[ShorebirdCodePush]: Shorebird Engine not available, using no-op implementation.
+This occurs when using package:shorebird_code_push in an app that does not
+contain the Shorebird Engine. Most commonly this is due to building with
+`flutter build` or `flutter run` instead of `shorebird release`.
+
+[ChangelogService] Initialized: v1.0.8 build 13 patch null
+Got object store box in database changelog_cache.
+💾 Cached role: superadmin
+✅ User role: superadmin, isCoordinator: false
+team_members table returned empty or doesn't exist, checking projects table
+[ChangelogService] No previous version seen - showing dialog
+Checking 2 projects for user membership
+Found user in teamComposition for project: 660399f4-80a2-4642-8f66-9f1f245775e6 (role: dataCollector)
+Found user in teamComposition for project: 82ed43a2-e046-482a-a55d-0fe10358b213 (role: dataCollector)
+User project IDs from projects table: 2 (total: 2)
+User is member of 2 projects: [660399f4-80a2-4642-8f66-9f1f245775e6, 82ed43a2-e046-482a-a55d-0fe10358b213]
+[WebRTC] Error loading TURN credentials: PostgrestException(message: Could not find the table 'public.app_config' in the
+schema cache, code: PGRST205, details: , hint: Perhaps you meant the table 'public.app_versions')
+[WebRTC] Initialized for user: ELSIDDIG IBRAHIM (eeaf10a4-84ad-42d7-8042-ab0a42e69e5b)
+✅ WebRTC service initialized for user: ELSIDDIG IBRAHIM
+[WebRTC] Signaling channel status: RealtimeSubscribeStatus.subscribed
+[WebRTC] Signaling channel ready
+Got object store box in database pact_users_cache.
+[WebRTC] Presence channel ready
+[ChangelogService] Marked version as seen: 1.0.8.13
+Filtered data collector sites by project: 0 of 0
+[PresenceService] Fetched 73 profiles from database
+[PresenceService] Loaded 73 users
+[WebRTC] Presence channel closed/timed out
+[PresenceService] Initialized for user ELSIDDIG IBRAHIM
+✅ Presence service initialized for user: ELSIDDIG IBRAHIM
+[PresenceService] Synced 0 online users
+[PresenceService] Presence channel ready
+[PresenceService] Synced 1 online users
+[Dashboard] Cached dashboard data with 0 coordinator and 0 DC visits
+📦 Drawer: Loaded cached role: superAdmin
+[ShorebirdCodePush]: Shorebird Engine not available, using no-op implementation.
+This occurs when using package:shorebird_code_push in an app that does not
+contain the Shorebird Engine. Most commonly this is due to building with
+`flutter build` or `flutter run` instead of `shorebird release`.
+
+[CommunicationsScreen] Fetching contacts directly from database...
+[CommunicationsScreen] Loaded user info: role=superAdmin, state=river-nile, hub=dongola-hub
+[CommunicationsScreen] Direct fetch returned 73 profiles
+[CommunicationsScreen] Loaded 73 users via direct fetch
+[CommunicationsScreen] Direct fetch successful: 73 users
+[CommunicationsScreen] Total users loaded: 73
+Got object store box in database message_queue_box.
+[ChatService] Synced 0 messages
+[PresenceService] Synced 1 online users
+[PresenceService] Synced 2 online users
+[WebRTC] Initiating call to Insaf Ibrahim Aldoom Alamin (af5a82e7-ffd2-4c60-9c19-bfb93d7321bc)
+[WebRTC] Requesting call permissions (camera: false)
+[WebRTC] Channel pre-warmed for af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Microphone permission: PermissionStatus.granted
+[WebRTC] Local media stream acquired
+[WebRTC] Signal sent: CallSignalType.callRequest to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+Got object store box in database pact_call_history.
+[PresenceService] Synced 2 online users
+[PresenceService] Synced 2 online users
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+Got object store box in database settings.
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Channel pre-warm failed for af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[PresenceService] Synced 1 online users
+[PresenceService] Synced 2 online users
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1666:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:pact_mobile/screens/main_screen.dart 248:39                               <fn>
+dart-sdk/lib/async/zone.dart 1778:9                                               runUnaryGuarded
+dart-sdk/lib/async/stream_impl.dart 381:5                                         [_sendData]
+dart-sdk/lib/async/stream_impl.dart 573:13                                        perform
+dart-sdk/lib/async/stream_impl.dart 678:10                                        handleNext
+dart-sdk/lib/async/stream_impl.dart 649:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+[PresenceService] Synced 2 online users
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:pact_mobile/screens/main_screen.dart 248:39                               <fn>
+dart-sdk/lib/async/zone.dart 1778:9                                               runUnaryGuarded
+dart-sdk/lib/async/stream_impl.dart 381:5                                         [_sendData]
+dart-sdk/lib/async/stream_impl.dart 573:13                                        perform
+dart-sdk/lib/async/stream_impl.dart 678:10                                        handleNext
+dart-sdk/lib/async/stream_impl.dart 649:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1666:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+[PresenceService] Synced 2 online users

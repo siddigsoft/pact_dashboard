@@ -131,7 +131,9 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
                       onTap: () async {
                         await _stopRingingSound();
                         await WebRTCService().rejectCall(widget.callerId, widget.callId);
-                        Navigator.of(context).pop();
+                        if (mounted && context.mounted) {
+                          Navigator.of(context).pop();
+                        }
                       },
                       child: Container(
                         width: 60,
@@ -164,18 +166,27 @@ class _IncomingCallDialogState extends State<IncomingCallDialog> {
                     GestureDetector(
                       onTap: () async {
                         await _stopRingingSound();
-                        Navigator.of(context).pop();
+                        
+                        // Store navigator reference before async operations
+                        final navigator = Navigator.of(context);
+                        
+                        if (mounted && context.mounted) {
+                          navigator.pop();
+                        }
+                        
                         await WebRTCService()
                             .acceptCall(widget.callerId, widget.callId, widget.callToken);
                         
-                        // Navigate to call screen
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => CallScreen(
-                              remoteUserName: widget.callerName,
+                        // Navigate to call screen using stored navigator
+                        if (mounted) {
+                          navigator.push(
+                            MaterialPageRoute(
+                              builder: (ctx) => CallScreen(
+                                remoteUserName: widget.callerName,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        }
                       },
                       child: Container(
                         width: 60,
