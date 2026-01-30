@@ -1,0 +1,1013 @@
+packages/synchronized/src/utils.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/audioplayers/src/audio_log_level.dart
+[   +2 ms] MetadataProvider: Loaded debug metadata for module:
+packages/audioplayers/src/audio_cache.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/file/local.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/backends/local.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/backends/local/local_file_system.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/backends/local/local_link.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/io.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/forwarding/forwarding_link.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/interface.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/interface/link.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/interface/error_codes.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/interface/error_codes_internal.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/forwarding/forwarding_random_access_file.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/file/src/common.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/audioplayers_platform_interface/src/api/audio_context_config.dart
+[   +2 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/native/rtc_video_platform_view.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/native/utils.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/native/event_channel.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/logger.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/web.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/printers/simple_printer.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/log_printer.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/log_event.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/log_level.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/ansi_color.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/printers/pretty_printer.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/printers/prefix_printer.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/printers/logfmt_printer.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/printers/hybrid_printer.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/outputs/stream_output.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/output_event.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/log_output.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/outputs/multi_output.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/outputs/memory_output.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/outputs/console_output.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/logger.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/filters/production_filter.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/outputs/advanced_file_output_stub.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/logger/src/outputs/file_output_stub.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/webrtc_interface.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_video_renderer.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/media_stream.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/media_stream_track.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_track_event.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_rtp_transceiver.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_rtp_sender.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_stats_report.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_rtp_parameters.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_rtcp_parameters.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/enums.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_dtmf_sender.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_rtp_receiver.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_rtp_capabilities.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_session_description.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_peerconnection.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_ice_candidate.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/rtc_data_channel.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/navigator.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/mediadevices.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/media_recorder.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/frame_cryptor.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/factory.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/webrtc_interface/src/data_packet_cryptor.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/native/ios/audio_configuration.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/native/android/audio_configuration.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/native/camera_utils.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/native/adapter_type.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/web/utils.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/rtc_video_element.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/media_stream_track_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/utils.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/media_stream_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/rtc_rtp_capailities_imp.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/rtc_rtp_transceiver_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/rtc_rtp_sender_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/rtc_rtp_parameters_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/rtc_dtmf_sender_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/rtc_rtp_receiver_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/rtc_data_channel_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/navigator_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/mediadevices_impl.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/media_recorder_impl.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/frame_cryptor_impl.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/event.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/e2ee.worker/e2ee.logger.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/dart_webrtc/src/data_packet_cryptor_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/web/factory_impl.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_webrtc/src/desktop_capturer.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/call_history_service.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/vibration/vibration.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/vibration_platform_interface/src/method_channel_vibration.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/device_info_plus/device_info_plus.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/device_info_plus/src/model/windows_device_info.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/device_info_plus/src/model/macos_device_info.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/device_info_plus/src/model/linux_device_info.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/device_info_plus/src/model/ios_device_info.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/device_info_plus/src/model/android_device_info.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proximity_sensor/proximity_sensor.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/wakelock_plus/wakelock_plus.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/chat_contact_service.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/chat_contact.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/chat_service.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/chat_message.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/record/record.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/record/src/record.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/image_picker/image_picker.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/comprehensive_monitoring_form_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/comprehensive_monitoring_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/comprehensive_safety_checklist.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/documents_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/visit_report_detail_screen.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_riverpod/flutter_riverpod.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_riverpod/src/framework.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/riverpod/src/state_provider.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/riverpod/src/result.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/state_notifier/state_notifier.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/riverpod/src/common/env.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/riverpod/src/pragma.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/riverpod/src/stack_trace.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/stack_trace/stack_trace.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/stack_trace/src/stack_zone_specification.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/stack_trace/src/utils.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/riverpod/src/run_guarded.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/riverpod/src/state_controller.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/riverpod/riverpod.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/request_advance_dialog.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/visit_report_data.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator/geolocator.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator_apple/geolocator_apple.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator_apple/src/types/apple_settings.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator_apple/src/types/activity_type.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator_apple/src/geolocator_apple.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator_android/src/geolocator_android.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator_android/src/types/foreground_settings.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator_android/src/types/android_position.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geolocator_android/src/types/android_settings.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/offline_data_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/storage_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/advance_request_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/photo_upload_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/location_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/visit_report_dialog.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/start_visit_dialog.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/professional_movable_toggle.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/providers/profile_provider.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/repositories/profile_repository.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/pact_user_profile.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/user_availability.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/modern_app_header.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/site_visit_detail_screen.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/widgets/cell_content.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/table_calendar_base.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/widgets/calendar_core.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/widgets/calendar_page.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/shared/utils.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/simple_gesture_detector/simple_gesture_detector.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/customization/calendar_builders.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/widgets/calendar_header.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/widgets/format_button.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/widgets/custom_icon_button.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/customization/header_style.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/table_calendar/src/customization/days_of_week_style.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/flutter_map.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/misc/position.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/geo/latlng_bounds.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/misc/point_extensions.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/misc/move_and_rotate_result.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/misc/fit_bounds_options.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/misc/center_zoom.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/misc/bounds.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/general/mobile_layer_transformer.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/map/options/interaction.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/map/options/cursor_keyboard_rotation.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/gestures/multi_finger_gesture.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/gestures/interactive_flag.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/geo/crs.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/classes/projection_tuple.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/wkt_parser/wkt_parser.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/wkt_parser/src/proj_wkt.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/wkt_parser/src/process.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/wkt_parser/src/parser.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/wkt_parser/src/clean_wkt.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/constants/values.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/classes/point.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/mgrs_dart/mgrs_dart.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/mgrs_dart/src/mgrs.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/unicode/unicode.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/lists/lists.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/mgrs_dart/src/classes/utm.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/mgrs_dart/src/classes/lonlat.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/mgrs_dart/src/classes/bbox.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/classes/proj_params.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/constants/units.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/classes/unit.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/constants/prime_meridians.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/constants/datums.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/classes/constant_datum.dart
+[   +6 ms] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/common/derive_constants.dart
+[   +2 ms] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/constants/ellipsoids.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/classes/ellipsoid.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/globals/nadgrid_store.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/classes/datum.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/constants/faces.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/constants/areas.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/proj4dart/src/common/datum_utils.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/gestures/positioned_tap_detector_2.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/gestures/latlng_tween.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/general/translucent_pointer.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_update_transformer.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_update_event.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/http/retry.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_scale_calculator.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_range_calculator.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_range.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_coordinates.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_provider/network_image_provider.dart 
+[   +2 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_bounds/tile_bounds_at_zoom.dart      
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_bounds/tile_bounds.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_provider/file_providers/tile_provider
+_stub.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/tile_layer/tile_provider/asset_tile_provider.dart    
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/polyline_layer.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/polygon_layer/label.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/polylabel/polylabel.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/polylabel/src/data.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/polylabel/src/polylabel_base.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/overlay_image_layer.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/marker_layer.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/circle_layer.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/attribution_layer/simple.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/attribution_layer/rich/widget.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_map/src/layer/attribution_layer/rich/source.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/communications_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/incoming_call_overlay.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/presence_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/wallet_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/config/wallet_constants.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/wallet_transaction.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/wallet_models.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/json_annotation/json_annotation.dart
+[   +2 ms] MetadataProvider: Loaded debug metadata for module:
+packages/json_annotation/src/json_value.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/json_annotation/src/json_serializable.dart
+[   +2 ms] MetadataProvider: Loaded debug metadata for module:
+packages/json_annotation/src/allowed_keys_helpers.dart
+[   +2 ms] MetadataProvider: Loaded debug metadata for module:
+packages/json_annotation/src/json_converter.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/json_annotation/src/checked_helpers.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/json_annotation/src/json_literal.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/json_annotation/src/json_enum.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/admin/email_tracking_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/admin/audit_logs_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/admin/role_management_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/admin/user_management_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/admin_user_approval_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/database_models.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/auth_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/help_models.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/help_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/package_info_plus/package_info_plus.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/package_info_plus/src/package_info_plus_linux.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/help_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/user_selection_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/notifications_panel.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/dashboard_card.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/profile_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/provider/provider.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/provider/src/value_listenable_provider.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/provider/src/provider.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/provider/src/reassemble_handler.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/nested/nested.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/provider/src/selector.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/provider/src/proxy_provider.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/provider/src/listenable_provider.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/provider/src/async_provider.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/language_switcher.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/site_visit_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/utils/site_visit_constraints.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/notification_trigger_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/notification_models.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/geocoding/geocoding.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geocoding_platform_interface/geocoding_platform_interface.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geocoding_platform_interface/src/models/models.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/geocoding_platform_interface/src/models/placemark.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/geocoding_platform_interface/src/models/location.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/geocoding_platform_interface/src/geocoding_platform_interface.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/geocoding_platform_interface/src/errors/errors.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/geocoding_platform_interface/src/errors/no_result_found_exception.dart     
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/custom_bottom_navigation_bar.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/screens/main_screen.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/whats_new_dialog.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/changelog_service.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/incoming_call_dialog.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/network_status_indicator.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/authentication/biometric_prompt_screen.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/authentication/login_screen.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/widgets/biometric_setup_dialog.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/biometric_auth_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_secure_storage/flutter_secure_storage.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/flutter_secure_storage/test/test_flutter_secure_storage_platform.dart      
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_darwin/local_auth_darwin.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_platform_interface/types/biometric_type.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_platform_interface/types/auth_options.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_platform_interface/types/auth_messages.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_darwin/types/auth_messages_ios.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_darwin/types/auth_messages_macos.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_darwin/src/messages.g.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_platform_interface/default_method_channel_platform.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_platform_interface/types/types.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_platform_interface/types/auth_exception.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_android/local_auth_android.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_android/src/auth_messages_android.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_android/src/messages.g.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth/error_codes.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth/local_auth.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth/src/local_auth.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_windows/local_auth_windows.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_windows/types/auth_messages_windows.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/local_auth_windows/src/messages.g.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/realtime_notification_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/authentication/forgot_password_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/authentication/reset_password_screen.dart
+[        ] MetadataProvider: Loaded debug metadata for module:
+packages/pinput/pinput.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pinput/src/pinput.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/authentication/improved_register_screen.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/data/sudan_locations.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/firebase_messaging/firebase_messaging.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/services/authentication_service.dart
+[   +1 ms] MetadataProvider: Loaded debug metadata for module:
+packages/pact_mobile/models/user.dart
+[  +27 ms] DwdsInjector: Injected debugging metadata for entrypoint at
+http://localhost:60367/main_module.bootstrap.js
+[+19556 ms] DevHandler: VmService proxy responded with an error:
+                     {jsonrpc: 2.0, id: 3, error: {code: -32602, message: The stream
+                     `Timer` is not supported on web devices}}
+[+7588 ms] ChromeProxyService: Initializing expression compiler for
+main_module.bootstrap.js
+[ +388 ms] ChromeProxyService: Caching
+package:flutter/src/widgets/widget_inspector.dart in expression compiler worker     
+[ +161 ms] DevHandler: Debug service listening on
+ws://127.0.0.1:56101/1zbvhTdvZQs=/ws
+
+[ +406 ms] DevHandler: Chrome proxy service initialized successfully
+[  +16 ms] DevHandler: VmService proxy responded with an error:
+           {jsonrpc: 2.0, id: 11, error: {code: -32601, message: Method not found,  
+           data: {jsonrpc: 2.0, method: _setStreamIncludePrivateMembers, id: 11,    
+           params: {streamId: Stdout, includePrivateMembers: false}}}}
+[   +8 ms] This app is linked to the debug service:
+ws://127.0.0.1:56101/1zbvhTdvZQs=/ws
+[   +4 ms] DevHandler: VmService proxy responded with an error:
+           {jsonrpc: 2.0, id: 12, error: {code: -32601, message: Method not found,  
+           data: {jsonrpc: 2.0, method: _setStreamIncludePrivateMembers, id: 12,    
+           params: {streamId: Stderr, includePrivateMembers: false}}}}
+[  +23 ms] DevHandler: VmService proxy responded with an error:
+           {jsonrpc: 2.0, id: 14, error: {code: -32601, message: Method not found,  
+           data: {jsonrpc: 2.0, method: _setStreamIncludePrivateMembers, id: 14,    
+           params: {streamId: Isolate, includePrivateMembers: false}}}}
+[  +21 ms] DevHandler: VmService proxy responded with an error:
+           {jsonrpc: 2.0, id: 15, error: {code: -32601, message: Method not found,  
+           data: {jsonrpc: 2.0, method: _setStreamIncludePrivateMembers, id: 15,    
+           params: {streamId: Extension, includePrivateMembers: false}}}}
+[  +11 ms] Debug service listening on ws://127.0.0.1:56101/1zbvhTdvZQs=/ws
+[   +2 ms] A Dart VM Service on Chrome is available at:
+http://127.0.0.1:56101/1zbvhTdvZQs=
+[   +7 ms] The Flutter DevTools debugger and profiler on Chrome is available at:    
+
+http://127.0.0.1:56101/1zbvhTdvZQs=/devtools/?uri=ws://127.0.0.1:56101/1zbvhTdvZQs=/
+           ws
+[  +90 ms] ExpressionEvaluator: Evaluating "() { return true; }" at
+packages/flutter/src/cupertino/text_form_field_row.dart
+[  +27 ms] Starting application from main method in:
+org-dartlang-app:/web_entrypoint.dart.
+[  +10 ms] ExpressionEvaluator: Evaluating JS: "function () {
+             try {
+               return ((() => {var sentinel = {}; var output = function() {
+                   let dart = dartDevEmbedder.importLibrary("dart:_runtime",        
+                   function(lib) {
+                     dart = lib;
+                   });
+                   let dart_rti = dartDevEmbedder.importLibrary("dart:_rti",        
+                   function(lib) {
+                     dart_rti = lib;
+                   });
+                   let dartx = dartDevEmbedder.importLibrary("dartx", function(lib) 
+                   {
+                     dartx = lib;
+                   });
+                   var T = {
+                     VoidTobool: () => (T.VoidTobool =
+                     dart.constFn(dart_rti._Universe.eval(dart.typeUniverse,        
+                     "core|bool()", true)))()
+                   };
+                   return dart.fn(() => true, T.VoidTobool());
+                 }(); if (output === sentinel) throw Error("Value not found in      
+                 scope");return output?._boundMethod || output;})())();
+             } catch (error) {
+               return error.name + ": " + error.message;
+             }
+           }" with scope: {}
+[ +434 ms] ExpressionEvaluator: Evaluated "() { return true; }" to "{type: boolean,
+value: true}"
+[+2950 ms] Firebase.initializeApp() failed or not configured: Assertion failed:
+
+file:///C:/Users/PC/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_core_web-3.4.0/l
+                    ib/src/firebase_core_web.dart:320:11
+[   +3 ms] options != null
+[   +4 ms] "FirebaseOptions cannot be null when creating the default app."
+[   +4 ms] Running on web - location permissions not requested
+[ +286 ms] supabase.supabase_flutter: INFO: ***** Supabase init completed ***** 
+[  +13 ms] [AuthenticationService] Auth state changed:
+AuthChangeEvent.initialSession at
+           2026-01-31T01:41:20.690
+[   +1 ms] [AuthenticationService] Auth user for event
+AuthChangeEvent.initialSession: null
+[  +83 ms] Got object store box in database tasks.
+[  +24 ms] Got object store box in database equipments.
+[   +5 ms] Got object store box in database incidentreports.
+[   +7 ms] Got object store box in database safetychecklists.
+[   +7 ms] Got object store box in database userprofiles.
+[   +7 ms] Got object store box in database appsettings.
+[  +10 ms] Got object store box in database mapdata.
+[   +8 ms] Got object store box in database tasks_sync.
+[   +8 ms] Got object store box in database equipments_sync.
+[   +8 ms] Got object store box in database incidentreports_sync.
+[   +8 ms] Got object store box in database safetychecklists_sync.
+[   +8 ms] Got object store box in database userprofiles_sync.
+[  +19 ms] Got object store box in database pending_sync.
+[  +18 ms] Got object store box in database site_visits.
+[  +11 ms] Got object store box in database locations.
+[  +12 ms] Got object store box in database offline_requests.
+[  +16 ms] Got object store box in database site_cache.
+[  +16 ms] Got object store box in database mmp_cache.
+[  +15 ms] Got object store box in database notifications_cache.
+[  +14 ms] Got object store box in database chat_cache.
+[  +22 ms] Got object store box in database projects_cache.
+[  +15 ms] Got object store box in database wallet_cache.
+[  +16 ms] Got object store box in database budget_cache.
+[   +8 ms] Got object store box in database reports_cache.
+[  +13 ms] Got object store box in database profile_cache.
+[  +12 ms] Got object store box in database offline_metadata.
+[  +10 ms] 🌐 Web platform detected: Path URL strategy configured
+[   +1 ms] 🚀 Starting PACT Consultancy app
+[ +110 ms] Connectivity changed: true
+[   +7 ms] Starting data migration from SharedPreferences to Hive...
+[   +8 ms] Data migration completed successfully
+[  +91 ms] [ShorebirdCodePush]: Shorebird Engine not available, using no-op
+implementation.
+           This occurs when using package:shorebird_code_push in an app that does   
+not
+           contain the Shorebird Engine. Most commonly this is due to building with 
+           `flutter build` or `flutter run` instead of `shorebird release`.
+
+[  +10 ms] Shorebird is not available on this platform
+[   +3 ms] 📱 Notification services initialized
+[  +46 ms] 🔑 No biometrics enabled and user not logged in, showing login screen
+[+6911 ms] 📱 Biometric Check Results:
+[   +4 ms]   Available: false
+[  +15 ms]   Enabled: false
+[   +2 ms]   Has Enrolled: false
+[   +2 ms]   Device Credentials: Available via fallback in authentication
+[   +7 ms] ❌ Biometrics not available on this device
+[   +2 ms] 📱 Biometric Check Results:
+[   +2 ms]   Available: false
+[   +2 ms]   Enabled: false
+[   +3 ms]   Has Enrolled: false
+[   +4 ms]   Device Credentials: Available via fallback in authentication
+[   +6 ms] ❌ Biometrics not available on this device
+[+2589 ms] ReferenceError: serviceWorkerVersion is not defined
+                    . 150:77
+                    <fn>
+                    lib/_engine/engine/dom.dart 311:8
+                    DomEventTarget.dispatchEvent
+                    lib/_engine/engine/platform_dispatcher.dart 557:19
+                    [_sendPlatformMessage]
+                    lib/_engine/engine/platform_dispatcher.dart 368:5
+                    sendPlatformMessage
+                    package:flutter/src/services/binding.dart 637:27
+                    send
+                    package:flutter/src/services/platform_channel.dart 360:33       
+                    <fn>
+                    dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart    
+623:19
+                    <fn>
+                    dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart    
+648:23
+                    <fn>
+                    dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart    
+542:3
+                    _asyncStartSync
+                    package:flutter/src/services/platform_channel.dart 352:14       
+                    [_invokeMethod]
+                    package:flutter/src/services/platform_channel.dart 540:12       
+                    invokeMethod
+                    package:flutter/src/rendering/binding.dart 491:18
+                    [_handleWebFirstFrame]
+
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77    
+                    tear
+                    package:flutter/src/scheduler/binding.dart 1434:7
+                    [_invokeFrameCallback]
+                    package:flutter/src/scheduler/binding.dart 1361:11
+                    handleDrawFrame
+                    package:flutter/src/scheduler/binding.dart 1057:9
+                    <fn>
+                    lib/_engine/engine/frame_service.dart 163:9
+                    <fn>
+
+dart-sdk/lib/_internal/js_dev_runtime/private/isolate_helper.dart 47:11
+                    internalCallback
+[+65863 ms] [AuthenticationService] Auth state changed: AuthChangeEvent.signedIn at
+                     2026-01-31T01:42:36.717
+[   +7 ms] [AuthenticationService] Auth user for event AuthChangeEvent.signedIn:
+           eeaf10a4-84ad-42d7-8042-ab0a42e69e5b
+[  +51 ms] [AuthenticationService] Session expired: false
+[   +3 ms] [AuthenticationService] Session expires at: 1769816561
+[   +1 ms] Auth data stored locally
+[ +544 ms] Note: Could not update last_active (column may not exist):
+                    PostgrestException(message: Could not find the 'last_active'    
+column of 'profiles' in
+                    the schema cache, code: PGRST204, details: , hint: null)        
+[ +675 ms] Failed to assign worker role: PostgrestException(message: new row for
+relation
+                    "user_roles" violates check constraint "user_roles_role_check", 
+code: 23514,
+                    details: , hint: null)
+[+4362 ms] ══╡ EXCEPTION CAUGHT BY RENDERING LIBRARY
+                    ╞═════════════════════════════════════════════════════════      
+[   +2 ms] The following assertion was thrown during layout:
+[  +51 ms] A RenderFlex overflowed by 1.00 pixels on the bottom.
+[   +6 ms] The relevant error-causing widget was:
+[   +3 ms]   Column
+
+Column:file:///C:/Users/PC/PACT_mobile/lib/widgets/professional_movable_toggle.dar  
+             t:737:25
+[   +5 ms] The overflowing RenderFlex has an orientation of Axis.vertical.
+[   +6 ms] The edge of the RenderFlex that is overflowing has been marked in the
+rendering with
+           a yellow and
+[   +3 ms] black striped pattern. This is usually caused by the contents being too  
+big for the
+           RenderFlex.
+[   +4 ms] Consider applying a flex factor (e.g. using an Expanded widget) to force 
+the
+           children of the
+[   +6 ms] RenderFlex to fit within the available space instead of being sized to
+their natural
+           size.
+[   +4 ms] This is considered an error condition because it indicates that there is 
+content
+           that cannot be
+[   +3 ms] seen. If the content is legitimately bigger than the available space,    
+consider
+           clipping it with a
+[   +2 ms] ClipRect widget before putting it in the flex, or using a scrollable
+container
+           rather than a Flex,
+[   +4 ms] like a ListView.
+[   +3 ms] The specific RenderFlex in question is: RenderFlex#dcc47
+relayoutBoundary=up24
+           OVERFLOWING:
+[   +2 ms]   creator: Column ← Row ← Padding ← DecoratedBox ← Container ← Listener ←
+             _GestureSemantics ←
+[   +7 ms]     RawGestureDetector ← GestureDetector ← Row ← DefaultTextStyle ←
+               AnimatedDefaultTextStyle ← ⋯
+[   +5 ms]   parentData: offset=Offset(42.0, 0.0); flex=null; fit=null (can use     
+size)
+[   +1 ms]   constraints: BoxConstraints(0.0<=w<=Infinity, 0.0<=h<=31.0)
+[   +3 ms]   size: Size(62.3, 31.0)
+[   +3 ms]   direction: vertical
+[   +1 ms]   mainAxisAlignment: start
+[   +3 ms]   mainAxisSize: min
+[   +4 ms]   crossAxisAlignment: start
+[   +2 ms]   textDirection: ltr
+[   +1 ms]   verticalDirection: down
+[   +1 ms]   spacing: 0.0
+[   +3 ms]
+◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤
+           ◢◤◢◤◢◤◢◤◢◤◢◤◢◤◢◤
+[   +1 ms]
+════════════════════════════════════════════════════════════════════════════════════
+           ════════════════
+[ +118 ms] Got object store box in database user_profile_cache.
+[  +44 ms] 📦 Loaded cached profile for WebRTC: siddigsoft123
+[ +316 ms] [_fetchUserProjectMemberships] Fetching projects for user:
+                    eeaf10a4-84ad-42d7-8042-ab0a42e69e5b
+[ +298 ms] 💾 Cached role: superadmin
+[   +2 ms] ✅ User role: superadmin, isCoordinator: false
+[ +149 ms] [ShorebirdCodePush]: Shorebird Engine not available, using no-op
+implementation.
+                    This occurs when using package:shorebird_code_push in an app    
+that does not
+                    contain the Shorebird Engine. Most commonly this is due to      
+building with
+                    `flutter build` or `flutter run` instead of `shorebird release`.
+
+[   +2 ms] [ChangelogService] Initialized: v1.0.8 build 13 patch null
+[  +49 ms] Got object store box in database changelog_cache.
+[  +79 ms] [ChangelogService] No previous version seen - showing dialog
+[ +267 ms] team_members table returned empty or doesn't exist, checking projects
+table
+[ +261 ms] [WebRTC] Error loading TURN credentials: PostgrestException(message:
+Could not find
+                    the table 'public.app_config' in the schema cache, code:        
+PGRST205, details: , hint:
+                    Perhaps you meant the table 'public.app_versions')
+[   +2 ms] [WebRTC] Initialized for user: ELSIDDIG IBRAHIM
+           (eeaf10a4-84ad-42d7-8042-ab0a42e69e5b)
+[   +1 ms] ✅ WebRTC service initialized for user: ELSIDDIG IBRAHIM
+[  +44 ms] Got object store box in database pact_users_cache.
+[  +96 ms] [WebRTC] Signaling channel status: RealtimeSubscribeStatus.subscribed
+[   +1 ms] [WebRTC] Signaling channel ready
+[   +2 ms] [WebRTC] Presence channel ready
+[ +253 ms] Checking 2 projects for user membership
+[   +2 ms] Found user in teamComposition for project:
+660399f4-80a2-4642-8f66-9f1f245775e6
+           (role: dataCollector)
+[   +1 ms] Found user in teamComposition for project:
+82ed43a2-e046-482a-a55d-0fe10358b213
+           (role: dataCollector)
+[   +1 ms] User project IDs from projects table: 2 (total: 2)
+[   +1 ms] User is member of 2 projects: [660399f4-80a2-4642-8f66-9f1f245775e6,     
+           82ed43a2-e046-482a-a55d-0fe10358b213]
+[ +311 ms] [PresenceService] Fetched 73 profiles from database
+[  +42 ms] [PresenceService] Loaded 73 users
+[   +8 ms] [WebRTC] Presence channel closed/timed out
+[   +1 ms] [PresenceService] Initialized for user ELSIDDIG IBRAHIM
+[   +2 ms] ✅ Presence service initialized for user: ELSIDDIG IBRAHIM
+[ +370 ms] [PresenceService] Synced 0 online users
+[ +156 ms] [PresenceService] Presence channel ready
+[   +6 ms] [PresenceService] Synced 1 online users
+[ +845 ms] Filtered data collector sites by project: 0 of 0
+[+3341 ms] [Dashboard] Cached dashboard data with 0 coordinator and 0 DC visits
+[+1652 ms] [ChangelogService] Marked version as seen: 1.0.8.13
+[+21554 ms] 📦 Drawer: Loaded cached role: superAdmin
+[   +2 ms] [ShorebirdCodePush]: Shorebird Engine not available, using no-op
+implementation.
+           This occurs when using package:shorebird_code_push in an app that does   
+not
+           contain the Shorebird Engine. Most commonly this is due to building with 
+           `flutter build` or `flutter run` instead of `shorebird release`.
+
+[+2343 ms] [PresenceService] Synced 1 online users
+[ +341 ms] Got object store box in database chat_cache_box.
+[+20899 ms] Got object store box in database message_cache_box.
+[   +5 ms] Got object store box in database message_queue_box.
+[ +243 ms] _loadParticipants for 196582e9-d861-4174-9123-c72ec786de92: [Instance of
+                    'ChatParticipant']
+[+1632 ms] [ChatScreen] Attempting call to insaf.alamin
+[   +4 ms] [ChatScreen] WebRTC initialized: true
+[   +8 ms] [ChatScreen] WebRTC fully ready: true
+[   +4 ms] [ChatScreen] Call type: Audio
+[   +6 ms] [WebRTC] ===== INITIATING CALL =====
+[   +7 ms] [WebRTC] Target: insaf.alamin (af5a82e7-ffd2-4c60-9c19-bfb93d7321bc)
+[   +2 ms] [WebRTC] Audio Only: true
+[   +3 ms] [WebRTC] Current user ID: eeaf10a4-84ad-42d7-8042-ab0a42e69e5b
+[   +3 ms] [WebRTC] Current call state: CallStatus.idle
+[   +5 ms] [WebRTC] Checking signaling channel readiness: true
+[   +4 ms] [WebRTC] Checking if target user is busy...
+[   +4 ms] [WebRTC] ✅ Target user is available
+[   +4 ms] [WebRTC] ✅ Target user is available
+[   +7 ms] [WebRTC] Generated call ID: 1ed20d36-ad29-4658-8940-0b5d073e5d82
+[   +4 ms] [WebRTC] Updating call state to CALLING...
+[   +5 ms] [WebRTC] ✅ Call state updated to CALLING
+[   +4 ms] [WebRTC] Setting up presence and local media...
+[   +3 ms] [WebRTC] Setting up local media (audio only: true)...
+[   +6 ms] [WebRTC] Requesting permissions...
+[   +2 ms] [WebRTC] Requesting call permissions (camera: false)
+[ +183 ms] [WebRTC] Channel pre-warmed for af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[+3211 ms] [WebRTC] Microphone permission: PermissionStatus.granted
+[   +4 ms] [WebRTC] ✅ Permissions granted
+[   +7 ms] [WebRTC] Requesting user media with constraints: {audio:
+{echoCancellation: true,
+           noiseSuppression: true, autoGainControl: true, sampleRate: 48000,        
+channelCount: 1},
+           video: false}
+[ +238 ms] [WebRTC] ✅ Local media stream acquired successfully
+[   +6 ms] [WebRTC] Audio tracks: 1
+[   +2 ms] [WebRTC] Video tracks: 0
+[+3134 ms] [PresenceService] Synced 1 online users
+[+3141 ms] [WebRTC] ✅ Presence and media setup complete
+[   +3 ms] [WebRTC] Sending call request signal...
+[   +2 ms] [WebRTC] Signal sent: CallSignalType.callRequest to
+           af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[   +2 ms] [WebRTC] ✅ Call signal sent successfully
+[   +2 ms] [WebRTC] ===== CALL INITIATED SUCCESSFULLY =====
+[   +2 ms] [ChatScreen] Call initiation result: true
+[ +465 ms] Got object store box in database pact_call_history.
+[+18907 ms] [WebRTC] Ending call
+[   +2 ms] [WebRTC] Signal sent: CallSignalType.callEnd to
+af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[   +2 ms] [WebRTC] Cleaning up resources

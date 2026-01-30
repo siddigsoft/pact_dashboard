@@ -154,13 +154,7 @@ export function FinanceApprovalSignature({
         userRole={approverRole}
         walletId={request.walletId}
         allowedMethods={['uuid', 'handwriting']}
-        onSignatureComplete={async (result) => {
-          toast({
-            title: 'Approval Signed',
-            description: 'Withdrawal has been approved with your digital signature.',
-          });
-          setIsModalOpen(false);
-        }}
+        onSignatureComplete={handleSignAndApprove}
       />
     </div>
   );
@@ -272,13 +266,7 @@ export function BatchApprovalSignature({
         userEmail={approverEmail}
         userRole={approverRole}
         allowedMethods={['uuid', 'handwriting']}
-        onSignatureComplete={async (result) => {
-          toast({
-            title: 'Batch Approval Signed',
-            description: `${requests.length} withdrawal(s) approved with your digital signature.`,
-          });
-          setIsModalOpen(false);
-        }}
+        onSignatureComplete={handleSignAndApproveBatch}
       />
     </div>
   );
