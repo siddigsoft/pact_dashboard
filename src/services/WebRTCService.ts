@@ -1,8 +1,10 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+export type CallSignalType = 'offer' | 'answer' | 'ice-candidate' | 'call-request' | 'call-accepted' | 'call-rejected' | 'call-ended' | 'call-busy' | 'jitsi-invite' | 'jitsi-accepted' | 'jitsi-rejected';
+
 export type CallSignal = {
-  type: 'offer' | 'answer' | 'ice-candidate' | 'call-request' | 'call-accepted' | 'call-rejected' | 'call-ended' | 'call-busy' | 'jitsi-invite' | 'jitsi-accepted' | 'jitsi-rejected';
+  type: CallSignalType;
   from: string;
   to: string;
   fromName: string;
@@ -13,6 +15,35 @@ export type CallSignal = {
   timestamp: number;
   jitsiRoom?: string;
   isAudioOnly?: boolean;
+};
+
+// Normalize signal types from mobile (camelCase) to web (kebab-case) format
+const normalizeSignalType = (type: string): CallSignalType => {
+  const typeMap: Record<string, CallSignalType> = {
+    // Mobile format -> Web format
+    'callRequest': 'call-request',
+    'callAccept': 'call-accepted',
+    'callReject': 'call-rejected',
+    'callEnd': 'call-ended',
+    'callBusy': 'call-busy',
+    'iceCandidate': 'ice-candidate',
+    'jitsiInvite': 'jitsi-invite',
+    'jitsiAccept': 'jitsi-accepted',
+    'jitsiReject': 'jitsi-rejected',
+    // Already normalized types pass through
+    'call-request': 'call-request',
+    'call-accepted': 'call-accepted',
+    'call-rejected': 'call-rejected',
+    'call-ended': 'call-ended',
+    'call-busy': 'call-busy',
+    'ice-candidate': 'ice-candidate',
+    'offer': 'offer',
+    'answer': 'answer',
+    'jitsi-invite': 'jitsi-invite',
+    'jitsi-accepted': 'jitsi-accepted',
+    'jitsi-rejected': 'jitsi-rejected',
+  };
+  return typeMap[type] || (type as CallSignalType);
 };
 
 export type CallEventHandler = {
@@ -218,7 +249,13 @@ class WebRTCService {
       .channel(channelName)
       .on('broadcast', { event: 'call-signal' }, async ({ payload }) => {
         console.log('[WebRTC] Received broadcast signal:', payload);
-        const signal = payload as CallSignal;
+        // Normalize signal type for cross-platform compatibility (mobile uses camelCase, web uses kebab-case)
+        const rawSignal = payload as any;
+        const signal: CallSignal = {
+          ...rawSignal,
+          type: normalizeSignalType(rawSignal.type),
+        };
+        console.log('[WebRTC] Normalized signal type:', rawSignal.type, '->', signal.type);
         
         if (signal.to !== this.currentUserId) return;
         

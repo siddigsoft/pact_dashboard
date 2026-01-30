@@ -15,6 +15,38 @@ enum CallSignalType {
   jitsiReject,
 }
 
+/// Normalize signal type from web (kebab-case) to mobile (camelCase) format
+/// Handles cross-platform compatibility between web and mobile apps
+CallSignalType normalizeSignalType(String type) {
+  // Map web format (kebab-case) to mobile format (camelCase)
+  const typeMap = <String, CallSignalType>{
+    // Web format -> Mobile format
+    'call-request': CallSignalType.callRequest,
+    'call-accepted': CallSignalType.callAccept,
+    'call-rejected': CallSignalType.callReject,
+    'call-ended': CallSignalType.callEnd,
+    'call-busy': CallSignalType.callBusy,
+    'ice-candidate': CallSignalType.iceCandidate,
+    'jitsi-invite': CallSignalType.jitsiInvite,
+    'jitsi-accepted': CallSignalType.jitsiAccept,
+    'jitsi-rejected': CallSignalType.jitsiReject,
+    // Mobile format also supported (pass-through)
+    'callRequest': CallSignalType.callRequest,
+    'callAccept': CallSignalType.callAccept,
+    'callReject': CallSignalType.callReject,
+    'callEnd': CallSignalType.callEnd,
+    'callBusy': CallSignalType.callBusy,
+    'iceCandidate': CallSignalType.iceCandidate,
+    'offer': CallSignalType.offer,
+    'answer': CallSignalType.answer,
+    'jitsiInvite': CallSignalType.jitsiInvite,
+    'jitsiAccept': CallSignalType.jitsiAccept,
+    'jitsiReject': CallSignalType.jitsiReject,
+  };
+  
+  return typeMap[type] ?? CallSignalType.callRequest;
+}
+
 /// Call signal message for WebRTC signaling
 class CallSignal {
   final CallSignalType type;
@@ -60,11 +92,11 @@ class CallSignal {
   }
 
   factory CallSignal.fromJson(Map<String, dynamic> json) {
+    // Use normalizer for cross-platform compatibility (web uses kebab-case, mobile uses camelCase)
+    final normalizedType = normalizeSignalType(json['type'] as String? ?? 'callRequest');
+    
     return CallSignal(
-      type: CallSignalType.values.firstWhere(
-        (e) => e.name == json['type'],
-        orElse: () => CallSignalType.callRequest,
-      ),
+      type: normalizedType,
       from: json['from'] as String,
       to: json['to'] as String,
       fromName: json['fromName'] as String,
