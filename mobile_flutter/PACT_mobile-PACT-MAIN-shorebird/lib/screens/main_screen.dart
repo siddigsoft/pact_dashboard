@@ -237,6 +237,8 @@ class _MainScreenState extends State<MainScreen> {
       _callStateSubscription = WebRTCService().callStateStream.listen((state) {
         if (state.status == CallStatus.ringing &&
             state.remoteUserId != null &&
+            state.callId != null &&
+            state.callToken != null &&
             mounted) {
           // Show incoming call dialog
           showIncomingCallDialog(
