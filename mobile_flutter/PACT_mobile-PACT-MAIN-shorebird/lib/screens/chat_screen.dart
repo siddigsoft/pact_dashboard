@@ -1,6 +1,7 @@
 // lib/screens/chat_screen.dart
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -634,21 +635,18 @@ class _ChatScreenState extends State<ChatScreen> {
           .from('chat-attachments')
           .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
       
-      // Send as audio message
+      // Send as audio message - encode URL and metadata in content as JSON
       final durationSeconds = _recordingDuration.inSeconds;
-      final metadata = {
+      final audioContent = jsonEncode({
+        'url': signedUrl,
         'duration': durationSeconds,
-        'mimeType': 'audio/mp4',
         'fileName': fileName,
-        'storagePath': storagePath,
-      };
+      });
       
       await _chatService.sendMessage(
-        chatId: widget.chat.id,
-        content: 'Voice message (${_formatDuration(_recordingDuration)})',
-        messageType: 'audio',
-        attachmentUrl: signedUrl,
-        metadata: metadata,
+        widget.chat.id,
+        audioContent,
+        contentType: 'audio',
       );
       
       // Delete temp file
