@@ -1,0 +1,871 @@
+[ChangelogService] Initialized: v1.0.8 build 13 patch null
+Got object store box in database changelog_cache.
+💾 Cached role: coordinator
+✅ User role: coordinator, isCoordinator: true
+team_members table returned empty or doesn't exist, checking projects table
+[ChangelogService] No previous version seen - showing dialog
+Checking 2 projects for user membership
+Found user in teamComposition for project: 660399f4-80a2-4642-8f66-9f1f245775e6 (role: dataCollector)
+User project IDs from projects table: 1 (total: 1)
+User is member of 1 projects: [660399f4-80a2-4642-8f66-9f1f245775e6]
+[WebRTC] Error loading TURN credentials: PostgrestException(message: Could not find the table 'public.app_config' in the
+schema cache, code: PGRST205, details: , hint: Perhaps you meant the table 'public.app_versions')
+[WebRTC] Initialized for user: Insaf Ibrahim Aldoom Alamin (af5a82e7-ffd2-4c60-9c19-bfb93d7321bc)
+✅ WebRTC service initialized for user: Insaf Ibrahim Aldoom Alamin
+Got object store box in database pact_users_cache.
+Filtered coordinator sites by project: 23 of 23
+[WebRTC] Signaling channel status: RealtimeSubscribeStatus.subscribed
+[WebRTC] Signaling channel ready
+[WebRTC] Presence channel ready
+[Dashboard] Cached dashboard data with 23 coordinator and 0 DC visits
+[PresenceService] Fetched 73 profiles from database
+[PresenceService] Loaded 73 users
+[WebRTC] Presence channel closed/timed out
+[PresenceService] Initialized for user Insaf Ibrahim Aldoom Alamin
+✅ Presence service initialized for user: Insaf Ibrahim Aldoom Alamin
+[PresenceService] Synced 0 online users
+[PresenceService] Presence channel ready
+[PresenceService] Synced 1 online users
+[ChangelogService] Marked version as seen: 1.0.8.13
+📦 Drawer: Loaded cached role: coordinator
+[ShorebirdCodePush]: Shorebird Engine not available, using no-op implementation.
+This occurs when using package:shorebird_code_push in an app that does not
+contain the Shorebird Engine. Most commonly this is due to building with
+`flutter build` or `flutter run` instead of `shorebird release`.
+
+[CommunicationsScreen] Fetching contacts directly from database...
+[CommunicationsScreen] Loaded user info: role=coordinator, state=west-darfur, hub=forchana-hub
+[CommunicationsScreen] Direct fetch returned 73 profiles
+[CommunicationsScreen] Loaded 73 users via direct fetch
+[CommunicationsScreen] Direct fetch successful: 73 users
+[CommunicationsScreen] Total users loaded: 73
+Got object store box in database message_queue_box.
+[ChatService] Synced 0 messages
+[PresenceService] Synced 1 online users
+[PresenceService] Synced 1 online users
+[PresenceService] Synced 1 online users
+Filtered coordinator sites by project: 23 of 23
+[Dashboard] Cached dashboard data with 23 coordinator and 0 DC visits
+📦 Drawer: Loaded cached role: coordinator
+[ShorebirdCodePush]: Shorebird Engine not available, using no-op implementation.
+This occurs when using package:shorebird_code_push in an app that does not
+contain the Shorebird Engine. Most commonly this is due to building with
+`flutter build` or `flutter run` instead of `shorebird release`.
+
+supabase.auth: INFO: Signing out user with scope: SignOutScope.local 
+[AuthenticationService] Auth state changed: AuthChangeEvent.signedOut at 2026-01-30T23:29:59.536
+[AuthenticationService] Auth user for event AuthChangeEvent.signedOut: null
+[AuthenticationService] Sign out detected - current session: false, has local auth: false
+[AuthenticationService] No local auth data - normal sign out flow
+[AuthenticationService] _handleSignOut invoked at 2026-01-30T23:29:59.538
+[AuthenticationService] Clearing local auth data for user: null
+Local auth data cleared
+📱 Biometric Check Results:
+  Available: false
+  Enabled: false
+  Has Enrolled: false
+  Device Credentials: Available via fallback in authentication
+❌ Biometrics not available on this device
+[PresenceService] Synced 1 online users
+[PresenceService] Synced 1 online users
+[AuthenticationService] Auth state changed: AuthChangeEvent.signedIn at 2026-01-30T23:30:24.436
+[AuthenticationService] Auth user for event AuthChangeEvent.signedIn: eeaf10a4-84ad-42d7-8042-ab0a42e69e5b
+[AuthenticationService] Session expired: false
+[AuthenticationService] Session expires at: 1769808628
+Auth data stored locally
+Note: Could not update last_active (column may not exist): PostgrestException(message: Could not find the 'last_active'
+column of 'profiles' in the schema cache, code: PGRST204, details: , hint: null)
+Failed to assign worker role: PostgrestException(message: new row for relation "user_roles" violates check constraint
+"user_roles_role_check", code: 23514, details: , hint: null)
+📦 Loaded cached role: coordinator
+📦 Loaded cached profile for WebRTC: Insaf Ibrahim Aldoom Alamin
+Another exception was thrown: A RenderFlex overflowed by 1.00 pixels on the bottom.
+[WebRTC] Signaling channel status: RealtimeSubscribeStatus.closed
+[WebRTC] Signaling channel closed/timed out
+[WebRTC] Presence channel closed/timed out
+[PresenceService] Presence channel closed/timed out
+[_fetchUserProjectMemberships] Fetching projects for user: eeaf10a4-84ad-42d7-8042-ab0a42e69e5b
+💾 Cached role: superadmin
+✅ User role: superadmin, isCoordinator: false
+[WebRTC] Signaling channel status: RealtimeSubscribeStatus.subscribed
+[WebRTC] Signaling channel ready
+[WebRTC] Presence channel ready
+[ShorebirdCodePush]: Shorebird Engine not available, using no-op implementation.
+This occurs when using package:shorebird_code_push in an app that does not
+contain the Shorebird Engine. Most commonly this is due to building with
+`flutter build` or `flutter run` instead of `shorebird release`.
+
+[ChangelogService] Initialized: v1.0.8 build 13 patch null
+[ChangelogService] Last seen: 1.0.8.13, Current: 1.0.8.13, isNew: false
+[WebRTC] Error loading TURN credentials: PostgrestException(message: Could not find the table 'public.app_config' in the
+schema cache, code: PGRST205, details: , hint: Perhaps you meant the table 'public.app_versions')
+[WebRTC] Initialized for user: ELSIDDIG IBRAHIM (eeaf10a4-84ad-42d7-8042-ab0a42e69e5b)
+✅ WebRTC service initialized for user: ELSIDDIG IBRAHIM
+[PresenceService] Loaded 73 cached users
+team_members table returned empty or doesn't exist, checking projects table
+[PresenceService] Fetched 73 profiles from database
+[PresenceService] Loaded 73 users
+[PresenceService] Presence channel closed/timed out
+[WebRTC] Presence channel closed/timed out
+[PresenceService] Initialized for user ELSIDDIG IBRAHIM
+✅ Presence service initialized for user: ELSIDDIG IBRAHIM
+Checking 2 projects for user membership
+Found user in teamComposition for project: 660399f4-80a2-4642-8f66-9f1f245775e6 (role: dataCollector)
+Found user in teamComposition for project: 82ed43a2-e046-482a-a55d-0fe10358b213 (role: dataCollector)
+User project IDs from projects table: 2 (total: 2)
+User is member of 2 projects: [660399f4-80a2-4642-8f66-9f1f245775e6, 82ed43a2-e046-482a-a55d-0fe10358b213]
+[PresenceService] Synced 0 online users
+[PresenceService] Presence channel ready
+[PresenceService] Synced 1 online users
+Filtered data collector sites by project: 0 of 0
+[Dashboard] Cached dashboard data with 0 coordinator and 0 DC visits
+📦 Drawer: Loaded cached role: superadmin
+[ShorebirdCodePush]: Shorebird Engine not available, using no-op implementation.
+This occurs when using package:shorebird_code_push in an app that does not
+contain the Shorebird Engine. Most commonly this is due to building with
+`flutter build` or `flutter run` instead of `shorebird release`.
+
+[CommunicationsScreen] Fetching contacts directly from database...
+[CommunicationsScreen] Loaded user info: role=superAdmin, state=river-nile, hub=dongola-hub
+[CommunicationsScreen] Direct fetch returned 73 profiles
+[CommunicationsScreen] Loaded 73 users via direct fetch
+[CommunicationsScreen] Direct fetch successful: 73 users
+[CommunicationsScreen] Total users loaded: 73
+[ChatService] Synced 0 messages
+[PresenceService] Synced 2 online users
+[WebRTC] Initiating call to Insaf Ibrahim Aldoom Alamin (af5a82e7-ffd2-4c60-9c19-bfb93d7321bc)
+[WebRTC] Requesting call permissions (camera: false)
+[WebRTC] Channel pre-warmed for af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Microphone permission: PermissionStatus.granted
+[WebRTC] Local media stream acquired
+[PresenceService] Synced 2 online users
+[WebRTC] Detected stuck call state (no peer connection), forcing reset
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callRequest to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+Got object store box in database pact_call_history.
+[WebRTC] Channel pre-warm failed for af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+RethrownDartError: Concurrent modification during iteration: Instance of 'IdentityMap<String, RealtimeChannel>'.
+    Non-error `Concurrent modification during iteration: Instance of 'IdentityMap<String, RealtimeChannel>'.` thrown by JS   
+    does not have stack trace.
+Caught in Dart at:
+
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 331:18      missing
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 177:24      stackTrace
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 582:57               _asyncRethrow
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+
+
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 307:10      createErrorWithStack
+dart-sdk/lib/_internal/js_dev_runtime/patch/core_patch.dart 280:28                _throw
+dart-sdk/lib/core/errors.dart 120:5                                               throwWithStackTrace
+dart-sdk/lib/async/zone.dart 1512:11                                              <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+[PresenceService] Synced 1 online users
+[PresenceService] Synced 2 online users
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+Got object store box in database settings.
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[PresenceService] Synced 2 online users
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'  
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Received signal: broadcast
+[WebRTC] Processing signal: CallSignalType.callRequest
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[WebRTC] Error adding notification to bell: PostgrestException(message: Could not find the 'body' column of 'notifications'
+in the schema cache, code: PGRST204, details: , hint: null)
+[PresenceService] Synced 1 online users
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+[WebRTC] Signal sent: CallSignalType.callReject to af5a82e7-ffd2-4c60-9c19-bfb93d7321bc
+[WebRTC] Cleaning up resources
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+DartError: Unexpected null value.
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/errors.dart 274:3       throw_
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 950:18  nullCheck
+package:flutter/src/widgets/framework.dart 5941:44                                get state
+package:flutter/src/widgets/navigator.dart 2900:9                                 of
+package:pact_mobile/widgets/incoming_call_dialog.dart 134:47                      <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 602:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 1642:3                           <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 504:7                complete
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 571:12               _asyncReturn
+package:pact_mobile/services/webrtc_service.dart 358:3                            <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 623:19               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 648:23               <fn>
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 594:19               <fn>
+dart-sdk/lib/async/zone.dart 1849:54                                              runUnary
+dart-sdk/lib/async/future_impl.dart 222:18                                        handleValue
+dart-sdk/lib/async/future_impl.dart 948:44                                        handleValueCallback
+dart-sdk/lib/async/future_impl.dart 977:13                                        _propagateToListeners
+dart-sdk/lib/async/future_impl.dart 720:5                                         [_completeWithValue]
+dart-sdk/lib/async/future_impl.dart 804:7                                         <fn>
+dart-sdk/lib/async/schedule_microtask.dart 40:34                                  _microtaskLoop
+dart-sdk/lib/async/schedule_microtask.dart 49:5                                   _startMicrotaskLoop
+dart-sdk/lib/_internal/js_dev_runtime/private/ddc_runtime/operations.dart 118:77  tear
+dart-sdk/lib/_internal/js_dev_runtime/patch/async_patch.dart 188:69               <fn>
+[PresenceService] Synced 1 online users
