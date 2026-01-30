@@ -1001,6 +1001,10 @@ class WebRTCService {
         if (status == RealtimeSubscribeStatus.subscribed) {
           if (!completer.isCompleted) completer.complete();
         } else if (status == RealtimeSubscribeStatus.closed || error != null) {
+          // Defer removal to avoid concurrent modification
+          Future.microtask(() {
+            _outboundChannels.remove(channelName);
+          });
           if (!completer.isCompleted) {
             completer.completeError(error ?? 'Channel closed');
           }
@@ -1040,8 +1044,11 @@ class WebRTCService {
       if (status == RealtimeSubscribeStatus.subscribed) {
         debugPrint('[WebRTC] Channel pre-warmed for $targetUserId');
       } else if (status == RealtimeSubscribeStatus.closed || error != null) {
-        // Remove failed channel so it can be retried
-        _outboundChannels.remove(channelName);
+        // Remove failed channel asynchronously to avoid concurrent modification
+        // Use Future.microtask to defer the removal
+        Future.microtask(() {
+          _outboundChannels.remove(channelName);
+        });
         debugPrint('[WebRTC] Channel pre-warm failed for $targetUserId');
       }
     });
@@ -1534,9 +1541,16 @@ class WebRTCService {
   
   /// Force reset if stuck in a call state
   Future<void> forceResetIfNotInActiveCall() async {
+    // During "calling" or "ringing" phase, it's NORMAL to not have a peer connection yet.
+    // The peer connection is only created when the callee accepts and sends an offer.
+    // Only consider it "stuck" if we're supposed to be connected but have no connection.
+    final isNormalPreConnectionState = 
+        _callState.status == CallStatus.calling ||
+        _callState.status == CallStatus.ringing;
+    
     // If we think we're in a call but have no active peer connection,
-    // then we're in a stuck state and should reset
-    if (_callState.isInCall && _peerConnection == null) {
+    // then we're in a stuck state and should reset (except during calling/ringing phases)
+    if (_callState.isInCall && _peerConnection == null && !isNormalPreConnectionState) {
       debugPrint('[WebRTC] Detected stuck call state (no peer connection), forcing reset');
       await _cleanup();
       return;
@@ -1552,7 +1566,8 @@ class WebRTCService {
     }
     
     // Reset if local/remote streams are null but we think we're in a call
-    if (_callState.isInCall && _localStream == null && _remoteStream == null) {
+    // Again, skip for calling/ringing phase where streams are being set up
+    if (_callState.isInCall && _localStream == null && _remoteStream == null && !isNormalPreConnectionState) {
       debugPrint('[WebRTC] Detected stuck call state (no streams), forcing reset');
       await _cleanup();
     }
@@ -1581,15 +1596,17 @@ class WebRTCService {
 
     await _updatePresence(inCall: false);
 
-    // Cleanup outbound channels
-    for (final channel in _outboundChannels.values) {
+    // Cleanup outbound channels - create copy to avoid concurrent modification
+    final channelsToCleanup = Map<String, RealtimeChannel>.from(_outboundChannels);
+    _outboundChannels.clear(); // Clear first to prevent further modifications
+    
+    for (final channel in channelsToCleanup.values) {
       try {
         await channel.unsubscribe();
       } catch (e) {
         // Ignore cleanup errors
       }
     }
-    _outboundChannels.clear();
 
     _callState = CallState();
     _callStateController.add(_callState);
