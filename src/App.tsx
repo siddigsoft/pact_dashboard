@@ -75,6 +75,7 @@ const BudgetPage = lazy(() => import('./pages/Budget'));
 const Classifications = lazy(() => import('./pages/Classifications'));
 const ClassificationFeeManagement = lazy(() => import('./pages/ClassificationFeeManagement'));
 const CostSubmission = lazy(() => import('./pages/CostSubmission'));
+const CostSubmissionReports = lazy(() => import('./pages/CostSubmissionReports'));
 const DemoDataCollector = lazy(() => import('./pages/DemoDataCollector'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
@@ -239,6 +240,7 @@ const AppRoutes = () => {
         <Route path="/wallet-reports" element={<WalletReports />} />
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/cost-submission" element={<CostSubmission />} />
+        <Route path="/cost-submission/reports" element={<CostSubmissionReports />} />
         <Route path="/site-visits" element={<SiteVisits />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
         <Route path="/site-visits/create/mmp" element={<CreateSiteVisitMMP />} />
