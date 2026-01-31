@@ -92,12 +92,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     let cancelled = false;
     const loadCollectors = async () => {
       try {
+        // Query all profiles first, then filter by role case-insensitively
+        // This handles all role variations: DataCollector, datacollector, Coordinator, coordinator, Enumerator, etc.
         const { data, error } = await supabase
           .from("profiles")
           .select(
-            "id, full_name, username, email, hub_id, state_id, locality_id",
+            "id, full_name, username, email, hub_id, state_id, locality_id, role",
           )
-          .in("role", ["dataCollector", "datacollector", "coordinator"])
           .order("full_name", { ascending: true });
 
         if (!cancelled) {
@@ -108,7 +109,16 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             );
             setCollectors([]);
           } else {
-            setCollectors(data as any[] as DataCollector[]);
+            // Filter by role case-insensitively
+            const rolePatterns = ['datacollector', 'data collector', 'coordinator', 'enumerator'];
+            const filtered = (data || []).filter(profile => {
+              const role = (profile.role || '').toLowerCase().replace(/\s+/g, '');
+              return rolePatterns.some(pattern => 
+                role.includes(pattern.replace(/\s+/g, ''))
+              );
+            });
+            console.log(`[DispatchSitesDialog] Loaded ${filtered.length} collectors/coordinators from ${data?.length || 0} total profiles`);
+            setCollectors(filtered as any[] as DataCollector[]);
           }
         }
       } catch (err) {
@@ -180,34 +190,56 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     let filtered = collectors;
 
     if (dispatchType === "state" && selectedState) {
-      // Convert state name to state ID for matching
-      const stateId = sudanStates.find(
-        (s) => s.name.toLowerCase() === selectedState.toLowerCase(),
-      )?.id;
-      if (stateId) {
-        filtered = filtered.filter((c) => c.state_id === stateId);
+      // Find the state from sudanStates - selectedState is typically the state NAME
+      const stateData = sudanStates.find(
+        (s) => s.name.toLowerCase() === selectedState.toLowerCase() ||
+               s.id.toLowerCase() === selectedState.toLowerCase()
+      );
+      
+      if (stateData) {
+        // Match collectors by: state_id equals stateData.id OR stateData.name (users may have either stored)
+        filtered = filtered.filter((c) => {
+          if (!c.state_id) return false;
+          const collectorStateId = c.state_id.toLowerCase();
+          return collectorStateId === stateData.id.toLowerCase() || 
+                 collectorStateId === stateData.name.toLowerCase();
+        });
+        console.log(`[DispatchSitesDialog] State filter: "${selectedState}" -> found ${filtered.length} collectors (matching id:"${stateData.id}" or name:"${stateData.name}")`);
       } else {
-        // Fallback: try direct match in case selectedState is already an ID
-        filtered = filtered.filter((c) => c.state_id === selectedState);
+        // Fallback: try direct case-insensitive match
+        filtered = filtered.filter((c) => 
+          c.state_id?.toLowerCase() === selectedState.toLowerCase()
+        );
+        console.log(`[DispatchSitesDialog] State filter fallback: "${selectedState}" -> found ${filtered.length} collectors`);
       }
     } else if (dispatchType === "locality" && selectedLocality) {
       // Convert locality name to locality ID for matching
       // Need to find the state first to get the correct locality
-      let localityId: string | undefined;
+      let localityData: { id: string; name: string } | undefined;
       for (const state of sudanStates) {
         const locality = state.localities.find(
-          (l) => l.name.toLowerCase() === selectedLocality.toLowerCase(),
+          (l) => l.name.toLowerCase() === selectedLocality.toLowerCase() ||
+                 l.id.toLowerCase() === selectedLocality.toLowerCase()
         );
         if (locality) {
-          localityId = locality.id;
+          localityData = locality;
           break;
         }
       }
-      if (localityId) {
-        filtered = filtered.filter((c) => c.locality_id === localityId);
+      if (localityData) {
+        // Match collectors by: locality_id equals localityData.id OR localityData.name
+        filtered = filtered.filter((c) => {
+          if (!c.locality_id) return false;
+          const collectorLocalityId = c.locality_id.toLowerCase();
+          return collectorLocalityId === localityData!.id.toLowerCase() || 
+                 collectorLocalityId === localityData!.name.toLowerCase();
+        });
+        console.log(`[DispatchSitesDialog] Locality filter: "${selectedLocality}" -> found ${filtered.length} collectors`);
       } else {
-        // Fallback: try direct match in case selectedLocality is already an ID
-        filtered = filtered.filter((c) => c.locality_id === selectedLocality);
+        // Fallback: try direct case-insensitive match
+        filtered = filtered.filter((c) => 
+          c.locality_id?.toLowerCase() === selectedLocality.toLowerCase()
+        );
       }
     }
 
