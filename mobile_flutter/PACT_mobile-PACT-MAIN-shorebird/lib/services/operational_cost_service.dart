@@ -270,7 +270,11 @@ class OperationalCostService {
     }
   }
 
-  /// Tier 1 Review (Supervisor/FOM)
+  /// Tier 1 Review (Supervisor/FOM based on submitter role hierarchy)
+  /// Coordinator → Supervisor approves
+  /// Supervisor → FOM approves
+  /// FOM → CountryDirector approves
+  /// CountryDirector → Admin approves
   Future<bool> tier1Review({
     required String submissionId,
     required bool approved,
@@ -278,6 +282,14 @@ class OperationalCostService {
   }) async {
     final userId = currentUserId;
     if (userId == null) return false;
+
+    // Verify reviewer has Tier 1 approval permission
+    final permissions = await getUserPermissions();
+    if (!permissions.isSupervisor && !permissions.isFOM && 
+        !permissions.isCountryDirector && !permissions.isAdmin) {
+      print('Error: User does not have Tier 1 approval permission');
+      return false;
+    }
 
     try {
       await _supabase
@@ -300,7 +312,7 @@ class OperationalCostService {
     }
   }
 
-  /// Tier 2 Review (Admin/Country Director)
+  /// Tier 2 Review (Admin/Country Director - final approval)
   Future<bool> tier2Review({
     required String submissionId,
     required bool approved,
@@ -308,6 +320,13 @@ class OperationalCostService {
   }) async {
     final userId = currentUserId;
     if (userId == null) return false;
+
+    // Verify reviewer has Tier 2 approval permission (Admin or CountryDirector)
+    final permissions = await getUserPermissions();
+    if (!permissions.isAdmin && !permissions.isCountryDirector) {
+      print('Error: User does not have Tier 2 approval permission');
+      return false;
+    }
 
     try {
       await _supabase
@@ -334,6 +353,13 @@ class OperationalCostService {
   Future<bool> markAsPaid(String submissionId) async {
     final userId = currentUserId;
     if (userId == null) return false;
+
+    // Verify user has payout permission (Admin only)
+    final permissions = await getUserPermissions();
+    if (!permissions.canPayOut) {
+      print('Error: User does not have payout permission');
+      return false;
+    }
 
     try {
       await _supabase

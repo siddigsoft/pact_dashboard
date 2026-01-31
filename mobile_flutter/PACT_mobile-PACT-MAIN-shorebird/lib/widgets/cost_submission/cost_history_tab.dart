@@ -524,15 +524,13 @@ class _SubmissionCard extends StatelessWidget {
   bool _shouldShowActions() {
     if (isProcessing) return false;
     
-    // Tier 1 approval (pending status)
-    if (submission.status == OperationalCostStatus.pending && 
-        (permissions.isSupervisor || permissions.isFOM)) {
+    // Tier 1 approval - uses role-based permission check
+    if (permissions.canApproveTier1(submission)) {
       return true;
     }
     
-    // Tier 2 approval (under_review status)
-    if (submission.status == OperationalCostStatus.underReview && 
-        (permissions.isAdmin || permissions.isCountryDirector)) {
+    // Tier 2 approval - uses role-based permission check
+    if (permissions.canApproveTier2(submission)) {
       return true;
     }
     
@@ -552,9 +550,8 @@ class _SubmissionCard extends StatelessWidget {
   Widget _buildActionButtons(BuildContext context) {
     final buttons = <Widget>[];
     
-    // Tier 1 actions
-    if (submission.status == OperationalCostStatus.pending && 
-        (permissions.isSupervisor || permissions.isFOM)) {
+    // Tier 1 actions - based on submitter role hierarchy
+    if (permissions.canApproveTier1(submission)) {
       buttons.add(
         TextButton.icon(
           onPressed: onReject,
@@ -567,7 +564,7 @@ class _SubmissionCard extends StatelessWidget {
         ElevatedButton.icon(
           onPressed: onApprove,
           icon: const Icon(Icons.check, size: 18),
-          label: Text(isArabic ? 'موافقة' : 'Approve'),
+          label: Text(isArabic ? 'موافقة المستوى 1' : 'Tier 1 Approve'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green,
             foregroundColor: Colors.white,
@@ -576,9 +573,8 @@ class _SubmissionCard extends StatelessWidget {
       );
     }
     
-    // Tier 2 actions
-    if (submission.status == OperationalCostStatus.underReview && 
-        (permissions.isAdmin || permissions.isCountryDirector)) {
+    // Tier 2 actions - Admin/CountryDirector final approval
+    if (permissions.canApproveTier2(submission)) {
       buttons.add(
         TextButton.icon(
           onPressed: onTier2Reject,

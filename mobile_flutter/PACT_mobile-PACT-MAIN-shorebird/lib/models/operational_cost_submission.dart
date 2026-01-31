@@ -458,11 +458,13 @@ class CostSubmissionPermissions {
   final bool canApprove;
   final bool canPayOut;
   final bool isAdmin;
+  final bool isSuperAdmin;
   final bool isSupervisor;
   final bool isFOM;
   final bool isCoordinator;
   final bool isCountryDirector;
   final bool isDataCollector;
+  final String role;
 
   CostSubmissionPermissions({
     required this.canSubmit,
@@ -470,21 +472,23 @@ class CostSubmissionPermissions {
     required this.canApprove,
     required this.canPayOut,
     required this.isAdmin,
+    required this.isSuperAdmin,
     required this.isSupervisor,
     required this.isFOM,
     required this.isCoordinator,
     required this.isCountryDirector,
     required this.isDataCollector,
+    required this.role,
   });
 
   factory CostSubmissionPermissions.fromRole(String? role) {
     final r = role?.toLowerCase() ?? '';
     
-    final isAdmin = r == 'admin' || r == 'super_admin' || r == 'superadmin';
     final isSuperAdmin = r == 'super_admin' || r == 'superadmin';
+    final isAdmin = r == 'admin' || isSuperAdmin;
     final isSupervisor = r == 'supervisor' || r == 'hubsupervisor' || r == 'hub_supervisor';
-    final isFOM = r.contains('fom') || r.contains('field operation');
-    final isCoordinator = r == 'coordinator' || r.contains('coordinator');
+    final isFOM = r.contains('fom') || r.contains('field operation') || r.contains('fieldoperation');
+    final isCoordinator = r == 'coordinator' || (r.contains('coordinator') && !r.contains('country'));
     final isCountryDirector = r == 'countrydirector' || r == 'country_director';
     final isDataCollector = r == 'data_collector' || r == 'datacollector' || r == 'enumerator';
 
@@ -494,12 +498,61 @@ class CostSubmissionPermissions {
       canApprove: isAdmin || isSupervisor || isFOM || isCountryDirector,
       canPayOut: isAdmin || isSuperAdmin,
       isAdmin: isAdmin,
+      isSuperAdmin: isSuperAdmin,
       isSupervisor: isSupervisor,
       isFOM: isFOM,
       isCoordinator: isCoordinator,
       isCountryDirector: isCountryDirector,
       isDataCollector: isDataCollector,
+      role: r,
     );
+  }
+
+  /// Tier 1 approvers: Supervisor, FOM (for their subordinates)
+  /// Coordinator submissions → Supervisor reviews Tier 1
+  /// Supervisor submissions → FOM reviews Tier 1
+  bool canApproveTier1(OperationalCostSubmission submission) {
+    if (submission.status != OperationalCostStatus.pending) return false;
+    final submitterRole = submission.submitterRole?.toLowerCase() ?? '';
+    
+    // Coordinator → Supervisor approves Tier 1
+    if (submitterRole.contains('coordinator') && isSupervisor) return true;
+    
+    // Supervisor → FOM approves Tier 1
+    if (submitterRole.contains('supervisor') && isFOM) return true;
+    
+    // FOM → Country Director approves Tier 1
+    if (submitterRole.contains('fom') && isCountryDirector) return true;
+    
+    // Country Director → Admin approves Tier 1
+    if (submitterRole.contains('country') && isAdmin) return true;
+    
+    // Fallback: Supervisor or FOM can approve Tier 1 for general submissions
+    if (isSupervisor || isFOM) return true;
+    
+    return false;
+  }
+
+  /// Tier 2 approvers: Admin, Country Director (final approval)
+  /// After Tier 1, Country Director or Admin gives final approval
+  bool canApproveTier2(OperationalCostSubmission submission) {
+    if (submission.status != OperationalCostStatus.underReview) return false;
+    
+    // Admin can always do Tier 2 approval
+    if (isAdmin) return true;
+    
+    // Country Director can do Tier 2 for non-CD submissions
+    final submitterRole = submission.submitterRole?.toLowerCase() ?? '';
+    if (isCountryDirector && !submitterRole.contains('country')) return true;
+    
+    return false;
+  }
+
+  /// Check if user can cancel this submission (own submission only)
+  bool canCancel(OperationalCostSubmission submission, String? currentUserId) {
+    if (currentUserId == null) return false;
+    if (submission.userId != currentUserId) return false;
+    return submission.isCancellable;
   }
 
   /// Get approval hierarchy based on submitter role
@@ -520,4 +573,19 @@ class CostSubmissionPermissions {
     }
     return 'Supervisor → Admin';
   }
+
+  /// Get role display name
+  String getRoleDisplayName(bool isArabic) {
+    if (isSuperAdmin) return isArabic ? 'مشرف رئيسي' : 'Super Admin';
+    if (isAdmin) return isArabic ? 'مشرف' : 'Admin';
+    if (isCountryDirector) return isArabic ? 'مدير قطري' : 'Country Director';
+    if (isFOM) return isArabic ? 'مدير العمليات الميدانية' : 'FOM';
+    if (isSupervisor) return isArabic ? 'مشرف المحور' : 'Supervisor';
+    if (isCoordinator) return isArabic ? 'منسق' : 'Coordinator';
+    if (isDataCollector) return isArabic ? 'جامع بيانات' : 'Data Collector';
+    return isArabic ? 'مستخدم' : 'User';
+  }
+
+  /// Check if user can view outstanding advances (for reconciliation)
+  bool get canViewOutstandingAdvances => canSubmit;
 }
