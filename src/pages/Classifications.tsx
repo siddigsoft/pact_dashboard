@@ -68,7 +68,7 @@ const Classifications = () => {
   const canAccessClassifications = canManageFinances();
   const canEditFees = canEditFeeStructures();
 
-  // Fetch user profiles and enrich classifications
+  // Fetch user profiles and enrich classifications - optimized with parallel queries
   useEffect(() => {
     const fetchUserProfiles = async () => {
       if (!canAccessClassifications) {
@@ -87,27 +87,29 @@ const Classifications = () => {
         setErrorMessage(null);
         const userIds = userClassifications.map(uc => uc.userId);
         
-        const { data: profiles, error: profileError } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .in('id', userIds);
+        // Run both queries in parallel for faster loading
+        const [profilesResult, rolesResult] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, full_name, email, role')
+            .in('id', userIds),
+          supabase
+            .from('user_roles')
+            .select('user_id, role')
+            .in('user_id', userIds)
+        ]);
 
-        if (profileError) throw new Error(`Failed to fetch profiles: ${profileError.message}`);
+        if (profilesResult.error) throw new Error(`Failed to fetch profiles: ${profilesResult.error.message}`);
+        if (rolesResult.error) throw new Error(`Failed to fetch user roles: ${rolesResult.error.message}`);
 
-        const { data: userRoles, error: rolesError } = await supabase
-          .from('user_roles')
-          .select('user_id, role')
-          .in('user_id', userIds);
-
-        if (rolesError) throw new Error(`Failed to fetch user roles: ${rolesError.message}`);
-
-        const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
-        const roleMap = new Map(userRoles?.map(r => [r.user_id, r.role]) || []);
+        const profileMap = new Map(profilesResult.data?.map(p => [p.id, p]) || []);
+        const roleMap = new Map(rolesResult.data?.map(r => [r.user_id, r.role]) || []);
         
         const enriched: CurrentUserClassification[] = [];
         for (const uc of userClassifications) {
           const profile = profileMap.get(uc.userId);
-          const role = roleMap.get(uc.userId);
+          // Try role from user_roles table first, then fallback to profile.role
+          const role = roleMap.get(uc.userId) || profile?.role;
           
           if (!role) {
             console.warn(`User ${uc.userId} has classification but no role assigned`);
@@ -240,19 +242,38 @@ const Classifications = () => {
     }
   };
 
-  const stats = {
-    totalStructures: feeStructures.length,
-    totalClassified: enrichedClassifications.length,
-    levelACount: enrichedClassifications.filter(uc => uc.classificationLevel === 'A').length,
-    levelBCount: enrichedClassifications.filter(uc => uc.classificationLevel === 'B').length,
-    levelCCount: enrichedClassifications.filter(uc => uc.classificationLevel === 'C').length,
-    withRetainer: enrichedClassifications.filter(uc => uc.hasRetainer).length,
-    avgBaseFee: feeStructures.length > 0
-      ? feeStructures.reduce((sum, fs) => sum + (fs.siteVisitBaseFeeCents || 0), 0) / feeStructures.length
-      : 0,
-    totalBudget: enrichedClassifications.reduce((sum, uc) => 
-      sum + (uc.hasRetainer ? (uc.retainerAmountCents || 0) : 0), 0) / 100,
-  };
+  // Memoize stats to avoid recalculating on every render
+  const stats = useMemo(() => {
+    let levelACount = 0, levelBCount = 0, levelCCount = 0, withRetainer = 0, totalBudget = 0;
+    
+    // Single pass through enrichedClassifications for all counts
+    for (const uc of enrichedClassifications) {
+      if (uc.classificationLevel === 'A') levelACount++;
+      else if (uc.classificationLevel === 'B') levelBCount++;
+      else if (uc.classificationLevel === 'C') levelCCount++;
+      if (uc.hasRetainer) {
+        withRetainer++;
+        totalBudget += (uc.retainerAmountCents || 0);
+      }
+    }
+    
+    // Single pass for fee structures
+    let feeSum = 0;
+    for (const fs of feeStructures) {
+      feeSum += (fs.siteVisitBaseFeeCents || 0);
+    }
+    
+    return {
+      totalStructures: feeStructures.length,
+      totalClassified: enrichedClassifications.length,
+      levelACount,
+      levelBCount,
+      levelCCount,
+      withRetainer,
+      avgBaseFee: feeStructures.length > 0 ? feeSum / feeStructures.length : 0,
+      totalBudget: totalBudget / 100,
+    };
+  }, [enrichedClassifications, feeStructures]);
 
   const exportToCSV = () => {
     if (activeTab === 'fee-structures') {

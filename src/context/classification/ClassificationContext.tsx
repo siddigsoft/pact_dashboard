@@ -144,11 +144,37 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
     }
   }, [toast]);
 
-  // Initial data load
+  // Initial data load - run both in parallel for faster loading
   useEffect(() => {
-    refreshUserClassifications();
-    refreshFeeStructures();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        // Run both queries in parallel
+        const [classificationsResult, feeStructuresResult] = await Promise.all([
+          supabase
+            .from('user_classifications')
+            .select('*')
+            .order('effective_from', { ascending: false }),
+          supabase
+            .from('classification_fee_structures')
+            .select('*')
+            .order('effective_from', { ascending: false })
+        ]);
+
+        if (classificationsResult.data) {
+          setUserClassifications(classificationsResult.data.map(transformUserClassificationFromDB));
+        }
+        if (feeStructuresResult.data) {
+          setFeeStructures(feeStructuresResult.data.map(transformFeeStructureFromDB));
+        }
+      } catch (error: any) {
+        console.warn('[Classification] Could not load initial data:', error?.message || error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadInitialData();
   }, []);
 
   // Realtime subscriptions for classification changes
