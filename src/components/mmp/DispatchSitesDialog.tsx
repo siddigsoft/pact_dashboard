@@ -84,7 +84,87 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   const [loadingPredictions, setLoadingPredictions] = useState(false);
   const [varianceAlerts, setVarianceAlerts] = useState<VarianceAlert[]>([]);
   const [currentExchangeRate, setCurrentExchangeRate] = useState<number>(602.00);
+  const [collectorClassificationFee, setCollectorClassificationFee] = useState<{
+    level: string | null;
+    baseFee: number;
+    multiplier: number;
+    totalFee: number;
+  } | null>(null);
+  const [loadingClassificationFee, setLoadingClassificationFee] = useState(false);
   const { toast } = useToast();
+
+  // Load selected collector's classification fee when selecting individual dispatch
+  useEffect(() => {
+    if (!selectedCollector || dispatchType !== "individual") {
+      setCollectorClassificationFee(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadClassificationFee = async () => {
+      setLoadingClassificationFee(true);
+      try {
+        // First get user's classification
+        const { data: classification, error: classError } = await supabase
+          .from("user_classifications")
+          .select("classification_level, role_scope")
+          .eq("user_id", selectedCollector)
+          .eq("is_active", true)
+          .order("effective_from", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (classError) {
+          console.error("Error loading classification:", classError);
+          setCollectorClassificationFee(null);
+          return;
+        }
+
+        if (!classification) {
+          console.log("[DispatchSitesDialog] Collector has no classification");
+          setCollectorClassificationFee(null);
+          return;
+        }
+
+        // Then get fee structure for that classification
+        const { data: feeStructure, error: feeError } = await supabase
+          .from("classification_fee_structures")
+          .select("site_visit_base_fee_cents, complexity_multiplier")
+          .eq("classification_level", classification.classification_level)
+          .eq("role_scope", classification.role_scope)
+          .eq("is_active", true)
+          .order("effective_from", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!cancelled) {
+          if (feeError || !feeStructure) {
+            console.log("[DispatchSitesDialog] No fee structure found for classification");
+            setCollectorClassificationFee(null);
+          } else {
+            const baseFee = Number(feeStructure.site_visit_base_fee_cents) || 0;
+            const multiplier = Number(feeStructure.complexity_multiplier) || 1;
+            const totalFee = Math.round(baseFee * multiplier * 100) / 100;
+            console.log(`[DispatchSitesDialog] Classification fee: Level ${classification.classification_level}, Base ${baseFee} * ${multiplier} = ${totalFee} SDG`);
+            setCollectorClassificationFee({
+              level: classification.classification_level,
+              baseFee,
+              multiplier,
+              totalFee,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error loading classification fee:", err);
+        if (!cancelled) setCollectorClassificationFee(null);
+      } finally {
+        if (!cancelled) setLoadingClassificationFee(false);
+      }
+    };
+
+    loadClassificationFee();
+    return () => { cancelled = true; };
+  }, [selectedCollector, dispatchType]);
 
   // Load data collectors
   useEffect(() => {
@@ -1833,16 +1913,41 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                             </div>
                           )}
                         </div>
-                        <div className="text-right">
+                        <div className="text-right space-y-1">
                           <Badge
                             variant="outline"
                             className="text-lg font-bold"
                           >
                             {transportBudget.toLocaleString()} SDG
                           </Badge>
-                          <p className="text-xs text-muted-foreground mt-1">
+                          <p className="text-xs text-muted-foreground">
                             Transport Budget
                           </p>
+                          {dispatchType === "individual" && collectorClassificationFee && (
+                            <>
+                              <div className="flex items-center justify-end gap-1 mt-2">
+                                <Badge variant="secondary" className="text-sm">
+                                  + {collectorClassificationFee.totalFee.toLocaleString()} SDG
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Level {collectorClassificationFee.level} Fee ({collectorClassificationFee.baseFee.toLocaleString()} × {collectorClassificationFee.multiplier})
+                              </p>
+                              <div className="border-t pt-1 mt-1">
+                                <Badge variant="default" className="text-sm font-bold">
+                                  = {(transportBudget + collectorClassificationFee.totalFee).toLocaleString()} SDG
+                                </Badge>
+                                <p className="text-xs text-muted-foreground">
+                                  Estimated Total
+                                </p>
+                              </div>
+                            </>
+                          )}
+                          {dispatchType === "individual" && loadingClassificationFee && (
+                            <p className="text-xs text-muted-foreground animate-pulse">
+                              Loading classification fee...
+                            </p>
+                          )}
                         </div>
                       </div>
 
