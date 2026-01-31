@@ -638,7 +638,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
               .eq('user_id', userId)
               .eq('document_name', '$sigName (Template)')
               .eq('is_template', true)
-              .is_('source_signature_id', null);
+              .filter('source_signature_id', 'is', 'null');
           debugPrint('Cleaned up legacy template entries');
         }
       } catch (syncError) {
