@@ -5,11 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
-import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote, ShieldX, MapPinOff } from 'lucide-react';
+import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote, ShieldX } from 'lucide-react';
 import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-claim-fee-calculation';
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
 import { useClassification } from '@/context/classification/ClassificationContext';
-import { getStateName, getLocalityName } from '@/data/sudanStates';
+import { getStateName } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAuditLog } from '@/hooks/use-audit-log';
 import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
@@ -67,7 +67,7 @@ export function ClaimSiteButton({
   
   const hasClassification = !!userClassification;
   
-  // PERMISSION CHECK 2: Site must be in user's assigned locality
+  // PERMISSION CHECK 2: Site must be in user's assigned state (locality no longer used)
   const localityCheck = useMemo(() => {
     if (!currentUser || !isFieldWorker || isSuperAdmin) {
       // Non-field workers (admin, FOM, etc) and SuperAdmins can claim any site
@@ -75,7 +75,6 @@ export function ClaimSiteButton({
     }
     
     const userStateId = currentUser.stateId;
-    const userLocalityId = currentUser.localityId;
     
     // User must have geographic assignment
     if (!userStateId) {
@@ -86,12 +85,9 @@ export function ClaimSiteButton({
     }
     
     const userStateName = getStateName(userStateId)?.toLowerCase().trim() || '';
-    const userLocalityName = userLocalityId ? getLocalityName(userStateId, userLocalityId)?.toLowerCase().trim() : '';
-    
     const siteState = (state || '').toLowerCase().trim();
-    const siteLocality = (locality || '').toLowerCase().trim();
     
-    // Check state match
+    // Check state match only (locality removed - same state → site is claimable)
     const stateMatches = siteState === userStateName || 
                          siteState.includes(userStateName) || 
                          userStateName.includes(siteState);
@@ -103,22 +99,8 @@ export function ClaimSiteButton({
       };
     }
     
-    // If user has locality assigned, check locality match
-    if (userLocalityId && userLocalityName) {
-      const localityMatches = siteLocality === userLocalityName || 
-                              siteLocality.includes(userLocalityName) || 
-                              userLocalityName.includes(siteLocality);
-      
-      if (!localityMatches) {
-        return { 
-          canClaim: false, 
-          reason: `This site is in ${locality || 'unknown locality'}, but you are assigned to ${getLocalityName(userStateId, userLocalityId) || 'unknown'}.` 
-        };
-      }
-    }
-    
     return { canClaim: true, reason: null };
-  }, [currentUser, isFieldWorker, isSuperAdmin, state, locality]);
+  }, [currentUser, isFieldWorker, isSuperAdmin, state]);
 
   // Combined permission check for field workers
   const canClaimSite = useMemo(() => {
@@ -332,7 +314,6 @@ export function ClaimSiteButton({
   // Show blocked button if user cannot claim due to permission restrictions
   if (!canClaimSite.allowed && isFieldWorker) {
     const isClassificationIssue = !hasClassification;
-    const isLocalityIssue = !localityCheck.canClaim;
     
     return (
       <Button
@@ -354,11 +335,6 @@ export function ClaimSiteButton({
           <>
             <ShieldX className="h-4 w-4 mr-2" />
             No Classification
-          </>
-        ) : isLocalityIssue ? (
-          <>
-            <MapPinOff className="h-4 w-4 mr-2" />
-            Wrong Location
           </>
         ) : (
           <>
