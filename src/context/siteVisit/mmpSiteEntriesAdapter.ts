@@ -171,8 +171,8 @@ const mapStatus = (dbStatus: string): SiteVisit['status'] => {
     'cancelled': 'cancelled',
     'canceled': 'canceled',
     'verified': 'permitVerified',
-    'dispatched': 'assigned',
-    'accepted': 'assigned',
+    'dispatched': 'dispatched',
+    'accepted': 'accepted',
   };
   return statusMap[s] || 'pending';
 };
@@ -189,6 +189,8 @@ const mapStatusToDb = (appStatus: SiteVisit['status']): string => {
     'permitVerified': 'Verified',
     'assigned': 'Assigned',
     'inProgress': 'In Progress',
+    'dispatched': 'Dispatched',
+    'accepted': 'Accepted',
   };
   
   return statusMap[appStatus] || 'Pending';
