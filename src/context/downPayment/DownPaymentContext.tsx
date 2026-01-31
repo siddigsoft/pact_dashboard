@@ -125,9 +125,25 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           console.warn('[DownPayment] Supervisor has no hubId set - showing only own requests');
           query = query.eq('requested_by', currentUser.id);
         }
-      } else if (userRole === 'admin' || userRole === 'financialadmin') {
-        // Admins see all requests - no filter applied
-        console.log('[DownPayment] Admin user - fetching all requests');
+      } else if (
+        userRole === 'admin' || 
+        userRole === 'financialadmin' || 
+        userRole === 'superadmin' || 
+        userRole === 'super_admin' ||
+        userRole === 'ict' ||
+        userRole === 'fom' ||
+        userRole === 'field operation manager' ||
+        userRole === 'countrydirector' ||
+        userRole === 'country_director' ||
+        userRole === 'datateam' ||
+        userRole === 'data_team'
+      ) {
+        // Admins, super admins, FOM, ICT, and management roles see all requests - no filter applied
+        console.log('[DownPayment] Admin/Management user - fetching all requests');
+      } else {
+        // Fallback: other roles see only their own requests
+        console.log('[DownPayment] Other role - showing only own requests:', userRole);
+        query = query.eq('requested_by', currentUser.id);
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
