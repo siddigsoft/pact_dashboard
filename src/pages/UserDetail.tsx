@@ -304,10 +304,10 @@ const UserDetail: React.FC = () => {
       let newEmail = editForm.email;
       
       if (emailChanged && isAdmin && adminUpdateUserEmail) {
-        // Add timeout for edge function call
+        // Add timeout for edge function call with extended timeout
         const emailPromise = adminUpdateUserEmail(user.id, editForm.email!);
         const timeoutPromise = new Promise<boolean>((_, reject) => 
-          setTimeout(() => reject(new Error('Email update timed out')), 15000)
+          setTimeout(() => reject(new Error('Email update timed out')), 30000)
         );
         
         try {
@@ -327,7 +327,7 @@ const UserDetail: React.FC = () => {
           console.error("Email update timeout:", timeoutError);
           toast({
             title: "Request timed out",
-            description: "The email update took too long. Please try again.",
+            description: "The email update took too long. Please check your connection and try again.",
             variant: "destructive"
           });
           setIsSaving(false);
@@ -343,20 +343,33 @@ const UserDetail: React.FC = () => {
         email: emailChanged ? newEmail : (editForm.email || user.email)
       };
       
-      // Add timeout for profile update
-      const updatePromise = updateUser(updatedUser);
-      const updateTimeoutPromise = new Promise<boolean>((_, reject) => 
-        setTimeout(() => reject(new Error('Profile update timed out')), 15000)
-      );
+      // Add timeout for profile update with retry logic
+      const executeUpdate = async (attempt: number = 1): Promise<boolean> => {
+        const updatePromise = updateUser(updatedUser);
+        const updateTimeoutPromise = new Promise<boolean>((_, reject) => 
+          setTimeout(() => reject(new Error('Profile update timed out')), 30000)
+        );
+        
+        try {
+          return await Promise.race([updatePromise, updateTimeoutPromise]);
+        } catch (timeoutError) {
+          console.error(`Profile update timeout (attempt ${attempt}):`, timeoutError);
+          if (attempt < 2) {
+            console.log("Retrying profile update...");
+            return executeUpdate(attempt + 1);
+          }
+          throw timeoutError;
+        }
+      };
       
       let success: boolean;
       try {
-        success = await Promise.race([updatePromise, updateTimeoutPromise]);
+        success = await executeUpdate();
       } catch (timeoutError) {
-        console.error("Profile update timeout:", timeoutError);
+        console.error("Profile update failed after retries:", timeoutError);
         toast({
           title: "Request timed out",
-          description: "The profile update took too long. Please try again.",
+          description: "The profile update took too long. Please check your connection and try again.",
           variant: "destructive"
         });
         setIsSaving(false);
