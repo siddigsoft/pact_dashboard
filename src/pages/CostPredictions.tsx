@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -557,19 +557,24 @@ export default function CostPredictions() {
   };
 
   useEffect(() => {
-    fetchCostData();
-    fetchAccuracyMetrics();
-    fetchSitePredictions();
-    fetchVarianceAlerts();
+    // Parallelize data fetching for better performance
+    Promise.all([
+      fetchCostData(),
+      fetchAccuracyMetrics(),
+      fetchSitePredictions(),
+      fetchVarianceAlerts()
+    ]).catch(console.error);
   }, [selectedPeriod, selectedHub]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchCostData();
-    fetchAccuracyMetrics();
-    fetchSitePredictions();
-    fetchVarianceAlerts();
-  };
+    Promise.all([
+      fetchCostData(),
+      fetchAccuracyMetrics(),
+      fetchSitePredictions(),
+      fetchVarianceAlerts()
+    ]).finally(() => setRefreshing(false));
+  }, [selectedPeriod, selectedHub]);
 
   const filteredPredictions = useMemo(() => {
     if (!siteSearchQuery.trim()) return sitePredictions;
@@ -613,11 +618,13 @@ export default function CostPredictions() {
     }).format(amount);
   };
 
-  // Group records by Month → State → Locality for hierarchical preview
-  const groupRecordsByMonthStateLocality = (records: typeof parsedRecords) => {
-    const grouped: Record<string, Record<string, Record<string, typeof records>>> = {};
+  // Memoized grouped records by Month → State → Locality for hierarchical preview
+  const groupedPreviewRecords = useMemo(() => {
+    if (parsedRecords.length === 0) return { grouped: {}, sortedMonths: [] as string[] };
     
-    records.forEach((record, originalIdx) => {
+    const grouped: Record<string, Record<string, Record<string, any[]>>> = {};
+    
+    parsedRecords.forEach((record, originalIdx) => {
       // Get month display from visitDate
       let monthKey = 'Unknown Month';
       if (record.visitDate) {
@@ -644,12 +651,35 @@ export default function CostPredictions() {
       if (!grouped[monthKey][stateKey]) grouped[monthKey][stateKey] = {};
       if (!grouped[monthKey][stateKey][localityKey]) grouped[monthKey][stateKey][localityKey] = [];
       
-      // Attach the original index for editing (cast to any to add extra property)
-      grouped[monthKey][stateKey][localityKey].push({ ...record, _originalIdx: originalIdx } as any);
+      // Attach the original index for editing
+      grouped[monthKey][stateKey][localityKey].push({ ...record, _originalIdx: originalIdx });
     });
     
-    return grouped;
-  };
+    // Pre-sort months chronologically
+    const sortedMonths = Object.keys(grouped).sort((a, b) => {
+      try {
+        const dateA = new Date(a);
+        const dateB = new Date(b);
+        return dateA.getTime() - dateB.getTime();
+      } catch {
+        return a.localeCompare(b);
+      }
+    });
+    
+    return { grouped, sortedMonths };
+  }, [parsedRecords]);
+  
+  // Memoize missing cost count
+  const missingCostCount = useMemo(() => 
+    parsedRecords.filter(r => !r.actualCost || r.actualCost === 0).length
+  , [parsedRecords]);
+  
+  // Memoize valid records for import (has cost and not error status)
+  const validRecordsForImport = useMemo(() => 
+    parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error')
+  , [parsedRecords]);
+  
+  const validRecordsCount = validRecordsForImport.length;
 
   const loadRegistrySites = async (): Promise<Map<string, any>> => {
     try {
@@ -1411,13 +1441,13 @@ export default function CostPredictions() {
     }
   };
 
-  const handleImportData = async () => {
-    if (parsedRecords.length === 0) return;
+  const handleImportData = useCallback(async () => {
+    if (validRecordsForImport.length === 0) return;
 
     setImporting(true);
     try {
-      // Filter out duplicates and records without cost
-      const validRecords = parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error');
+      // Use memoized valid records
+      const validRecords = validRecordsForImport;
       
       // Step 1: Register new sites to the sites_registry first
       const newSiteRecords = validRecords.filter(r => r.isNewSite);
@@ -1524,7 +1554,7 @@ export default function CostPredictions() {
     } finally {
       setImporting(false);
     }
-  };
+  }, [validRecordsForImport, registrySites]);
 
   const resetUpload = () => {
     setUploadFile(null);
@@ -2059,9 +2089,9 @@ export default function CostPredictions() {
                         <Badge variant="outline" className="font-normal">
                           {parsedRecords.length} total
                         </Badge>
-                        {parsedRecords.filter(r => !r.actualCost || r.actualCost === 0).length > 0 && (
+                        {missingCostCount > 0 && (
                           <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
-                            {parsedRecords.filter(r => !r.actualCost || r.actualCost === 0).length} missing cost
+                            {missingCostCount} missing cost
                           </Badge>
                         )}
                       </CardTitle>
@@ -2069,21 +2099,8 @@ export default function CostPredictions() {
                     <CardContent>
                       <ScrollArea className="h-[400px]">
                         <div className="space-y-2">
-                          {(() => {
-                            const grouped = groupRecordsByMonthStateLocality(parsedRecords);
-                            const sortedMonths = Object.keys(grouped).sort((a, b) => {
-                              // Sort months chronologically
-                              try {
-                                const dateA = new Date(a);
-                                const dateB = new Date(b);
-                                return dateA.getTime() - dateB.getTime();
-                              } catch {
-                                return a.localeCompare(b);
-                              }
-                            });
-                            
-                            return sortedMonths.map(month => {
-                              const statesInMonth = grouped[month];
+                          {groupedPreviewRecords.sortedMonths.map(month => {
+                              const statesInMonth = groupedPreviewRecords.grouped[month];
                               const monthRecordCount = Object.values(statesInMonth).flatMap(s => 
                                 Object.values(s).flat()
                               ).length;
@@ -2253,8 +2270,7 @@ export default function CostPredictions() {
                                   </CollapsibleContent>
                                 </Collapsible>
                               );
-                            });
-                          })()}
+                            })}
                         </div>
                       </ScrollArea>
                     </CardContent>
@@ -2263,7 +2279,7 @@ export default function CostPredictions() {
                   {/* Show warning/error message based on duplicate status */}
                   {validationSummary && validationSummary.errors.length > 0 && (
                     <>
-                      {parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error').length === 0 ? (
+                      {validRecordsCount === 0 ? (
                         <Alert variant="destructive">
                           <AlertCircle className="h-4 w-4" />
                           <AlertTitle>Cannot Import - All Records Are Duplicates</AlertTitle>
@@ -2298,7 +2314,7 @@ export default function CostPredictions() {
                     </Button>
                     <Button 
                       onClick={handleImportData} 
-                      disabled={importing || parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error').length === 0} 
+                      disabled={importing || validRecordsCount === 0} 
                       data-testid="button-import"
                     >
                       {importing ? (
@@ -2306,7 +2322,7 @@ export default function CostPredictions() {
                       ) : (
                         <Database className="h-4 w-4 mr-2" />
                       )}
-                      Import {parsedRecords.filter(r => r.actualCost && r.actualCost > 0 && r.validationStatus !== 'error').length} Records
+                      Import {validRecordsCount} Records
                     </Button>
                   </div>
                 </div>
