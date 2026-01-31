@@ -68,7 +68,7 @@ import { normalizeHubId, getNormalizedHubName, hubs } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { getHubAccessInfo, shouldApplyHubFilter } from '@/utils/hubAccessControl';
+import { getHubAccessInfo, shouldApplyHubFilter, filterByHubAccess } from '@/utils/hubAccessControl';
 import { BaselineCostManagement } from '@/components/cost-predictions/BaselineCostManagement';
 import * as XLSX from 'xlsx';
 import { 
@@ -258,7 +258,9 @@ export default function CostPredictions() {
   const fetchAccuracyMetrics = async () => {
     try {
       setLoadingAccuracy(true);
-      const metrics = await CostPredictionService.calculateAccuracyMetrics();
+      
+      const hubFilter = isSupervisor && hubAccessInfo.hubId ? hubAccessInfo.hubId : (selectedHub !== 'all' ? selectedHub : undefined);
+      const metrics = await CostPredictionService.calculateAccuracyMetrics(undefined, undefined, hubFilter);
       setAccuracyMetrics(metrics);
     } catch (err) {
       console.error('Error fetching accuracy metrics:', err);
@@ -270,13 +272,23 @@ export default function CostPredictions() {
   const fetchUploadedHistoricalData = async (page: number = 0) => {
     try {
       setLoadingHistoricalData(true);
+      
+      const hubFilter = isSupervisor && hubAccessInfo.hubId ? hubAccessInfo.hubId : (selectedHub !== 'all' ? selectedHub : undefined);
+      
       const result = await CostPredictionService.getHistoricalCosts({ 
         limit: 50, 
-        offset: page * 50 
+        offset: page * 50,
+        hubId: hubFilter
       });
-      setUploadedHistoricalData(result.data);
+      
+      let filteredData = result.data;
+      if (isSupervisor && hubAccessInfo.hubStates.length > 0) {
+        filteredData = filterByHubAccess(result.data, hubAccessInfo);
+      }
+      
+      setUploadedHistoricalData(filteredData);
       setHistoricalDataStats({
-        total: result.total,
+        total: isSupervisor ? filteredData.length : result.total,
         linked: result.linked_count,
         unlinked: result.unlinked_count
       });
@@ -386,11 +398,41 @@ export default function CostPredictions() {
 
   const fetchVarianceAlerts = async () => {
     try {
-      const { data: recentCosts, error } = await supabase
+      const shouldFilter = isSupervisor || selectedHub !== 'all';
+      
+      let hubScopedVisitIds: string[] = [];
+      if (shouldFilter) {
+        let visitsQuery = supabase
+          .from('site_visits')
+          .select('id, hub_id')
+          .order('created_at', { ascending: false })
+          .limit(100);
+        
+        if (isSupervisor && hubAccessInfo.hubId) {
+          visitsQuery = visitsQuery.eq('hub_id', hubAccessInfo.hubId);
+        } else if (selectedHub !== 'all') {
+          visitsQuery = visitsQuery.eq('hub_id', selectedHub);
+        }
+        
+        const { data: hubVisits } = await visitsQuery;
+        if (!hubVisits || hubVisits.length === 0) {
+          setVarianceAlerts([]);
+          return;
+        }
+        hubScopedVisitIds = hubVisits.map(v => v.id);
+      }
+      
+      let costQuery = supabase
         .from('cost_submissions')
         .select('site_visit_id, total_cost, transportation_cost, created_at')
         .order('created_at', { ascending: false })
         .limit(50);
+      
+      if (shouldFilter && hubScopedVisitIds.length > 0) {
+        costQuery = costQuery.in('site_visit_id', hubScopedVisitIds);
+      }
+      
+      const { data: recentCosts, error } = await costQuery;
       
       if (error || !recentCosts) return;
       
@@ -444,25 +486,55 @@ export default function CostPredictions() {
       const periodMonths = selectedPeriod === '1month' ? 1 : selectedPeriod === '3months' ? 3 : selectedPeriod === '6months' ? 6 : 12;
       const startDate = format(subMonths(new Date(), periodMonths), 'yyyy-MM-dd');
       
-      // Fetch transportation cost submissions
-      let costQuery = supabase
-        .from('cost_submissions')
-        .select('*')
-        .gte('created_at', startDate);
-      
-      const { data: costSubmissions, error: costError } = await costQuery;
-      
-      if (costError) throw costError;
-      
-      // Fetch site visits for visit counts
+      // Fetch site visits for visit counts (apply hub filter first)
       let visitsQuery = supabase
         .from('site_visits')
         .select('id, hub_id, state, status')
         .gte('created_at', startDate);
       
+      if (isSupervisor && hubAccessInfo.hubId) {
+        visitsQuery = visitsQuery.eq('hub_id', hubAccessInfo.hubId);
+      } else if (selectedHub !== 'all') {
+        visitsQuery = visitsQuery.eq('hub_id', selectedHub);
+      }
+      
       const { data: siteVisits, error: visitsError } = await visitsQuery;
       
       if (visitsError) throw visitsError;
+      
+      // Get the visit IDs for filtering cost submissions
+      const visitIds = siteVisits?.map(v => v.id) || [];
+      
+      // For supervisors, if no visits found, return empty data set (guard against unfiltered query)
+      const shouldFilterByVisits = isSupervisor || selectedHub !== 'all';
+      if (shouldFilterByVisits && visitIds.length === 0) {
+        setCostData({
+          transportationTotal: 0,
+          perDiemTotal: 0,
+          enumeratorFeesTotal: 0,
+          otherCostsTotal: 0,
+          totalCosts: 0,
+          avgCostPerVisit: 0,
+          totalVisits: 0
+        });
+        setMonthlyTrends([]);
+        setHubCostBreakdown([]);
+        return;
+      }
+      
+      // Fetch transportation cost submissions filtered by hub-accessible visits
+      let costQuery = supabase
+        .from('cost_submissions')
+        .select('*')
+        .gte('created_at', startDate);
+      
+      if (shouldFilterByVisits && visitIds.length > 0) {
+        costQuery = costQuery.in('site_visit_id', visitIds);
+      }
+      
+      const { data: costSubmissions, error: costError } = await costQuery;
+      
+      if (costError) throw costError;
       
       // Fetch budget data
       const { data: budgets, error: budgetError } = await supabase
@@ -731,10 +803,17 @@ export default function CostPredictions() {
       let totalLoaded = 0;
       
       while (hasMore) {
-        const { data, error } = await supabase
+        let query = supabase
           .from('sites_registry')
-          .select('*')
-          .range(offset, offset + BATCH_SIZE - 1);
+          .select('*');
+        
+        if (isSupervisor && hubAccessInfo.hubId) {
+          query = query.eq('hub_id', hubAccessInfo.hubId);
+        } else if (selectedHub !== 'all') {
+          query = query.eq('hub_id', selectedHub);
+        }
+        
+        const { data, error } = await query.range(offset, offset + BATCH_SIZE - 1);
         
         if (error) {
           console.error('[CostPredictions] Error fetching sites batch:', error);
@@ -866,10 +945,18 @@ export default function CostPredictions() {
       
       console.log('[CostPredictions] Starting validation with', siteMap.size, 'registry sites');
       
-      // Load existing historical costs to check for duplicates
-      const { data: existingCosts } = await supabase
+      // Load existing historical costs to check for duplicates (hub-filtered for supervisors)
+      let histQuery = supabase
         .from('historical_site_costs')
-        .select('site_id, site_name, state_id, locality_id, visit_date');
+        .select('site_id, site_name, state_id, locality_id, visit_date, hub_id');
+      
+      if (isSupervisor && hubAccessInfo.hubId) {
+        histQuery = histQuery.eq('hub_id', hubAccessInfo.hubId);
+      } else if (selectedHub !== 'all') {
+        histQuery = histQuery.eq('hub_id', selectedHub);
+      }
+      
+      const { data: existingCosts } = await histQuery;
       
       // Build a set of existing site+month combinations for duplicate detection
       // Use site_id + month as primary key (more reliable than name matching)
@@ -1714,13 +1801,20 @@ export default function CostPredictions() {
     let page = 0;
     const pageSize = 1000;
     
-    // Paginate through all records
+    // Paginate through all records (hub-filtered for supervisors)
     while (true) {
-      const { data: pageCosts, error } = await supabase
+      let query = supabase
         .from('historical_site_costs')
-        .select('id, site_id, site_name, state_id, visit_date, created_at')
-        .order('created_at', { ascending: true })
-        .range(page * pageSize, (page + 1) * pageSize - 1);
+        .select('id, site_id, site_name, state_id, visit_date, created_at, hub_id')
+        .order('created_at', { ascending: true });
+      
+      if (isSupervisor && hubAccessInfo.hubId) {
+        query = query.eq('hub_id', hubAccessInfo.hubId);
+      } else if (selectedHub !== 'all') {
+        query = query.eq('hub_id', selectedHub);
+      }
+      
+      const { data: pageCosts, error } = await query.range(page * pageSize, (page + 1) * pageSize - 1);
 
       if (error) {
         console.error('[CostPredictions] Error fetching costs for duplicate check:', error);

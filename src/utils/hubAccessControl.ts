@@ -38,6 +38,10 @@ export function getHubAccessInfo(user: User | null): HubAccessInfo {
   };
 }
 
+export function normalizeStateId(stateId: string): string {
+  return stateId.toLowerCase().trim().replace(/\s+/g, '-').replace(/_/g, '-');
+}
+
 export function isStateInHub(stateId: string | null | undefined, hubId: string | null): boolean {
   if (!stateId || !hubId) return false;
   
@@ -47,8 +51,12 @@ export function isStateInHub(stateId: string | null | undefined, hubId: string |
   const hub = hubs.find(h => h.id === normalizedHubId);
   if (!hub) return false;
 
-  const normalizedStateId = stateId.toLowerCase().trim();
-  return hub.states.some(s => s === normalizedStateId || normalizedStateId.includes(s) || s.includes(normalizedStateId));
+  const normalizedStateId = normalizeStateId(stateId);
+  return hub.states.some(s => normalizeStateId(s) === normalizedStateId);
+}
+
+export function normalizeStateName(stateName: string): string {
+  return stateName.toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
 export function isStateNameInHub(stateName: string | null | undefined, hubId: string | null): boolean {
@@ -58,17 +66,16 @@ export function isStateNameInHub(stateName: string | null | undefined, hubId: st
   if (!normalizedHubId) return false;
 
   const hubStatesData = getStatesInHub(normalizedHubId);
-  const normalizedStateName = stateName.toLowerCase().trim();
+  const normalizedStateName = normalizeStateName(stateName);
+  const stateIdFromName = normalizeStateId(stateName);
   
   return hubStatesData.some(s => 
-    s.name.toLowerCase() === normalizedStateName ||
-    s.id === normalizedStateName ||
-    normalizedStateName.includes(s.name.toLowerCase()) ||
-    s.name.toLowerCase().includes(normalizedStateName)
+    normalizeStateName(s.name) === normalizedStateName ||
+    normalizeStateId(s.id) === stateIdFromName
   );
 }
 
-export function filterByHubAccess<T extends { state?: string; stateName?: string; state_name?: string; stateId?: string; state_id?: string }>(
+export function filterByHubAccess<T extends { state?: string; stateName?: string; state_name?: string; stateId?: string; state_id?: string; hub_id?: string }>(
   items: T[],
   hubAccessInfo: HubAccessInfo
 ): T[] {
@@ -76,34 +83,33 @@ export function filterByHubAccess<T extends { state?: string; stateName?: string
     return items;
   }
 
+  const normalizedHubStates = hubAccessInfo.hubStates.map(s => normalizeStateId(s));
+  const normalizedHubStateNames = hubAccessInfo.hubStateNames.map(s => normalizeStateName(s));
+
   return items.filter(item => {
+    if ((item as any).hub_id && (item as any).hub_id === hubAccessInfo.hubId) {
+      return true;
+    }
+    
     const stateId = item.state_id || item.stateId || item.state;
     const stateName = item.state_name || item.stateName;
     
-    if (stateId && isStateInHub(stateId, hubAccessInfo.hubId)) {
-      return true;
-    }
-    
-    if (stateName && isStateNameInHub(stateName, hubAccessInfo.hubId)) {
-      return true;
-    }
-    
     if (stateId) {
-      const normalizedStateId = stateId.toLowerCase().trim().replace(/\s+/g, '-');
-      return hubAccessInfo.hubStates.some(hs => 
-        hs === normalizedStateId ||
-        normalizedStateId.includes(hs) ||
-        hs.includes(normalizedStateId)
-      );
+      const normalizedId = normalizeStateId(stateId);
+      if (normalizedHubStates.includes(normalizedId)) {
+        return true;
+      }
     }
-
+    
     if (stateName) {
-      const normalizedStateName = stateName.toLowerCase().trim();
-      return hubAccessInfo.hubStateNames.some(hsn => 
-        hsn.toLowerCase() === normalizedStateName ||
-        normalizedStateName.includes(hsn.toLowerCase()) ||
-        hsn.toLowerCase().includes(normalizedStateName)
-      );
+      const normalizedName = normalizeStateName(stateName);
+      if (normalizedHubStateNames.includes(normalizedName)) {
+        return true;
+      }
+      const stateIdFromName = normalizeStateId(stateName);
+      if (normalizedHubStates.includes(stateIdFromName)) {
+        return true;
+      }
     }
 
     return false;
