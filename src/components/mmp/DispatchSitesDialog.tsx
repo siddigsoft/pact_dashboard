@@ -109,15 +109,21 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             );
             setCollectors([]);
           } else {
-            // Filter by role case-insensitively
-            const rolePatterns = ['datacollector', 'data collector', 'coordinator', 'enumerator'];
+            // Filter by role case-insensitively - include data collectors, coordinators, and enumerators
+            const rolePatterns = ['datacollector', 'data collector', 'collector', 'coordinator', 'enumerator'];
             const filtered = (data || []).filter(profile => {
               const role = (profile.role || '').toLowerCase().replace(/\s+/g, '');
               return rolePatterns.some(pattern => 
                 role.includes(pattern.replace(/\s+/g, ''))
               );
             });
+            
+            // Debug: Log all profiles with their roles and localities
             console.log(`[DispatchSitesDialog] Loaded ${filtered.length} collectors/coordinators from ${data?.length || 0} total profiles`);
+            filtered.forEach(p => {
+              console.log(`  - ${p.full_name || p.username}: role=${p.role}, state_id=${p.state_id}, locality_id=${p.locality_id}`);
+            });
+            
             setCollectors(filtered as any[] as DataCollector[]);
           }
         }
@@ -1192,7 +1198,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                   (filteredCollectors.length > 0 ? (
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground">
-                        {filteredCollectors.length} data collector(s) found in{" "}
+                        {filteredCollectors.length} collector(s)/coordinator(s) found in{" "}
                         {selectedState}:
                       </p>
                       <div className="flex flex-wrap gap-1.5">
@@ -1211,7 +1217,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                       <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                          No data collectors in {selectedState}
+                          No collectors/coordinators in {selectedState}
                         </p>
                         <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                           You can still dispatch sites. They will be available
@@ -1274,7 +1280,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     (filteredCollectors.length > 0 ? (
                       <div className="space-y-1">
                         <p className="text-sm text-muted-foreground">
-                          {filteredCollectors.length} data collector(s) found in{" "}
+                          {filteredCollectors.length} collector(s)/coordinator(s) found in{" "}
                           {selectedLocality}:
                         </p>
                         <div className="flex flex-wrap gap-1.5">
@@ -1293,7 +1299,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                         <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
                         <div>
                           <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                            No data collectors in {selectedLocality}
+                            No collectors/coordinators in {selectedLocality}
                           </p>
                           <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                             You can still dispatch sites. They will be available
