@@ -46,6 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useOfflineSiteVisit } from '@/hooks/useOfflineSiteVisit';
 import { useOffline } from '@/hooks/use-offline';
 import WorkflowTrackerTab from '@/components/mmp/WorkflowTrackerTab';
+import { getHubAccessInfo, filterByHubAccess, shouldApplyHubFilter } from '@/utils/hubAccessControl';
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 interface SitesDisplayTableProps {
   siteRows: SiteVisitRow[]; 
@@ -1831,6 +1832,11 @@ const MMP = () => {
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'enumerator', 'Enumerator']);
   // Coordinators have full data collector capabilities (can claim sites, view transport fees, etc.)
   const canClaimSites = isDataCollector || isCoordinator;
+  
+  // Hub-based access control for supervisors
+  // Supervisors should only see operations within their assigned hub
+  const hubAccessInfo = useMemo(() => getHubAccessInfo(currentUser), [currentUser]);
+  const applyHubFilter = shouldApplyHubFilter(currentUser);
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
@@ -1946,6 +1952,19 @@ const MMP = () => {
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
     let filteredMMPs = mmpFiles;
+
+    // HUB-BASED ACCESS FILTER FOR SUPERVISORS
+    // Hub supervisors should only see MMPs with sites in their hub's states
+    if (applyHubFilter && hubAccessInfo.isHubSupervisor && hubAccessInfo.hubStates.length > 0) {
+      filteredMMPs = filteredMMPs.map(mmp => {
+        const siteEntries = mmp.siteEntries || [];
+        const filteredSiteEntries = filterByHubAccess(siteEntries, hubAccessInfo);
+        if (filteredSiteEntries.length === 0) {
+          return null;
+        }
+        return { ...mmp, siteEntries: filteredSiteEntries };
+      }).filter((mmp): mmp is NonNullable<typeof mmp> => mmp !== null);
+    }
 
     // PROJECT TEAM MEMBERSHIP FILTER
     // Only show MMPs from projects the user belongs to (unless admin/superuser).
@@ -2102,7 +2121,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites]);
+  }, [mmpFiles, isFOM, isSupervisor, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites, mmpIdsWithVerifiedSites, applyHubFilter, hubAccessInfo]);
 
   // Load site entries for MMPs when tabs become active (ensures site data is synchronized)
   useEffect(() => {
@@ -2304,19 +2323,18 @@ const MMP = () => {
   }, [categorizedMMPs]);
 
   // Extract site entries ONLY from verified MMPs (for Verified Sites tab)
-  // Uses verifiedMMPIds set for stable filtering
+  // Uses categorizedMMPs.verified which already has hub filtering applied for supervisors
   const verifiedSiteEntries = useMemo(() => {
-    return mmpFiles
-      .filter(mmp => verifiedMMPIds.has(mmp.id))
-      .flatMap(mmp => {
-        const entries = mmp.siteEntries || [];
-        return entries.map(entry => ({
-          ...entry,
-          mmp_file_id: mmp.id,
-          mmpId: mmp.id
-        }));
-      });
-  }, [mmpFiles, verifiedMMPIds]);
+    const verifiedMMPs = categorizedMMPs.verified || [];
+    return verifiedMMPs.flatMap(mmp => {
+      const entries = mmp.siteEntries || [];
+      return entries.map(entry => ({
+        ...entry,
+        mmp_file_id: mmp.id,
+        mmpId: mmp.id
+      }));
+    });
+  }, [categorizedMMPs.verified]);
 
   // Memoized filter options for dispatched site entries
   const dispatchedFilterOptions = useMemo(() => {
