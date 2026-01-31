@@ -184,16 +184,30 @@ const ClassificationFeeManagement = () => {
 
     setSaving(true);
     try {
+      console.log('[ClassificationFeeManagement] Saving fee structures:', feeStructures);
+      
       for (const fee of feeStructures) {
-        const { error } = await supabase
+        const updateData = {
+          site_visit_base_fee_cents: fee.site_visit_base_fee_cents,
+          complexity_multiplier: useMultiplier ? fee.complexity_multiplier : 1.0,
+          is_active: true, // Ensure the fee structure is active
+          updated_at: new Date().toISOString()
+        };
+        
+        console.log(`[ClassificationFeeManagement] Updating fee ${fee.id} (Level ${fee.classification_level}):`, updateData);
+        
+        const { data, error } = await supabase
           .from('classification_fee_structures')
-          .update({
-            site_visit_base_fee_cents: fee.site_visit_base_fee_cents,
-            complexity_multiplier: useMultiplier ? fee.complexity_multiplier : 1.0
-          })
-          .eq('id', fee.id);
+          .update(updateData)
+          .eq('id', fee.id)
+          .select();
 
-        if (error) throw error;
+        if (error) {
+          console.error(`[ClassificationFeeManagement] Error updating fee ${fee.id}:`, error);
+          throw error;
+        }
+        
+        console.log(`[ClassificationFeeManagement] Updated fee ${fee.id}:`, data);
       }
 
       toast({
@@ -201,6 +215,9 @@ const ClassificationFeeManagement = () => {
         description: 'Classification fee structure has been saved successfully',
       });
       setHasChanges(false);
+      
+      // Refresh data after save to confirm changes persisted
+      await loadData();
     } catch (error) {
       console.error('Error saving fees:', error);
       toast({
