@@ -1190,10 +1190,22 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                 </Select>
                 {selectedState &&
                   (filteredCollectors.length > 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      {filteredCollectors.length} data collector(s) found in{" "}
-                      {selectedState}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">
+                        {filteredCollectors.length} data collector(s) found in{" "}
+                        {selectedState}:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {filteredCollectors.map((collector) => (
+                          <span
+                            key={collector.id}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20"
+                          >
+                            {collector.full_name || collector.username || collector.email || 'Unknown'}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md">
                       <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
@@ -1260,10 +1272,22 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                   </Select>
                   {selectedLocality &&
                     (filteredCollectors.length > 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        {filteredCollectors.length} data collector(s) found in{" "}
-                        {selectedLocality}
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">
+                          {filteredCollectors.length} data collector(s) found in{" "}
+                          {selectedLocality}:
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {filteredCollectors.map((collector) => (
+                            <span
+                              key={collector.id}
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20"
+                            >
+                              {collector.full_name || collector.username || collector.email || 'Unknown'}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md">
                         <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
