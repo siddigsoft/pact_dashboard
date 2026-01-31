@@ -25,6 +25,58 @@ class SiteVisit {
   }
 
   String get locationString => location?['description'] as String? ?? '';
+  
+  /// Get site coordinates as a Map for GPS proximity checks
+  /// Checks multiple sources: location, additionalData, visitData
+  Map<String, dynamic>? get siteCoordinates {
+    // First check direct location property
+    if (latitude != null && longitude != null) {
+      return {'latitude': latitude, 'longitude': longitude};
+    }
+    if (location != null) return location;
+    
+    // Check additionalData for coordinates
+    if (additionalData != null) {
+      final lat = additionalData!['latitude'] ?? additionalData!['lat'] ?? additionalData!['site_latitude'];
+      final lng = additionalData!['longitude'] ?? additionalData!['lng'] ?? additionalData!['lon'] ?? additionalData!['site_longitude'];
+      if (lat != null && lng != null) {
+        return {'latitude': lat, 'longitude': lng};
+      }
+      // Check for nested location object
+      if (additionalData!['location'] is Map) {
+        return additionalData!['location'] as Map<String, dynamic>;
+      }
+      if (additionalData!['gps'] is Map) {
+        return additionalData!['gps'] as Map<String, dynamic>;
+      }
+    }
+    
+    // Check visitData for coordinates
+    if (visitData != null) {
+      final lat = visitData!['latitude'] ?? visitData!['lat'];
+      final lng = visitData!['longitude'] ?? visitData!['lng'] ?? visitData!['lon'];
+      if (lat != null && lng != null) {
+        return {'latitude': lat, 'longitude': lng};
+      }
+      if (visitData!['location'] is Map) {
+        return visitData!['location'] as Map<String, dynamic>;
+      }
+    }
+    
+    return null;
+  }
+
+  /// Get scheduled date for confirmation deadline calculations
+  String? get scheduledDate {
+    // Try visit_data first
+    if (visitData != null) {
+      final scheduled = visitData!['scheduledDate'] ?? visitData!['scheduled_date'];
+      if (scheduled != null) return scheduled.toString();
+    }
+    // Fall back to dueDate
+    if (dueDate != null) return dueDate!.toIso8601String();
+    return null;
+  }
   final Map<String, dynamic>? fees;
   final Map<String, dynamic>? visitData;
   final String assignedTo;

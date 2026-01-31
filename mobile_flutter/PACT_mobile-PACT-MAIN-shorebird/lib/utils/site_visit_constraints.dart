@@ -1,22 +1,31 @@
 // lib/utils/site_visit_constraints.dart
-// Enforces geographic and role-based constraints for data collectors and coordinators
+// Enforces geographic, GPS proximity, and role-based constraints for data collectors and coordinators
 // Based on the comprehensive constraints document
+// Updated to match web app behavior with GPS proximity enforcement
 
 import '../models/site_visit.dart';
 import '../models/pact_user_profile.dart';
+import 'geo_distance.dart';
 
 /// Result of a constraint check
 class ConstraintCheckResult {
   final bool allowed;
   final String? reason;
   final String? action; // 'view', 'claim', 'accept', etc.
+  final double? distanceKm; // Distance in km for GPS proximity checks
 
-  ConstraintCheckResult({required this.allowed, this.reason, this.action});
+  ConstraintCheckResult({
+    required this.allowed,
+    this.reason,
+    this.action,
+    this.distanceKm,
+  });
 
-  factory ConstraintCheckResult.allow() => ConstraintCheckResult(allowed: true);
+  factory ConstraintCheckResult.allow({double? distanceKm}) =>
+      ConstraintCheckResult(allowed: true, distanceKm: distanceKm);
 
-  factory ConstraintCheckResult.deny(String reason, {String? action}) =>
-      ConstraintCheckResult(allowed: false, reason: reason, action: action);
+  factory ConstraintCheckResult.deny(String reason, {String? action, double? distanceKm}) =>
+      ConstraintCheckResult(allowed: false, reason: reason, action: action, distanceKm: distanceKm);
 }
 
 /// Service for enforcing site visit constraints for data collectors and coordinators
@@ -188,6 +197,109 @@ class SiteVisitConstraints {
   ) {
     // Same checks as claiming
     return canClaimSite(visit, user);
+  }
+
+  /// Check if user can claim a site with GPS proximity enforcement
+  /// This is the enhanced version that matches web app behavior
+  static Future<ConstraintCheckResult> canClaimSiteWithGPS(
+    SiteVisit visit,
+    PACTUserProfile user,
+  ) async {
+    // First run the basic constraint checks
+    final basicCheck = canClaimSite(visit, user);
+    if (!basicCheck.allowed) {
+      return basicCheck;
+    }
+
+    // Skip GPS checks for SuperAdmins and non-field workers
+    final isFieldWorker =
+        user.role == 'dataCollector' ||
+        user.role.toLowerCase() == 'datacollector' ||
+        user.role == 'coordinator';
+    final isSuperAdmin = user.role.toLowerCase() == 'superadmin';
+
+    if (!isFieldWorker || isSuperAdmin) {
+      return ConstraintCheckResult.allow();
+    }
+
+    // Get proximity configuration
+    final config = await GeoDistanceUtils.getProximityConfig();
+    
+    // If proximity check is disabled, allow
+    if (!config.enabled) {
+      return ConstraintCheckResult.allow();
+    }
+
+    // Check if GPS is available
+    final hasLocationPermission = await GeoDistanceUtils.hasLocationPermission();
+    final isLocationEnabled = await GeoDistanceUtils.isLocationServiceEnabled();
+
+    // If location sharing is required but not available, deny
+    if (config.requireLocationSharing) {
+      if (!isLocationEnabled) {
+        return ConstraintCheckResult.deny(
+          'Location services must be enabled to claim sites. Please enable GPS.',
+          action: 'claim',
+        );
+      }
+      if (!hasLocationPermission) {
+        return ConstraintCheckResult.deny(
+          'Location permission is required to claim sites. Please grant location access.',
+          action: 'claim',
+        );
+      }
+    }
+
+    // Get user's current location
+    final userLocation = await GeoDistanceUtils.getCurrentLocation();
+    
+    // If we couldn't get user location but it's required, deny
+    if (config.requireLocationSharing && userLocation == null) {
+      return ConstraintCheckResult.deny(
+        'Could not get your current location. Please enable GPS and try again.',
+        action: 'claim',
+      );
+    }
+
+    // Parse site coordinates
+    final siteLocation = GeoDistanceUtils.parseGpsCoordinates(visit.siteCoordinates);
+    
+    // If site has no coordinates, allow (can't check proximity)
+    if (siteLocation == null) {
+      return ConstraintCheckResult.allow();
+    }
+
+    // If user has no location, but it's not required, allow
+    if (userLocation == null) {
+      return ConstraintCheckResult.allow();
+    }
+
+    // Check GPS proximity
+    final proximityResult = GeoDistanceUtils.checkSiteProximity(
+      userStateName: user.stateId,
+      userLocation: userLocation,
+      siteStateName: visit.state,
+      siteLocation: siteLocation,
+      config: config,
+    );
+
+    if (proximityResult.canAccess) {
+      return ConstraintCheckResult.allow(distanceKm: proximityResult.distanceKm);
+    } else {
+      return ConstraintCheckResult.deny(
+        proximityResult.reason ?? 'Site is outside your allowed range.',
+        action: 'claim',
+        distanceKm: proximityResult.distanceKm,
+      );
+    }
+  }
+
+  /// Check if user can accept a site with GPS proximity enforcement
+  static Future<ConstraintCheckResult> canAcceptSiteWithGPS(
+    SiteVisit visit,
+    PACTUserProfile user,
+  ) async {
+    return canClaimSiteWithGPS(visit, user);
   }
 
   /// Filter site visits based on user constraints
