@@ -1198,9 +1198,9 @@ export default function CostPredictions() {
 
           if (!isDuplicate && validationStatus !== 'error') {
             if (!matchedSite) {
-              // BLOCKING: Sites must exist in registry or MMP uploads
-              validationStatus = 'error';
-              validationMessage = 'Site not found in registry - must be uploaded via MMP first';
+              // Allow sites not in registry - they will be imported with site name as identifier
+              validationStatus = 'warning';
+              validationMessage = 'New site - will be imported using site name as identifier';
             } else if (!matchedSite.gps_latitude || !matchedSite.gps_longitude) {
               validationStatus = 'warning';
               validationMessage = 'Site found but missing GPS coordinates';
@@ -1283,14 +1283,11 @@ export default function CostPredictions() {
         }
       });
       
-      // Count unmatched sites (sites not in registry)
-      const unmatchedSiteRecords = allRecords.filter(r => r.validationStatus === 'error' && r.validationMessage?.includes('Site not found in registry'));
+      // Count new sites (sites not in registry - now allowed as warnings)
+      const newSiteRecords = allRecords.filter(r => r.isNewSite && r.validationStatus === 'warning');
       
       // Build error messages
       const errors: string[] = [];
-      if (unmatchedSiteRecords.length > 0) {
-        errors.push(`${unmatchedSiteRecords.length} records have sites not found in the registry - these must be uploaded via MMP first`);
-      }
       if (missingDateRecords.length > 0) {
         errors.push(`${missingDateRecords.length} records are missing or have invalid visit dates (month is required)`);
       }
@@ -1312,8 +1309,8 @@ export default function CostPredictions() {
         matchedSites: matchedSites.length,
         matchedWithGps: matchedWithGps.length,
         matchedWithoutGps: matchedWithoutGps.length,
-        newSites: newSites.length, // Now counted as errors (sites not in registry)
-        unmatchedSites: unmatchedSiteRecords.length, // Sites not found in registry
+        newSites: newSites.length, // Sites not in registry (now allowed)
+        unmatchedSites: newSiteRecords.length, // Same as newSites - sites not in registry
         recordsWithCosts: recordsWithCosts.length,
         duplicateRecords: duplicateRecords.length,
         validatedStates: uniqueStates.size,
