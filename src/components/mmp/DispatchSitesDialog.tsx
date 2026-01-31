@@ -196,37 +196,49 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     let filtered = collectors;
 
     if (dispatchType === "state" && selectedState) {
+      // Normalize function to handle variations like "RiverNile" vs "River Nile" vs "river-nile"
+      const normalizeLocation = (s: string) => s.toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
+      
       // Find the state from sudanStates - selectedState is typically the state NAME
       const stateData = sudanStates.find(
-        (s) => s.name.toLowerCase() === selectedState.toLowerCase() ||
-               s.id.toLowerCase() === selectedState.toLowerCase()
+        (s) => normalizeLocation(s.name) === normalizeLocation(selectedState) ||
+               normalizeLocation(s.id) === normalizeLocation(selectedState)
       );
       
       if (stateData) {
+        const normalizedStateId = normalizeLocation(stateData.id);
+        const normalizedStateName = normalizeLocation(stateData.name);
+        
         // Match collectors by: state_id equals stateData.id OR stateData.name (users may have either stored)
         filtered = filtered.filter((c) => {
           if (!c.state_id) return false;
-          const collectorStateId = c.state_id.toLowerCase();
-          return collectorStateId === stateData.id.toLowerCase() || 
-                 collectorStateId === stateData.name.toLowerCase();
+          const normalizedCollectorState = normalizeLocation(c.state_id);
+          return normalizedCollectorState === normalizedStateId || 
+                 normalizedCollectorState === normalizedStateName ||
+                 normalizedCollectorState.includes(normalizedStateName) ||
+                 normalizedStateName.includes(normalizedCollectorState);
         });
         console.log(`[DispatchSitesDialog] State filter: "${selectedState}" -> found ${filtered.length} collectors (matching id:"${stateData.id}" or name:"${stateData.name}")`);
       } else {
         // Fallback: try direct case-insensitive match
         filtered = filtered.filter((c) => 
-          c.state_id?.toLowerCase() === selectedState.toLowerCase()
+          normalizeLocation(c.state_id || '') === normalizeLocation(selectedState)
         );
         console.log(`[DispatchSitesDialog] State filter fallback: "${selectedState}" -> found ${filtered.length} collectors`);
       }
     } else if (dispatchType === "locality" && selectedLocality) {
       // Convert locality name to locality ID for matching
       // Need to find the state first to get the correct locality
+      // Normalize function to handle variations like "Almatama" vs "Al Matama"
+      const normalizeLocation = (s: string) => s.toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
+      const normalizedSelectedLocality = normalizeLocation(selectedLocality);
+      
       let localityData: { id: string; name: string } | undefined;
       let foundInState: string | undefined;
       for (const state of sudanStates) {
         const locality = state.localities.find(
-          (l) => l.name.toLowerCase() === selectedLocality.toLowerCase() ||
-                 l.id.toLowerCase() === selectedLocality.toLowerCase()
+          (l) => normalizeLocation(l.name) === normalizedSelectedLocality ||
+                 normalizeLocation(l.id) === normalizedSelectedLocality
         );
         if (locality) {
           localityData = locality;
@@ -241,15 +253,23 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       
       if (localityData) {
         // Match collectors by: locality_id equals localityData.id OR localityData.name
+        // Normalize by removing spaces for flexible matching (e.g., "Almatama" vs "Al Matama")
+        const normalizeLocality = (s: string) => s.toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
+        const normalizedId = normalizeLocality(localityData.id);
+        const normalizedName = normalizeLocality(localityData.name);
+        
         filtered = filtered.filter((c) => {
           if (!c.locality_id) {
             console.log(`  [SKIP] ${c.full_name}: no locality_id`);
             return false;
           }
-          const collectorLocalityId = c.locality_id.toLowerCase();
-          const matches = collectorLocalityId === localityData!.id.toLowerCase() || 
-                         collectorLocalityId === localityData!.name.toLowerCase();
-          console.log(`  [${matches ? 'MATCH' : 'NO MATCH'}] ${c.full_name}: locality_id="${c.locality_id}" vs id="${localityData!.id}" or name="${localityData!.name}"`);
+          const normalizedCollectorLocality = normalizeLocality(c.locality_id);
+          // Check: exact match, normalized match, or contains match
+          const matches = normalizedCollectorLocality === normalizedId || 
+                         normalizedCollectorLocality === normalizedName ||
+                         normalizedCollectorLocality.includes(normalizedName) ||
+                         normalizedName.includes(normalizedCollectorLocality);
+          console.log(`  [${matches ? 'MATCH' : 'NO MATCH'}] ${c.full_name}: locality_id="${c.locality_id}" (normalized: "${normalizedCollectorLocality}") vs id="${normalizedId}" or name="${normalizedName}"`);
           return matches;
         });
         console.log(`[DispatchSitesDialog] After locality filter: ${filtered.length} collectors/coordinators`);
