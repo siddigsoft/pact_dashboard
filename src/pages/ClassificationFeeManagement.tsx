@@ -210,20 +210,24 @@ const ClassificationFeeManagement = () => {
         };
         
         console.log(`[ClassificationFeeManagement] Updating Level ${fee.classification_level} (${fee.role_scope}):`, updateData);
+        console.log(`[ClassificationFeeManagement] Fee ID: ${fee.id}`);
         
-        // Use upsert-like approach: update by classification_level and role_scope
-        const { data, error, count } = await supabase
+        // Update by ID - more reliable than composite key matching
+        const { data, error, status, statusText } = await supabase
           .from('classification_fee_structures')
           .update(updateData)
-          .eq('classification_level', fee.classification_level)
-          .eq('role_scope', fee.role_scope)
+          .eq('id', fee.id)
           .select();
 
+        console.log(`[ClassificationFeeManagement] Response status: ${status} ${statusText}`);
+        console.log(`[ClassificationFeeManagement] Response data:`, data);
+        console.log(`[ClassificationFeeManagement] Response error:`, error);
+
         if (error) {
-          console.error(`[ClassificationFeeManagement] Error updating Level ${fee.classification_level}:`, error);
+          console.error(`[ClassificationFeeManagement] Error updating Level ${fee.classification_level}:`, error.message, error.details, error.hint);
           failCount++;
         } else if (!data || data.length === 0) {
-          console.warn(`[ClassificationFeeManagement] No rows updated for Level ${fee.classification_level} (${fee.role_scope})`);
+          console.warn(`[ClassificationFeeManagement] No rows updated for Level ${fee.classification_level} - RLS policy may be blocking update`);
           failCount++;
         } else {
           console.log(`[ClassificationFeeManagement] Successfully updated Level ${fee.classification_level}:`, data);
