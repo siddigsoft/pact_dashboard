@@ -1837,6 +1837,74 @@ const MMP = () => {
   // Supervisors should only see operations within their assigned hub
   const hubAccessInfo = useMemo(() => getHubAccessInfo(currentUser), [currentUser]);
   const applyHubFilter = shouldApplyHubFilter(currentUser);
+
+  // Direct database load of dispatched sites for data collectors/coordinators
+  // This ensures sites are visible even if MMP context hasn't loaded site entries yet
+  useEffect(() => {
+    const loadDispatchedSitesForEnumerator = async () => {
+      if (!canClaimSites || !currentUser?.id || !currentUser?.stateId) return;
+      
+      setLoadingEnumerator(true);
+      try {
+        // Get collector's state name for filtering
+        const collectorStateName = sudanStates.find(s => s.id === currentUser.stateId)?.name;
+        if (!collectorStateName) {
+          console.warn('[MMP] Could not find state name for:', currentUser.stateId);
+          return;
+        }
+
+        // Query dispatched sites directly from database
+        const { data: dispatchedSites, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .ilike('status', 'Dispatched')
+          .is('accepted_by', null)
+          .ilike('state', `%${collectorStateName}%`)
+          .order('created_at', { ascending: false })
+          .limit(500);
+
+        if (error) {
+          console.error('[MMP] Error loading dispatched sites:', error);
+          return;
+        }
+
+        console.log(`📊 [MMP Direct Load] Found ${dispatchedSites?.length || 0} dispatched sites for ${collectorStateName}`);
+
+        if (dispatchedSites && dispatchedSites.length > 0) {
+          // Format entries for display
+          const formattedEntries = dispatchedSites.map(entry => ({
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            mmp_file_id: entry.mmp_file_id,
+            mmpId: entry.mmp_file_id,
+            enumerator_fee: entry.enumerator_fee,
+            transport_fee: entry.transport_fee,
+            additionalData: entry.additional_data || {}
+          }));
+          
+          setEnumeratorSiteEntries(formattedEntries);
+          
+          // Group by state-locality
+          const grouped = formattedEntries.reduce((acc: Record<string, any[]>, entry: any) => {
+            const state = entry.state || 'Unknown State';
+            const locality = entry.locality || 'Unknown Locality';
+            const key = `${state} - ${locality}`;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(entry);
+            return acc;
+          }, {});
+          setEnumeratorGroupedByStates(grouped);
+        }
+      } catch (error) {
+        console.error('[MMP] Failed to load dispatched sites:', error);
+      } finally {
+        setLoadingEnumerator(false);
+      }
+    };
+
+    loadDispatchedSitesForEnumerator();
+  }, [canClaimSites, currentUser?.id, currentUser?.stateId]);
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
