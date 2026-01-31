@@ -5,14 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, Briefcase, Wallet } from "lucide-react";
-import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
 import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUserProjects } from "@/hooks/useUserProjects";
 import { AppRole } from "@/types";
-import CostSubmissionForm from "@/components/cost-submission/CostSubmissionForm";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
 import OperationalCostForm from "@/components/cost-submission/OperationalCostForm";
 import CostRequestForm from "@/components/cost-submission/CostRequestForm";
@@ -23,7 +21,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
   Info, 
-  MapPin, 
   RefreshCw, 
   CircleDollarSign,
   ClipboardCheck,
@@ -34,7 +31,6 @@ const CostSubmission = () => {
   const navigate = useNavigate();
   const { currentUser, roles } = useAppContext();
   const { users } = useUser();
-  const { siteVisits } = useSiteVisitContext();
   const { projects: allProjects } = useProjectContext();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { toast } = useToast();
@@ -67,11 +63,11 @@ const CostSubmission = () => {
   // Determine default tab based on role
   const getDefaultTab = () => {
     if (canViewTeamSubmissions) return "history";
-    if (canSubmitOperationalCosts && !isSupervisor) return "operational";
-    return "submit";
+    if (canSubmitOperationalCosts) return "operational";
+    return "budget"; // Default to advance/reimburse for field staff
   };
   
-  const [activeTab, setActiveTab] = useState<"submit" | "operational" | "budget" | "reconciliation" | "outstanding" | "history">(getDefaultTab());
+  const [activeTab, setActiveTab] = useState<"operational" | "budget" | "reconciliation" | "outstanding" | "history">(getDefaultTab());
   const [showGuide, setShowGuide] = useState(false);
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
@@ -134,25 +130,6 @@ const CostSubmission = () => {
       !s.projectId || userProjectIds.includes(s.projectId)
     );
   }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser]);
-
-  // Admins see all completed site visits, supervisors see their team's, data collectors see only their own
-  // Also apply project team membership filter for non-admins
-  const baseAvailableSiteVisits = isAdmin 
-    ? siteVisits.filter(visit => visit.status === 'completed')
-    : isSupervisor && teamMemberIds.length > 0
-      ? siteVisits.filter(visit => visit.status === 'completed' && teamMemberIds.includes(visit.assignedTo || ''))
-      : siteVisits.filter(visit => visit.assignedTo === currentUser?.id && visit.status === 'completed');
-
-  // Apply project filter to site visits
-  // Non-admin users with no project assignments see nothing (empty array)
-  const availableSiteVisits = useMemo(() => {
-    if (isAdminOrSuperUser) return baseAvailableSiteVisits;
-    if (userProjectIds.length === 0) return []; // No project memberships = no data
-    return baseAvailableSiteVisits.filter(visit => {
-      const projectId = (visit as any).projectId || (visit as any).mmpDetails?.projectId;
-      return !projectId || userProjectIds.includes(projectId);
-    });
-  }, [baseAvailableSiteVisits, userProjectIds, isAdminOrSuperUser]);
 
   const submissionStats = {
     total: submissions.length,
@@ -440,15 +417,6 @@ const CostSubmission = () => {
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
         <TabsList className="flex-wrap gap-1">
-          {/* Submit Section */}
-          {!canViewTeamSubmissions && (
-            <TabsTrigger value="submit" data-testid="tab-submit" className="gap-1.5">
-              <MapPin className="h-4 w-4" />
-              <span className="hidden sm:inline">Site Visit</span>
-              <span className="sm:hidden">Visit</span>
-            </TabsTrigger>
-          )}
-          
           {/* Operational Costs */}
           {canSubmitOperationalCosts && (
             <TabsTrigger value="operational" data-testid="tab-operational" className="gap-1.5">
@@ -488,48 +456,6 @@ const CostSubmission = () => {
             <span className="sm:hidden">History</span>
           </TabsTrigger>
         </TabsList>
-
-        {/* Site Visit Costs Tab */}
-        {!canViewTeamSubmissions && (
-          <TabsContent value="submit" className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-blue-600" />
-                  <CardTitle>Site Visit Cost Submission</CardTitle>
-                </div>
-                <CardDescription>
-                  Submit transportation, per diem, and other costs for completed site visits. Select a visit and enter the actual expenses incurred.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            {isLoading ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <Skeleton className="h-96 w-full" />
-                </CardContent>
-              </Card>
-            ) : availableSiteVisits.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-center py-12">
-                    <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">No Completed Site Visits</h3>
-                    <p className="text-muted-foreground mb-4">
-                      You don't have any completed site visits yet. Complete a site visit to submit costs.
-                    </p>
-                    <Button variant="outline" onClick={() => navigate('/site-visits')} data-testid="button-go-visits">
-                      <MapPin className="h-4 w-4 mr-2" />
-                      Go to Site Visits
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <CostSubmissionForm siteVisits={availableSiteVisits} />
-            )}
-          </TabsContent>
-        )}
 
         {/* Operational Costs Tab */}
         {canSubmitOperationalCosts && (
