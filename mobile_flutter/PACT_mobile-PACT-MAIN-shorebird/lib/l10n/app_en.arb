@@ -1459,5 +1459,180 @@
   "selectFile": "Select File",
   "@selectFile": {
     "description": "Button to select a file"
+  },
+  "notificationAppUpdateTitle": "App Update Available",
+  "@notificationAppUpdateTitle": {
+    "description": "Notification title for app update"
+  },
+  "notificationAppUpdateBody": "A new version ({version}) is ready. Tap to update!",
+  "@notificationAppUpdateBody": {
+    "description": "Notification body for app update",
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "notificationDownloadingTitle": "Downloading Update",
+  "@notificationDownloadingTitle": {
+    "description": "Notification title for downloading update"
+  },
+  "notificationDownloadingBody": "Please wait...",
+  "@notificationDownloadingBody": {
+    "description": "Notification body for downloading update"
+  },
+  "notificationUpdateInstalledTitle": "Update Installed",
+  "@notificationUpdateInstalledTitle": {
+    "description": "Notification title for update installed"
+  },
+  "notificationUpdateInstalledBody": "Your app is now up to date. Restart to apply.",
+  "@notificationUpdateInstalledBody": {
+    "description": "Notification body for update installed"
+  },
+  "notificationCostApprovedTitle": "Cost Submission Approved",
+  "@notificationCostApprovedTitle": {
+    "description": "Notification title for cost approved"
+  },
+  "notificationCostApprovedBody": "Approved for site visit {siteId}. Amount: {amount} {currency}",
+  "@notificationCostApprovedBody": {
+    "description": "Notification body for cost approved",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationCostRejectedTitle": "Cost Submission Rejected",
+  "@notificationCostRejectedTitle": {
+    "description": "Notification title for cost rejected"
+  },
+  "notificationCostRejectedBody": "Rejected for site visit {siteId}. Reason: {reason}",
+  "@notificationCostRejectedBody": {
+    "description": "Notification body for cost rejected",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "reason": {"type": "String"}
+    }
+  },
+  "notificationRevisionTitle": "Revision Requested",
+  "@notificationRevisionTitle": {
+    "description": "Notification title for revision requested"
+  },
+  "notificationRevisionBody": "Site visit {siteId} needs revision. Notes: {notes}",
+  "@notificationRevisionBody": {
+    "description": "Notification body for revision requested",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "notes": {"type": "String"}
+    }
+  },
+  "notificationSyncCompletedTitle": "Offline Sync Completed",
+  "@notificationSyncCompletedTitle": {
+    "description": "Notification title for sync completed"
+  },
+  "notificationSyncCompletedBody": "{count} submission(s) synchronized successfully.",
+  "@notificationSyncCompletedBody": {
+    "description": "Notification body for sync completed",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationBudgetAlertTitle": "Budget Alert",
+  "@notificationBudgetAlertTitle": {
+    "description": "Notification title for budget alert"
+  },
+  "notificationBudgetAlertBody": "Remaining budget for {siteId}: {amount} {currency}",
+  "@notificationBudgetAlertBody": {
+    "description": "Notification body for budget alert",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationNewMessageTitle": "New Message",
+  "@notificationNewMessageTitle": {
+    "description": "Notification title for new message"
+  },
+  "notificationSignatureVerifiedTitle": "Signature Verified",
+  "@notificationSignatureVerifiedTitle": {
+    "description": "Notification title for signature verified"
+  },
+  "notificationSignatureVerifiedBody": "Your signature has been verified by admin.",
+  "@notificationSignatureVerifiedBody": {
+    "description": "Notification body for signature verified"
+  },
+  "notificationSignatureRejectedTitle": "Signature Rejected",
+  "@notificationSignatureRejectedTitle": {
+    "description": "Notification title for signature rejected"
+  },
+  "notificationSignatureRejectedBody": "Your signature was rejected. Please submit a new one.",
+  "@notificationSignatureRejectedBody": {
+    "description": "Notification body for signature rejected"
+  },
+  "notificationSiteAssignedTitle": "Site Visit Assigned",
+  "@notificationSiteAssignedTitle": {
+    "description": "Notification title for site visit assigned"
+  },
+  "notificationSiteAssignedBody": "You have been assigned to visit: {siteName}",
+  "@notificationSiteAssignedBody": {
+    "description": "Notification body for site visit assigned",
+    "placeholders": {
+      "siteName": {"type": "String"}
+    }
+  },
+  "notificationPaymentReceivedTitle": "Payment Received",
+  "@notificationPaymentReceivedTitle": {
+    "description": "Notification title for payment received"
+  },
+  "notificationPaymentReceivedBody": "You received {amount} {currency}.",
+  "@notificationPaymentReceivedBody": {
+    "description": "Notification body for payment received",
+    "placeholders": {
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationApprovalRequiredTitle": "Approval Required",
+  "@notificationApprovalRequiredTitle": {
+    "description": "Notification title for approval required"
+  },
+  "notificationApprovalRequiredBody": "A {itemType} requires your approval.",
+  "@notificationApprovalRequiredBody": {
+    "description": "Notification body for approval required",
+    "placeholders": {
+      "itemType": {"type": "String"}
+    }
+  },
+  "notificationSupportTicketTitle": "Support Ticket Updated",
+  "@notificationSupportTicketTitle": {
+    "description": "Notification title for support ticket update"
+  },
+  "notificationSupportTicketBody": "Your support ticket #{ticketId} has been updated.",
+  "@notificationSupportTicketBody": {
+    "description": "Notification body for support ticket update",
+    "placeholders": {
+      "ticketId": {"type": "String"}
+    }
+  },
+  "notificationIncomingCallTitle": "Incoming Call",
+  "@notificationIncomingCallTitle": {
+    "description": "Notification title for incoming call"
+  },
+  "notificationIncomingCallBody": "{callerName} is calling you.",
+  "@notificationIncomingCallBody": {
+    "description": "Notification body for incoming call",
+    "placeholders": {
+      "callerName": {"type": "String"}
+    }
+  },
+  "notificationMissedCallTitle": "Missed Call",
+  "@notificationMissedCallTitle": {
+    "description": "Notification title for missed call"
+  },
+  "notificationMissedCallBody": "You missed a call from {callerName}.",
+  "@notificationMissedCallBody": {
+    "description": "Notification body for missed call",
+    "placeholders": {
+      "callerName": {"type": "String"}
+    }
   }
 }

@@ -1459,5 +1459,180 @@
   "selectFile": "اختر ملف",
   "@selectFile": {
     "description": "Button to select a file"
+  },
+  "notificationAppUpdateTitle": "تحديث التطبيق متاح",
+  "@notificationAppUpdateTitle": {
+    "description": "Notification title for app update"
+  },
+  "notificationAppUpdateBody": "إصدار جديد ({version}) جاهز. اضغط للتحديث!",
+  "@notificationAppUpdateBody": {
+    "description": "Notification body for app update",
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "notificationDownloadingTitle": "جاري تحميل التحديث",
+  "@notificationDownloadingTitle": {
+    "description": "Notification title for downloading update"
+  },
+  "notificationDownloadingBody": "يرجى الانتظار...",
+  "@notificationDownloadingBody": {
+    "description": "Notification body for downloading update"
+  },
+  "notificationUpdateInstalledTitle": "تم تثبيت التحديث",
+  "@notificationUpdateInstalledTitle": {
+    "description": "Notification title for update installed"
+  },
+  "notificationUpdateInstalledBody": "تطبيقك محدث الآن. أعد التشغيل للتطبيق.",
+  "@notificationUpdateInstalledBody": {
+    "description": "Notification body for update installed"
+  },
+  "notificationCostApprovedTitle": "تمت الموافقة على التكلفة",
+  "@notificationCostApprovedTitle": {
+    "description": "Notification title for cost approved"
+  },
+  "notificationCostApprovedBody": "تمت الموافقة لزيارة الموقع {siteId}. المبلغ: {amount} {currency}",
+  "@notificationCostApprovedBody": {
+    "description": "Notification body for cost approved",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationCostRejectedTitle": "تم رفض طلب التكلفة",
+  "@notificationCostRejectedTitle": {
+    "description": "Notification title for cost rejected"
+  },
+  "notificationCostRejectedBody": "تم الرفض لزيارة الموقع {siteId}. السبب: {reason}",
+  "@notificationCostRejectedBody": {
+    "description": "Notification body for cost rejected",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "reason": {"type": "String"}
+    }
+  },
+  "notificationRevisionTitle": "مطلوب مراجعة",
+  "@notificationRevisionTitle": {
+    "description": "Notification title for revision requested"
+  },
+  "notificationRevisionBody": "زيارة الموقع {siteId} تحتاج مراجعة. الملاحظات: {notes}",
+  "@notificationRevisionBody": {
+    "description": "Notification body for revision requested",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "notes": {"type": "String"}
+    }
+  },
+  "notificationSyncCompletedTitle": "اكتمل المزامنة",
+  "@notificationSyncCompletedTitle": {
+    "description": "Notification title for sync completed"
+  },
+  "notificationSyncCompletedBody": "تم مزامنة {count} طلب(ات) بنجاح.",
+  "@notificationSyncCompletedBody": {
+    "description": "Notification body for sync completed",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "notificationBudgetAlertTitle": "تنبيه الميزانية",
+  "@notificationBudgetAlertTitle": {
+    "description": "Notification title for budget alert"
+  },
+  "notificationBudgetAlertBody": "الميزانية المتبقية لـ {siteId}: {amount} {currency}",
+  "@notificationBudgetAlertBody": {
+    "description": "Notification body for budget alert",
+    "placeholders": {
+      "siteId": {"type": "String"},
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationNewMessageTitle": "رسالة جديدة",
+  "@notificationNewMessageTitle": {
+    "description": "Notification title for new message"
+  },
+  "notificationSignatureVerifiedTitle": "تم التحقق من التوقيع",
+  "@notificationSignatureVerifiedTitle": {
+    "description": "Notification title for signature verified"
+  },
+  "notificationSignatureVerifiedBody": "تم التحقق من توقيعك من قبل المسؤول.",
+  "@notificationSignatureVerifiedBody": {
+    "description": "Notification body for signature verified"
+  },
+  "notificationSignatureRejectedTitle": "تم رفض التوقيع",
+  "@notificationSignatureRejectedTitle": {
+    "description": "Notification title for signature rejected"
+  },
+  "notificationSignatureRejectedBody": "تم رفض توقيعك. يرجى تقديم توقيع جديد.",
+  "@notificationSignatureRejectedBody": {
+    "description": "Notification body for signature rejected"
+  },
+  "notificationSiteAssignedTitle": "تم تعيين زيارة موقع",
+  "@notificationSiteAssignedTitle": {
+    "description": "Notification title for site visit assigned"
+  },
+  "notificationSiteAssignedBody": "تم تعيينك لزيارة: {siteName}",
+  "@notificationSiteAssignedBody": {
+    "description": "Notification body for site visit assigned",
+    "placeholders": {
+      "siteName": {"type": "String"}
+    }
+  },
+  "notificationPaymentReceivedTitle": "تم استلام الدفعة",
+  "@notificationPaymentReceivedTitle": {
+    "description": "Notification title for payment received"
+  },
+  "notificationPaymentReceivedBody": "استلمت {amount} {currency}.",
+  "@notificationPaymentReceivedBody": {
+    "description": "Notification body for payment received",
+    "placeholders": {
+      "amount": {"type": "String"},
+      "currency": {"type": "String"}
+    }
+  },
+  "notificationApprovalRequiredTitle": "مطلوب موافقة",
+  "@notificationApprovalRequiredTitle": {
+    "description": "Notification title for approval required"
+  },
+  "notificationApprovalRequiredBody": "يتطلب {itemType} موافقتك.",
+  "@notificationApprovalRequiredBody": {
+    "description": "Notification body for approval required",
+    "placeholders": {
+      "itemType": {"type": "String"}
+    }
+  },
+  "notificationSupportTicketTitle": "تم تحديث تذكرة الدعم",
+  "@notificationSupportTicketTitle": {
+    "description": "Notification title for support ticket update"
+  },
+  "notificationSupportTicketBody": "تم تحديث تذكرة الدعم #{ticketId} الخاصة بك.",
+  "@notificationSupportTicketBody": {
+    "description": "Notification body for support ticket update",
+    "placeholders": {
+      "ticketId": {"type": "String"}
+    }
+  },
+  "notificationIncomingCallTitle": "مكالمة واردة",
+  "@notificationIncomingCallTitle": {
+    "description": "Notification title for incoming call"
+  },
+  "notificationIncomingCallBody": "{callerName} يتصل بك.",
+  "@notificationIncomingCallBody": {
+    "description": "Notification body for incoming call",
+    "placeholders": {
+      "callerName": {"type": "String"}
+    }
+  },
+  "notificationMissedCallTitle": "مكالمة فائتة",
+  "@notificationMissedCallTitle": {
+    "description": "Notification title for missed call"
+  },
+  "notificationMissedCallBody": "فاتتك مكالمة من {callerName}.",
+  "@notificationMissedCallBody": {
+    "description": "Notification body for missed call",
+    "placeholders": {
+      "callerName": {"type": "String"}
+    }
   }
 }
