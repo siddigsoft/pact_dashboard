@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { DownPaymentProvider, useDownPayment } from '@/context/downPayment/DownPaymentContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -39,25 +38,8 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-interface TransportCostRequest {
-  id: string;
-  type: 'advance' | 'cost_submission';
-  siteName: string;
-  requestedBy: string;
-  requestedAt: string;
-  hubId?: string;
-  hubName?: string;
-  requestedAmount: number;
-  status: string;
-  totalPaidAmount: number;
-  remainingAmount: number;
-  budgetLine?: string;
-  projectName?: string;
-  description?: string;
-}
-
 function AdvanceRequestsReportContent() {
-  const { requests: downPaymentRequests, loading: dpLoading, refreshRequests } = useDownPayment();
+  const { requests, loading, refreshRequests } = useDownPayment();
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const navigate = useNavigate();
@@ -67,88 +49,6 @@ function AdvanceRequestsReportContent() {
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
-  const [sourceFilter, setSourceFilter] = useState<string>('all');
-  
-  // Transportation cost submissions state
-  const [costSubmissions, setCostSubmissions] = useState<TransportCostRequest[]>([]);
-  const [costLoading, setCostLoading] = useState(true);
-  
-  // Fetch transportation-related cost submissions
-  useEffect(() => {
-    async function fetchTransportCosts() {
-      if (!currentUser) {
-        setCostSubmissions([]);
-        setCostLoading(false);
-        return;
-      }
-      
-      try {
-        setCostLoading(true);
-        
-        // Fetch cost_requests with transportation budget lines
-        const { data, error } = await supabase
-          .from('cost_requests')
-          .select('*')
-          .or('budget_line_category.eq.transportation_and_visit_fees,budget_line_category.eq.general_transport,budget_line.ilike.%transport%')
-          .order('created_at', { ascending: false });
-        
-        if (error) {
-          console.error('[TransportCost] Error fetching:', error);
-          setCostSubmissions([]);
-        } else {
-          const transformed: TransportCostRequest[] = (data || []).map((item: any) => ({
-            id: item.id,
-            type: 'cost_submission' as const,
-            siteName: item.activity_description || item.description || 'Transportation Cost',
-            requestedBy: item.submitted_by || item.requester_id,
-            requestedAt: item.created_at,
-            hubId: item.hub_id,
-            hubName: item.hub_name,
-            requestedAmount: (item.requested_amount_cents || item.amount_cents || 0) / 100,
-            status: item.status || 'pending',
-            totalPaidAmount: (item.disbursed_amount_cents || item.paid_amount_cents || 0) / 100,
-            remainingAmount: ((item.requested_amount_cents || 0) - (item.disbursed_amount_cents || item.paid_amount_cents || 0)) / 100,
-            budgetLine: item.budget_line_category || item.budget_line,
-            projectName: item.project_name,
-            description: item.description,
-          }));
-          setCostSubmissions(transformed);
-          console.log('[TransportCost] Fetched:', transformed.length);
-        }
-      } catch (err) {
-        console.error('[TransportCost] Fetch error:', err);
-        setCostSubmissions([]);
-      } finally {
-        setCostLoading(false);
-      }
-    }
-    
-    fetchTransportCosts();
-  }, [currentUser]);
-  
-  // Combine both data sources
-  const allRequests = useMemo(() => {
-    const dpMapped: TransportCostRequest[] = downPaymentRequests.map(req => ({
-      id: req.id,
-      type: 'advance' as const,
-      siteName: req.siteName,
-      requestedBy: req.requestedBy,
-      requestedAt: req.requestedAt,
-      hubId: req.hubId,
-      hubName: req.hubName,
-      requestedAmount: req.requestedAmount,
-      status: req.status,
-      totalPaidAmount: req.totalPaidAmount || 0,
-      remainingAmount: req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0)),
-      budgetLine: 'Transportation Advance',
-      description: req.justification,
-    }));
-    
-    return [...dpMapped, ...costSubmissions];
-  }, [downPaymentRequests, costSubmissions]);
-  
-  const loading = dpLoading || costLoading;
-  const requests = allRequests;
 
   const userRole = currentUser?.role?.toLowerCase();
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
@@ -190,12 +90,10 @@ function AdvanceRequestsReportContent() {
         const matchesSite = req.siteName?.toLowerCase().includes(term);
         const matchesUser = getProfileName(req.requestedBy).toLowerCase().includes(term);
         const matchesHub = req.hubName?.toLowerCase().includes(term);
-        const matchesBudget = req.budgetLine?.toLowerCase().includes(term);
-        if (!matchesSite && !matchesUser && !matchesHub && !matchesBudget) return false;
+        if (!matchesSite && !matchesUser && !matchesHub) return false;
       }
       if (statusFilter !== 'all' && req.status !== statusFilter) return false;
       if (hubFilter !== 'all' && req.hubId !== hubFilter) return false;
-      if (sourceFilter !== 'all' && req.type !== sourceFilter) return false;
       if (dateFilter !== 'all') {
         const reqDate = parseISO(req.requestedAt);
         const range = dateRanges[dateFilter as keyof typeof dateRanges];
@@ -203,7 +101,7 @@ function AdvanceRequestsReportContent() {
       }
       return true;
     });
-  }, [requests, searchTerm, statusFilter, hubFilter, dateFilter, sourceFilter, dateRanges]);
+  }, [requests, searchTerm, statusFilter, hubFilter, dateFilter, dateRanges]);
 
   const stats = useMemo(() => {
     const totalRequested = filteredRequests.reduce((sum, r) => sum + r.requestedAmount, 0);
@@ -270,15 +168,14 @@ function AdvanceRequestsReportContent() {
     const data = filteredRequests.map(req => ({
       'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd HH:mm'),
       'Requested By': getProfileName(req.requestedBy),
-      'Site/Activity': req.siteName,
+      'Site Name': req.siteName,
       'Hub': req.hubName || 'N/A',
-      'Source': req.type === 'advance' ? 'Advance Request' : 'Cost Submission',
-      'Budget Line': req.budgetLine || 'Transportation',
       'Requested Amount (SDG)': req.requestedAmount,
       'Status': req.status.replace(/_/g, ' ').toUpperCase(),
       'Paid Amount (SDG)': req.totalPaidAmount || 0,
       'Remaining (SDG)': req.remainingAmount || 0,
-      'Description': req.description || '',
+      'Payment Type': req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
+      'Justification': req.justification || '',
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -483,16 +380,6 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="last3Months">Last 3 Months</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[180px]" data-testid="select-source-filter">
-            <SelectValue placeholder="Source" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sources</SelectItem>
-            <SelectItem value="advance">Advance Requests</SelectItem>
-            <SelectItem value="cost_submission">Cost Submissions</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -592,9 +479,8 @@ function AdvanceRequestsReportContent() {
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead>Requested By</TableHead>
-                        <TableHead>Site/Activity</TableHead>
+                        <TableHead>Site</TableHead>
                         <TableHead>Hub</TableHead>
-                        <TableHead>Source</TableHead>
                         <TableHead className="text-right">Amount (SDG)</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Paid</TableHead>
@@ -605,18 +491,13 @@ function AdvanceRequestsReportContent() {
                     <TableBody>
                       {filteredRequests.slice(0, 50).map(req => {
                         const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
-                        const needsReconciliation = req.type === 'advance' && ['approved', 'partially_paid', 'fully_paid'].includes(req.status) && remaining > 0;
+                        const needsReconciliation = ['approved', 'partially_paid', 'fully_paid'].includes(req.status) && remaining > 0;
                         return (
                           <TableRow key={req.id} data-testid={`row-request-${req.id}`}>
                             <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
                             <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
                             <TableCell className="max-w-[200px] truncate">{req.siteName}</TableCell>
                             <TableCell>{req.hubName || 'N/A'}</TableCell>
-                            <TableCell>
-                              <Badge variant={req.type === 'advance' ? 'default' : 'secondary'} className="text-xs">
-                                {req.type === 'advance' ? 'Advance' : 'Cost Sub'}
-                              </Badge>
-                            </TableCell>
                             <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
                             <TableCell>{getStatusBadge(req.status)}</TableCell>
                             <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
