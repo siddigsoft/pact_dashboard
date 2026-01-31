@@ -68,7 +68,8 @@ export default function MobileSignatureAdmin() {
   const { data: signatures = [], isLoading, refetch } = useQuery({
     queryKey: ['mobile-signatures', statusFilter, typeFilter],
     queryFn: async () => {
-      let query = supabase
+      // Fetch from digital_signatures (document signing events)
+      let digitalQuery = supabase
         .from('digital_signatures')
         .select(`
           *,
@@ -78,25 +79,30 @@ export default function MobileSignatureAdmin() {
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') {
-        query = query.eq('verification_status', statusFilter);
+        digitalQuery = digitalQuery.eq('verification_status', statusFilter);
       }
       if (typeFilter !== 'all') {
-        query = query.eq('signature_type', typeFilter);
+        digitalQuery = digitalQuery.eq('signature_type', typeFilter);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []).map((s: any) => ({
+      const { data: digitalData, error: digitalError } = await digitalQuery;
+      if (digitalError) throw digitalError;
+      
+      // Map digital_signatures to unified format
+      // Note: Mobile signatures are automatically synced to digital_signatures on creation
+      // This provides a single source of truth for admin verification
+      return (digitalData || []).map((s: any) => ({
         ...s,
         user_name: s.profiles?.full_name || 'Unknown',
         user_email: s.profiles?.email || '',
-        document_name: s.documents?.name || 'No document',
+        document_name: s.documents?.name || s.document_name || 'No document',
       }));
     },
   });
 
   const updateVerificationMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      // All signatures are in digital_signatures (synced from mobile on creation)
       const { error } = await supabase
         .from('digital_signatures')
         .update({ verification_status: status })
@@ -348,10 +354,17 @@ export default function MobileSignatureAdmin() {
                         </div>
                       </div>
                       
-                      <div className="flex items-center justify-between">
-                        <Badge variant="outline" className={typeConfig.color}>
-                          {typeConfig.label}
-                        </Badge>
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <div className="flex items-center gap-1">
+                          <Badge variant="outline" className={typeConfig.color}>
+                            {typeConfig.label}
+                          </Badge>
+                          {signature.device_info?.includes('Template') && (
+                            <Badge variant="outline" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/20 text-[10px]">
+                              Template
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-xs text-muted-foreground">{getTimeAgo(signature.created_at)}</span>
                       </div>
                     </CardContent>
@@ -476,14 +489,20 @@ export default function MobileSignatureAdmin() {
                   <>
                     <Button
                       variant="destructive"
-                      onClick={() => updateVerificationMutation.mutate({ id: selectedSignature.id, status: 'rejected' })}
+                      onClick={() => updateVerificationMutation.mutate({ 
+                        id: selectedSignature.id, 
+                        status: 'rejected'
+                      })}
                       disabled={updateVerificationMutation.isPending}
                     >
                       <X className="w-4 h-4 mr-2" />
                       Reject
                     </Button>
                     <Button
-                      onClick={() => updateVerificationMutation.mutate({ id: selectedSignature.id, status: 'verified' })}
+                      onClick={() => updateVerificationMutation.mutate({ 
+                        id: selectedSignature.id, 
+                        status: 'verified'
+                      })}
                       disabled={updateVerificationMutation.isPending}
                       className="bg-emerald-600 hover:bg-emerald-700"
                     >

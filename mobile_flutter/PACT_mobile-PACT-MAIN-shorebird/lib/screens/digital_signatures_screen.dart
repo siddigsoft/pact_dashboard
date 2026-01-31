@@ -852,14 +852,34 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
       debugPrint('Is first signature: $isFirstSignature');
 
       debugPrint('Inserting signature into database...');
+      final signatureName = _nameController.text.isNotEmpty
+          ? _nameController.text
+          : (widget.isArabic ? 'توقيعي' : 'My Signature');
+      
       await Supabase.instance.client.from('user_signatures').insert({
         'user_id': userId,
-        'name': _nameController.text.isNotEmpty
-            ? _nameController.text
-            : (widget.isArabic ? 'توقيعي' : 'My Signature'),
+        'name': signatureName,
         'signature_data': signatureData,
         'is_default': isFirstSignature,
       });
+
+      debugPrint('Signature saved to user_signatures');
+      
+      // Also sync to digital_signatures for web admin visibility
+      try {
+        await Supabase.instance.client.from('digital_signatures').insert({
+          'user_id': userId,
+          'signature_type': 'drawn',
+          'signature_data': signatureData,
+          'verification_status': 'pending',
+          'document_name': '$signatureName (Template)',
+          'device_info': 'PACT Mobile App - Signature Template',
+        });
+        debugPrint('Signature synced to digital_signatures for admin visibility');
+      } catch (syncError) {
+        debugPrint('Note: Could not sync to digital_signatures: $syncError');
+        // Non-critical - signature is still saved in user_signatures
+      }
 
       debugPrint('Signature saved successfully!');
       
