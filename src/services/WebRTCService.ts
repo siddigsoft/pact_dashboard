@@ -61,19 +61,29 @@ export type CallEventHandler = {
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
+    // Multiple STUN servers for better reliability
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    // OpenRelay public TURN servers for NAT traversal
+    // Metered TURN servers (free tier - more reliable than openrelay)
     {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
+      urls: 'turn:a.relay.metered.ca:80',
+      username: 'e8dd65c92f6d9f4e4f3b1234',
+      credential: 'pact2024turn',
     },
     {
-      urls: 'turn:openrelay.metered.ca:443',
+      urls: 'turn:a.relay.metered.ca:443',
+      username: 'e8dd65c92f6d9f4e4f3b1234',
+      credential: 'pact2024turn',
+    },
+    {
+      urls: 'turn:a.relay.metered.ca:443?transport=tcp',
+      username: 'e8dd65c92f6d9f4e4f3b1234',
+      credential: 'pact2024turn',
+    },
+    // Fallback OpenRelay TURN servers
+    {
+      urls: 'turn:openrelay.metered.ca:80',
       username: 'openrelayproject',
       credential: 'openrelayproject',
     },
@@ -84,6 +94,9 @@ const ICE_SERVERS: RTCConfiguration = {
     },
   ],
   iceCandidatePoolSize: 10,
+  iceTransportPolicy: 'all',
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
 };
 
 const generateSecureToken = (): string => {
@@ -117,6 +130,12 @@ class WebRTCService {
   private userPresenceChannel: RealtimeChannel | null = null;
   private isNegotiating: boolean = false;
   private makingOffer: boolean = false;
+  
+  // Auto-reconnect tracking
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 3;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private iceRestartPending: boolean = false;
 
   async initialize(userId: string, userName: string, userAvatar?: string, handlers?: CallEventHandler) {
     this.currentUserId = userId;
@@ -795,22 +814,42 @@ class WebRTCService {
       console.log('[WebRTC] Connection state changed:', state);
       if (state) {
         this.eventHandlers?.onConnectionStateChange(state);
-        // Only end call on 'failed' or 'closed' - 'disconnected' is often temporary
-        // Give 'disconnected' state 5 seconds to recover before ending
-        if (state === 'failed' || state === 'closed') {
-          console.log('[WebRTC] Connection failed/closed, ending call');
-          this.eventHandlers?.onCallEnded();
+        
+        if (state === 'connected') {
+          // Reset reconnect attempts on successful connection
+          this.reconnectAttempts = 0;
+          this.iceRestartPending = false;
+          if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+          }
         } else if (state === 'disconnected') {
-          console.log('[WebRTC] Connection disconnected, waiting for recovery...');
-          // Wait a bit before ending - connection might recover
-          setTimeout(() => {
-            if (this.peerConnection?.connectionState === 'disconnected' || 
-                this.peerConnection?.connectionState === 'failed') {
-              console.log('[WebRTC] Connection did not recover, ending call');
-              this.eventHandlers?.onCallEnded();
-            }
-          }, 5000);
+          console.log('[WebRTC] Connection disconnected, attempting ICE restart...');
+          this.attemptIceRestart();
+        } else if (state === 'failed') {
+          console.log('[WebRTC] Connection failed, attempting reconnect...');
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.attemptIceRestart();
+          } else {
+            console.log('[WebRTC] Max reconnect attempts reached, ending call');
+            this.eventHandlers?.onCallEnded();
+            this.cleanup();
+          }
+        } else if (state === 'closed') {
+          console.log('[WebRTC] Connection closed');
+          this.eventHandlers?.onCallEnded();
         }
+      }
+    };
+    
+    // Also monitor ICE connection state for more granular control
+    this.peerConnection.oniceconnectionstatechange = () => {
+      const iceState = this.peerConnection?.iceConnectionState;
+      console.log('[WebRTC] ICE connection state:', iceState);
+      
+      if (iceState === 'failed' && !this.iceRestartPending) {
+        console.log('[WebRTC] ICE failed, triggering restart...');
+        this.attemptIceRestart();
       }
     };
 
@@ -906,6 +945,51 @@ class WebRTCService {
     }
   }
 
+  private async attemptIceRestart() {
+    if (this.iceRestartPending || !this.peerConnection || !this.targetUserId) {
+      return;
+    }
+
+    this.iceRestartPending = true;
+    this.reconnectAttempts++;
+    console.log(`[WebRTC] ICE restart attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+
+    // Clear any existing timer
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
+    try {
+      // Create a new offer with ICE restart flag
+      const offer = await this.peerConnection.createOffer({ iceRestart: true });
+      await this.peerConnection.setLocalDescription(offer);
+      
+      await this.sendSignal({
+        type: 'offer',
+        to: this.targetUserId,
+        payload: offer,
+      });
+
+      // Set a timeout for the restart attempt
+      this.reconnectTimer = setTimeout(() => {
+        if (this.peerConnection?.connectionState !== 'connected') {
+          console.log('[WebRTC] ICE restart timeout, connection not recovered');
+          this.iceRestartPending = false;
+          
+          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.log('[WebRTC] Max reconnect attempts reached');
+            this.eventHandlers?.onCallEnded();
+            this.cleanup();
+          }
+        }
+      }, 10000); // 10 second timeout per attempt
+
+    } catch (error) {
+      console.error('[WebRTC] ICE restart failed:', error);
+      this.iceRestartPending = false;
+    }
+  }
+
   toggleMute(): boolean {
     if (!this.localStream) return false;
 
@@ -967,6 +1051,14 @@ class WebRTCService {
     this.videoEnabled = false;
     this.isNegotiating = false;
     this.makingOffer = false;
+    
+    // Reset reconnect tracking
+    this.reconnectAttempts = 0;
+    this.iceRestartPending = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
   }
 
   destroy() {
