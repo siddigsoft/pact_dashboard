@@ -2,9 +2,14 @@
  * SignatureAuditLog Component
  * Displays signature history and audit trail for compliance
  * Features real-time updates via Supabase subscriptions
+ * 
+ * OPTIMIZATIONS:
+ * - Pagination for large datasets (10 items per page)
+ * - Debounced real-time updates
+ * - Memoized helper functions
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,7 +30,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { 
   History, 
@@ -34,14 +38,15 @@ import {
   XCircle, 
   Clock, 
   Eye,
-  Download,
   Shield,
   Fingerprint,
   Phone,
   Mail,
   Pen,
   RefreshCw,
-  Radio
+  Radio,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -55,10 +60,61 @@ import type {
   SignatureStats
 } from '@/types/signature';
 
+const ITEMS_PER_PAGE = 10;
+
 interface SignatureAuditLogProps {
   userId: string;
   className?: string;
 }
+
+// Debounce helper
+function useDebounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  return useCallback((...args: Parameters<T>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => fn(...args), delay);
+  }, [fn, delay]) as T;
+}
+
+// Pagination component
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}
+
+const Pagination = memo(function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
+  if (totalPages <= 1) return null;
+  
+  return (
+    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+      <span className="text-sm text-muted-foreground">
+        Page {currentPage} of {totalPages}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+});
 
 export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps) {
   const [loading, setLoading] = useState(true);
@@ -69,6 +125,10 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [isLive, setIsLive] = useState(false);
   const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  
+  // Pagination state
+  const [txPage, setTxPage] = useState(1);
+  const [docPage, setDocPage] = useState(1);
 
   const loadSignatures = useCallback(async () => {
     setLoading(true);
@@ -89,6 +149,9 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
     }
   }, [userId]);
 
+  // Debounced reload to prevent rapid updates
+  const debouncedReload = useDebounce(loadSignatures, 500);
+
   useEffect(() => {
     loadSignatures();
 
@@ -103,7 +166,7 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
           filter: `signer_id=eq.${userId}`,
         },
         () => {
-          loadSignatures();
+          debouncedReload();
         }
       )
       .on(
@@ -115,7 +178,7 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
           filter: `signer_id=eq.${userId}`,
         },
         () => {
-          loadSignatures();
+          debouncedReload();
         }
       )
       .subscribe((status) => {
@@ -129,7 +192,21 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
         supabase.removeChannel(subscriptionRef.current);
       }
     };
-  }, [userId, loadSignatures]);
+  }, [userId, loadSignatures, debouncedReload]);
+
+  // Paginated data
+  const paginatedTxSignatures = useMemo(() => {
+    const start = (txPage - 1) * ITEMS_PER_PAGE;
+    return transactionSignatures.slice(start, start + ITEMS_PER_PAGE);
+  }, [transactionSignatures, txPage]);
+
+  const paginatedDocSignatures = useMemo(() => {
+    const start = (docPage - 1) * ITEMS_PER_PAGE;
+    return documentSignatures.slice(start, start + ITEMS_PER_PAGE);
+  }, [documentSignatures, docPage]);
+
+  const txTotalPages = Math.ceil(transactionSignatures.length / ITEMS_PER_PAGE);
+  const docTotalPages = Math.ceil(documentSignatures.length / ITEMS_PER_PAGE);
 
   const getMethodIcon = (method: SignatureMethod) => {
     switch (method) {
@@ -241,123 +318,141 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
           </TabsList>
 
           <TabsContent value="transactions" className="mt-4">
-            <ScrollArea className="h-[400px]">
+            <div>
               {transactionSignatures.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <FileSignature className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>No transaction signatures yet</p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactionSignatures.map((sig) => (
-                      <TableRow key={sig.id} data-testid={`row-signature-${sig.id}`}>
-                        <TableCell className="text-sm">
-                          {format(new Date(sig.createdAt), 'MMM dd, yyyy HH:mm')}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {sig.transactionType.replace(/_/g, ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          {sig.currency} {sig.amount.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {getMethodIcon(sig.signatureMethod)}
-                            <span className="text-xs capitalize">{sig.signatureMethod}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(sig.status, sig.verified)}
-                        </TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => viewSignatureDetails(sig)}
-                            data-testid={`button-view-signature-${sig.id}`}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <>
+                  <ScrollArea className="h-[350px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedTxSignatures.map((sig) => (
+                          <TableRow key={sig.id} data-testid={`row-signature-${sig.id}`}>
+                            <TableCell className="text-sm">
+                              {format(new Date(sig.createdAt), 'MMM dd, yyyy HH:mm')}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="capitalize">
+                                {sig.transactionType.replace(/_/g, ' ')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-mono">
+                              {sig.currency} {sig.amount.toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {getMethodIcon(sig.signatureMethod)}
+                                <span className="text-xs capitalize">{sig.signatureMethod}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {getStatusBadge(sig.status, sig.verified)}
+                            </TableCell>
+                            <TableCell>
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => viewSignatureDetails(sig)}
+                                data-testid={`button-view-signature-${sig.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                  <Pagination
+                    currentPage={txPage}
+                    totalPages={txTotalPages}
+                    onPageChange={setTxPage}
+                  />
+                </>
               )}
-            </ScrollArea>
+            </div>
           </TabsContent>
 
           <TabsContent value="documents" className="mt-4">
-            <ScrollArea className="h-[400px]">
+            <div>
               {documentSignatures.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <FileSignature className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>No document signatures yet</p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Document</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {documentSignatures.map((sig) => (
-                      <TableRow key={sig.id} data-testid={`row-doc-signature-${sig.id}`}>
-                        <TableCell className="text-sm">
-                          {format(new Date(sig.createdAt), 'MMM dd, yyyy HH:mm')}
-                        </TableCell>
-                        <TableCell className="max-w-[150px] truncate">
-                          {sig.documentTitle}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {sig.documentType.replace(/_/g, ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {getMethodIcon(sig.signatureMethod)}
-                            <span className="text-xs capitalize">{sig.signatureMethod}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(sig.status, sig.verified)}
-                        </TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => viewSignatureDetails(sig)}
-                            data-testid={`button-view-doc-signature-${sig.id}`}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <>
+                  <ScrollArea className="h-[350px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Document</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedDocSignatures.map((sig) => (
+                          <TableRow key={sig.id} data-testid={`row-doc-signature-${sig.id}`}>
+                            <TableCell className="text-sm">
+                              {format(new Date(sig.createdAt), 'MMM dd, yyyy HH:mm')}
+                            </TableCell>
+                            <TableCell className="max-w-[150px] truncate">
+                              {sig.documentTitle}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="capitalize">
+                                {sig.documentType.replace(/_/g, ' ')}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {getMethodIcon(sig.signatureMethod)}
+                                <span className="text-xs capitalize">{sig.signatureMethod}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {getStatusBadge(sig.status, sig.verified)}
+                            </TableCell>
+                            <TableCell>
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => viewSignatureDetails(sig)}
+                                data-testid={`button-view-doc-signature-${sig.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                  <Pagination
+                    currentPage={docPage}
+                    totalPages={docTotalPages}
+                    onPageChange={setDocPage}
+                  />
+                </>
               )}
-            </ScrollArea>
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>

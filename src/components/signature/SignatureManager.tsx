@@ -2,14 +2,19 @@
  * SignatureManager Component
  * Comprehensive signature management for users
  * Features real-time updates via Supabase subscriptions
+ * 
+ * OPTIMIZATIONS:
+ * - Lazy loading of tabs (history tab only loads when clicked)
+ * - Debounced real-time updates to prevent rapid refetching
+ * - Memoized signature cards to prevent unnecessary re-renders
+ * - Single consolidated subscription instead of multiple
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo, lazy, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -32,18 +37,114 @@ import {
   History,
   CheckCircle2,
   AlertCircle,
-  Loader2,
-  RefreshCw,
   Radio
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SignaturePad } from './SignaturePad';
-import { SignatureAuditLog } from './SignatureAuditLog';
 import { SignatureService } from '@/services/signature.service';
 import type { HandwritingSignature, SignatureStats } from '@/types/signature';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+
+// Lazy load the audit log component - only loads when History tab is clicked
+const SignatureAuditLog = lazy(() => import('./SignatureAuditLog'));
+
+// Loading skeleton for lazy-loaded audit log
+function AuditLogSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-4 w-64" />
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </CardContent>
+    </Card>
+  );
+}
+
+// Memoized signature card component to prevent unnecessary re-renders
+interface SignatureCardProps {
+  signature: HandwritingSignature;
+  onSetDefault: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const SignatureCard = memo(function SignatureCard({ 
+  signature, 
+  onSetDefault, 
+  onDelete 
+}: SignatureCardProps) {
+  return (
+    <Card 
+      className={cn(
+        'relative transition-all',
+        signature.isDefault && 'ring-2 ring-primary'
+      )}
+      data-testid={`card-signature-${signature.id}`}
+    >
+      <CardContent className="pt-6">
+        <div className="border rounded-md p-4 bg-white dark:bg-gray-900 mb-4">
+          <img
+            src={signature.signatureImage}
+            alt="Signature"
+            className="h-[80px] w-full object-contain"
+            loading="lazy"
+          />
+        </div>
+        
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              {signature.signatureType === 'drawn' ? 'Drawn' : 'Uploaded'}
+            </Badge>
+            {signature.isDefault && (
+              <Badge className="text-xs">
+                <Star className="h-3 w-3 mr-1" />
+                Default
+              </Badge>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-1">
+            {!signature.isDefault && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onSetDefault(signature.id)}
+                title="Set as default"
+                data-testid={`button-set-default-${signature.id}`}
+              >
+                <StarOff className="h-4 w-4" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onDelete(signature.id)}
+              title="Delete signature"
+              data-testid={`button-delete-${signature.id}`}
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
+        </div>
+        
+        <p className="text-xs text-muted-foreground mt-2">
+          Created {format(new Date(signature.createdAt), 'MMM dd, yyyy')}
+        </p>
+      </CardContent>
+    </Card>
+  );
+});
 
 interface SignatureManagerProps {
   userId: string;
@@ -51,6 +152,18 @@ interface SignatureManagerProps {
   userEmail?: string;
   userPhone?: string;
   className?: string;
+}
+
+// Debounce helper for real-time updates
+function useDebounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  return useCallback((...args: Parameters<T>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => fn(...args), delay);
+  }, [fn, delay]) as T;
 }
 
 export function SignatureManager({
@@ -68,20 +181,37 @@ export function SignatureManager({
   const [stats, setStats] = useState<SignatureStats | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('signatures');
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const [isLive, setIsLive] = useState(false);
   const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Only load signatures for the main tab (stats loaded separately)
+  const loadSignatures = useCallback(async () => {
+    try {
+      const sigs = await SignatureService.getUserHandwritingSignatures(userId);
+      setSignatures(sigs);
+    } catch (err: any) {
+      console.error('Failed to load signatures:', err);
+    }
+  }, [userId]);
+
+  // Load stats separately (lighter query)
+  const loadStats = useCallback(async () => {
+    try {
+      const signatureStats = await SignatureService.getSignatureStats(userId);
+      setStats(signatureStats);
+    } catch (err: any) {
+      console.error('Failed to load stats:', err);
+    }
+  }, [userId]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [sigs, signatureStats] = await Promise.all([
-        SignatureService.getUserHandwritingSignatures(userId),
-        SignatureService.getSignatureStats(userId),
-      ]);
-      setSignatures(sigs);
-      setStats(signatureStats);
+      await Promise.all([loadSignatures(), loadStats()]);
     } catch (err: any) {
       console.error('Failed to load signatures:', err);
       const errorMessage = err?.message || 'Failed to load signatures';
@@ -89,13 +219,18 @@ export function SignatureManager({
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [loadSignatures, loadStats]);
+
+  // Debounced reload to prevent rapid updates from real-time events
+  const debouncedReload = useDebounce(loadSignatures, 500);
 
   useEffect(() => {
     loadData();
 
+    // Consolidated subscription - only watch handwriting_signatures for this component
+    // The audit log has its own subscriptions for transaction/document signatures
     const channel = supabase
-      .channel(`signatures-${userId}`)
+      .channel(`signatures-manager-${userId}`)
       .on(
         'postgres_changes',
         {
@@ -104,32 +239,8 @@ export function SignatureManager({
           table: 'handwriting_signatures',
           filter: `user_id=eq.${userId}`,
         },
-        (payload) => {
-          loadData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'transaction_signatures',
-          filter: `signer_id=eq.${userId}`,
-        },
         () => {
-          loadData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'document_signatures',
-          filter: `signer_id=eq.${userId}`,
-        },
-        () => {
-          loadData();
+          debouncedReload();
         }
       )
       .subscribe((status) => {
@@ -143,7 +254,15 @@ export function SignatureManager({
         supabase.removeChannel(subscriptionRef.current);
       }
     };
-  }, [userId, loadData]);
+  }, [userId, loadData, debouncedReload]);
+
+  // Track when history tab is first viewed for lazy loading
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+    if (value === 'history' && !historyLoaded) {
+      setHistoryLoaded(true);
+    }
+  }, [historyLoaded]);
 
   const handleCreateSignature = async (signatureData: string, type: 'drawn' | 'uploaded' | 'saved') => {
     setSaving(true);
@@ -296,7 +415,7 @@ export function SignatureManager({
       </div>
 
       {/* Main Content */}
-      <Tabs defaultValue="signatures" className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3">
           <TabsTrigger value="signatures" className="flex items-center gap-1">
             <Pen className="h-4 w-4" />
@@ -342,65 +461,12 @@ export function SignatureManager({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {signatures.map((sig) => (
-                    <Card 
-                      key={sig.id} 
-                      className={cn(
-                        'relative transition-all',
-                        sig.isDefault && 'ring-2 ring-primary'
-                      )}
-                      data-testid={`card-signature-${sig.id}`}
-                    >
-                      <CardContent className="pt-6">
-                        <div className="border rounded-md p-4 bg-white dark:bg-gray-900 mb-4">
-                          <img
-                            src={sig.signatureImage}
-                            alt="Signature"
-                            className="h-[80px] w-full object-contain"
-                          />
-                        </div>
-                        
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              {sig.signatureType === 'drawn' ? 'Drawn' : 'Uploaded'}
-                            </Badge>
-                            {sig.isDefault && (
-                              <Badge className="text-xs">
-                                <Star className="h-3 w-3 mr-1" />
-                                Default
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center gap-1">
-                            {!sig.isDefault && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleSetDefault(sig.id)}
-                                title="Set as default"
-                                data-testid={`button-set-default-${sig.id}`}
-                              >
-                                <StarOff className="h-4 w-4" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeleteConfirmId(sig.id)}
-                              title="Delete signature"
-                              data-testid={`button-delete-${sig.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </div>
-                        
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Created {format(new Date(sig.createdAt), 'MMM dd, yyyy')}
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <SignatureCard
+                      key={sig.id}
+                      signature={sig}
+                      onSetDefault={handleSetDefault}
+                      onDelete={setDeleteConfirmId}
+                    />
                   ))}
                 </div>
               )}
@@ -409,7 +475,14 @@ export function SignatureManager({
         </TabsContent>
 
         <TabsContent value="history" className="mt-6">
-          <SignatureAuditLog userId={userId} />
+          {/* Only load audit log when history tab is first viewed */}
+          {historyLoaded ? (
+            <Suspense fallback={<AuditLogSkeleton />}>
+              <SignatureAuditLog userId={userId} />
+            </Suspense>
+          ) : (
+            <AuditLogSkeleton />
+          )}
         </TabsContent>
 
         <TabsContent value="settings" className="mt-6">
