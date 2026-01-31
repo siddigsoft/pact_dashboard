@@ -29,10 +29,14 @@ import {
   BarChart3,
   RefreshCw,
   Receipt,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  FileText
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 function AdvanceRequestsReportContent() {
   const { requests, loading, refreshRequests } = useDownPayment();
@@ -189,7 +193,85 @@ function AdvanceRequestsReportContent() {
     const summarySheet = XLSX.utils.json_to_sheet(summaryData);
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
-    XLSX.writeFile(wb, `advance_requests_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    XLSX.writeFile(wb, `transportation_advance_cost_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = 20;
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text('PACT Field Operations System', 14, yPos);
+    doc.text(`Generated: ${format(new Date(), 'PPP')}`, 140, yPos);
+    
+    yPos += 15;
+    doc.setFontSize(20);
+    doc.setTextColor(0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Transportation Advance Cost Report', 14, yPos);
+    
+    yPos += 15;
+    doc.setDrawColor(200);
+    doc.line(14, yPos, 196, yPos);
+    yPos += 10;
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Summary', 14, yPos);
+    yPos += 8;
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Requests', stats.totalCount.toString()],
+        ['Total Requested (SDG)', stats.totalRequested.toLocaleString()],
+        ['Total Approved (SDG)', stats.totalApproved.toLocaleString()],
+        ['Total Pending (SDG)', stats.totalPending.toLocaleString()],
+        ['Total Rejected (SDG)', stats.totalRejected.toLocaleString()],
+        ['Total Paid (SDG)', stats.totalPaid.toLocaleString()],
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Advance Requests', 14, yPos);
+    yPos += 8;
+
+    const tableData = filteredRequests.slice(0, 100).map(req => [
+      format(parseISO(req.requestedAt), 'MMM dd, yyyy'),
+      getProfileName(req.requestedBy),
+      req.siteName.substring(0, 25) + (req.siteName.length > 25 ? '...' : ''),
+      req.hubName || 'N/A',
+      req.requestedAmount.toLocaleString(),
+      req.status.replace(/_/g, ' '),
+      (req.totalPaidAmount || 0).toLocaleString(),
+    ]);
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'Requested By', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 8 },
+      bodyStyles: { fontSize: 7 },
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 22 },
+        5: { cellWidth: 28 },
+        6: { cellWidth: 20 },
+      },
+    });
+
+    doc.save(`transportation_advance_cost_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
   if (!isAdmin && !isSupervisor && !isFOM) {
@@ -223,6 +305,12 @@ function AdvanceRequestsReportContent() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button size="sm" asChild data-testid="button-request-advance">
+            <Link to="/site-visits?status=accepted">
+              <Plus className="h-4 w-4 mr-1" />
+              Request Advance
+            </Link>
+          </Button>
           <Button variant="outline" size="sm" asChild data-testid="button-goto-reconciliation">
             <Link to="/cost-submission?tab=outstanding">
               <Receipt className="h-4 w-4 mr-1" />
@@ -233,9 +321,13 @@ function AdvanceRequestsReportContent() {
             <RefreshCw className="h-4 w-4 mr-1" />
             Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={exportToPDF} data-testid="button-export-pdf">
+            <FileText className="h-4 w-4 mr-1" />
+            PDF
+          </Button>
           <Button onClick={exportToExcel} size="sm" data-testid="button-export-excel">
             <Download className="h-4 w-4 mr-1" />
-            Export Excel
+            Excel
           </Button>
         </div>
       </div>
