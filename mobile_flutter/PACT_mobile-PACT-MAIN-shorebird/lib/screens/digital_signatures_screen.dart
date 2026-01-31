@@ -67,11 +67,72 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
           _isLoading = false;
         });
       }
+
+      // Backfill: Sync any existing signatures not yet in digital_signatures
+      await _backfillSignaturesToDigitalSignatures(userId);
     } catch (e) {
       debugPrint('Error loading signatures: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// Backfill existing user_signatures to digital_signatures table for admin visibility
+  /// Uses source_signature_id as primary key for reliable deduplication
+  Future<void> _backfillSignaturesToDigitalSignatures(String userId) async {
+    try {
+      // Get all user signatures
+      final userSignatures = await Supabase.instance.client
+          .from('user_signatures')
+          .select('id, user_id, name, signature_data, created_at')
+          .eq('user_id', userId);
+
+      if (userSignatures == null || (userSignatures as List).isEmpty) return;
+
+      // Get existing digital signatures by source_signature_id for reliable deduplication
+      final existingDigital = await Supabase.instance.client
+          .from('digital_signatures')
+          .select('source_signature_id')
+          .eq('user_id', userId)
+          .not('source_signature_id', 'is', null);
+
+      final existingSourceIds = <String>{};
+      for (final ds in (existingDigital as List)) {
+        if (ds['source_signature_id'] != null) {
+          existingSourceIds.add(ds['source_signature_id'].toString());
+        }
+      }
+
+      // Sync missing signatures using source_signature_id as unique key
+      for (final sig in userSignatures) {
+        final sigId = sig['id']?.toString();
+        if (sigId == null) continue;
+        
+        // Skip if already synced (by source_signature_id)
+        if (existingSourceIds.contains(sigId)) continue;
+        
+        final sigName = sig['name'] ?? 'My Signature';
+        final sigData = sig['signature_data'] ?? '';
+        
+        try {
+          await Supabase.instance.client.from('digital_signatures').insert({
+            'user_id': userId,
+            'signature_type': 'drawn',
+            'signature_data': sigData,
+            'verification_status': 'pending',
+            'document_name': '$sigName (Template)',
+            'device_info': 'PACT Mobile App - Backfilled Template',
+            'is_template': true,
+            'source_signature_id': sigId,
+          });
+          debugPrint('Backfilled signature: $sigName (id: $sigId)');
+        } catch (e) {
+          debugPrint('Could not backfill signature $sigName: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Backfill check failed (non-critical): $e');
     }
   }
 
@@ -503,10 +564,47 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
 
   Future<void> _deleteSignature(String signatureId) async {
     try {
+      // Get signature name before deletion for legacy cleanup
+      final sigData = await Supabase.instance.client
+          .from('user_signatures')
+          .select('name, user_id')
+          .eq('id', signatureId)
+          .maybeSingle();
+      
+      final sigName = sigData?['name'];
+      final userId = sigData?['user_id'];
+
+      // Delete from user_signatures
       await Supabase.instance.client
           .from('user_signatures')
           .delete()
           .eq('id', signatureId);
+
+      // Sync deletion to digital_signatures
+      try {
+        // Primary: Delete by source_signature_id (for properly linked signatures)
+        await Supabase.instance.client
+            .from('digital_signatures')
+            .delete()
+            .eq('source_signature_id', signatureId);
+        debugPrint('Synced deletion by source_signature_id');
+        
+        // Fallback: Also delete legacy templates by matching document_name pattern
+        // (for signatures created before source_signature_id was added)
+        if (sigName != null && userId != null) {
+          await Supabase.instance.client
+              .from('digital_signatures')
+              .delete()
+              .eq('user_id', userId)
+              .eq('document_name', '$sigName (Template)')
+              .eq('is_template', true)
+              .is_('source_signature_id', null);
+          debugPrint('Cleaned up legacy template entries');
+        }
+      } catch (syncError) {
+        debugPrint('Note: Could not sync deletion to digital_signatures: $syncError');
+        // Non-critical - main signature is already deleted
+      }
 
       await _loadSignatures();
 
@@ -856,16 +954,22 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
           ? _nameController.text
           : (widget.isArabic ? 'توقيعي' : 'My Signature');
       
-      await Supabase.instance.client.from('user_signatures').insert({
-        'user_id': userId,
-        'name': signatureName,
-        'signature_data': signatureData,
-        'is_default': isFirstSignature,
-      });
+      // Insert and get the new signature ID
+      final insertResponse = await Supabase.instance.client
+          .from('user_signatures')
+          .insert({
+            'user_id': userId,
+            'name': signatureName,
+            'signature_data': signatureData,
+            'is_default': isFirstSignature,
+          })
+          .select('id')
+          .single();
 
-      debugPrint('Signature saved to user_signatures');
+      final newSignatureId = insertResponse['id'];
+      debugPrint('Signature saved to user_signatures with id: $newSignatureId');
       
-      // Also sync to digital_signatures for web admin visibility
+      // Also sync to digital_signatures for web admin visibility with template flag
       try {
         await Supabase.instance.client.from('digital_signatures').insert({
           'user_id': userId,
@@ -874,6 +978,8 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
           'verification_status': 'pending',
           'document_name': '$signatureName (Template)',
           'device_info': 'PACT Mobile App - Signature Template',
+          'is_template': true,
+          'source_signature_id': newSignatureId,
         });
         debugPrint('Signature synced to digital_signatures for admin visibility');
       } catch (syncError) {
