@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { DownPaymentProvider, useDownPayment } from '@/context/downPayment/DownPaymentContext';
@@ -26,7 +27,9 @@ import {
   FileSpreadsheet,
   PieChart,
   BarChart3,
-  RefreshCw
+  RefreshCw,
+  Receipt,
+  ExternalLink
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -35,6 +38,7 @@ function AdvanceRequestsReportContent() {
   const { requests, loading, refreshRequests } = useDownPayment();
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
+  const navigate = useNavigate();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -212,13 +216,19 @@ function AdvanceRequestsReportContent() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <BarChart3 className="h-7 w-7 text-primary" />
-            Advance Requests Report
+            Transportation Advance Cost
           </h1>
           <p className="text-muted-foreground mt-1">
-            Track and analyze transportation advance requests from your team
+            Track and analyze transportation advance costs from your team
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" asChild data-testid="button-goto-reconciliation">
+            <Link to="/cost-submission?tab=outstanding">
+              <Receipt className="h-4 w-4 mr-1" />
+              Cost Submission
+            </Link>
+          </Button>
           <Button variant="outline" size="sm" onClick={() => refreshRequests()} data-testid="button-refresh-report">
             <RefreshCw className="h-4 w-4 mr-1" />
             Refresh
@@ -382,20 +392,58 @@ function AdvanceRequestsReportContent() {
                         <TableHead className="text-right">Amount (SDG)</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Paid</TableHead>
+                        <TableHead className="text-right">Remaining</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredRequests.slice(0, 50).map(req => (
-                        <TableRow key={req.id} data-testid={`row-request-${req.id}`}>
-                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
-                          <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{req.siteName}</TableCell>
-                          <TableCell>{req.hubName || 'N/A'}</TableCell>
-                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
-                          <TableCell>{getStatusBadge(req.status)}</TableCell>
-                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
-                        </TableRow>
-                      ))}
+                      {filteredRequests.slice(0, 50).map(req => {
+                        const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                        const needsReconciliation = ['approved', 'partially_paid', 'fully_paid'].includes(req.status) && remaining > 0;
+                        return (
+                          <TableRow key={req.id} data-testid={`row-request-${req.id}`}>
+                            <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                            <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
+                            <TableCell className="max-w-[200px] truncate">{req.siteName}</TableCell>
+                            <TableCell>{req.hubName || 'N/A'}</TableCell>
+                            <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                            <TableCell>{getStatusBadge(req.status)}</TableCell>
+                            <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-mono">
+                              {remaining > 0 ? (
+                                <span className="text-amber-600">{remaining.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-muted-foreground">0</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {needsReconciliation && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs gap-1"
+                                    onClick={() => navigate('/cost-submission?tab=reconciliation')}
+                                    data-testid={`button-reconcile-${req.id}`}
+                                  >
+                                    <Receipt className="h-3 w-3" />
+                                    Reconcile
+                                  </Button>
+                                )}
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7"
+                                  onClick={() => navigate('/down-payment-approval')}
+                                  data-testid={`button-view-${req.id}`}
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
