@@ -483,6 +483,16 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="last3Months">Last 3 Months</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-source-filter">
+            <SelectValue placeholder="Source" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sources</SelectItem>
+            <SelectItem value="advance">Advance Requests</SelectItem>
+            <SelectItem value="cost_submission">Cost Submissions</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -582,8 +592,9 @@ function AdvanceRequestsReportContent() {
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead>Requested By</TableHead>
-                        <TableHead>Site</TableHead>
+                        <TableHead>Site/Activity</TableHead>
                         <TableHead>Hub</TableHead>
+                        <TableHead>Source</TableHead>
                         <TableHead className="text-right">Amount (SDG)</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Paid</TableHead>
@@ -594,13 +605,18 @@ function AdvanceRequestsReportContent() {
                     <TableBody>
                       {filteredRequests.slice(0, 50).map(req => {
                         const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
-                        const needsReconciliation = ['approved', 'partially_paid', 'fully_paid'].includes(req.status) && remaining > 0;
+                        const needsReconciliation = req.type === 'advance' && ['approved', 'partially_paid', 'fully_paid'].includes(req.status) && remaining > 0;
                         return (
                           <TableRow key={req.id} data-testid={`row-request-${req.id}`}>
                             <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
                             <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
                             <TableCell className="max-w-[200px] truncate">{req.siteName}</TableCell>
                             <TableCell>{req.hubName || 'N/A'}</TableCell>
+                            <TableCell>
+                              <Badge variant={req.type === 'advance' ? 'default' : 'secondary'} className="text-xs">
+                                {req.type === 'advance' ? 'Advance' : 'Cost Sub'}
+                              </Badge>
+                            </TableCell>
                             <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
                             <TableCell>{getStatusBadge(req.status)}</TableCell>
                             <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
