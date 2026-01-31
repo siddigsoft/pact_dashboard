@@ -66,6 +66,9 @@ import { ExchangeRatePanel } from '@/components/mmp/ExchangeRatePanel';
 import { normalizeStateId, normalizeLocalityId } from '@/utils/siteNormalization';
 import { normalizeHubId, getNormalizedHubName, hubs } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useAppContext } from '@/context/AppContext';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { getHubAccessInfo, shouldApplyHubFilter } from '@/utils/hubAccessControl';
 import { BaselineCostManagement } from '@/components/cost-predictions/BaselineCostManagement';
 import * as XLSX from 'xlsx';
 import { 
@@ -222,6 +225,35 @@ export default function CostPredictions() {
   const [editValue, setEditValue] = useState('');
   
   const { isSuperAdmin } = useSuperAdmin();
+  const { currentUser } = useAppContext();
+  const { hasAnyRole } = useAuthorization();
+  
+  // Hub-based access control for supervisors
+  const hubAccessInfo = useMemo(() => getHubAccessInfo(currentUser), [currentUser]);
+  const applyHubFilter = shouldApplyHubFilter(currentUser);
+  
+  // Check if user is a supervisor (for restricting hub selection)
+  const isSupervisor = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    const isAdmin = hasAnyRole(['admin', 'ict', 'super_admin', 'superadmin', 'fom', 'finance', 'financialadmin']);
+    return (hasAnyRole(['supervisor', 'Supervisor', 'hubsupervisor']) || role === 'supervisor' || role === 'hubsupervisor') && !isAdmin;
+  }, [currentUser, hasAnyRole]);
+  
+  // Auto-set hub filter for supervisors to their hub only
+  useEffect(() => {
+    if (isSupervisor && hubAccessInfo.hubId && selectedHub === 'all') {
+      setSelectedHub(hubAccessInfo.hubId);
+    }
+  }, [isSupervisor, hubAccessInfo.hubId, selectedHub]);
+  
+  // Filter hub options for supervisors - they can only see their hub
+  const availableHubs = useMemo(() => {
+    if (isSupervisor && hubAccessInfo.hubId) {
+      return hubs.filter(h => h.id === hubAccessInfo.hubId);
+    }
+    return hubs;
+  }, [isSupervisor, hubAccessInfo.hubId]);
 
   const fetchAccuracyMetrics = async () => {
     try {
@@ -260,10 +292,19 @@ export default function CostPredictions() {
     try {
       setLoadingSitePredictions(true);
       
-      const { data: sites, error } = await supabase
+      // Build query with hub filtering for supervisors
+      let query = supabase
         .from('sites_registry')
-        .select('id, site_code, site_name, state_name, locality_name, hub_id, gps_latitude, gps_longitude')
-        .limit(100);
+        .select('id, site_code, site_name, state_name, locality_name, hub_id, gps_latitude, gps_longitude');
+      
+      // Apply hub filter for supervisors
+      if (isSupervisor && hubAccessInfo.hubId) {
+        query = query.eq('hub_id', hubAccessInfo.hubId);
+      } else if (selectedHub !== 'all') {
+        query = query.eq('hub_id', selectedHub);
+      }
+      
+      const { data: sites, error } = await query.limit(100);
       
       if (error || !sites) {
         console.error('Error fetching sites:', error);
