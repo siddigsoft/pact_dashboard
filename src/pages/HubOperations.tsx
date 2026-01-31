@@ -270,7 +270,8 @@ export default function HubOperations() {
   });
 
   const userRole = currentUser?.role?.toLowerCase() || '';
-  const canManage = isSuperAdmin || userRole === 'admin' || userRole === 'superadmin' || userRole === 'super_admin';
+  const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
+  const canManage = isSuperAdmin || userRole === 'admin' || userRole === 'superadmin' || userRole === 'super_admin' || isSupervisor;
 
   useEffect(() => {
     loadData();
@@ -1176,7 +1177,7 @@ export default function HubOperations() {
             <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">Access Restricted</h2>
             <p className="text-muted-foreground">
-              Only Super Admins and Admins can access Hub & Field Operations management.
+              Only Super Admins, Admins, and Supervisors can access Hub & Field Operations management.
             </p>
           </CardContent>
         </Card>
