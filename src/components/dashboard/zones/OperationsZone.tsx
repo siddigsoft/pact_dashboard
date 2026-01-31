@@ -32,9 +32,10 @@ import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { fetchHubs } from '@/services/mmpActions';
 import { isAfter, addDays } from 'date-fns';
-import { getStateName } from '@/data/sudanStates';
+import { getStateName, sudanStates } from '@/data/sudanStates';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
+import { supabase } from '@/integrations/supabase/client';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
 
@@ -76,6 +77,9 @@ export const OperationsZone: React.FC = () => {
 
   // State for coordinator's state name
   const [coordinatorStateName, setCoordinatorStateName] = useState<string | null>(null);
+  
+  // State for directly loaded dispatched sites (for coordinators/data collectors)
+  const [dispatchedSitesFromDB, setDispatchedSitesFromDB] = useState<any[]>([]);
 
   // Fetch supervisor's hub name
   useEffect(() => {
@@ -109,6 +113,72 @@ export const OperationsZone: React.FC = () => {
     console.log(`📊 OperationsZone: Coordinator state loaded: ${stateName} (id: ${currentUser.stateId})`);
   }, [isCoordinator, currentUser?.stateId]);
 
+  // Direct load of dispatched sites for coordinators from database
+  // This ensures consistent counts with the MMP page
+  useEffect(() => {
+    const loadDispatchedSites = async () => {
+      if (!isCoordinator || !currentUser?.id) {
+        setDispatchedSitesFromDB([]);
+        return;
+      }
+      
+      try {
+        // Determine state name using multiple approaches
+        let stateName = sudanStates.find(s => s.id === currentUser.stateId)?.name;
+        if (!stateName) {
+          const stateByName = sudanStates.find(s => 
+            s.name.toLowerCase() === (currentUser.stateId || '').toLowerCase()
+          );
+          if (stateByName) stateName = stateByName.name;
+        }
+        if (!stateName && currentUser.stateId) {
+          stateName = currentUser.stateId;
+        }
+        
+        if (!stateName) {
+          console.log('[OperationsZone] No state for coordinator, skipping direct load');
+          return;
+        }
+        
+        console.log(`[OperationsZone] Loading dispatched sites for state: ${stateName}`);
+        
+        const { data: sites, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .ilike('status', 'Dispatched')
+          .is('accepted_by', null)
+          .ilike('state', `%${stateName}%`)
+          .limit(500);
+        
+        if (error) {
+          console.error('[OperationsZone] Error loading dispatched sites:', error);
+          return;
+        }
+        
+        console.log(`📊 [OperationsZone] Loaded ${sites?.length || 0} dispatched sites from DB`);
+        
+        if (sites && sites.length > 0) {
+          // Transform to site visit format for metrics
+          const transformed = sites.map(entry => ({
+            id: entry.id,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            status: 'dispatched', // Keep as dispatched for counting
+            state: entry.state,
+            locality: entry.locality,
+            hub: entry.hub_office,
+            dueDate: entry.visit_date || new Date().toISOString(),
+          }));
+          setDispatchedSitesFromDB(transformed);
+        }
+      } catch (error) {
+        console.error('[OperationsZone] Failed to load dispatched sites:', error);
+      }
+    };
+    
+    loadDispatchedSites();
+  }, [isCoordinator, currentUser?.id, currentUser?.stateId]);
+
   // Apply supervisor hub filtering or coordinator state filtering to site visits
   const siteVisits = useMemo(() => {
     console.log(`📊 OperationsZone: isSupervisor=${isSupervisor}, isCoordinator=${isCoordinator}, allSiteVisits=${allSiteVisits.length}`);
@@ -134,63 +204,69 @@ export const OperationsZone: React.FC = () => {
       return filtered;
     }
     
-    // Coordinator: build site visits from forwarded MMP site entries (same logic as CoordinatorSites.tsx)
+    // Coordinator: build site visits from forwarded MMP site entries + dispatched sites in their state
     if (isCoordinator) {
-      if (!currentUser?.id || !contextMmpFiles || contextLoading) {
-        console.log(`📊 OperationsZone: Coordinator - no user or loading, showing no sites`);
-        return [];
-      }
-      
-      // Non-admin users with no project assignments should see nothing
-      if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-        console.log(`📊 OperationsZone: Coordinator - no project access, showing no sites`);
+      if (!currentUser?.id) {
+        console.log(`📊 OperationsZone: Coordinator - no user, showing no sites`);
         return [];
       }
       
       const allSites: any[] = [];
       
-      // Collect all site entries from context that are forwarded to this coordinator
-      contextMmpFiles.forEach((mmp: any) => {
-        if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
-        
-        mmp.siteEntries.forEach((entry: any) => {
-          // Filter by forwarded_to_user_id
-          if (entry.forwardedToUserId !== currentUser.id) return;
+      // First, add dispatched sites loaded directly from database
+      // These are sites in the coordinator's state that are available to claim
+      if (dispatchedSitesFromDB.length > 0) {
+        allSites.push(...dispatchedSitesFromDB);
+        console.log(`📊 OperationsZone: Added ${dispatchedSitesFromDB.length} dispatched sites from DB`);
+      }
+      
+      // Also collect site entries from context that are forwarded to this coordinator
+      if (contextMmpFiles && !contextLoading) {
+        contextMmpFiles.forEach((mmp: any) => {
+          if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
           
-          // For non-admins, also check project membership
-          if (!isAdminOrSuperUser) {
-            const projectId = mmp.projectId;
-            if (!projectId || !userProjectIds.includes(projectId)) return;
-          }
-          
-          // Transform entry to SiteVisit-like format (minimal for metrics)
-          allSites.push({
-            id: entry.id,
-            siteName: entry.siteName || entry.site_name,
-            siteCode: entry.siteCode || entry.site_code,
-            status: entry.status,
-            state: entry.state,
-            locality: entry.locality,
-            activity: entry.siteActivity || entry.activity_at_site || entry.mainActivity,
-            mainActivity: entry.mainActivity || entry.main_activity,
-            visitDate: entry.visitDate,
-            assignedAt: entry.additionalData?.assigned_at || entry.additional_data?.assigned_at,
-            comments: entry.comments,
-            mmpFileId: mmp.id,
-            hub: entry.hubOffice || entry.hub_office,
-            cpName: entry.cpName || entry.cp_name,
-            monitoringBy: entry.monitoringBy || entry.monitoring_by,
-            surveyTool: entry.surveyTool || entry.survey_tool,
-            useMarketDiversion: entry.useMarketDiversion ?? entry.use_market_diversion ?? false,
-            useWarehouseMonitoring: entry.useWarehouseMonitoring ?? entry.use_warehouse_monitoring ?? false,
-            verifiedAt: entry.verified_at,
-            verifiedBy: entry.verified_by,
-            verificationNotes: entry.verification_notes,
-            additionalData: entry.additionalData || entry.additional_data || {},
-            dueDate: entry.dueDate || new Date().toISOString(), // Fallback for overdue calc
+          mmp.siteEntries.forEach((entry: any) => {
+            // Filter by forwarded_to_user_id
+            if (entry.forwardedToUserId !== currentUser.id) return;
+            
+            // Skip if already added from dispatchedSitesFromDB
+            if (allSites.some(s => s.id === entry.id)) return;
+            
+            // For non-admins, also check project membership
+            if (!isAdminOrSuperUser) {
+              const projectId = mmp.projectId;
+              if (!projectId || !userProjectIds.includes(projectId)) return;
+            }
+            
+            // Transform entry to SiteVisit-like format (minimal for metrics)
+            allSites.push({
+              id: entry.id,
+              siteName: entry.siteName || entry.site_name,
+              siteCode: entry.siteCode || entry.site_code,
+              status: entry.status,
+              state: entry.state,
+              locality: entry.locality,
+              activity: entry.siteActivity || entry.activity_at_site || entry.mainActivity,
+              mainActivity: entry.mainActivity || entry.main_activity,
+              visitDate: entry.visitDate,
+              assignedAt: entry.additionalData?.assigned_at || entry.additional_data?.assigned_at,
+              comments: entry.comments,
+              mmpFileId: mmp.id,
+              hub: entry.hubOffice || entry.hub_office,
+              cpName: entry.cpName || entry.cp_name,
+              monitoringBy: entry.monitoringBy || entry.monitoring_by,
+              surveyTool: entry.surveyTool || entry.survey_tool,
+              useMarketDiversion: entry.useMarketDiversion ?? entry.use_market_diversion ?? false,
+              useWarehouseMonitoring: entry.useWarehouseMonitoring ?? entry.use_warehouse_monitoring ?? false,
+              verifiedAt: entry.verified_at,
+              verifiedBy: entry.verified_by,
+              verificationNotes: entry.verification_notes,
+              additionalData: entry.additionalData || entry.additional_data || {},
+              dueDate: entry.dueDate || new Date().toISOString(), // Fallback for overdue calc
+            });
           });
         });
-      });
+      }
       
       console.log(`📊 OperationsZone: Coordinator filtered to ${allSites.length} forwarded sites`);
       return allSites;
@@ -198,7 +274,7 @@ export const OperationsZone: React.FC = () => {
     
     // Admin/other roles: show all
     return allSiteVisits;
-  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.stateId, contextMmpFiles, contextLoading, userProjectIds, isAdminOrSuperUser]);
+  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.stateId, contextMmpFiles, contextLoading, userProjectIds, isAdminOrSuperUser, dispatchedSitesFromDB]);
 
   const upcomingVisits = siteVisits
     .filter(v => {
