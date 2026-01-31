@@ -276,6 +276,9 @@
     if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor)) {
       financeItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 6, isPinned: isPinned('/down-payment-approval') });
     }
+    if (!isHidden('/advance-requests-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+      financeItems.push({ id: 'advance-requests-report', title: "Advance Requests Report", url: "/advance-requests-report", icon: BarChart3, priority: 6.5, isPinned: isPinned('/advance-requests-report') });
+    }
     if (!isHidden('/finance-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       financeItems.push({ id: 'finance-approval', title: "Finance Approval", url: "/finance-approval", icon: Banknote, priority: 7, isPinned: isPinned('/finance-approval') });
     }

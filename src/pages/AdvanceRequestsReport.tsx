@@ -1,0 +1,518 @@
+import { useState, useMemo } from 'react';
+import { useUser } from '@/context/user/UserContext';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { DownPaymentProvider, useDownPayment } from '@/context/downPayment/DownPaymentContext';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { 
+  DollarSign, 
+  TrendingUp, 
+  Clock, 
+  CheckCircle2, 
+  XCircle, 
+  AlertTriangle,
+  Download,
+  Search,
+  Filter,
+  Users,
+  Building2,
+  Calendar,
+  FileSpreadsheet,
+  PieChart,
+  BarChart3,
+  RefreshCw
+} from 'lucide-react';
+import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
+import * as XLSX from 'xlsx';
+
+function AdvanceRequestsReportContent() {
+  const { requests, loading, refreshRequests } = useDownPayment();
+  const { currentUser, users } = useUser();
+  const { isSuperAdmin } = useSuperAdmin();
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [hubFilter, setHubFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState('overview');
+
+  const userRole = currentUser?.role?.toLowerCase();
+  const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
+  const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
+  const isFOM = userRole === 'fom' || userRole === 'field operation manager';
+
+  const getProfileName = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    return user?.fullName || user?.email || 'Unknown User';
+  };
+
+  const getStatusBadge = (status: string) => {
+    const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', label: string, className: string }> = {
+      'pending_supervisor': { variant: 'outline', label: 'Pending Supervisor', className: 'border-amber-500 text-amber-600' },
+      'pending_admin': { variant: 'outline', label: 'Pending Admin', className: 'border-blue-500 text-blue-600' },
+      'approved': { variant: 'default', label: 'Approved', className: 'bg-green-500' },
+      'rejected': { variant: 'destructive', label: 'Rejected', className: '' },
+      'partially_paid': { variant: 'secondary', label: 'Partially Paid', className: 'bg-purple-100 text-purple-700' },
+      'fully_paid': { variant: 'default', label: 'Fully Paid', className: 'bg-emerald-500' },
+      'cancelled': { variant: 'secondary', label: 'Cancelled', className: 'bg-gray-100 text-gray-600' },
+    };
+    const config = statusConfig[status] || { variant: 'outline' as const, label: status, className: '' };
+    return <Badge variant={config.variant} className={config.className}>{config.label}</Badge>;
+  };
+
+  const dateRanges = useMemo(() => {
+    const now = new Date();
+    return {
+      thisMonth: { start: startOfMonth(now), end: endOfMonth(now) },
+      lastMonth: { start: startOfMonth(subMonths(now, 1)), end: endOfMonth(subMonths(now, 1)) },
+      last3Months: { start: startOfMonth(subMonths(now, 2)), end: endOfMonth(now) },
+    };
+  }, []);
+
+  const filteredRequests = useMemo(() => {
+    return requests.filter(req => {
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const matchesSite = req.siteName?.toLowerCase().includes(term);
+        const matchesUser = getProfileName(req.requestedBy).toLowerCase().includes(term);
+        const matchesHub = req.hubName?.toLowerCase().includes(term);
+        if (!matchesSite && !matchesUser && !matchesHub) return false;
+      }
+      if (statusFilter !== 'all' && req.status !== statusFilter) return false;
+      if (hubFilter !== 'all' && req.hubId !== hubFilter) return false;
+      if (dateFilter !== 'all') {
+        const reqDate = parseISO(req.requestedAt);
+        const range = dateRanges[dateFilter as keyof typeof dateRanges];
+        if (range && !isWithinInterval(reqDate, range)) return false;
+      }
+      return true;
+    });
+  }, [requests, searchTerm, statusFilter, hubFilter, dateFilter, dateRanges]);
+
+  const stats = useMemo(() => {
+    const totalRequested = filteredRequests.reduce((sum, r) => sum + r.requestedAmount, 0);
+    const totalApproved = filteredRequests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).reduce((sum, r) => sum + r.requestedAmount, 0);
+    const totalPending = filteredRequests.filter(r => ['pending_supervisor', 'pending_admin'].includes(r.status)).reduce((sum, r) => sum + r.requestedAmount, 0);
+    const totalRejected = filteredRequests.filter(r => r.status === 'rejected').reduce((sum, r) => sum + r.requestedAmount, 0);
+    const totalPaid = filteredRequests.reduce((sum, r) => sum + (r.totalPaidAmount || 0), 0);
+    
+    const pendingCount = filteredRequests.filter(r => ['pending_supervisor', 'pending_admin'].includes(r.status)).length;
+    const approvedCount = filteredRequests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).length;
+    const rejectedCount = filteredRequests.filter(r => r.status === 'rejected').length;
+    
+    return { totalRequested, totalApproved, totalPending, totalRejected, totalPaid, pendingCount, approvedCount, rejectedCount, totalCount: filteredRequests.length };
+  }, [filteredRequests]);
+
+  const byTeamMember = useMemo(() => {
+    const grouped: Record<string, { name: string, requests: number, totalRequested: number, totalApproved: number, pending: number }> = {};
+    filteredRequests.forEach(req => {
+      if (!grouped[req.requestedBy]) {
+        grouped[req.requestedBy] = { name: getProfileName(req.requestedBy), requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 };
+      }
+      grouped[req.requestedBy].requests++;
+      grouped[req.requestedBy].totalRequested += req.requestedAmount;
+      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
+        grouped[req.requestedBy].totalApproved += req.requestedAmount;
+      }
+      if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
+        grouped[req.requestedBy].pending++;
+      }
+    });
+    return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
+  }, [filteredRequests, users]);
+
+  const byHub = useMemo(() => {
+    const grouped: Record<string, { name: string, requests: number, totalRequested: number, totalApproved: number, pending: number }> = {};
+    filteredRequests.forEach(req => {
+      const hubKey = req.hubId || 'unknown';
+      if (!grouped[hubKey]) {
+        grouped[hubKey] = { name: req.hubName || 'Unknown Hub', requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 };
+      }
+      grouped[hubKey].requests++;
+      grouped[hubKey].totalRequested += req.requestedAmount;
+      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
+        grouped[hubKey].totalApproved += req.requestedAmount;
+      }
+      if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
+        grouped[hubKey].pending++;
+      }
+    });
+    return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
+  }, [filteredRequests]);
+
+  const uniqueHubs = useMemo(() => {
+    const hubs = new Map<string, string>();
+    requests.forEach(req => {
+      if (req.hubId && req.hubName) {
+        hubs.set(req.hubId, req.hubName);
+      }
+    });
+    return Array.from(hubs.entries()).map(([id, name]) => ({ id, name }));
+  }, [requests]);
+
+  const exportToExcel = () => {
+    const data = filteredRequests.map(req => ({
+      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd HH:mm'),
+      'Requested By': getProfileName(req.requestedBy),
+      'Site Name': req.siteName,
+      'Hub': req.hubName || 'N/A',
+      'Requested Amount (SDG)': req.requestedAmount,
+      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
+      'Paid Amount (SDG)': req.totalPaidAmount || 0,
+      'Remaining (SDG)': req.remainingAmount || 0,
+      'Payment Type': req.paymentType === 'full_advance' ? 'Full Advance' : 'Installments',
+      'Justification': req.justification || '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Advance Requests');
+    
+    const summaryData = [
+      { Metric: 'Total Requests', Value: stats.totalCount },
+      { Metric: 'Total Requested (SDG)', Value: stats.totalRequested },
+      { Metric: 'Total Approved (SDG)', Value: stats.totalApproved },
+      { Metric: 'Total Pending (SDG)', Value: stats.totalPending },
+      { Metric: 'Total Rejected (SDG)', Value: stats.totalRejected },
+      { Metric: 'Total Paid (SDG)', Value: stats.totalPaid },
+    ];
+    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+    XLSX.writeFile(wb, `advance_requests_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  if (!isAdmin && !isSupervisor && !isFOM) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center text-center space-y-4">
+              <AlertTriangle className="h-12 w-12 text-destructive" />
+              <h2 className="text-xl font-semibold">Access Denied</h2>
+              <p className="text-muted-foreground max-w-md">
+                You don't have permission to access advance request reports.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 sm:p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <BarChart3 className="h-7 w-7 text-primary" />
+            Advance Requests Report
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Track and analyze transportation advance requests from your team
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => refreshRequests()} data-testid="button-refresh-report">
+            <RefreshCw className="h-4 w-4 mr-1" />
+            Refresh
+          </Button>
+          <Button onClick={exportToExcel} size="sm" data-testid="button-export-excel">
+            <Download className="h-4 w-4 mr-1" />
+            Export Excel
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by site, user, or hub..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9"
+            data-testid="input-search-requests"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="pending_supervisor">Pending Supervisor</SelectItem>
+            <SelectItem value="pending_admin">Pending Admin</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="partially_paid">Partially Paid</SelectItem>
+            <SelectItem value="fully_paid">Fully Paid</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={hubFilter} onValueChange={setHubFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-hub-filter">
+            <SelectValue placeholder="Hub" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Hubs</SelectItem>
+            {uniqueHubs.map(hub => (
+              <SelectItem key={hub.id} value={hub.id}>{hub.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={dateFilter} onValueChange={setDateFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-date-filter">
+            <SelectValue placeholder="Date Range" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Time</SelectItem>
+            <SelectItem value="thisMonth">This Month</SelectItem>
+            <SelectItem value="lastMonth">Last Month</SelectItem>
+            <SelectItem value="last3Months">Last 3 Months</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Requested</p>
+                <p className="text-2xl font-bold">{loading ? <Skeleton className="h-8 w-24" /> : `SDG ${stats.totalRequested.toLocaleString()}`}</p>
+                <p className="text-xs text-muted-foreground">{stats.totalCount} requests</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <DollarSign className="h-5 w-5 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Approved</p>
+                <p className="text-2xl font-bold text-green-600">{loading ? <Skeleton className="h-8 w-24" /> : `SDG ${stats.totalApproved.toLocaleString()}`}</p>
+                <p className="text-xs text-muted-foreground">{stats.approvedCount} requests</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Pending</p>
+                <p className="text-2xl font-bold text-amber-600">{loading ? <Skeleton className="h-8 w-24" /> : `SDG ${stats.totalPending.toLocaleString()}`}</p>
+                <p className="text-xs text-muted-foreground">{stats.pendingCount} requests</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-amber-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Rejected</p>
+                <p className="text-2xl font-bold text-red-600">{loading ? <Skeleton className="h-8 w-24" /> : `SDG ${stats.totalRejected.toLocaleString()}`}</p>
+                <p className="text-xs text-muted-foreground">{stats.rejectedCount} requests</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                <XCircle className="h-5 w-5 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview" className="gap-1" data-testid="tab-overview">
+            <FileSpreadsheet className="h-4 w-4" />
+            All Requests
+          </TabsTrigger>
+          <TabsTrigger value="byTeam" className="gap-1" data-testid="tab-by-team">
+            <Users className="h-4 w-4" />
+            By Team Member
+          </TabsTrigger>
+          <TabsTrigger value="byHub" className="gap-1" data-testid="tab-by-hub">
+            <Building2 className="h-4 w-4" />
+            By Hub
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <Card>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : filteredRequests.length === 0 ? (
+                <div className="p-12 text-center">
+                  <DollarSign className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                  <p className="mt-4 text-muted-foreground">No advance requests found matching your filters</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Requested By</TableHead>
+                        <TableHead>Site</TableHead>
+                        <TableHead>Hub</TableHead>
+                        <TableHead className="text-right">Amount (SDG)</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Paid</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredRequests.slice(0, 50).map(req => (
+                        <TableRow key={req.id} data-testid={`row-request-${req.id}`}>
+                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{req.siteName}</TableCell>
+                          <TableCell>{req.hubName || 'N/A'}</TableCell>
+                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          {filteredRequests.length > 50 && (
+            <p className="text-sm text-muted-foreground text-center">
+              Showing first 50 of {filteredRequests.length} requests. Export to Excel to see all.
+            </p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="byTeam" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Requests by Team Member
+              </CardTitle>
+              <CardDescription>Breakdown of advance requests per team member</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : byTeamMember.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Team Member</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Total Requested (SDG)</TableHead>
+                        <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                        <TableHead className="text-right">Pending</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {byTeamMember.map((member, idx) => (
+                        <TableRow key={idx} data-testid={`row-team-${idx}`}>
+                          <TableCell className="font-medium">{member.name}</TableCell>
+                          <TableCell className="text-right">{member.requests}</TableCell>
+                          <TableCell className="text-right font-mono">{member.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{member.totalApproved.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            {member.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{member.pending}</Badge>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="byHub" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Requests by Hub
+              </CardTitle>
+              <CardDescription>Breakdown of advance requests per hub/location</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : byHub.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Hub</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Total Requested (SDG)</TableHead>
+                        <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                        <TableHead className="text-right">Pending</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {byHub.map((hub, idx) => (
+                        <TableRow key={idx} data-testid={`row-hub-${idx}`}>
+                          <TableCell className="font-medium">{hub.name}</TableCell>
+                          <TableCell className="text-right">{hub.requests}</TableCell>
+                          <TableCell className="text-right font-mono">{hub.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{hub.totalApproved.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            {hub.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{hub.pending}</Badge>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+export default function AdvanceRequestsReport() {
+  return (
+    <DownPaymentProvider>
+      <AdvanceRequestsReportContent />
+    </DownPaymentProvider>
+  );
+}
