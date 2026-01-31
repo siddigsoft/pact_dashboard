@@ -1,41 +1,81 @@
--- Add is_template and source_signature_id columns to digital_signatures table
--- This migration adds explicit template tracking for better filtering and sync between tables
+-- Create digital_signatures table for admin visibility of mobile signatures
+-- This table stores synced signatures from mobile app for web admin management
 
--- Add is_template column for explicit template identification
-ALTER TABLE digital_signatures 
-ADD COLUMN IF NOT EXISTS is_template BOOLEAN DEFAULT FALSE;
+-- Create the table if it doesn't exist
+CREATE TABLE IF NOT EXISTS digital_signatures (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    signature_type TEXT NOT NULL DEFAULT 'drawn',
+    signature_data TEXT NOT NULL,
+    verification_status TEXT NOT NULL DEFAULT 'pending',
+    document_name TEXT,
+    device_info TEXT,
+    is_template BOOLEAN DEFAULT FALSE,
+    source_signature_id UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Add source_signature_id to link back to user_signatures for sync operations
-ALTER TABLE digital_signatures 
-ADD COLUMN IF NOT EXISTS source_signature_id UUID;
+-- Create indexes for efficient querying
+CREATE INDEX IF NOT EXISTS idx_digital_signatures_user_id 
+ON digital_signatures(user_id);
 
--- Create index for faster template filtering
+CREATE INDEX IF NOT EXISTS idx_digital_signatures_verification_status 
+ON digital_signatures(verification_status);
+
 CREATE INDEX IF NOT EXISTS idx_digital_signatures_is_template 
 ON digital_signatures(is_template) 
 WHERE is_template = TRUE;
 
--- Create index for source signature lookup (for deletion sync)
 CREATE INDEX IF NOT EXISTS idx_digital_signatures_source_signature_id 
 ON digital_signatures(source_signature_id) 
 WHERE source_signature_id IS NOT NULL;
 
--- Update existing mobile templates (those with "(Template)" in document_name)
--- to have is_template = true
-UPDATE digital_signatures 
-SET is_template = TRUE 
-WHERE document_name LIKE '%(Template)%' 
-  AND is_template IS NOT TRUE;
+-- Enable RLS
+ALTER TABLE digital_signatures ENABLE ROW LEVEL SECURITY;
 
--- Backfill source_signature_id for existing templates by matching user_id and signature_data
--- This links legacy templates to their source user_signatures for proper sync
-UPDATE digital_signatures ds
-SET source_signature_id = us.id
-FROM user_signatures us
-WHERE ds.user_id = us.user_id
-  AND ds.signature_data = us.signature_data
-  AND ds.is_template = TRUE
-  AND ds.source_signature_id IS NULL;
+-- RLS policies for digital_signatures
+CREATE POLICY IF NOT EXISTS "Users can view own signatures" 
+ON digital_signatures FOR SELECT 
+USING (auth.uid() = user_id);
 
--- Add comment for documentation
+CREATE POLICY IF NOT EXISTS "Users can insert own signatures" 
+ON digital_signatures FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "Users can update own signatures" 
+ON digital_signatures FOR UPDATE 
+USING (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "Users can delete own signatures" 
+ON digital_signatures FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- Admin policy - admins can view all signatures
+CREATE POLICY IF NOT EXISTS "Admins can view all signatures" 
+ON digital_signatures FOR SELECT 
+USING (
+    EXISTS (
+        SELECT 1 FROM user_roles ur
+        JOIN roles r ON ur.role_id = r.id
+        WHERE ur.user_id = auth.uid()
+        AND r.name IN ('admin', 'super_admin')
+    )
+);
+
+-- Admin policy - admins can update all signatures (for verification)
+CREATE POLICY IF NOT EXISTS "Admins can update all signatures" 
+ON digital_signatures FOR UPDATE 
+USING (
+    EXISTS (
+        SELECT 1 FROM user_roles ur
+        JOIN roles r ON ur.role_id = r.id
+        WHERE ur.user_id = auth.uid()
+        AND r.name IN ('admin', 'super_admin')
+    )
+);
+
+-- Add comments for documentation
+COMMENT ON TABLE digital_signatures IS 'Stores digital signatures synced from mobile app for admin management and verification';
 COMMENT ON COLUMN digital_signatures.is_template IS 'True if this is a mobile signature template, false for actual document signatures';
 COMMENT ON COLUMN digital_signatures.source_signature_id IS 'Links to user_signatures.id for sync operations (backfill, delete)';
