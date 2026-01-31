@@ -32,6 +32,7 @@ import '../screens/calendar_screen.dart';
 import '../screens/documents_screen.dart';
 import '../screens/site_visit_detail_screen.dart';
 import '../screens/cost_submission_screen.dart';
+import '../screens/advance_requests_report_screen.dart';
 
 class CustomDrawerMenu extends ConsumerStatefulWidget {
   final User? currentUser;
@@ -511,6 +512,32 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                           widget.onClose();
                         },
                       ),
+                      if (_userRole.toLowerCase() == 'admin' ||
+                          _userRole.toLowerCase() == 'super_admin' ||
+                          _userRole.toLowerCase() == 'superadmin' ||
+                          _userRole.toLowerCase() == 'supervisor' ||
+                          _userRole.toLowerCase() == 'coordinator' ||
+                          _userRole.toLowerCase() == 'field_coordinator' ||
+                          _userRole.toLowerCase() == 'state_coordinator' ||
+                          _userRole.toLowerCase() == 'fom' ||
+                          _userRole.toLowerCase() == 'finance' ||
+                          _userRole.toLowerCase() == 'country_director' ||
+                          _userRole.toLowerCase() == 'data_team')
+                        _MenuItemData(
+                          icon: Icons.assessment_rounded,
+                          title: 'Advance Reports',
+                          subtitle: 'Transportation cost analytics',
+                          iconColor: const Color(0xFF1E40AF),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AdvanceRequestsReportScreen(),
+                              ),
+                            );
+                            widget.onClose();
+                          },
+                        ),
                       _MenuItemData(
                         icon: Icons.calendar_month_rounded,
                         title: 'Calendar',
