@@ -62,6 +62,16 @@ const LEVEL_LABELS: Record<string, { label: string; description: string; color: 
   },
 };
 
+interface PendingVisitUpdate {
+  visitId: string;
+  siteName: string;
+  collectorName: string;
+  collectorLevel: string;
+  currentFee: number;
+  newFee: number;
+  status: string;
+}
+
 const ClassificationFeeManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -73,6 +83,12 @@ const ClassificationFeeManagement = () => {
   const [saving, setSaving] = useState(false);
   const [useMultiplier, setUseMultiplier] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // New state for bulk visit fee updates
+  const [pendingVisitUpdates, setPendingVisitUpdates] = useState<PendingVisitUpdate[]>([]);
+  const [loadingVisits, setLoadingVisits] = useState(false);
+  const [updatingVisits, setUpdatingVisits] = useState(false);
+  const [showVisitUpdates, setShowVisitUpdates] = useState(false);
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.roles?.includes('admin' as any);
 
@@ -133,6 +149,159 @@ const ClassificationFeeManagement = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Load dispatched/claimed visits that need fee updates
+  const loadPendingVisitUpdates = useCallback(async () => {
+    setLoadingVisits(true);
+    try {
+      // Get visits that are dispatched or claimed (not completed/cancelled)
+      const { data: visits, error: visitsError } = await supabase
+        .from('site_visits')
+        .select(`
+          id,
+          site_name,
+          assigned_to,
+          enumerator_fee,
+          status
+        `)
+        .in('status', ['dispatched', 'claimed', 'in_progress', 'pending']);
+
+      if (visitsError) throw visitsError;
+
+      if (!visits || visits.length === 0) {
+        setPendingVisitUpdates([]);
+        toast({
+          title: 'No Visits Found',
+          description: 'No dispatched or claimed visits to update',
+        });
+        return;
+      }
+
+      // Get collector IDs
+      const collectorIds = [...new Set(visits.map(v => v.assigned_to).filter(Boolean))];
+      
+      // Get profiles and classifications
+      const [profilesResult, classificationsResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', collectorIds),
+        supabase
+          .from('user_classifications')
+          .select('user_id, classification_level')
+          .in('user_id', collectorIds)
+          .eq('role_scope', 'dataCollector')
+          .eq('is_active', true)
+      ]);
+
+      if (profilesResult.error) throw profilesResult.error;
+      if (classificationsResult.error) throw classificationsResult.error;
+
+      // Create lookup maps
+      const profileMap = new Map((profilesResult.data || []).map(p => [p.id, p.full_name]));
+      const classificationMap = new Map((classificationsResult.data || []).map(c => [c.user_id, c.classification_level]));
+      const feeMap = new Map(feeStructures.map(f => [f.classification_level, f.site_visit_base_fee_cents]));
+
+      // Calculate updates
+      const updates: PendingVisitUpdate[] = [];
+      for (const visit of visits) {
+        if (!visit.assigned_to) continue;
+        
+        const level = classificationMap.get(visit.assigned_to) || 'C';
+        const newFee = feeMap.get(level) || 0;
+        const currentFee = visit.enumerator_fee || 0;
+
+        // Only include if fee would change
+        if (currentFee !== newFee) {
+          updates.push({
+            visitId: visit.id,
+            siteName: visit.site_name || 'Unknown Site',
+            collectorName: profileMap.get(visit.assigned_to) || 'Unknown',
+            collectorLevel: level,
+            currentFee: currentFee,
+            newFee: newFee,
+            status: visit.status
+          });
+        }
+      }
+
+      setPendingVisitUpdates(updates);
+      setShowVisitUpdates(true);
+
+      if (updates.length === 0) {
+        toast({
+          title: 'All Fees Current',
+          description: 'All dispatched visits already have correct fees',
+        });
+      } else {
+        toast({
+          title: `${updates.length} Visits Found`,
+          description: `Found ${updates.length} visits with outdated fees`,
+        });
+      }
+    } catch (error: any) {
+      console.error('Error loading pending visits:', error);
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to load visits',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoadingVisits(false);
+    }
+  }, [feeStructures, toast]);
+
+  // Apply fee updates to all pending visits
+  const applyVisitFeeUpdates = async () => {
+    if (pendingVisitUpdates.length === 0) return;
+
+    setUpdatingVisits(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const update of pendingVisitUpdates) {
+        const { error } = await supabase
+          .from('site_visits')
+          .update({ 
+            enumerator_fee: update.newFee,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', update.visitId);
+
+        if (error) {
+          console.error(`Failed to update visit ${update.visitId}:`, error);
+          failCount++;
+        } else {
+          successCount++;
+        }
+      }
+
+      if (failCount > 0) {
+        toast({
+          title: 'Partial Update',
+          description: `Updated ${successCount} visits, ${failCount} failed`,
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: 'Fees Updated',
+          description: `Successfully updated ${successCount} visit fees`,
+        });
+        setPendingVisitUpdates([]);
+        setShowVisitUpdates(false);
+      }
+    } catch (error: any) {
+      console.error('Error applying visit updates:', error);
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to update visits',
+        variant: 'destructive'
+      });
+    } finally {
+      setUpdatingVisits(false);
+    }
+  };
 
   const handleFeeChange = (level: string, value: string) => {
     const numValue = parseFloat(value) || 0;
@@ -474,6 +643,130 @@ const ClassificationFeeManagement = () => {
                 <strong>Multiplier Mode:</strong> Final fee = Base Fee × Multiplier. Use this to give bonuses (1.2 = +20%) or reductions (0.8 = -20%).
               </AlertDescription>
             </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Bulk Update Existing Visits Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5" />
+                Update Existing Visit Fees
+              </CardTitle>
+              <CardDescription>
+                Apply current fee rates to dispatched/claimed visits
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              onClick={loadPendingVisitUpdates}
+              disabled={loadingVisits || feeStructures.length === 0}
+              data-testid="button-check-visits"
+            >
+              {loadingVisits ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Check Visits
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!showVisitUpdates && (
+            <p className="text-sm text-muted-foreground">
+              Click "Check Visits" to find dispatched or claimed visits that have outdated fees 
+              based on the current fee structure.
+            </p>
+          )}
+          
+          {showVisitUpdates && pendingVisitUpdates.length === 0 && (
+            <Alert>
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                All dispatched visits have correct fees. No updates needed.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {showVisitUpdates && pendingVisitUpdates.length > 0 && (
+            <div className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Found <strong>{pendingVisitUpdates.length}</strong> visits with outdated fees.
+                </AlertDescription>
+              </Alert>
+
+              <div className="border rounded-md overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="text-left p-2 font-medium">Site</th>
+                      <th className="text-left p-2 font-medium">Collector</th>
+                      <th className="text-left p-2 font-medium">Level</th>
+                      <th className="text-right p-2 font-medium">Current Fee</th>
+                      <th className="text-right p-2 font-medium">New Fee</th>
+                      <th className="text-left p-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingVisitUpdates.slice(0, 10).map((update, index) => (
+                      <tr key={update.visitId} className={index % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
+                        <td className="p-2 truncate max-w-[150px]">{update.siteName}</td>
+                        <td className="p-2 truncate max-w-[120px]">{update.collectorName}</td>
+                        <td className="p-2">
+                          <Badge className={LEVEL_LABELS[update.collectorLevel]?.color || ''}>
+                            Level {update.collectorLevel}
+                          </Badge>
+                        </td>
+                        <td className="p-2 text-right text-muted-foreground">
+                          {update.currentFee.toLocaleString()} SDG
+                        </td>
+                        <td className="p-2 text-right font-medium text-green-600 dark:text-green-400">
+                          {update.newFee.toLocaleString()} SDG
+                        </td>
+                        <td className="p-2">
+                          <Badge variant="outline">{update.status}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {pendingVisitUpdates.length > 10 && (
+                  <div className="p-2 text-center text-sm text-muted-foreground bg-muted">
+                    ... and {pendingVisitUpdates.length - 10} more visits
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowVisitUpdates(false);
+                    setPendingVisitUpdates([]);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={applyVisitFeeUpdates}
+                  disabled={updatingVisits}
+                  data-testid="button-apply-visit-updates"
+                >
+                  {updatingVisits ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Update {pendingVisitUpdates.length} Visits
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
