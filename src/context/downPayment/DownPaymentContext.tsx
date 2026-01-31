@@ -37,11 +37,16 @@ export function useDownPayment() {
 }
 
 function transformFromDB(data: any): DownPaymentRequest {
+  // Extract state and project from joined mmp_site_entries if available
+  const mmpEntry = data.mmp_site_entries;
+  
   return {
     id: data.id,
     siteVisitId: data.site_visit_id,
     mmpSiteEntryId: data.mmp_site_entry_id,
     siteName: data.site_name,
+    stateName: mmpEntry?.state || data.metadata?.state_name || undefined,
+    projectName: mmpEntry?.cp_name || data.metadata?.project_name || undefined,
     requestedBy: data.requested_by,
     requestedAt: data.requested_at,
     requesterRole: data.requester_role,
@@ -99,7 +104,13 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         hubId: currentUser.hubId
       });
 
-      let query = supabase.from('down_payment_requests').select('*');
+      let query = supabase.from('down_payment_requests').select(`
+        *,
+        mmp_site_entries (
+          state,
+          cp_name
+        )
+      `);
 
       if (userRole === 'datacollector' || userRole === 'coordinator') {
         // Data collectors and coordinators only see their own requests

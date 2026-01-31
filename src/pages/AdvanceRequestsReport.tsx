@@ -189,6 +189,48 @@ function AdvanceRequestsReportContent() {
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
   }, [filteredRequests]);
 
+  // Group by State
+  const byState = useMemo(() => {
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
+    filteredRequests.forEach(req => {
+      const stateKey = req.stateName || 'Unknown';
+      if (!grouped[stateKey]) {
+        grouped[stateKey] = { id: stateKey, name: stateKey, requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
+      }
+      grouped[stateKey].requests++;
+      grouped[stateKey].totalRequested += req.requestedAmount;
+      grouped[stateKey].items.push(req);
+      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
+        grouped[stateKey].totalApproved += req.requestedAmount;
+      }
+      if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
+        grouped[stateKey].pending++;
+      }
+    });
+    return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
+  }, [filteredRequests]);
+
+  // Group by Project
+  const byProject = useMemo(() => {
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
+    filteredRequests.forEach(req => {
+      const projectKey = req.projectName || 'Unknown';
+      if (!grouped[projectKey]) {
+        grouped[projectKey] = { id: projectKey, name: projectKey, requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
+      }
+      grouped[projectKey].requests++;
+      grouped[projectKey].totalRequested += req.requestedAmount;
+      grouped[projectKey].items.push(req);
+      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
+        grouped[projectKey].totalApproved += req.requestedAmount;
+      }
+      if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
+        grouped[projectKey].pending++;
+      }
+    });
+    return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
+  }, [filteredRequests]);
+
   const uniqueHubs = useMemo(() => {
     const hubs = new Map<string, string>();
     requests.forEach(req => {
@@ -514,6 +556,130 @@ function AdvanceRequestsReportContent() {
     doc.save(`advance_by_status_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
+  // Export By State
+  const exportStateToExcel = () => {
+    const summaryData = byState.map(s => ({
+      'State': s.name,
+      'Total Requests': s.requests,
+      'Total Requested (SDG)': s.totalRequested,
+      'Total Approved (SDG)': s.totalApproved,
+      'Pending': s.pending,
+    }));
+    const detailData = filteredRequests.map(req => ({
+      'State': req.stateName || 'Unknown',
+      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
+      'Requested By': getProfileName(req.requestedBy),
+      'Site': req.siteName,
+      'Hub': req.hubName || 'N/A',
+      'Amount (SDG)': req.requestedAmount,
+      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
+      'Paid (SDG)': req.totalPaidAmount || 0,
+      'Remaining (SDG)': req.remainingAmount || 0,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by State');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
+    XLSX.writeFile(wb, `advance_by_state_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  const exportStateToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = addPdfHeader(doc, 'Advance Requests by State');
+    autoTable(doc, {
+      startY: yPos,
+      head: [['State', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
+      body: byState.map(s => [s.name, s.requests, s.totalRequested.toLocaleString(), s.totalApproved.toLocaleString(), s.pending]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
+      bodyStyles: { fontSize: 8 },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detailed Requests', 14, yPos);
+    yPos += 5;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'State', 'Team Member', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
+      body: filteredRequests.slice(0, 100).map(r => [
+        format(parseISO(r.requestedAt), 'MMM dd'),
+        (r.stateName || 'Unknown').substring(0, 15),
+        getProfileName(r.requestedBy).substring(0, 20),
+        r.siteName.substring(0, 20),
+        (r.hubName || 'N/A').substring(0, 10),
+        r.requestedAmount.toLocaleString(),
+        r.status.replace(/_/g, ' '),
+        (r.totalPaidAmount || 0).toLocaleString()
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
+      bodyStyles: { fontSize: 6 },
+    });
+    doc.save(`advance_by_state_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
+  // Export By Project
+  const exportProjectToExcel = () => {
+    const summaryData = byProject.map(p => ({
+      'Project': p.name,
+      'Total Requests': p.requests,
+      'Total Requested (SDG)': p.totalRequested,
+      'Total Approved (SDG)': p.totalApproved,
+      'Pending': p.pending,
+    }));
+    const detailData = filteredRequests.map(req => ({
+      'Project': req.projectName || 'Unknown',
+      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
+      'Requested By': getProfileName(req.requestedBy),
+      'Site': req.siteName,
+      'Hub': req.hubName || 'N/A',
+      'Amount (SDG)': req.requestedAmount,
+      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
+      'Paid (SDG)': req.totalPaidAmount || 0,
+      'Remaining (SDG)': req.remainingAmount || 0,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by Project');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
+    XLSX.writeFile(wb, `advance_by_project_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  const exportProjectToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = addPdfHeader(doc, 'Advance Requests by Project');
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Project', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
+      body: byProject.map(p => [p.name, p.requests, p.totalRequested.toLocaleString(), p.totalApproved.toLocaleString(), p.pending]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
+      bodyStyles: { fontSize: 8 },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detailed Requests', 14, yPos);
+    yPos += 5;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'Project', 'Team Member', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
+      body: filteredRequests.slice(0, 100).map(r => [
+        format(parseISO(r.requestedAt), 'MMM dd'),
+        (r.projectName || 'Unknown').substring(0, 15),
+        getProfileName(r.requestedBy).substring(0, 20),
+        r.siteName.substring(0, 20),
+        (r.hubName || 'N/A').substring(0, 10),
+        r.requestedAmount.toLocaleString(),
+        r.status.replace(/_/g, ' '),
+        (r.totalPaidAmount || 0).toLocaleString()
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
+      bodyStyles: { fontSize: 6 },
+    });
+    doc.save(`advance_by_project_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
   if (!isAdmin && !isSupervisor && !isFOM) {
     return (
       <div className="p-6">
@@ -700,6 +866,14 @@ function AdvanceRequestsReportContent() {
           <TabsTrigger value="byStatus" className="gap-1" data-testid="tab-by-status">
             <Clock className="h-4 w-4" />
             By Status
+          </TabsTrigger>
+          <TabsTrigger value="byState" className="gap-1" data-testid="tab-by-state">
+            <MapPin className="h-4 w-4" />
+            By State
+          </TabsTrigger>
+          <TabsTrigger value="byProject" className="gap-1" data-testid="tab-by-project">
+            <FolderKanban className="h-4 w-4" />
+            By Project
           </TabsTrigger>
         </TabsList>
 
@@ -1083,6 +1257,218 @@ function AdvanceRequestsReportContent() {
                           <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
                           <TableCell>{req.hubName || 'N/A'}</TableCell>
                           <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
+                          <TableCell className="text-center">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate('/down-payment-approval')}>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="byState" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={exportStateToPDF} data-testid="button-state-pdf">
+              <FileText className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button size="sm" onClick={exportStateToExcel} data-testid="button-state-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Summary by State
+              </CardTitle>
+              <CardDescription>Breakdown of advance requests per state/region</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : byState.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>State</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Total Requested (SDG)</TableHead>
+                        <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                        <TableHead className="text-right">Pending</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {byState.map((state, idx) => (
+                        <TableRow key={idx} data-testid={`row-state-${idx}`}>
+                          <TableCell className="font-medium">{state.name}</TableCell>
+                          <TableCell className="text-right">{state.requests}</TableCell>
+                          <TableCell className="text-right font-mono">{state.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{state.totalApproved.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            {state.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{state.pending}</Badge>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Requests (Detailed)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>State</TableHead>
+                      <TableHead>Team Member</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead className="text-right">Amount (SDG)</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Remaining</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRequests.slice(0, 50).map(req => {
+                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      return (
+                        <TableRow key={req.id}>
+                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className="font-medium">{req.stateName || 'Unknown'}</TableCell>
+                          <TableCell>{getProfileName(req.requestedBy)}</TableCell>
+                          <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
+                          <TableCell>{req.hubName || 'N/A'}</TableCell>
+                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
+                          <TableCell className="text-center">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate('/down-payment-approval')}>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="byProject" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={exportProjectToPDF} data-testid="button-project-pdf">
+              <FileText className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button size="sm" onClick={exportProjectToExcel} data-testid="button-project-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FolderKanban className="h-5 w-5" />
+                Summary by Project
+              </CardTitle>
+              <CardDescription>Breakdown of advance requests per cooperating partner/project</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : byProject.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Project</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Total Requested (SDG)</TableHead>
+                        <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                        <TableHead className="text-right">Pending</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {byProject.map((project, idx) => (
+                        <TableRow key={idx} data-testid={`row-project-${idx}`}>
+                          <TableCell className="font-medium">{project.name}</TableCell>
+                          <TableCell className="text-right">{project.requests}</TableCell>
+                          <TableCell className="text-right font-mono">{project.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{project.totalApproved.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">
+                            {project.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{project.pending}</Badge>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Requests (Detailed)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Project</TableHead>
+                      <TableHead>Team Member</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead className="text-right">Amount (SDG)</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Remaining</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRequests.slice(0, 50).map(req => {
+                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      return (
+                        <TableRow key={req.id}>
+                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className="font-medium">{req.projectName || 'Unknown'}</TableCell>
+                          <TableCell>{getProfileName(req.requestedBy)}</TableCell>
+                          <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
+                          <TableCell>{req.hubName || 'N/A'}</TableCell>
+                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell>{getStatusBadge(req.status)}</TableCell>
                           <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
                           <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
                           <TableCell className="text-center">

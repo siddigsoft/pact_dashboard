@@ -55,6 +55,10 @@ export interface DownPaymentRequest {
   mmpSiteEntryId?: string;
   siteName: string;
   
+  // Geographic information (from related MMP entry)
+  stateName?: string;
+  projectName?: string;
+  
   // Requester information
   requestedBy: string;
   requestedAt: string;
