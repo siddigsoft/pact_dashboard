@@ -4,24 +4,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, Briefcase } from "lucide-react";
+import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, Briefcase, Wallet } from "lucide-react";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
+import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUserProjects } from "@/hooks/useUserProjects";
 import { AppRole } from "@/types";
 import CostSubmissionForm from "@/components/cost-submission/CostSubmissionForm";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
 import OperationalCostForm from "@/components/cost-submission/OperationalCostForm";
+import CostRequestForm from "@/components/cost-submission/CostRequestForm";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 const CostSubmission = () => {
   const navigate = useNavigate();
   const { currentUser, roles } = useAppContext();
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
+  const { projects: allProjects } = useProjectContext();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+  const { toast } = useToast();
+  const [isBudgetSubmitting, setIsBudgetSubmitting] = useState(false);
   
   // Check if user is admin or supervisor
   const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
@@ -54,7 +60,7 @@ const CostSubmission = () => {
     return "submit";
   };
   
-  const [activeTab, setActiveTab] = useState<"submit" | "operational" | "history">(getDefaultTab());
+  const [activeTab, setActiveTab] = useState<"submit" | "operational" | "budget" | "history">(getDefaultTab());
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
   // - Admins/Supervisors: Fetch all submissions (enabled), skip user-specific query (empty userId)
@@ -143,6 +149,43 @@ const CostSubmission = () => {
     approved: submissions.filter(s => s.status === 'approved').length,
     rejected: submissions.filter(s => s.status === 'rejected').length,
     paid: submissions.filter(s => s.status === 'paid').length
+  };
+
+  // Filter projects for budget request form based on user access
+  const availableProjects = useMemo(() => {
+    if (isAdminOrSuperUser) return allProjects;
+    if (userProjectIds.length === 0) return [];
+    return allProjects.filter(p => userProjectIds.includes(p.id));
+  }, [allProjects, userProjectIds, isAdminOrSuperUser]);
+
+  // Format projects for CostRequestForm
+  const projectsForForm = availableProjects.map(p => ({
+    id: p.id,
+    name: p.name,
+    budgetRemaining: (p as any).budgetRemaining
+  }));
+
+  // Handle budget request submission
+  const handleBudgetRequestSubmit = async (data: any) => {
+    setIsBudgetSubmitting(true);
+    try {
+      // TODO: Integrate with backend service when enhanced_cost_requests table is available
+      console.log('Budget request submitted:', data);
+      toast({
+        title: data.requestType === 'advance' ? 'Advance Request Submitted' : 'Reimbursement Request Submitted',
+        description: `Your ${data.requestType} request for ${data.currency} ${data.requestedAmount?.toLocaleString()} has been submitted for approval.`,
+      });
+      setActiveTab("history");
+    } catch (error) {
+      console.error('Error submitting budget request:', error);
+      toast({
+        title: 'Submission Failed',
+        description: 'There was an error submitting your request. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBudgetSubmitting(false);
+    }
   };
 
   return (
@@ -314,6 +357,10 @@ const CostSubmission = () => {
               Operational Costs
             </TabsTrigger>
           )}
+          <TabsTrigger value="budget" data-testid="tab-budget">
+            <Wallet className="h-4 w-4 mr-2" />
+            Advance / Reimburse
+          </TabsTrigger>
           <TabsTrigger value="history" data-testid="tab-history">
             <Clock className="h-4 w-4 mr-2" />
             {isAdmin ? "All Submissions" : isSupervisor ? "Team Submissions" : isCountryDirector ? "Overview" : "My Submissions"}
@@ -353,6 +400,15 @@ const CostSubmission = () => {
             />
           </TabsContent>
         )}
+
+        <TabsContent value="budget" className="space-y-4">
+          <CostRequestForm 
+            projects={projectsForForm}
+            onSubmit={handleBudgetRequestSubmit}
+            onCancel={() => setActiveTab("history")}
+            isSubmitting={isBudgetSubmitting}
+          />
+        </TabsContent>
 
         <TabsContent value="history" className="space-y-4">
           {isLoading ? (
