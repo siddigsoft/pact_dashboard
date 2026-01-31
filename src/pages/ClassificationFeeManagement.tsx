@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,41 +76,47 @@ const ClassificationFeeManagement = () => {
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.roles?.includes('admin' as any);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: fees, error: feesError } = await supabase
-        .from('classification_fee_structures')
-        .select('*')
-        .eq('role_scope', 'dataCollector')
-        .order('classification_level');
+      // Run both queries in parallel for faster loading
+      const [feesResult, classificationsResult] = await Promise.all([
+        supabase
+          .from('classification_fee_structures')
+          .select('*')
+          .eq('role_scope', 'dataCollector')
+          .order('classification_level'),
+        supabase
+          .from('user_classifications')
+          .select('classification_level')
+          .eq('role_scope', 'dataCollector')
+          .eq('is_active', true)
+      ]);
 
-      if (feesError) throw feesError;
+      if (feesResult.error) throw feesResult.error;
+      if (classificationsResult.error) throw classificationsResult.error;
 
-      const { data: classifications, error: classError } = await supabase
-        .from('user_classifications')
-        .select('classification_level')
-        .eq('role_scope', 'dataCollector')
-        .eq('is_active', true);
-
-      if (classError) throw classError;
-
+      // Count classifications in single pass
       const counts: Record<string, number> = { A: 0, B: 0, C: 0 };
-      classifications?.forEach(c => {
+      for (const c of classificationsResult.data || []) {
         if (counts[c.classification_level] !== undefined) {
           counts[c.classification_level]++;
         }
-      });
+      }
 
-      setFeeStructures(fees || []);
+      const fees = feesResult.data || [];
+      setFeeStructures(fees);
       setUserCounts(counts);
       
-      const hasNonOneMultiplier = fees?.some(f => f.complexity_multiplier !== 1.0);
-      setUseMultiplier(hasNonOneMultiplier || false);
+      // Check for non-1.0 multipliers
+      let hasNonOneMultiplier = false;
+      for (const f of fees) {
+        if (f.complexity_multiplier !== 1.0) {
+          hasNonOneMultiplier = true;
+          break;
+        }
+      }
+      setUseMultiplier(hasNonOneMultiplier);
       
     } catch (error) {
       console.error('Error loading fee structures:', error);
@@ -122,7 +128,11 @@ const ClassificationFeeManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleFeeChange = (level: string, value: string) => {
     const numValue = parseFloat(value) || 0;
