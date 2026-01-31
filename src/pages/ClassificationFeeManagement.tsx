@@ -183,46 +183,76 @@ const ClassificationFeeManagement = () => {
     }
 
     setSaving(true);
+    let successCount = 0;
+    let failCount = 0;
+    
     try {
-      console.log('[ClassificationFeeManagement] Saving fee structures:', feeStructures);
+      // Check session first
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        console.error('[ClassificationFeeManagement] No valid session:', sessionError);
+        toast({
+          title: 'Session Error',
+          description: 'Please log in again to save changes',
+          variant: 'destructive'
+        });
+        return;
+      }
+      console.log('[ClassificationFeeManagement] Session valid, user:', session.user.email);
+      console.log('[ClassificationFeeManagement] Starting save for', feeStructures.length, 'fee structures');
       
       for (const fee of feeStructures) {
         const updateData = {
           site_visit_base_fee_cents: fee.site_visit_base_fee_cents,
           complexity_multiplier: useMultiplier ? fee.complexity_multiplier : 1.0,
-          is_active: true, // Ensure the fee structure is active
+          is_active: true,
           updated_at: new Date().toISOString()
         };
         
-        console.log(`[ClassificationFeeManagement] Updating fee ${fee.id} (Level ${fee.classification_level}):`, updateData);
+        console.log(`[ClassificationFeeManagement] Updating Level ${fee.classification_level} (${fee.role_scope}):`, updateData);
         
-        const { data, error } = await supabase
+        // Use upsert-like approach: update by classification_level and role_scope
+        const { data, error, count } = await supabase
           .from('classification_fee_structures')
           .update(updateData)
-          .eq('id', fee.id)
+          .eq('classification_level', fee.classification_level)
+          .eq('role_scope', fee.role_scope)
           .select();
 
         if (error) {
-          console.error(`[ClassificationFeeManagement] Error updating fee ${fee.id}:`, error);
-          throw error;
+          console.error(`[ClassificationFeeManagement] Error updating Level ${fee.classification_level}:`, error);
+          failCount++;
+        } else if (!data || data.length === 0) {
+          console.warn(`[ClassificationFeeManagement] No rows updated for Level ${fee.classification_level} (${fee.role_scope})`);
+          failCount++;
+        } else {
+          console.log(`[ClassificationFeeManagement] Successfully updated Level ${fee.classification_level}:`, data);
+          successCount++;
         }
-        
-        console.log(`[ClassificationFeeManagement] Updated fee ${fee.id}:`, data);
       }
 
-      toast({
-        title: 'Fees Updated',
-        description: 'Classification fee structure has been saved successfully',
-      });
+      if (failCount > 0) {
+        toast({
+          title: 'Partial Update',
+          description: `Updated ${successCount} fees, ${failCount} failed. Check console for details.`,
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: 'Fees Updated',
+          description: 'Classification fee structure has been saved successfully',
+        });
+      }
+      
       setHasChanges(false);
       
       // Refresh data after save to confirm changes persisted
       await loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving fees:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save fee structures',
+        description: error?.message || 'Failed to save fee structures',
         variant: 'destructive'
       });
     } finally {
