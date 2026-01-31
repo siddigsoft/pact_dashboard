@@ -1361,6 +1361,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
        * across ALL states within their hub. Team members need matching `hub_id` to appear.
        */
       const supervisorHubId = currentUser.hubId;
+      const supervisorSecondaryHubId = currentUser.secondaryHubId;
       const supervisorStateId = currentUser.stateId;
 
       if (!supervisorHubId && !supervisorStateId) {
@@ -1368,12 +1369,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return [];
       }
 
-      // Query team members by hub_id (primary) or state_id (fallback for legacy support)
-      // Hub supervisors should have hub_id set - they see ALL team members in ALL states of their hub
+      // Query team members by hub_id (primary), secondary_hub_id, or state_id (fallback for legacy support)
+      // Hub supervisors should have hub_id set - they see ALL team members in ALL states of their hub(s)
+      // SECONDARY HUB: Supervisors with secondary_hub_id also see team members from that hub
+      let hubFilter = `hub_id.eq.${supervisorHubId || 'none'},state_id.eq.${supervisorStateId || 'none'}`;
+      if (supervisorSecondaryHubId) {
+        hubFilter += `,hub_id.eq.${supervisorSecondaryHubId}`;
+        console.log('[Wallet] Supervisor has secondary hub:', supervisorSecondaryHubId);
+      }
       const { data: teamMembers, error: teamError } = await supabase
         .from('profiles')
         .select('id, full_name, email, hub_id, state_id, role')
-        .or(`hub_id.eq.${supervisorHubId || 'none'},state_id.eq.${supervisorStateId || 'none'}`);
+        .or(hubFilter);
 
       if (teamError) {
         console.error('Failed to fetch team members:', teamError);

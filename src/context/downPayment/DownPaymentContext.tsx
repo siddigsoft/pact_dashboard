@@ -108,11 +108,18 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         /**
          * HUB-BASED SUPERVISION: Hub supervisors manage MULTIPLE states within their hub.
          * Examples: Kosti Hub = 7 states, Kassala Hub = 5 states
-         * Supervisors see their own requests + all requests from their hub
+         * Supervisors see their own requests + all requests from their hub(s)
          * Hub supervisors need hub_id assigned (NOT state_id) to see all team requests
+         * SECONDARY HUB: Supervisors with secondary_hub_id also see requests from that hub
          */
         if (currentUser.hubId) {
-          query = query.or(`requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId}`);
+          // Build OR filter for primary hub and optionally secondary hub
+          let hubFilter = `requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId}`;
+          if (currentUser.secondaryHubId) {
+            hubFilter += `,hub_id.eq.${currentUser.secondaryHubId}`;
+            console.log('[DownPayment] Supervisor has secondary hub:', currentUser.secondaryHubId);
+          }
+          query = query.or(hubFilter);
         } else {
           // If supervisor doesn't have hubId, try matching by hub name or just show own requests
           console.warn('[DownPayment] Supervisor has no hubId set - showing only own requests');
