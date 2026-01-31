@@ -2412,21 +2412,18 @@ const MMP = () => {
     // Format all entries
     const formattedEntries = allSiteEntries.map(formatSiteEntry);
 
-    // Filter available sites: status = "Dispatched", accepted_by = null, in collector's area
+    // Filter available sites: status = "Dispatched", accepted_by = null, in collector's STATE
+    // Users can see all dispatched sites within their assigned state (not restricted to locality)
     const availableSites = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
       if (status !== 'dispatched') return false;
       if (entry.accepted_by) return false; // Must be unclaimed
 
-      // Filter by location
-      if (collectorLocalityName) {
-        // User has locality set - filter by EXACT locality match only
-        return String(entry.locality || '').toLowerCase() === collectorLocalityName.toLowerCase();
-      } else if (collectorStateName) {
-        // User only has state set (no locality) - filter by state
+      // Filter by STATE only - users can claim any site in their state
+      if (collectorStateName) {
         return String(entry.state || '').toLowerCase() === collectorStateName.toLowerCase();
       }
-      return false; // No location = no sites
+      return false; // No state assigned = no sites
     }).sort((a, b) => {
       // Sort by created_at descending
       const aDate = a.created_at || a.createdAt || '';
