@@ -1575,25 +1575,48 @@ class WebRTCService {
   
   /// Force reset if stuck in a call state
   Future<void> forceResetIfNotInActiveCall() async {
-    // During "calling" or "ringing" phase, it's NORMAL to not have a peer connection yet.
-    // The peer connection is only created when the callee accepts and sends an offer.
-    // Only consider it "stuck" if we're supposed to be connected but have no connection.
-    final isNormalPreConnectionState = 
+    // If not in any call state, nothing to reset
+    if (_callState.status == CallStatus.idle) {
+      return;
+    }
+    
+    // Check for stale calling/ringing states (stuck for more than 60 seconds)
+    final isPreConnectionState = 
         _callState.status == CallStatus.calling ||
         _callState.status == CallStatus.ringing;
     
+    if (isPreConnectionState) {
+      // Check if we've been in this state for too long (60 seconds max)
+      final startTime = _callState.startTime;
+      if (startTime != null) {
+        final elapsed = DateTime.now().difference(startTime);
+        if (elapsed.inSeconds > 60) {
+          debugPrint('[WebRTC] Detected stale calling/ringing state (${elapsed.inSeconds}s), forcing reset');
+          await _cleanup();
+          return;
+        }
+      } else {
+        // No start time recorded - this is a stuck state, reset it
+        debugPrint('[WebRTC] Detected calling/ringing state with no start time, forcing reset');
+        await _cleanup();
+        return;
+      }
+    }
+    
     // If we think we're in a call but have no active peer connection,
     // then we're in a stuck state and should reset (except during calling/ringing phases)
-    if (_callState.isInCall && _peerConnection == null && !isNormalPreConnectionState) {
+    if (_callState.isInCall && _peerConnection == null && !isPreConnectionState) {
       debugPrint('[WebRTC] Detected stuck call state (no peer connection), forcing reset');
       await _cleanup();
       return;
     }
     
-    // Also reset if we're in a "ended/rejected/busy" state that wasn't cleaned up
+    // Also reset if we're in a "ended/rejected/busy/failed/unreachable" state that wasn't cleaned up
     if (_callState.status == CallStatus.ended ||
         _callState.status == CallStatus.rejected ||
-        _callState.status == CallStatus.busy) {
+        _callState.status == CallStatus.busy ||
+        _callState.status == CallStatus.failed ||
+        _callState.status == CallStatus.unreachable) {
       debugPrint('[WebRTC] Detected stale terminal call state, forcing reset');
       await _cleanup();
       return;
@@ -1601,10 +1624,17 @@ class WebRTCService {
     
     // Reset if local/remote streams are null but we think we're in a call
     // Again, skip for calling/ringing phase where streams are being set up
-    if (_callState.isInCall && _localStream == null && _remoteStream == null && !isNormalPreConnectionState) {
+    if (_callState.isInCall && _localStream == null && _remoteStream == null && !isPreConnectionState) {
       debugPrint('[WebRTC] Detected stuck call state (no streams), forcing reset');
       await _cleanup();
     }
+  }
+  
+  /// Force reset call state regardless of current state
+  /// Use this when the user explicitly wants to clear a stuck state
+  Future<void> forceReset() async {
+    debugPrint('[WebRTC] Force resetting call state');
+    await _cleanup();
   }
 
   /// Cleanup resources
