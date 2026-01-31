@@ -44,6 +44,7 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI for a res
     *   **Bilingual Notification Service:** Comprehensive Arabic/English translations for all notifications.
     *   **Mobile Support Ticket System:** In-app ticket management with categories, priorities, status tracking, and email fallback.
     *   **Mobile Operational Cost Submission System:** Complete expense tracking with 10 categories, 2 funding types, 4-tab interface, multi-tier approval workflow, and reconciliation system.
+    *   **Mobile Advance Requests Report:** Transportation advance cost analytics with 6 grouping views (All, Team, Hub, Status, State, Project), gradient SliverAppBar, stat cards, CSV export via share_plus, and comprehensive role-based access control.
 *   **Mobile-Web Integration Pages:** Web admin pages for managing mobile support tickets, help articles, digital signatures, call scheduling, and document sync.
 
 ### System Design Choices
@@ -76,7 +77,7 @@ The project uses a unified Supabase client for all interactions, ensuring consis
 
 ## Mobile Flutter File Structure
 Key files in `mobile_flutter/PACT_mobile-PACT-MAIN-shorebird/lib/`:
-*   **Models:** `operational_cost_submission.dart` (cost submission data model with CostSubmissionPermissions class)
-*   **Services:** `operational_cost_service.dart`, `help_enhancements_service.dart`, `webrtc_service.dart`, `jitsi_service.dart`
-*   **Screens:** `cost_submission_screen.dart`, `support_screen.dart`, `help_support_screen.dart`, `digital_signatures_screen.dart`, `communications_screen.dart`
+*   **Models:** `operational_cost_submission.dart` (cost submission data model with CostSubmissionPermissions class), `advance_request_report.dart` (report data models with AdvanceRequestData, ReportGroupData, ReportStats, StatusBadgeInfo)
+*   **Services:** `operational_cost_service.dart`, `help_enhancements_service.dart`, `webrtc_service.dart`, `jitsi_service.dart`, `advance_report_service.dart` (advance request report data fetching and grouping)
+*   **Screens:** `cost_submission_screen.dart`, `support_screen.dart`, `help_support_screen.dart`, `digital_signatures_screen.dart`, `communications_screen.dart`, `advance_requests_report_screen.dart` (6-tab report with CSV export)
 *   **Widgets:** `cost_submission/` folder with `cost_submit_tab.dart`, `cost_history_tab.dart`, `cost_outstanding_tab.dart`, `cost_reconciliation_tab.dart`, `cost_stats_cards.dart`

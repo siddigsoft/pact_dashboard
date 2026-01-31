@@ -20,6 +20,8 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
   late TabController _tabController;
   List<AdvanceRequestData> _requests = [];
   bool _isLoading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
   String _filterPeriod = 'all';
   ReportStats _stats = ReportStats();
   bool _hasAccess = false;
@@ -57,18 +59,32 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _errorMessage = '';
+    });
     
-    final requests = await AdvanceReportService.fetchAllRequests();
-    final filteredRequests = _applyPeriodFilter(requests);
-    final stats = AdvanceReportService.calculateStats(filteredRequests);
-    
-    if (mounted) {
-      setState(() {
-        _requests = filteredRequests;
-        _stats = stats;
-        _isLoading = false;
-      });
+    try {
+      final requests = await AdvanceReportService.fetchAllRequests();
+      final filteredRequests = _applyPeriodFilter(requests);
+      final stats = AdvanceReportService.calculateStats(filteredRequests);
+      
+      if (mounted) {
+        setState(() {
+          _requests = filteredRequests;
+          _stats = stats;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _errorMessage = 'Failed to load report data. Please check your connection and try again.';
+        });
+      }
     }
   }
 
@@ -197,7 +213,7 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'You do not have permission to view this report. Only Admins, Supervisors, FOM, Finance, and Country Directors can access this page.',
+                  'You do not have permission to view this report. Only Admins, Supervisors, Coordinators, FOM, Finance, Country Directors, and Data Team members can access this page.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey[600]),
                 ),
@@ -236,7 +252,9 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
         ],
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
+            : _hasError
+              ? _buildErrorState()
+              : TabBarView(
                 controller: _tabController,
                 children: [
                   _buildAllRequestsTab(),
@@ -469,6 +487,43 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
             style: TextStyle(color: Colors.grey[600], fontSize: 16),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
+            const SizedBox(height: 16),
+            Text(
+              'Error Loading Report',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Colors.red[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadData,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E40AF),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
