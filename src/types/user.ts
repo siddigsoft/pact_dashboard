@@ -60,6 +60,15 @@ export interface User {
    * Team members need matching hub_id to appear in supervisor's view.
    */
   hubId?: string;
+  
+  /**
+   * SECONDARY HUB ASSIGNMENT (Special Cases)
+   * =========================================
+   * For supervisors who need to manage TWO hubs simultaneously.
+   * This is rare and used for special cases only.
+   * When set, the supervisor sees requests from BOTH primary and secondary hubs.
+   */
+  secondaryHubId?: string;
   avatar?: string;
   username?: string;
   fullName?: string;
