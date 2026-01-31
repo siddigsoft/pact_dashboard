@@ -16,8 +16,19 @@ import CostSubmissionForm from "@/components/cost-submission/CostSubmissionForm"
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
 import OperationalCostForm from "@/components/cost-submission/OperationalCostForm";
 import CostRequestForm from "@/components/cost-submission/CostRequestForm";
+import CostReconciliationForm from "@/components/cost-submission/CostReconciliationForm";
+import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvances";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { 
+  Info, 
+  MapPin, 
+  RefreshCw, 
+  CircleDollarSign,
+  ClipboardCheck,
+  HelpCircle
+} from "lucide-react";
 
 const CostSubmission = () => {
   const navigate = useNavigate();
@@ -60,7 +71,8 @@ const CostSubmission = () => {
     return "submit";
   };
   
-  const [activeTab, setActiveTab] = useState<"submit" | "operational" | "budget" | "history">(getDefaultTab());
+  const [activeTab, setActiveTab] = useState<"submit" | "operational" | "budget" | "reconciliation" | "outstanding" | "history">(getDefaultTab());
+  const [showGuide, setShowGuide] = useState(false);
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
   // - Admins/Supervisors: Fetch all submissions (enabled), skip user-specific query (empty userId)
@@ -342,33 +354,155 @@ const CostSubmission = () => {
         </Card>
       </div>
 
+      {/* Process Guide - Collapsible */}
+      <Card className="mb-6 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <CardTitle className="text-base text-blue-800 dark:text-blue-200">Cost Submission Process Guide</CardTitle>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setShowGuide(!showGuide)}
+              className="text-blue-600 dark:text-blue-400"
+              data-testid="button-toggle-guide"
+            >
+              {showGuide ? 'Hide' : 'Show'} Guide
+            </Button>
+          </div>
+        </CardHeader>
+        {showGuide && (
+          <CardContent className="pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Step 1: Submit */}
+              <div className="flex flex-col p-4 rounded-lg bg-white dark:bg-slate-800 border">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">1</div>
+                  <h4 className="font-semibold">Submit Costs</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Submit site visit costs, operational expenses, or request advances/reimbursements with supporting documents.
+                </p>
+              </div>
+              
+              {/* Step 2: Review */}
+              <div className="flex flex-col p-4 rounded-lg bg-white dark:bg-slate-800 border">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center text-sm font-bold">2</div>
+                  <h4 className="font-semibold">Supervisor Review</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Your supervisor reviews and verifies the submission. They may request additional information or approve/reject.
+                </p>
+              </div>
+              
+              {/* Step 3: Approval */}
+              <div className="flex flex-col p-4 rounded-lg bg-white dark:bg-slate-800 border">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center text-sm font-bold">3</div>
+                  <h4 className="font-semibold">Admin Approval</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Admin performs final approval and authorizes payment. Digital signature may be required for certain amounts.
+                </p>
+              </div>
+              
+              {/* Step 4: Reconciliation */}
+              <div className="flex flex-col p-4 rounded-lg bg-white dark:bg-slate-800 border">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center text-sm font-bold">4</div>
+                  <h4 className="font-semibold">Reconciliation</h4>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  For advances: Submit receipts to reconcile. Return unused funds or request additional if overspent.
+                </p>
+              </div>
+            </div>
+            
+            <Alert className="mt-4 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+              <Info className="h-4 w-4 text-amber-600" />
+              <AlertTitle className="text-amber-800 dark:text-amber-200">Important Notes</AlertTitle>
+              <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
+                <ul className="list-disc list-inside space-y-1 mt-1">
+                  <li><strong>Site Visit Costs:</strong> Submit after completing a field visit with transportation and per diem details</li>
+                  <li><strong>Operational Costs:</strong> For permits, training, communications, and other field operation expenses</li>
+                  <li><strong>Advance Payments:</strong> Request funds before activities - must be reconciled with receipts after</li>
+                  <li><strong>Reimbursements:</strong> Get refunded for expenses you already paid from personal funds</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        )}
+      </Card>
+
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
-        <TabsList className="flex-wrap">
+        <TabsList className="flex-wrap gap-1">
+          {/* Submit Section */}
           {!canViewTeamSubmissions && (
-            <TabsTrigger value="submit" data-testid="tab-submit">
-              <Plus className="h-4 w-4 mr-2" />
-              Site Visit Costs
+            <TabsTrigger value="submit" data-testid="tab-submit" className="gap-1.5">
+              <MapPin className="h-4 w-4" />
+              <span className="hidden sm:inline">Site Visit</span>
+              <span className="sm:hidden">Visit</span>
             </TabsTrigger>
           )}
+          
+          {/* Operational Costs */}
           {canSubmitOperationalCosts && (
-            <TabsTrigger value="operational" data-testid="tab-operational">
-              <Receipt className="h-4 w-4 mr-2" />
-              Operational Costs
+            <TabsTrigger value="operational" data-testid="tab-operational" className="gap-1.5">
+              <Receipt className="h-4 w-4" />
+              <span className="hidden sm:inline">Operational</span>
+              <span className="sm:hidden">Ops</span>
             </TabsTrigger>
           )}
-          <TabsTrigger value="budget" data-testid="tab-budget">
-            <Wallet className="h-4 w-4 mr-2" />
-            Advance / Reimburse
+          
+          {/* Advance/Reimburse */}
+          <TabsTrigger value="budget" data-testid="tab-budget" className="gap-1.5">
+            <Wallet className="h-4 w-4" />
+            <span className="hidden sm:inline">Advance/Reimburse</span>
+            <span className="sm:hidden">Advance</span>
           </TabsTrigger>
-          <TabsTrigger value="history" data-testid="tab-history">
-            <Clock className="h-4 w-4 mr-2" />
-            {isAdmin ? "All Submissions" : isSupervisor ? "Team Submissions" : isCountryDirector ? "Overview" : "My Submissions"}
+          
+          {/* Reconciliation */}
+          <TabsTrigger value="reconciliation" data-testid="tab-reconciliation" className="gap-1.5">
+            <RefreshCw className="h-4 w-4" />
+            <span className="hidden sm:inline">Reconciliation</span>
+            <span className="sm:hidden">Reconcile</span>
+          </TabsTrigger>
+          
+          {/* Outstanding Advances */}
+          <TabsTrigger value="outstanding" data-testid="tab-outstanding" className="gap-1.5">
+            <CircleDollarSign className="h-4 w-4" />
+            <span className="hidden sm:inline">Outstanding</span>
+            <span className="sm:hidden">Due</span>
+          </TabsTrigger>
+          
+          {/* History */}
+          <TabsTrigger value="history" data-testid="tab-history" className="gap-1.5">
+            <ClipboardCheck className="h-4 w-4" />
+            <span className="hidden sm:inline">
+              {isAdmin ? "All Submissions" : isSupervisor ? "Team" : isCountryDirector ? "Overview" : "My Submissions"}
+            </span>
+            <span className="sm:hidden">History</span>
           </TabsTrigger>
         </TabsList>
 
+        {/* Site Visit Costs Tab */}
         {!canViewTeamSubmissions && (
           <TabsContent value="submit" className="space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-blue-600" />
+                  <CardTitle>Site Visit Cost Submission</CardTitle>
+                </div>
+                <CardDescription>
+                  Submit transportation, per diem, and other costs for completed site visits. Select a visit and enter the actual expenses incurred.
+                </CardDescription>
+              </CardHeader>
+            </Card>
             {isLoading ? (
               <Card>
                 <CardContent className="pt-6">
@@ -381,9 +515,13 @@ const CostSubmission = () => {
                   <div className="text-center py-12">
                     <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                     <h3 className="text-lg font-semibold mb-2">No Completed Site Visits</h3>
-                    <p className="text-muted-foreground">
+                    <p className="text-muted-foreground mb-4">
                       You don't have any completed site visits yet. Complete a site visit to submit costs.
                     </p>
+                    <Button variant="outline" onClick={() => navigate('/site-visits')} data-testid="button-go-visits">
+                      <MapPin className="h-4 w-4 mr-2" />
+                      Go to Site Visits
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -393,15 +531,41 @@ const CostSubmission = () => {
           </TabsContent>
         )}
 
+        {/* Operational Costs Tab */}
         {canSubmitOperationalCosts && (
           <TabsContent value="operational" className="space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Receipt className="h-5 w-5 text-emerald-600" />
+                  <CardTitle>Operational Expense Submission</CardTitle>
+                </div>
+                <CardDescription>
+                  Submit operational expenses for permits, training, communications, and other field operation costs. 
+                  Requires two-tier approval (Supervisor/FOM → Admin).
+                </CardDescription>
+              </CardHeader>
+            </Card>
             <OperationalCostForm 
               onSuccess={() => setActiveTab("history")}
             />
           </TabsContent>
         )}
 
+        {/* Advance/Reimburse Tab */}
         <TabsContent value="budget" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-indigo-600" />
+                <CardTitle>Advance Payment & Reimbursement</CardTitle>
+              </div>
+              <CardDescription>
+                Request advance funds for planned activities or submit reimbursement claims for expenses you've already paid. 
+                Advances must be reconciled with receipts after spending.
+              </CardDescription>
+            </CardHeader>
+          </Card>
           <CostRequestForm 
             projects={projectsForForm}
             onSubmit={handleBudgetRequestSubmit}
@@ -410,7 +574,104 @@ const CostSubmission = () => {
           />
         </TabsContent>
 
+        {/* Reconciliation Tab */}
+        <TabsContent value="reconciliation" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-purple-600" />
+                <CardTitle>Advance Reconciliation</CardTitle>
+              </div>
+              <CardDescription>
+                Reconcile advance payments by submitting receipts and accounting for all funds received. 
+                Return unused amounts or request additional funds if you overspent.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert className="border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30">
+                <Info className="h-4 w-4 text-purple-600" />
+                <AlertTitle className="text-purple-800 dark:text-purple-200">How Reconciliation Works</AlertTitle>
+                <AlertDescription className="text-purple-700 dark:text-purple-300 text-sm mt-2">
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Go to <strong>"Outstanding"</strong> tab to see advances pending reconciliation</li>
+                    <li>Click <strong>"Reconcile"</strong> on an advance to start the process</li>
+                    <li>Upload receipts and document how funds were spent</li>
+                    <li>If you spent less, indicate the amount to return</li>
+                    <li>If you overspent, submit a reimbursement request for the difference</li>
+                  </ol>
+                </AlertDescription>
+              </Alert>
+              
+              <div className="text-center py-8 text-muted-foreground">
+                <RefreshCw className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                <h3 className="text-lg font-semibold mb-2">No Active Reconciliation</h3>
+                <p className="mb-4">Select an outstanding advance to begin reconciliation.</p>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setActiveTab("outstanding")}
+                  data-testid="button-go-outstanding"
+                >
+                  <CircleDollarSign className="h-4 w-4 mr-2" />
+                  View Outstanding Advances
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Outstanding Advances Tab */}
+        <TabsContent value="outstanding" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <CircleDollarSign className="h-5 w-5 text-amber-600" />
+                <CardTitle>Outstanding Advances</CardTitle>
+              </div>
+              <CardDescription>
+                View all advance payments that are pending reconciliation. Track amounts received vs. spent and due dates for submitting receipts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <OutstandingAdvances 
+                requests={[]}
+                onReconcile={(request) => {
+                  toast({
+                    title: 'Reconciliation Started',
+                    description: `Starting reconciliation for advance of ${request.currency} ${((request.requestedAmountCents || 0) / 100).toLocaleString()}`,
+                  });
+                  setActiveTab("reconciliation");
+                }}
+                onViewDetails={(request) => {
+                  toast({
+                    title: 'Advance Details',
+                    description: `Viewing details for request: ${request.title}`,
+                  });
+                }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Submissions History Tab */}
         <TabsContent value="history" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5 text-slate-600" />
+                <CardTitle>
+                  {isAdmin ? "All Cost Submissions" : isSupervisor ? "Team Submissions" : isCountryDirector ? "Submissions Overview" : "My Submissions"}
+                </CardTitle>
+              </div>
+              <CardDescription>
+                {isAdmin 
+                  ? "Review and manage all cost submissions across the organization. Approve, reject, or request more information."
+                  : isSupervisor
+                    ? "Review cost submissions from your team members. Verify and forward for admin approval."
+                    : "Track the status of your submitted costs and view approval history."
+                }
+              </CardDescription>
+            </CardHeader>
+          </Card>
           {isLoading ? (
             <Card>
               <CardContent className="pt-6">
