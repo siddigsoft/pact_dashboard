@@ -31,6 +31,7 @@ import '../screens/digital_signatures_screen.dart';
 import '../screens/calendar_screen.dart';
 import '../screens/documents_screen.dart';
 import '../screens/site_visit_detail_screen.dart';
+import '../screens/cost_submission_screen.dart';
 
 class CustomDrawerMenu extends ConsumerStatefulWidget {
   final User? currentUser;
@@ -490,6 +491,21 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                             context,
                             MaterialPageRoute(
                               builder: (context) => const WalletScreen(),
+                            ),
+                          );
+                          widget.onClose();
+                        },
+                      ),
+                      _MenuItemData(
+                        icon: Icons.receipt_long_rounded,
+                        title: 'Cost Submission',
+                        subtitle: 'Submit operational expenses',
+                        iconColor: Colors.orange,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const CostSubmissionScreen(),
                             ),
                           );
                           widget.onClose();
