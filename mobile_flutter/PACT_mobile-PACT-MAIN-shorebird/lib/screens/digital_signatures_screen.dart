@@ -46,29 +46,47 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
   Future<void> _loadSignatures() async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        debugPrint('No user logged in');
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+      
+      debugPrint('Loading signatures for user: $userId');
 
-      final signaturesResponse = await Supabase.instance.client
-          .from('user_signatures')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
+      // Load user signatures
+      List<Map<String, dynamic>> signatures = [];
+      try {
+        final signaturesResponse = await Supabase.instance.client
+            .from('user_signatures')
+            .select()
+            .eq('user_id', userId)
+            .order('created_at', ascending: false);
+        signatures = List<Map<String, dynamic>>.from(signaturesResponse as List);
+        debugPrint('Loaded ${signatures.length} signatures');
+      } catch (e) {
+        debugPrint('Error loading user_signatures: $e');
+      }
 
-      final historyResponse = await Supabase.instance.client
-          .from('signature_logs')
-          .select('*, document:document_id(*)')
-          .eq('user_id', userId)
-          .order('signed_at', ascending: false)
-          .limit(50);
+      // Load signature history separately (don't fail if this table doesn't exist)
+      List<Map<String, dynamic>> history = [];
+      try {
+        final historyResponse = await Supabase.instance.client
+            .from('signature_logs')
+            .select('*, document:document_id(*)')
+            .eq('user_id', userId)
+            .order('signed_at', ascending: false)
+            .limit(50);
+        history = List<Map<String, dynamic>>.from(historyResponse as List);
+        debugPrint('Loaded ${history.length} history items');
+      } catch (e) {
+        debugPrint('Error loading signature_logs (non-critical): $e');
+      }
 
       if (mounted) {
         setState(() {
-          _signatures = List<Map<String, dynamic>>.from(
-            signaturesResponse as List,
-          );
-          _signatureHistory = List<Map<String, dynamic>>.from(
-            historyResponse as List,
-          );
+          _signatures = signatures;
+          _signatureHistory = history;
           _isLoading = false;
         });
       }
