@@ -848,6 +848,31 @@ const UserDetail: React.FC = () => {
                     )}
                   </div>
                   <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Secondary Hub (Optional)</h3>
+                    {editMode ? (
+                      <Select
+                        value={editForm.secondaryHubId || "__none__"}
+                        onValueChange={(value) => handleEditChange("secondaryHubId", value === "__none__" ? undefined : value)}
+                      >
+                        <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
+                          <SelectValue placeholder="No secondary hub" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No secondary hub</SelectItem>
+                          {hubs.filter(hub => hub.id !== editForm.hubId).map((hub) => (
+                            <SelectItem key={hub.id} value={hub.id}>
+                              {hub.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">
+                        {user.secondaryHubId ? (hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId) : 'None'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
                     <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">State</h3>
                     {editMode ? (
                       <Select
