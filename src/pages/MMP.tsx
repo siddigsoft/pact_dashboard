@@ -1842,16 +1842,44 @@ const MMP = () => {
   // This ensures sites are visible even if MMP context hasn't loaded site entries yet
   useEffect(() => {
     const loadDispatchedSitesForEnumerator = async () => {
-      if (!canClaimSites || !currentUser?.id || !currentUser?.stateId) return;
+      if (!canClaimSites || !currentUser?.id) {
+        console.log('[MMP Direct Load] Skipped - canClaimSites:', canClaimSites, 'userId:', currentUser?.id);
+        return;
+      }
+      
+      console.log('[MMP Direct Load] Starting... User stateId:', currentUser?.stateId, 'localityId:', currentUser?.localityId);
       
       setLoadingEnumerator(true);
       try {
-        // Get collector's state name for filtering
-        const collectorStateName = sudanStates.find(s => s.id === currentUser.stateId)?.name;
+        // Try multiple approaches to determine the collector's state name
+        // 1. Look up by ID in sudanStates (e.g., 'northern' -> 'Northern')
+        // 2. Use stateId directly if it looks like a state name (e.g., 'Northern')
+        // 3. Case-insensitive matching
+        let collectorStateName = sudanStates.find(s => s.id === currentUser.stateId)?.name;
+        
         if (!collectorStateName) {
-          console.warn('[MMP] Could not find state name for:', currentUser.stateId);
+          // stateId might already be the state name (e.g., 'Northern' instead of 'northern')
+          const stateByName = sudanStates.find(s => 
+            s.name.toLowerCase() === (currentUser.stateId || '').toLowerCase()
+          );
+          if (stateByName) {
+            collectorStateName = stateByName.name;
+          }
+        }
+        
+        if (!collectorStateName && currentUser.stateId) {
+          // Use stateId directly as a fallback - might be stored as name
+          collectorStateName = currentUser.stateId;
+          console.log('[MMP Direct Load] Using stateId directly as state name:', collectorStateName);
+        }
+        
+        if (!collectorStateName) {
+          console.warn('[MMP Direct Load] No state found for user. stateId:', currentUser.stateId);
+          setLoadingEnumerator(false);
           return;
         }
+
+        console.log('[MMP Direct Load] Querying dispatched sites for state:', collectorStateName);
 
         // Query dispatched sites directly from database
         const { data: dispatchedSites, error } = await supabase
@@ -1864,11 +1892,11 @@ const MMP = () => {
           .limit(500);
 
         if (error) {
-          console.error('[MMP] Error loading dispatched sites:', error);
+          console.error('[MMP Direct Load] DB Error:', error);
           return;
         }
 
-        console.log(`📊 [MMP Direct Load] Found ${dispatchedSites?.length || 0} dispatched sites for ${collectorStateName}`);
+        console.log(`📊 [MMP Direct Load] Found ${dispatchedSites?.length || 0} dispatched sites for "${collectorStateName}"`);
 
         if (dispatchedSites && dispatchedSites.length > 0) {
           // Format entries for display
@@ -1895,9 +1923,12 @@ const MMP = () => {
             return acc;
           }, {});
           setEnumeratorGroupedByStates(grouped);
+          console.log('[MMP Direct Load] Successfully loaded sites. Groups:', Object.keys(grouped).length);
+        } else {
+          console.log('[MMP Direct Load] No dispatched sites found for this state');
         }
       } catch (error) {
-        console.error('[MMP] Failed to load dispatched sites:', error);
+        console.error('[MMP Direct Load] Failed:', error);
       } finally {
         setLoadingEnumerator(false);
       }
@@ -2619,13 +2650,19 @@ const MMP = () => {
   }, [canClaimSites, currentUser?.id]);
 
   // Set enumerator state from derived data
+  // IMPORTANT: Only update availableSites/groupedByStates if enumeratorData has results
+  // This prevents overwriting data from the direct database load above
   useEffect(() => {
-    setEnumeratorSiteEntries(enumeratorData.availableSites);
-    setEnumeratorGroupedByStates(enumeratorData.groupedByStateLocality);
+    // Only update available sites if enumeratorData has results
+    // (the direct DB load populates these if context data isn't ready)
+    if (enumeratorData.availableSites.length > 0) {
+      setEnumeratorSiteEntries(enumeratorData.availableSites);
+      setEnumeratorGroupedByStates(enumeratorData.groupedByStateLocality);
+    }
     setEnumeratorGroupedByLocality({});
     setEnumeratorSmartAssigned(enumeratorData.smartAssigned);
     setEnumeratorMySites(enumeratorData.mySites);
-    setLoadingEnumerator(enumeratorData.loading);
+    // Don't override loading state if we're in the middle of direct loading
   }, [enumeratorData]);
 
   // Load smart assigned site entries only when the tab is active
