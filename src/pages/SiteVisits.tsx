@@ -30,6 +30,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { getStatusColor, getStatusLabel, getStatusDescription, isOverdue } from "@/utils/siteVisitUtils";
 import { useToast } from "@/hooks/use-toast";
 import FloatingMessenger from "@/components/communication/FloatingMessenger";
+import { RequestDownPaymentButton } from "@/components/site-visit/RequestDownPaymentButton";
 import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
@@ -768,7 +769,25 @@ const SiteVisits = () => {
             </CardContent>
             
             {/* Mobile-optimized footer with larger touch target */}
-            <CardFooter className="bg-muted/20 p-3 sm:p-4">
+            <CardFooter className="bg-muted/20 p-3 sm:p-4 flex flex-col gap-2">
+              {/* Show Request Advance button for accepted/ongoing sites with transport budget */}
+              {['accepted', 'ongoing', 'in progress', 'in_progress', 'assigned'].includes(visit.status?.toLowerCase() || '') && 
+               (visit.assignedTo === currentUser?.id || (visit as any).accepted_by === currentUser?.id || (visit as any).acceptedBy === currentUser?.id) &&
+               ((visit as any).transport_fee > 0 || (visit as any).transportFee > 0 || (visit.fees?.transport && visit.fees.transport > 0)) && (
+                <RequestDownPaymentButton
+                  site={{
+                    id: (visit as any).mmpSiteEntryId || (visit as any).mmp_site_entry_id || visit.id,
+                    siteName: visit.siteName,
+                    transportFee: (visit as any).transport_fee || (visit as any).transportFee || visit.fees?.transport || 0,
+                    hubId: (visit as any).hub_id || (visit as any).hubId,
+                    hubName: (visit as any).hub_name || (visit as any).hubName,
+                    status: visit.status
+                  }}
+                  variant="outline"
+                  size="default"
+                  className="w-full min-h-[44px]"
+                />
+              )}
               <Button 
                 asChild 
                 className="w-full shadow-sm hover:shadow-md transition-all min-h-[44px] text-sm sm:text-base py-3 active:scale-95" 
