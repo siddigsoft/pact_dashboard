@@ -428,6 +428,8 @@ const MMP = () => {
   const [dispatchedSiteEntries, setDispatchedSiteEntries] = useState<any[]>([]);
   const [loadingDispatched, setLoadingDispatched] = useState(false);
   const [dispatchedCount, setDispatchedCount] = useState(0);
+  const [dispatchedStateFilter, setDispatchedStateFilter] = useState<string>('all');
+  const [dispatchedLocalityFilter, setDispatchedLocalityFilter] = useState<string>('all');
   const [acceptedSiteEntries, setAcceptedSiteEntries] = useState<any[]>([]);
   const [loadingAccepted, setLoadingAccepted] = useState(false);
   const [acceptedCount, setAcceptedCount] = useState(0);
@@ -2316,6 +2318,55 @@ const MMP = () => {
       });
   }, [mmpFiles, verifiedMMPIds]);
 
+  // Memoized filter options for dispatched site entries
+  const dispatchedFilterOptions = useMemo(() => {
+    const states = new Set<string>();
+    const localitiesByState: Record<string, Set<string>> = {};
+    
+    dispatchedSiteEntries.forEach(entry => {
+      const state = entry.state || entry.stateName || '';
+      const locality = entry.locality || entry.localityName || '';
+      
+      if (state) {
+        states.add(state);
+        if (!localitiesByState[state]) {
+          localitiesByState[state] = new Set();
+        }
+        if (locality) {
+          localitiesByState[state].add(locality);
+        }
+      }
+    });
+    
+    return {
+      states: Array.from(states).sort(),
+      localitiesByState: Object.fromEntries(
+        Object.entries(localitiesByState).map(([state, locs]) => [state, Array.from(locs).sort()])
+      )
+    };
+  }, [dispatchedSiteEntries]);
+
+  // Filtered dispatched entries based on state/locality selection
+  const filteredDispatchedEntries = useMemo(() => {
+    let filtered = dispatchedSiteEntries;
+    
+    if (dispatchedStateFilter !== 'all') {
+      filtered = filtered.filter(entry => {
+        const state = entry.state || entry.stateName || '';
+        return state === dispatchedStateFilter;
+      });
+    }
+    
+    if (dispatchedLocalityFilter !== 'all') {
+      filtered = filtered.filter(entry => {
+        const locality = entry.locality || entry.localityName || '';
+        return locality === dispatchedLocalityFilter;
+      });
+    }
+    
+    return filtered;
+  }, [dispatchedSiteEntries, dispatchedStateFilter, dispatchedLocalityFilter]);
+
   // Note: verifiedTabSiteEntryCounts is now derived from precomputedSubcategorySites
   // which is calculated after buildSiteRowsFromMMPs is defined (around line 2736)
 
@@ -3835,12 +3886,64 @@ const MMP = () => {
                     </Card>
                   ) : (
                     <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold">Dispatched Site Entries</h3>
-                        <Badge variant="secondary">{dispatchedSiteEntries.length} entries</Badge>
+                      <div className="flex flex-col gap-3 mb-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-semibold">Dispatched Site Entries</h3>
+                          <Badge variant="secondary">{filteredDispatchedEntries.length} of {dispatchedSiteEntries.length} entries</Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm text-muted-foreground">State:</label>
+                            <Select value={dispatchedStateFilter} onValueChange={(val) => {
+                              setDispatchedStateFilter(val);
+                              setDispatchedLocalityFilter('all');
+                            }}>
+                              <SelectTrigger className="w-[180px] h-8">
+                                <SelectValue placeholder="All States" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All States</SelectItem>
+                                {dispatchedFilterOptions.states.map(state => (
+                                  <SelectItem key={state} value={state}>{state}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm text-muted-foreground">Locality:</label>
+                            <Select 
+                              value={dispatchedLocalityFilter} 
+                              onValueChange={setDispatchedLocalityFilter}
+                              disabled={dispatchedStateFilter === 'all'}
+                            >
+                              <SelectTrigger className="w-[180px] h-8">
+                                <SelectValue placeholder="All Localities" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Localities</SelectItem>
+                                {(dispatchedStateFilter !== 'all' && dispatchedFilterOptions.localitiesByState[dispatchedStateFilter] || []).map(locality => (
+                                  <SelectItem key={locality} value={locality}>{locality}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {(dispatchedStateFilter !== 'all' || dispatchedLocalityFilter !== 'all') && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => {
+                                setDispatchedStateFilter('all');
+                                setDispatchedLocalityFilter('all');
+                              }}
+                              className="h-8"
+                            >
+                              Clear Filters
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <MMPSiteEntriesTable 
-                        siteEntries={dispatchedSiteEntries} 
+                        siteEntries={filteredDispatchedEntries} 
                         editable={false}
                       />
                     </div>
