@@ -1033,131 +1033,221 @@ const UserDetail: React.FC = () => {
 
               {canManageClassifications && (
                 <TabsContent value="classification">
-                  <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div>
-                        <h3 className="text-lg font-semibold">Current Classification</h3>
-                        <p className="text-sm text-muted-foreground">Manage user classification and retainer</p>
+                  <div className="space-y-6">
+                    {/* Header Section */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <ShieldCheck className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold">Classification & Compensation</h3>
+                          <p className="text-sm text-muted-foreground">Manage user classification level and retainer fees</p>
+                        </div>
                       </div>
                       <Button
                         onClick={() => setClassificationDialogOpen(true)}
-                        className="min-h-[44px] px-4 w-full sm:w-auto"
+                        className="min-h-[44px] px-5 w-full sm:w-auto shadow-sm"
                         data-testid="button-manage-classification"
                       >
-                        <Plus className="h-4 w-4 mr-2" />
-                        {userClassification ? 'Update Classification' : 'Assign Classification'}
+                        {userClassification ? (
+                          <>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Update Classification
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Assign Classification
+                          </>
+                        )}
                       </Button>
                     </div>
 
+                    {/* Current Classification Card */}
                     {userClassification ? (
-                      <Card>
-                        <CardHeader className="p-4 sm:p-6">
-                          <CardTitle className="text-base">Active Classification</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 sm:p-6 space-y-4">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-sm text-muted-foreground mb-2">Level</p>
-                              <ClassificationBadge 
-                                level={userClassification.classificationLevel} 
-                                size="md"
-                                showTooltip={false}
-                              />
+                      <Card className="overflow-hidden border-l-4 border-l-primary shadow-sm">
+                        <CardHeader className="p-4 sm:p-5 bg-gradient-to-r from-primary/5 to-transparent">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Award className="h-5 w-5 text-primary" />
+                              <CardTitle className="text-base font-semibold">Active Classification</CardTitle>
                             </div>
-                            <div>
-                              <p className="text-sm text-muted-foreground">Role Scope</p>
-                              <p className="font-medium text-base">{userClassification.roleScope}</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-muted-foreground">Effective From</p>
-                              <p className="font-medium text-base">
-                                {new Date(userClassification.effectiveFrom).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-muted-foreground">Status</p>
-                              <p className="font-medium text-base">
-                                {userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date()
-                                  ? 'Expired'
-                                  : 'Active'}
-                              </p>
-                            </div>
-                            {userClassification.hasRetainer && userClassification.retainerAmountCents && (
-                              <>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">Retainer Amount</p>
-                                  <p className="font-medium text-base">
-                                    {(userClassification.retainerAmountCents / 100).toFixed(2)} {userClassification.retainerCurrency}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-sm text-muted-foreground">Retainer Period</p>
-                                  <p className="font-medium text-base capitalize">{userClassification.retainerFrequency}</p>
-                                </div>
-                              </>
-                            )}
+                            <Badge 
+                              variant={userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date() ? "destructive" : "default"}
+                              className="text-xs"
+                            >
+                              {userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date() ? 'Expired' : 'Active'}
+                            </Badge>
                           </div>
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      <Alert>
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>No Classification Assigned</AlertTitle>
-                        <AlertDescription>
-                          This user doesn't have a classification assigned yet. Click the button above to assign one.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    {classificationHistory.length > 0 ? (
-                      <Card>
-                        <CardHeader className="p-4 sm:p-6">
-                          <CardTitle className="text-base">Classification History</CardTitle>
                         </CardHeader>
-                        <CardContent className="p-4 sm:p-6">
-                          <div className="space-y-2">
-                            {classificationHistory.map((history) => (
-                              <div key={history.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 bg-muted rounded min-h-[80px] gap-2">
-                                <div className="space-y-2 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <ClassificationBadge 
-                                      level={history.classificationLevel} 
-                                      size="sm"
-                                      showTooltip={false}
-                                    />
-                                    <span className="text-sm font-medium">{history.roleScope}</span>
+                        <CardContent className="p-4 sm:p-5">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div className="bg-muted/50 rounded-lg p-3 text-center">
+                              <p className="text-xs text-muted-foreground mb-1">Level</p>
+                              <div className="flex justify-center">
+                                <ClassificationBadge 
+                                  level={userClassification.classificationLevel} 
+                                  size="md"
+                                  showTooltip={false}
+                                />
+                              </div>
+                            </div>
+                            <div className="bg-muted/50 rounded-lg p-3 text-center">
+                              <p className="text-xs text-muted-foreground mb-1">Role</p>
+                              <p className="font-semibold text-sm capitalize">{userClassification.roleScope}</p>
+                            </div>
+                            <div className="bg-muted/50 rounded-lg p-3 text-center">
+                              <p className="text-xs text-muted-foreground mb-1">Effective From</p>
+                              <p className="font-semibold text-sm">
+                                {new Date(userClassification.effectiveFrom).toLocaleDateString('en-US', { 
+                                  month: 'short', day: 'numeric', year: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                            <div className="bg-muted/50 rounded-lg p-3 text-center">
+                              <p className="text-xs text-muted-foreground mb-1">Valid Until</p>
+                              <p className="font-semibold text-sm">
+                                {userClassification.effectiveUntil 
+                                  ? new Date(userClassification.effectiveUntil).toLocaleDateString('en-US', { 
+                                      month: 'short', day: 'numeric', year: 'numeric' 
+                                    })
+                                  : 'Ongoing'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* Retainer Section */}
+                          {userClassification.hasRetainer && userClassification.retainerAmountCents ? (
+                            <div className="mt-4 pt-4 border-t">
+                              <div className="flex items-center gap-2 mb-3">
+                                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                <p className="text-sm font-medium">Retainer Details</p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/30 rounded-lg p-3">
+                                  <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/50">
+                                    <CreditCard className="h-4 w-4 text-green-600 dark:text-green-400" />
                                   </div>
-                                  <p className="text-sm text-muted-foreground">
-                                    {new Date(history.effectiveFrom).toLocaleDateString()} - 
-                                    {history.effectiveUntil ? new Date(history.effectiveUntil).toLocaleDateString() : 'Present'}
-                                  </p>
-                                  {history.changeReason && (
-                                    <p className="text-xs text-muted-foreground italic">
-                                      Reason: {history.changeReason}
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Amount</p>
+                                    <p className="font-bold text-lg text-green-700 dark:text-green-400">
+                                      {(userClassification.retainerAmountCents / 100).toLocaleString()} {userClassification.retainerCurrency}
                                     </p>
-                                  )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3">
+                                  <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/50">
+                                    <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground">Frequency</p>
+                                    <p className="font-semibold text-base capitalize">{userClassification.retainerFrequency}</p>
+                                  </div>
                                 </div>
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                          ) : (
+                            <div className="mt-4 pt-4 border-t">
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <CreditCard className="h-4 w-4" />
+                                <p className="text-sm">No retainer fee configured</p>
+                              </div>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
-                    ) : !loadingHistory ? (
-                      <Alert>
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>No Classification History</AlertTitle>
-                        <AlertDescription>
-                          This user has no classification history available.
-                        </AlertDescription>
-                      </Alert>
                     ) : (
-                      <Card>
-                        <CardContent className="p-6 text-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                          <p className="text-sm text-muted-foreground">Loading classification history...</p>
+                      <Card className="border-dashed border-2">
+                        <CardContent className="p-8 text-center">
+                          <div className="p-4 rounded-full bg-muted/50 inline-block mb-4">
+                            <ShieldCheck className="h-8 w-8 text-muted-foreground" />
+                          </div>
+                          <h4 className="font-semibold text-lg mb-2">No Classification Assigned</h4>
+                          <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                            This user doesn't have a classification level yet. Assign one to enable fee calculations and retainer payments.
+                          </p>
                         </CardContent>
                       </Card>
                     )}
+
+                    {/* Classification History */}
+                    <Card className="shadow-sm">
+                      <CardHeader className="p-4 sm:p-5 border-b bg-muted/30">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <CardTitle className="text-base font-semibold">Classification History</CardTitle>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-4 sm:p-5">
+                        {loadingHistory ? (
+                          <div className="flex flex-col items-center justify-center py-8">
+                            <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent mb-3"></div>
+                            <p className="text-sm text-muted-foreground">Loading history...</p>
+                          </div>
+                        ) : classificationHistory.length > 0 ? (
+                          <div className="relative">
+                            {/* Timeline line */}
+                            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border hidden sm:block" />
+                            
+                            <div className="space-y-3">
+                              {classificationHistory.map((history, index) => (
+                                <div 
+                                  key={history.id} 
+                                  className="relative flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors"
+                                >
+                                  {/* Timeline dot */}
+                                  <div className="hidden sm:flex absolute -left-0.5 top-5 h-3 w-3 rounded-full border-2 border-primary bg-background" />
+                                  
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                      <ClassificationBadge 
+                                        level={history.classificationLevel} 
+                                        size="sm"
+                                        showTooltip={false}
+                                      />
+                                      <Badge variant="outline" className="text-xs capitalize">
+                                        {history.roleScope}
+                                      </Badge>
+                                      {index === 0 && classificationHistory.length > 1 && (
+                                        <Badge variant="secondary" className="text-xs">Previous</Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                      <Calendar className="h-3.5 w-3.5" />
+                                      <span>
+                                        {new Date(history.effectiveFrom).toLocaleDateString('en-US', { 
+                                          month: 'short', day: 'numeric', year: 'numeric' 
+                                        })}
+                                        {' '}&rarr;{' '}
+                                        {history.effectiveUntil 
+                                          ? new Date(history.effectiveUntil).toLocaleDateString('en-US', { 
+                                              month: 'short', day: 'numeric', year: 'numeric' 
+                                            })
+                                          : 'Present'}
+                                      </span>
+                                    </div>
+                                    {history.changeReason && (
+                                      <p className="text-xs text-muted-foreground mt-2 pl-1 border-l-2 border-muted-foreground/30">
+                                        {history.changeReason}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <div className="p-3 rounded-full bg-muted mb-3">
+                              <Calendar className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                            <p className="text-sm text-muted-foreground">No classification history available</p>
+                            <p className="text-xs text-muted-foreground mt-1">History will appear here after the first assignment</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
                 </TabsContent>
               )}
