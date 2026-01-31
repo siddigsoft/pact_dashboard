@@ -53,6 +53,8 @@ interface Signature {
   user_name?: string;
   user_email?: string;
   hash?: string;
+  is_template?: boolean;
+  source_signature_id?: string;
 }
 
 export default function MobileSignatureAdmin() {
@@ -61,12 +63,13 @@ export default function MobileSignatureAdmin() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [templateFilter, setTemplateFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('all');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: signatures = [], isLoading, refetch } = useQuery({
-    queryKey: ['mobile-signatures', statusFilter, typeFilter],
+    queryKey: ['mobile-signatures', statusFilter, typeFilter, templateFilter],
     queryFn: async () => {
       // Fetch from digital_signatures (document signing events)
       let digitalQuery = supabase
@@ -83,6 +86,12 @@ export default function MobileSignatureAdmin() {
       }
       if (typeFilter !== 'all') {
         digitalQuery = digitalQuery.eq('signature_type', typeFilter);
+      }
+      // Filter by template status using explicit is_template field
+      if (templateFilter === 'templates') {
+        digitalQuery = digitalQuery.eq('is_template', true);
+      } else if (templateFilter === 'documents') {
+        digitalQuery = digitalQuery.or('is_template.is.null,is_template.eq.false');
       }
 
       const { data: digitalData, error: digitalError } = await digitalQuery;
@@ -260,6 +269,16 @@ export default function MobileSignatureAdmin() {
               <SelectItem value="drawn">Drawn</SelectItem>
               <SelectItem value="typed">Typed</SelectItem>
               <SelectItem value="initials">Initials</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={templateFilter} onValueChange={setTemplateFilter}>
+            <SelectTrigger className="w-[160px] h-11" data-testid="select-template-filter">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="templates">Mobile Templates</SelectItem>
+              <SelectItem value="documents">Document Signatures</SelectItem>
             </SelectContent>
           </Select>
         </div>
