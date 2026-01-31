@@ -28,6 +28,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
   final OperationalCostService _service = OperationalCostService();
   
   List<OperationalCostSubmission> _submissions = [];
+  List<OperationalCostSubmission> _outstandingAdvances = [];
   CostSubmissionPermissions _permissions = CostSubmissionPermissions.fromRole(null);
   OperationalCostStats _stats = OperationalCostStats.empty();
   bool _isLoading = true;
@@ -63,11 +64,15 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
     try {
       _permissions = await _service.getUserPermissions();
       
+      // Fetch submissions based on role
       if (_permissions.canViewTeam) {
         _submissions = await _service.getAllSubmissions();
       } else {
         _submissions = await _service.getUserSubmissions();
       }
+      
+      // Fetch outstanding advances separately (user's own advances needing reconciliation)
+      _outstandingAdvances = await _service.getOutstandingAdvances();
       
       _stats = OperationalCostStats.fromSubmissions(_submissions);
       
@@ -107,55 +112,8 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
         actions: [
-          // Role badge
-          if (_permissions.isAdmin)
-            Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.shield, size: 14, color: Colors.purple.shade700),
-                  const SizedBox(width: 4),
-                  Text(
-                    widget.isArabic ? 'مشرف' : 'Admin',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.purple.shade700,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else if (_permissions.isSupervisor)
-            Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.group, size: 14, color: Colors.blue.shade700),
-                  const SizedBox(width: 4),
-                  Text(
-                    widget.isArabic ? 'مشرف' : 'Supervisor',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue.shade700,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          // Role badge - shows current user role
+          _buildRoleBadge(),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
@@ -219,16 +177,16 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
                             onSuccess: _onSubmissionSuccess,
                             canSubmit: _permissions.canSubmit,
                           ),
-                          // Reconciliation tab
+                          // Reconciliation tab - user's own advances that need reconciliation
                           CostReconciliationTab(
                             isArabic: widget.isArabic,
-                            submissions: _submissions.where((s) => s.needsReconciliation).toList(),
+                            submissions: _outstandingAdvances,
                             onReconciled: _loadData,
                           ),
-                          // Outstanding advances tab
+                          // Outstanding advances tab - user's own paid advances not yet reconciled
                           CostOutstandingTab(
                             isArabic: widget.isArabic,
-                            submissions: _submissions.where((s) => s.needsReconciliation).toList(),
+                            submissions: _outstandingAdvances,
                           ),
                           // History tab
                           CostHistoryTab(
@@ -242,6 +200,60 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
                     ),
                   ],
                 ),
+    );
+  }
+
+  Widget _buildRoleBadge() {
+    MaterialColor badgeMaterialColor;
+    IconData badgeIcon;
+    
+    if (_permissions.isSuperAdmin) {
+      badgeMaterialColor = Colors.purple;
+      badgeIcon = Icons.admin_panel_settings;
+    } else if (_permissions.isAdmin) {
+      badgeMaterialColor = Colors.purple;
+      badgeIcon = Icons.shield;
+    } else if (_permissions.isCountryDirector) {
+      badgeMaterialColor = Colors.indigo;
+      badgeIcon = Icons.public;
+    } else if (_permissions.isFOM) {
+      badgeMaterialColor = Colors.teal;
+      badgeIcon = Icons.work;
+    } else if (_permissions.isSupervisor) {
+      badgeMaterialColor = Colors.blue;
+      badgeIcon = Icons.group;
+    } else if (_permissions.isCoordinator) {
+      badgeMaterialColor = Colors.green;
+      badgeIcon = Icons.person;
+    } else if (_permissions.isDataCollector) {
+      badgeMaterialColor = Colors.orange;
+      badgeIcon = Icons.assignment_ind;
+    } else {
+      return const SizedBox.shrink();
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeMaterialColor.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(badgeIcon, size: 14, color: badgeMaterialColor.shade700),
+          const SizedBox(width: 4),
+          Text(
+            _permissions.getRoleDisplayName(widget.isArabic),
+            style: TextStyle(
+              fontSize: 12,
+              color: badgeMaterialColor.shade700,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
