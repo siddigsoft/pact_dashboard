@@ -498,43 +498,59 @@ const UserDetail: React.FC = () => {
   }
 
   return (
-    <div className="container max-w-5xl mx-auto p-3 pt-36 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 md:space-y-8 pb-24 sm:pb-8">
-      <div className="flex items-center justify-between mb-2">
+    <div className="container max-w-6xl mx-auto p-3 pt-20 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-24 sm:pb-8">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-4">
+          <Button 
+            onClick={() => navigate("/users")} 
+            variant="ghost" 
+            size="icon"
+            className="h-10 w-10 rounded-full bg-muted/50 hover:bg-muted"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">User Profile</h1>
+            <p className="text-sm text-muted-foreground">View and manage user details</p>
+          </div>
+        </div>
         {isAdmin && !editMode && (
-          <Button onClick={handleEdit} variant="outline" className="min-h-[44px] px-4">
-            <Edit className="h-4 w-4 mr-1" />
+          <Button onClick={handleEdit} variant="default" className="min-h-[44px] px-5 shadow-sm">
+            <Edit className="h-4 w-4 mr-2" />
             Edit User
           </Button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8 mt-20 sm:mt-20 md:mt-24">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Profile Card */}
-        <Card className="lg:col-span-1 shadow-lg border-0 bg-gradient-to-b from-primary/5 to-background">
-          <CardContent className="pt-4 sm:pt-6 md:pt-8 pb-3 sm:pb-4 md:pb-6 px-3 sm:px-4 md:px-6 flex flex-col items-center">
-            <Avatar className="h-20 w-20 sm:h-24 md:h-32 md:w-32 shadow-lg border-4 border-background -mt-12 sm:-mt-16 md:-mt-20 mb-3 sm:mb-4">
+        <Card className="lg:col-span-1 shadow-md border overflow-hidden">
+          <div className="h-24 bg-gradient-to-br from-primary/20 via-primary/10 to-transparent" />
+          <CardContent className="pb-4 sm:pb-6 px-4 sm:px-6 flex flex-col items-center -mt-12">
+            <Avatar className="h-24 w-24 sm:h-28 sm:w-28 shadow-xl border-4 border-background ring-4 ring-primary/10 mb-4">
               {user.avatar ? (
-                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarImage src={user.avatar} alt={user.name} className="object-cover" />
               ) : (
-                <AvatarFallback className="bg-primary text-primary-foreground text-xl sm:text-2xl md:text-3xl">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-2xl sm:text-3xl font-bold">
                   {getInitials(user.name)}
                 </AvatarFallback>
               )}
             </Avatar>
-            <div className="text-center w-full px-2">
+            <div className="text-center w-full">
               {editMode ? (
                 <Input
-                  className="font-bold text-lg sm:text-xl md:text-2xl text-center mb-2 h-12 min-h-[44px]"
+                  className="font-bold text-lg sm:text-xl text-center mb-3 h-12 min-h-[44px]"
                   value={editForm.name || ""}
                   onChange={e => handleEditChange("name", e.target.value)}
                 />
               ) : (
-                <h2 className="text-lg sm:text-xl md:text-2xl font-bold leading-tight">{user.name}</h2>
+                <h2 className="text-lg sm:text-xl font-bold leading-tight mb-1">{user.name}</h2>
               )}
-              <div className="flex flex-wrap justify-center items-center gap-1 sm:gap-2 mt-2">
+              <div className="flex flex-wrap justify-center items-center gap-2 mt-3">
                 {editMode ? (
                   <select
-                    className="border rounded px-3 py-2 text-center min-h-[44px] text-sm w-full max-w-xs"
+                    className="border rounded-lg px-3 py-2 text-center min-h-[44px] text-sm w-full max-w-xs bg-background"
                     value={editForm.role || ""}
                     onChange={e => handleEditChange("role", e.target.value)}
                   >
@@ -547,7 +563,10 @@ const UserDetail: React.FC = () => {
                   <>
                     <RoleBadge role={user.role} size="sm" />
                     <UserClassificationBadge userId={user.id} />
-                    <Badge className="min-h-[32px] px-2 sm:px-3 text-xs sm:text-sm" variant={user.isApproved ? "default" : "destructive"}>
+                    <Badge 
+                      className="px-3 py-1" 
+                      variant={user.isApproved ? "default" : "destructive"}
+                    >
                       {user.isApproved ? "Active" : "Pending"}
                     </Badge>
                   </>
@@ -717,69 +736,74 @@ const UserDetail: React.FC = () => {
         </Card>
 
         {/* Details Tabs */}
-        <Card className="lg:col-span-2 shadow-lg border-0">
-          <CardHeader className="p-3 sm:p-4 md:p-6">
-            <CardTitle className="text-base sm:text-lg md:text-xl">User Details</CardTitle>
+        <Card className="lg:col-span-2 shadow-md border overflow-hidden">
+          <CardHeader className="p-4 sm:p-5 border-b bg-muted/30">
+            <div className="flex items-center gap-2">
+              <UserIcon className="h-5 w-5 text-primary" />
+              <CardTitle className="text-lg font-semibold">User Details</CardTitle>
+            </div>
           </CardHeader>
-          <CardContent className="p-3 sm:p-4 md:p-6">
+          <CardContent className="p-4 sm:p-5">
             <Tabs defaultValue="details" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 h-auto p-1 mb-3 sm:mb-4">
-                <TabsTrigger value="details" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 h-auto p-1.5 mb-5 bg-muted/50 rounded-lg">
+                <TabsTrigger value="details" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
                   <UserIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Details</span>
+                  <span>Details</span>
                 </TabsTrigger>
-                <TabsTrigger value="performance" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+                <TabsTrigger value="performance" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
                   <Award className="h-4 w-4" />
                   <span className="hidden sm:inline">Performance</span>
+                  <span className="sm:hidden">Perf</span>
                 </TabsTrigger>
-                <TabsTrigger value="bankak" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+                <TabsTrigger value="bankak" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
                   <CreditCard className="h-4 w-4" />
-                  <span className="hidden sm:inline">Bank</span>
+                  <span>Bank</span>
                 </TabsTrigger>
-                <TabsTrigger value="location" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+                <TabsTrigger value="location" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
                   <MapPin className="h-4 w-4" />
                   <span className="hidden sm:inline">Location</span>
+                  <span className="sm:hidden">Loc</span>
                 </TabsTrigger>
                 {canManageClassifications && (
-                  <TabsTrigger value="classification" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
-                    <Award className="h-4 w-4" />
-                    <span className="hidden sm:inline">Class</span>
+                  <TabsTrigger value="classification" className="flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] text-xs sm:text-sm rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    <ShieldCheck className="h-4 w-4" />
+                    <span>Class</span>
                   </TabsTrigger>
                 )}
               </TabsList>
               
-              <TabsContent value="details" className="space-y-3 sm:space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Full Name</h3>
+              <TabsContent value="details" className="space-y-4 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                    <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Full Name</h3>
                     {editMode ? (
                       <Input
                         value={editForm.name || ""}
                         onChange={e => handleEditChange("name", e.target.value)}
-                        className="h-11 min-h-[44px] text-sm sm:text-base"
+                        className="h-11 min-h-[44px] text-sm sm:text-base bg-background"
                       />
                     ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed">{user.name}</p>
+                      <p className="font-semibold text-base">{user.name}</p>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Email</h3>
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                    <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Email</h3>
                     {editMode ? (
                       <Input
                         type="email"
                         value={editForm.email || ""}
                         onChange={e => handleEditChange("email", e.target.value)}
-                        className="h-11 min-h-[44px] text-sm sm:text-base"
+                        className="h-11 min-h-[44px] text-sm sm:text-base bg-background"
                       />
                     ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base break-all leading-relaxed">{user.email}</p>
+                      <p className="font-semibold text-base break-all">{user.email}</p>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Role</h3>
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                    <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Role</h3>
                     {editMode ? (
                       <select
-                        className="border rounded px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base"
+                        className="border rounded-lg px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base bg-background"
                         value={editForm.role || ""}
                         onChange={e => handleEditChange("role", e.target.value)}
                       >
@@ -789,135 +813,145 @@ const UserDetail: React.FC = () => {
                         ))}
                       </select>
                     ) : (
-                      <div className="flex gap-2 items-center pt-1">
+                      <div className="flex gap-2 items-center">
                         <RoleBadge role={user.role} size="sm" />
                         <UserClassificationBadge userId={user.id} />
                       </div>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Employee ID</h3>
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                    <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Employee ID</h3>
                     {editMode ? (
                       <Input
                         value={editForm.employeeId || ""}
                         onChange={e => handleEditChange("employeeId", e.target.value)}
-                        className="h-11 min-h-[44px] text-sm sm:text-base"
+                        className="h-11 min-h-[44px] text-sm sm:text-base bg-background"
                       />
                     ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed">{user.employeeId || 'N/A'}</p>
+                      <p className="font-semibold text-base">{user.employeeId || <span className="text-muted-foreground">Not set</span>}</p>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Phone</h3>
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                    <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Phone</h3>
                     {editMode ? (
                       <Input
                         value={editForm.phone || ""}
                         onChange={e => handleEditChange("phone", e.target.value)}
-                        className="h-11 min-h-[44px] text-sm sm:text-base"
+                        className="h-11 min-h-[44px] text-sm sm:text-base bg-background"
                       />
                     ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed">{user.phone || 'N/A'}</p>
+                      <p className="font-semibold text-base">{user.phone || <span className="text-muted-foreground">Not set</span>}</p>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Status</h3>
-                    <Badge variant={user.isApproved ? "default" : "destructive"} className="mt-1 min-h-[32px] px-3 text-xs sm:text-sm">
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                    <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Status</h3>
+                    <Badge variant={user.isApproved ? "default" : "destructive"} className="px-3 py-1">
                       {user.isApproved ? 'Active' : 'Pending Approval'}
                     </Badge>
                   </div>
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Hub</h3>
-                    {editMode ? (
-                      <Select
-                        value={editForm.hubId || ""}
-                        onValueChange={(value) => handleEditChange("hubId", value)}
-                      >
-                        <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
-                          <SelectValue placeholder="Select hub" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {hubs.map((hub) => (
-                            <SelectItem key={hub.id} value={hub.id}>
-                              {hub.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{hubDisplayName || user.hubId || 'Not set'}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Secondary Hub (Optional)</h3>
-                    {editMode ? (
-                      <Select
-                        value={editForm.secondaryHubId || "__none__"}
-                        onValueChange={(value) => handleEditChange("secondaryHubId", value === "__none__" ? undefined : value)}
-                      >
-                        <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
-                          <SelectValue placeholder="No secondary hub" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">No secondary hub</SelectItem>
-                          {hubs.filter(hub => hub.id !== editForm.hubId).map((hub) => (
-                            <SelectItem key={hub.id} value={hub.id}>
-                              {hub.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">
-                        {user.secondaryHubId ? (hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId) : 'None'}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">State</h3>
-                    {editMode ? (
-                      <Select
-                        value={editForm.stateId || ""}
-                        onValueChange={(value) => handleEditChange("stateId", value)}
-                        disabled={!editForm.hubId}
-                      >
-                        <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
-                          <SelectValue placeholder="Select state" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableStates.map((state) => (
-                            <SelectItem key={state.id} value={state.id}>
-                              {state.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : 'Not set'}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Locality</h3>
-                    {editMode ? (
-                      <Select
-                        value={editForm.localityId || "__none__"}
-                        onValueChange={(value) => handleEditChange("localityId", value === "__none__" ? undefined : value)}
-                        disabled={!editForm.stateId}
-                      >
-                        <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
-                          <SelectValue placeholder="Select locality (optional)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {availableLocalities.map((locality) => (
-                            <SelectItem key={locality.id} value={locality.id}>
-                              {locality.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : 'Not set'}</p>
-                    )}
+                </div>
+
+                {/* Location Section */}
+                <div className="pt-4 border-t">
+                  <h4 className="font-semibold text-sm mb-4 flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    Location Information
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                      <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Hub</h3>
+                      {editMode ? (
+                        <Select
+                          value={editForm.hubId || ""}
+                          onValueChange={(value) => handleEditChange("hubId", value)}
+                        >
+                          <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base bg-background">
+                            <SelectValue placeholder="Select hub" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {hubs.map((hub) => (
+                              <SelectItem key={hub.id} value={hub.id}>
+                                {hub.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="font-semibold text-base">{hubDisplayName || user.hubId || <span className="text-muted-foreground">Not set</span>}</p>
+                      )}
+                    </div>
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                      <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Secondary Hub</h3>
+                      {editMode ? (
+                        <Select
+                          value={editForm.secondaryHubId || "__none__"}
+                          onValueChange={(value) => handleEditChange("secondaryHubId", value === "__none__" ? undefined : value)}
+                        >
+                          <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base bg-background">
+                            <SelectValue placeholder="No secondary hub" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">No secondary hub</SelectItem>
+                            {hubs.filter(hub => hub.id !== editForm.hubId).map((hub) => (
+                              <SelectItem key={hub.id} value={hub.id}>
+                                {hub.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="font-semibold text-base">
+                          {user.secondaryHubId ? (hubs.find(h => h.id === user.secondaryHubId)?.name || user.secondaryHubId) : <span className="text-muted-foreground">None</span>}
+                        </p>
+                      )}
+                    </div>
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                      <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">State</h3>
+                      {editMode ? (
+                        <Select
+                          value={editForm.stateId || ""}
+                          onValueChange={(value) => handleEditChange("stateId", value)}
+                          disabled={!editForm.hubId}
+                        >
+                          <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base bg-background">
+                            <SelectValue placeholder="Select state" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableStates.map((state) => (
+                              <SelectItem key={state.id} value={state.id}>
+                                {state.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="font-semibold text-base">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : <span className="text-muted-foreground">Not set</span>}</p>
+                      )}
+                    </div>
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                      <h3 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Locality</h3>
+                      {editMode ? (
+                        <Select
+                          value={editForm.localityId || "__none__"}
+                          onValueChange={(value) => handleEditChange("localityId", value === "__none__" ? undefined : value)}
+                          disabled={!editForm.stateId}
+                        >
+                          <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base bg-background">
+                            <SelectValue placeholder="Select locality (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">None</SelectItem>
+                            {availableLocalities.map((locality) => (
+                              <SelectItem key={locality.id} value={locality.id}>
+                                {locality.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="font-semibold text-base">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : <span className="text-muted-foreground">Not set</span>}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </TabsContent>
