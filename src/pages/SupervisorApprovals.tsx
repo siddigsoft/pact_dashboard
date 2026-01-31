@@ -77,7 +77,7 @@ export default function SupervisorApprovals() {
 
   const userRole = currentUser?.role?.toLowerCase();
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
-  const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'ict';
+  const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'ict' || userRole === 'superadmin';
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
 
   const supervisorHubId = currentUser?.hubId;
