@@ -731,11 +731,16 @@ export default function CostPredictions() {
     }).format(amount);
   };
 
-  // Memoized grouped records by Month → State → Locality for hierarchical preview
+  // Memoized grouped records by Hub → State → Month → Locality for hierarchical preview (matching MMP pattern)
   const groupedPreviewRecords = useMemo(() => {
-    if (parsedRecords.length === 0) return { grouped: {}, sortedMonths: [] as string[] };
+    if (parsedRecords.length === 0) return { 
+      grouped: {} as Record<string, Record<string, Record<string, Record<string, any[]>>>>,
+      sortedHubs: [] as string[],
+      totals: { sites: 0, cost: 0, missingCost: 0 }
+    };
     
-    const grouped: Record<string, Record<string, Record<string, any[]>>> = {};
+    // Hub → State → Month → Locality → Sites[]
+    const grouped: Record<string, Record<string, Record<string, Record<string, any[]>>>> = {};
     
     parsedRecords.forEach((record, originalIdx) => {
       // Get month display from visitDate
@@ -757,29 +762,51 @@ export default function CostPredictions() {
         }
       }
       
+      // Map state to hub using sudanStates data
       const stateKey = record.state || 'Unknown State';
+      const normalizedState = stateKey.toLowerCase().trim().replace(/\s+/g, '-');
+      let hubKey = 'Unknown Hub';
+      for (const hub of hubs) {
+        if (hub.states.some(s => s.toLowerCase() === normalizedState || 
+            s.toLowerCase().replace(/\s+/g, '-') === normalizedState)) {
+          hubKey = hub.name;
+          break;
+        }
+      }
+      
       const localityKey = record.locality || 'Unknown Locality';
       
-      if (!grouped[monthKey]) grouped[monthKey] = {};
-      if (!grouped[monthKey][stateKey]) grouped[monthKey][stateKey] = {};
-      if (!grouped[monthKey][stateKey][localityKey]) grouped[monthKey][stateKey][localityKey] = [];
+      if (!grouped[hubKey]) grouped[hubKey] = {};
+      if (!grouped[hubKey][stateKey]) grouped[hubKey][stateKey] = {};
+      if (!grouped[hubKey][stateKey][monthKey]) grouped[hubKey][stateKey][monthKey] = {};
+      if (!grouped[hubKey][stateKey][monthKey][localityKey]) grouped[hubKey][stateKey][monthKey][localityKey] = [];
       
       // Attach the original index for editing
-      grouped[monthKey][stateKey][localityKey].push({ ...record, _originalIdx: originalIdx });
+      grouped[hubKey][stateKey][monthKey][localityKey].push({ ...record, _originalIdx: originalIdx });
     });
     
-    // Pre-sort months chronologically
-    const sortedMonths = Object.keys(grouped).sort((a, b) => {
-      try {
-        const dateA = new Date(a);
-        const dateB = new Date(b);
-        return dateA.getTime() - dateB.getTime();
-      } catch {
-        return a.localeCompare(b);
-      }
+    // Pre-sort hubs alphabetically
+    const sortedHubs = Object.keys(grouped).sort((a, b) => {
+      if (a === 'Unknown Hub') return 1;
+      if (b === 'Unknown Hub') return -1;
+      return a.localeCompare(b);
     });
     
-    return { grouped, sortedMonths };
+    // Calculate overall totals
+    let totalSites = 0;
+    let totalCost = 0;
+    let totalMissingCost = 0;
+    parsedRecords.forEach(r => {
+      totalSites++;
+      totalCost += r.actualCost || 0;
+      if (!r.actualCost || r.actualCost === 0) totalMissingCost++;
+    });
+    
+    return { 
+      grouped, 
+      sortedHubs,
+      totals: { sites: totalSites, cost: totalCost, missingCost: totalMissingCost }
+    };
   }, [parsedRecords]);
   
   // Memoize missing cost count
@@ -2232,179 +2259,267 @@ export default function CostPredictions() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ScrollArea className="h-[400px]">
-                        <div className="space-y-2">
-                          {groupedPreviewRecords.sortedMonths.map(month => {
-                              const statesInMonth = groupedPreviewRecords.grouped[month];
-                              const monthRecordCount = Object.values(statesInMonth).flatMap(s => 
-                                Object.values(s).flat()
-                              ).length;
-                              const monthMissingCost = Object.values(statesInMonth).flatMap(s => 
-                                Object.values(s).flat()
-                              ).filter((r: any) => !r.actualCost || r.actualCost === 0).length;
-                              
-                              return (
-                                <Collapsible key={month} defaultOpen={true}>
-                                  <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 bg-primary/10 rounded-md hover-elevate cursor-pointer">
-                                    <ChevronDown className="h-4 w-4 transition-transform group-data-[state=closed]:rotate-[-90deg]" />
-                                    <Calendar className="h-4 w-4 text-primary" />
-                                    <span className="font-semibold text-sm">{month}</span>
-                                    <Badge variant="outline" className="ml-auto text-xs">
-                                      {monthRecordCount} sites
+                      <ScrollArea className="h-[500px]">
+                        <div className="space-y-3">
+                          {groupedPreviewRecords.sortedHubs.map(hub => {
+                            const statesInHub = groupedPreviewRecords.grouped[hub];
+                            
+                            const hubStats = (() => {
+                              let sites = 0, cost = 0, missingCost = 0;
+                              Object.values(statesInHub).forEach((months: any) => {
+                                Object.values(months).forEach((localities: any) => {
+                                  Object.values(localities).forEach((records: any[]) => {
+                                    records.forEach((r: any) => {
+                                      sites++;
+                                      cost += r.actualCost || 0;
+                                      if (!r.actualCost || r.actualCost === 0) missingCost++;
+                                    });
+                                  });
+                                });
+                              });
+                              return { sites, cost, missingCost };
+                            })();
+                            
+                            return (
+                              <Collapsible key={hub} defaultOpen={true}>
+                                <CollapsibleTrigger className="flex items-center gap-2 w-full p-2.5 bg-primary/20 rounded-lg hover-elevate cursor-pointer border border-primary/30">
+                                  <ChevronDown className="h-4 w-4 transition-transform group-data-[state=closed]:rotate-[-90deg]" />
+                                  <Building2 className="h-4 w-4 text-primary" />
+                                  <span className="font-bold text-sm">{hub}</span>
+                                  <div className="ml-auto flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs font-semibold">
+                                      {hubStats.sites} sites
                                     </Badge>
-                                    {monthMissingCost > 0 && (
+                                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-mono">
+                                      {formatCurrency(hubStats.cost)}
+                                    </Badge>
+                                    {hubStats.missingCost > 0 && (
                                       <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs">
-                                        {monthMissingCost} no cost
+                                        {hubStats.missingCost} no cost
                                       </Badge>
                                     )}
-                                  </CollapsibleTrigger>
-                                  <CollapsibleContent className="pl-4 mt-1 space-y-1">
-                                    {Object.keys(statesInMonth).sort().map(state => {
-                                      const localitiesInState = statesInMonth[state];
-                                      const stateRecordCount = Object.values(localitiesInState).flat().length;
-                                      const stateMissingCost = Object.values(localitiesInState).flat().filter((r: any) => !r.actualCost || r.actualCost === 0).length;
-                                      
-                                      return (
-                                        <Collapsible key={`${month}-${state}`} defaultOpen={true}>
-                                          <CollapsibleTrigger className="flex items-center gap-2 w-full p-1.5 bg-secondary/50 rounded hover-elevate cursor-pointer">
-                                            <ChevronDown className="h-3 w-3 transition-transform group-data-[state=closed]:rotate-[-90deg]" />
-                                            <Building2 className="h-3 w-3 text-muted-foreground" />
-                                            <span className="text-sm font-medium">{state}</span>
-                                            <Badge variant="secondary" className="ml-auto text-xs py-0">
-                                              {stateRecordCount}
+                                  </div>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="pl-4 mt-2 space-y-2">
+                                  {Object.keys(statesInHub).sort().map(state => {
+                                    const monthsInState = statesInHub[state];
+                                    
+                                    const stateStats = (() => {
+                                      let sites = 0, cost = 0, missingCost = 0;
+                                      Object.values(monthsInState).forEach((localities: any) => {
+                                        Object.values(localities).forEach((records: any[]) => {
+                                          records.forEach((r: any) => {
+                                            sites++;
+                                            cost += r.actualCost || 0;
+                                            if (!r.actualCost || r.actualCost === 0) missingCost++;
+                                          });
+                                        });
+                                      });
+                                      return { sites, cost, missingCost };
+                                    })();
+                                    
+                                    return (
+                                      <Collapsible key={`${hub}-${state}`} defaultOpen={true}>
+                                        <CollapsibleTrigger className="flex items-center gap-2 w-full p-2 bg-secondary/60 rounded-md hover-elevate cursor-pointer">
+                                          <ChevronDown className="h-4 w-4 transition-transform group-data-[state=closed]:rotate-[-90deg]" />
+                                          <MapPin className="h-4 w-4 text-muted-foreground" />
+                                          <span className="font-semibold text-sm">{state}</span>
+                                          <div className="ml-auto flex items-center gap-2">
+                                            <Badge variant="secondary" className="text-xs">
+                                              {stateStats.sites} sites
                                             </Badge>
-                                            {stateMissingCost > 0 && (
+                                            <Badge variant="outline" className="text-xs font-mono">
+                                              {formatCurrency(stateStats.cost)}
+                                            </Badge>
+                                            {stateStats.missingCost > 0 && (
                                               <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs py-0">
-                                                {stateMissingCost}
+                                                {stateStats.missingCost}
                                               </Badge>
                                             )}
-                                          </CollapsibleTrigger>
-                                          <CollapsibleContent className="pl-4 mt-1 space-y-1">
-                                            {Object.keys(localitiesInState).sort().map(locality => {
-                                              const records = localitiesInState[locality];
-                                              const localityMissingCost = records.filter((r: any) => !r.actualCost || r.actualCost === 0).length;
-                                              
-                                              return (
-                                                <Collapsible key={`${month}-${state}-${locality}`} defaultOpen={false}>
-                                                  <CollapsibleTrigger className="flex items-center gap-2 w-full p-1 bg-muted/30 rounded hover-elevate cursor-pointer">
-                                                    <ChevronRight className="h-3 w-3 transition-transform data-[state=open]:rotate-90" />
-                                                    <MapPin className="h-3 w-3 text-muted-foreground" />
-                                                    <span className="text-xs">{locality}</span>
-                                                    <Badge variant="outline" className="ml-auto text-xs py-0">
-                                                      {records.length} sites
+                                          </div>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent className="pl-4 mt-1 space-y-1">
+                                          {Object.keys(monthsInState).sort((a, b) => {
+                                            try {
+                                              return new Date(a).getTime() - new Date(b).getTime();
+                                            } catch { return a.localeCompare(b); }
+                                          }).map(month => {
+                                            const localitiesInMonth = monthsInState[month];
+                                            
+                                            const monthStats = (() => {
+                                              let sites = 0, cost = 0, missingCost = 0;
+                                              Object.values(localitiesInMonth).forEach((records: any[]) => {
+                                                records.forEach((r: any) => {
+                                                  sites++;
+                                                  cost += r.actualCost || 0;
+                                                  if (!r.actualCost || r.actualCost === 0) missingCost++;
+                                                });
+                                              });
+                                              return { sites, cost, missingCost };
+                                            })();
+                                            
+                                            return (
+                                              <Collapsible key={`${hub}-${state}-${month}`} defaultOpen={true}>
+                                                <CollapsibleTrigger className="flex items-center gap-2 w-full p-1.5 bg-primary/10 rounded hover-elevate cursor-pointer">
+                                                  <ChevronDown className="h-3 w-3 transition-transform group-data-[state=closed]:rotate-[-90deg]" />
+                                                  <Calendar className="h-3 w-3 text-primary" />
+                                                  <span className="text-sm font-medium">{month}</span>
+                                                  <div className="ml-auto flex items-center gap-2">
+                                                    <Badge variant="outline" className="text-xs py-0">
+                                                      {monthStats.sites} sites
                                                     </Badge>
-                                                    {localityMissingCost > 0 && (
+                                                    <Badge variant="secondary" className="text-xs py-0 font-mono">
+                                                      {formatCurrency(monthStats.cost)}
+                                                    </Badge>
+                                                    {monthStats.missingCost > 0 && (
                                                       <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs py-0">
-                                                        {localityMissingCost}
+                                                        {monthStats.missingCost}
                                                       </Badge>
                                                     )}
-                                                  </CollapsibleTrigger>
-                                                  <CollapsibleContent className="pl-4 mt-1">
-                                                    <Table>
-                                                      <TableHeader>
-                                                        <TableRow className="text-xs">
-                                                          <TableHead className="py-1 h-7">Status</TableHead>
-                                                          <TableHead className="py-1 h-7">Site</TableHead>
-                                                          <TableHead className="py-1 h-7">Cost</TableHead>
-                                                          <TableHead className="py-1 h-7">Notes</TableHead>
-                                                        </TableRow>
-                                                      </TableHeader>
-                                                      <TableBody>
-                                                        {records.map((record: any) => {
-                                                          const idx = record._originalIdx;
-                                                          const hasCost = record.actualCost && record.actualCost > 0;
-                                                          
-                                                          return (
-                                                            <TableRow 
-                                                              key={idx} 
-                                                              className={`text-xs ${
-                                                                record.validationStatus === 'error' 
-                                                                  ? 'bg-red-50 dark:bg-red-900/10' 
-                                                                  : !hasCost 
-                                                                    ? 'bg-orange-50 dark:bg-orange-900/10' 
-                                                                    : ''
-                                                              }`}
-                                                            >
-                                                              <TableCell className="py-1">
-                                                                {record.validationStatus === 'valid' && (
-                                                                  <CheckCircle2 className="h-3 w-3 text-green-600" />
-                                                                )}
-                                                                {record.validationStatus === 'warning' && (
-                                                                  <AlertCircle className="h-3 w-3 text-amber-500" />
-                                                                )}
-                                                                {record.validationStatus === 'error' && (
-                                                                  <XCircle className="h-3 w-3 text-red-500" />
-                                                                )}
-                                                              </TableCell>
-                                                              <TableCell className="py-1 font-medium max-w-[150px] truncate" title={record.siteName}>
-                                                                {record.siteName}
-                                                              </TableCell>
-                                                              <TableCell className="py-1">
-                                                                {editingCell?.idx === idx && editingCell?.field === 'cost' ? (
-                                                                  <div className="flex items-center gap-1">
-                                                                    <Input
-                                                                      value={editValue}
-                                                                      onChange={(e) => setEditValue(e.target.value)}
-                                                                      placeholder="Cost"
-                                                                      className="h-6 w-20 text-xs"
-                                                                      type="number"
-                                                                      onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter') updatePreviewRecord(idx, 'cost', editValue);
-                                                                        if (e.key === 'Escape') { setEditingCell(null); setEditValue(''); }
-                                                                      }}
-                                                                      autoFocus
-                                                                    />
-                                                                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => updatePreviewRecord(idx, 'cost', editValue)}>
-                                                                      <CheckCircle2 className="h-3 w-3 text-green-600" />
-                                                                    </Button>
-                                                                  </div>
-                                                                ) : (
-                                                                  <Badge 
-                                                                    variant={hasCost ? "outline" : "secondary"}
-                                                                    className={`font-mono text-xs cursor-pointer ${
-                                                                      !hasCost 
-                                                                        ? 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700' 
-                                                                        : ''
+                                                  </div>
+                                                </CollapsibleTrigger>
+                                                <CollapsibleContent className="pl-4 mt-1 space-y-1">
+                                                  {Object.keys(localitiesInMonth).sort().map(locality => {
+                                                    const records = localitiesInMonth[locality];
+                                                    const localityStats = (() => {
+                                                      let cost = 0, missingCost = 0;
+                                                      records.forEach((r: any) => {
+                                                        cost += r.actualCost || 0;
+                                                        if (!r.actualCost || r.actualCost === 0) missingCost++;
+                                                      });
+                                                      return { cost, missingCost };
+                                                    })();
+                                                    
+                                                    return (
+                                                      <Collapsible key={`${hub}-${state}-${month}-${locality}`} defaultOpen={false}>
+                                                        <CollapsibleTrigger className="flex items-center gap-2 w-full p-1 bg-muted/40 rounded hover-elevate cursor-pointer">
+                                                          <ChevronRight className="h-3 w-3 transition-transform data-[state=open]:rotate-90" />
+                                                          <MapPin className="h-3 w-3 text-muted-foreground" />
+                                                          <span className="text-xs font-medium">{locality}</span>
+                                                          <div className="ml-auto flex items-center gap-2">
+                                                            <Badge variant="outline" className="text-xs py-0">
+                                                              {records.length} sites
+                                                            </Badge>
+                                                            <Badge variant="secondary" className="text-xs py-0 font-mono">
+                                                              {formatCurrency(localityStats.cost)}
+                                                            </Badge>
+                                                            {localityStats.missingCost > 0 && (
+                                                              <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs py-0">
+                                                                {localityStats.missingCost}
+                                                              </Badge>
+                                                            )}
+                                                          </div>
+                                                        </CollapsibleTrigger>
+                                                        <CollapsibleContent className="pl-4 mt-1">
+                                                          <Table>
+                                                            <TableHeader>
+                                                              <TableRow className="text-xs">
+                                                                <TableHead className="py-1 h-7">Status</TableHead>
+                                                                <TableHead className="py-1 h-7">Site</TableHead>
+                                                                <TableHead className="py-1 h-7">Cost</TableHead>
+                                                                <TableHead className="py-1 h-7">Notes</TableHead>
+                                                              </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                              {records.map((record: any) => {
+                                                                const idx = record._originalIdx;
+                                                                const hasCost = record.actualCost && record.actualCost > 0;
+                                                                
+                                                                return (
+                                                                  <TableRow 
+                                                                    key={idx} 
+                                                                    className={`text-xs ${
+                                                                      record.validationStatus === 'error' 
+                                                                        ? 'bg-red-50 dark:bg-red-900/10' 
+                                                                        : !hasCost 
+                                                                          ? 'bg-orange-50 dark:bg-orange-900/10' 
+                                                                          : ''
                                                                     }`}
-                                                                    onClick={() => {
-                                                                      setEditingCell({ idx, field: 'cost' });
-                                                                      setEditValue(record.actualCost?.toString() || '');
-                                                                    }}
                                                                   >
-                                                                    {hasCost ? formatCurrency(record.actualCost) : 'No Cost'}
-                                                                    <Pencil className="h-2 w-2 ml-1 opacity-50" />
-                                                                  </Badge>
-                                                                )}
-                                                              </TableCell>
-                                                              <TableCell className="py-1">
-                                                                {record.validationMessage ? (
-                                                                  <span className={`text-xs ${record.validationStatus === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
-                                                                    {record.validationMessage}
-                                                                  </span>
-                                                                ) : record.isNewSite ? (
-                                                                  <Badge variant="secondary" className="text-xs py-0">New Site</Badge>
-                                                                ) : record.hasGps ? (
-                                                                  <Badge variant="outline" className="text-xs py-0">
-                                                                    <MapPin className="h-2 w-2 mr-0.5" />GPS
-                                                                  </Badge>
-                                                                ) : null}
-                                                              </TableCell>
-                                                            </TableRow>
-                                                          );
-                                                        })}
-                                                      </TableBody>
-                                                    </Table>
-                                                  </CollapsibleContent>
-                                                </Collapsible>
-                                              );
-                                            })}
-                                          </CollapsibleContent>
-                                        </Collapsible>
-                                      );
-                                    })}
-                                  </CollapsibleContent>
-                                </Collapsible>
-                              );
+                                                                    <TableCell className="py-1">
+                                                                      {record.validationStatus === 'valid' && (
+                                                                        <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                                                      )}
+                                                                      {record.validationStatus === 'warning' && (
+                                                                        <AlertCircle className="h-3 w-3 text-amber-500" />
+                                                                      )}
+                                                                      {record.validationStatus === 'error' && (
+                                                                        <XCircle className="h-3 w-3 text-red-500" />
+                                                                      )}
+                                                                    </TableCell>
+                                                                    <TableCell className="py-1 font-medium max-w-[150px] truncate" title={record.siteName}>
+                                                                      {record.siteName}
+                                                                    </TableCell>
+                                                                    <TableCell className="py-1">
+                                                                      {editingCell?.idx === idx && editingCell?.field === 'cost' ? (
+                                                                        <div className="flex items-center gap-1">
+                                                                          <Input
+                                                                            value={editValue}
+                                                                            onChange={(e) => setEditValue(e.target.value)}
+                                                                            placeholder="Cost"
+                                                                            className="h-6 w-20 text-xs"
+                                                                            type="number"
+                                                                            onKeyDown={(e) => {
+                                                                              if (e.key === 'Enter') updatePreviewRecord(idx, 'cost', editValue);
+                                                                              if (e.key === 'Escape') { setEditingCell(null); setEditValue(''); }
+                                                                            }}
+                                                                            autoFocus
+                                                                          />
+                                                                          <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => updatePreviewRecord(idx, 'cost', editValue)}>
+                                                                            <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                                                          </Button>
+                                                                        </div>
+                                                                      ) : (
+                                                                        <Badge 
+                                                                          variant={hasCost ? "outline" : "secondary"}
+                                                                          className={`font-mono text-xs cursor-pointer ${
+                                                                            !hasCost 
+                                                                              ? 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700' 
+                                                                              : ''
+                                                                          }`}
+                                                                          onClick={() => {
+                                                                            setEditingCell({ idx, field: 'cost' });
+                                                                            setEditValue(record.actualCost?.toString() || '');
+                                                                          }}
+                                                                        >
+                                                                          {hasCost ? formatCurrency(record.actualCost) : 'No Cost'}
+                                                                          <Pencil className="h-2 w-2 ml-1 opacity-50" />
+                                                                        </Badge>
+                                                                      )}
+                                                                    </TableCell>
+                                                                    <TableCell className="py-1">
+                                                                      {record.validationMessage ? (
+                                                                        <span className={`text-xs ${record.validationStatus === 'error' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                                                                          {record.validationMessage}
+                                                                        </span>
+                                                                      ) : record.isNewSite ? (
+                                                                        <Badge variant="secondary" className="text-xs py-0">New Site</Badge>
+                                                                      ) : record.hasGps ? (
+                                                                        <Badge variant="outline" className="text-xs py-0">
+                                                                          <MapPin className="h-2 w-2 mr-0.5" />GPS
+                                                                        </Badge>
+                                                                      ) : null}
+                                                                    </TableCell>
+                                                                  </TableRow>
+                                                                );
+                                                              })}
+                                                            </TableBody>
+                                                          </Table>
+                                                        </CollapsibleContent>
+                                                      </Collapsible>
+                                                    );
+                                                  })}
+                                                </CollapsibleContent>
+                                              </Collapsible>
+                                            );
+                                          })}
+                                        </CollapsibleContent>
+                                      </Collapsible>
+                                    );
+                                  })}
+                                </CollapsibleContent>
+                              </Collapsible>
+                            );
                             })}
                         </div>
                       </ScrollArea>
