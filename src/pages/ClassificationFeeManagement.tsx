@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/context/user/UserContext";
@@ -20,7 +21,9 @@ import {
   Info,
   Loader2,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  UserCog,
+  ClipboardList
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -47,19 +50,39 @@ interface UserClassification {
 const LEVEL_LABELS: Record<string, { label: string; description: string; color: string }> = {
   'A': { 
     label: 'Level A - Experienced', 
-    description: 'Senior data collectors with extensive field experience',
+    description: 'Senior staff with extensive field experience',
     color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
   },
   'B': { 
     label: 'Level B - Intermediate', 
-    description: 'Data collectors with moderate experience',
+    description: 'Staff with moderate experience',
     color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
   },
   'C': { 
     label: 'Level C - Entry Level', 
-    description: 'New data collectors in training',
+    description: 'New staff in training',
     color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
   },
+};
+
+type RoleScope = 'dataCollector' | 'coordinator' | 'supervisor';
+
+const ROLE_SCOPE_LABELS: Record<RoleScope, { label: string; icon: typeof Users; description: string }> = {
+  'dataCollector': {
+    label: 'Data Collectors',
+    icon: Users,
+    description: 'Field enumerators who collect data at sites'
+  },
+  'coordinator': {
+    label: 'Coordinators',
+    icon: ClipboardList,
+    description: 'Team leads who coordinate field activities'
+  },
+  'supervisor': {
+    label: 'Supervisors',
+    icon: UserCog,
+    description: 'Senior staff who oversee multiple teams'
+  }
 };
 
 interface PendingVisitUpdate {
@@ -77,12 +100,14 @@ const ClassificationFeeManagement = () => {
   const { toast } = useToast();
   const { currentUser } = useUser();
   
-  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
-  const [userCounts, setUserCounts] = useState<Record<string, number>>({});
+  // All fee structures for all role scopes
+  const [allFeeStructures, setAllFeeStructures] = useState<FeeStructure[]>([]);
+  const [userCounts, setUserCounts] = useState<Record<string, Record<string, number>>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [useMultiplier, setUseMultiplier] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [selectedRoleScope, setSelectedRoleScope] = useState<RoleScope>('dataCollector');
   
   // New state for bulk visit fee updates
   const [pendingVisitUpdates, setPendingVisitUpdates] = useState<PendingVisitUpdate[]>([]);
@@ -92,36 +117,51 @@ const ClassificationFeeManagement = () => {
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.roles?.includes('admin' as any);
 
+  // Get fee structures for current role scope
+  const feeStructures = useMemo(() => {
+    return allFeeStructures.filter(f => f.role_scope === selectedRoleScope);
+  }, [allFeeStructures, selectedRoleScope]);
+
+  // Get user counts for current role scope
+  const currentUserCounts = useMemo(() => {
+    return userCounts[selectedRoleScope] || { A: 0, B: 0, C: 0 };
+  }, [userCounts, selectedRoleScope]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Run both queries in parallel for faster loading
+      // Run queries in parallel for all role scopes
       const [feesResult, classificationsResult] = await Promise.all([
         supabase
           .from('classification_fee_structures')
           .select('*')
-          .eq('role_scope', 'dataCollector')
+          .in('role_scope', ['dataCollector', 'coordinator', 'supervisor'])
+          .order('role_scope')
           .order('classification_level'),
         supabase
           .from('user_classifications')
-          .select('classification_level')
-          .eq('role_scope', 'dataCollector')
+          .select('classification_level, role_scope')
+          .in('role_scope', ['dataCollector', 'coordinator', 'supervisor'])
           .eq('is_active', true)
       ]);
 
       if (feesResult.error) throw feesResult.error;
       if (classificationsResult.error) throw classificationsResult.error;
 
-      // Count classifications in single pass
-      const counts: Record<string, number> = { A: 0, B: 0, C: 0 };
+      // Count classifications per role scope
+      const counts: Record<string, Record<string, number>> = {
+        dataCollector: { A: 0, B: 0, C: 0 },
+        coordinator: { A: 0, B: 0, C: 0 },
+        supervisor: { A: 0, B: 0, C: 0 }
+      };
       for (const c of classificationsResult.data || []) {
-        if (counts[c.classification_level] !== undefined) {
-          counts[c.classification_level]++;
+        if (counts[c.role_scope] && counts[c.role_scope][c.classification_level] !== undefined) {
+          counts[c.role_scope][c.classification_level]++;
         }
       }
 
       const fees = feesResult.data || [];
-      setFeeStructures(fees);
+      setAllFeeStructures(fees);
       setUserCounts(counts);
       
       // Check for non-1.0 multipliers
@@ -305,9 +345,9 @@ const ClassificationFeeManagement = () => {
 
   const handleFeeChange = (level: string, value: string) => {
     const numValue = parseFloat(value) || 0;
-    setFeeStructures(prev => 
+    setAllFeeStructures(prev => 
       prev.map(f => 
-        f.classification_level === level 
+        f.classification_level === level && f.role_scope === selectedRoleScope
           ? { ...f, site_visit_base_fee_cents: numValue }
           : f
       )
@@ -317,9 +357,9 @@ const ClassificationFeeManagement = () => {
 
   const handleMultiplierChange = (level: string, value: string) => {
     const numValue = parseFloat(value) || 1.0;
-    setFeeStructures(prev => 
+    setAllFeeStructures(prev => 
       prev.map(f => 
-        f.classification_level === level 
+        f.classification_level === level && f.role_scope === selectedRoleScope
           ? { ...f, complexity_multiplier: numValue }
           : f
       )
@@ -330,7 +370,7 @@ const ClassificationFeeManagement = () => {
   const toggleMultiplierMode = (enabled: boolean) => {
     setUseMultiplier(enabled);
     if (!enabled) {
-      setFeeStructures(prev => 
+      setAllFeeStructures(prev => 
         prev.map(f => ({ ...f, complexity_multiplier: 1.0 }))
       );
     }
@@ -368,9 +408,9 @@ const ClassificationFeeManagement = () => {
         return;
       }
       console.log('[ClassificationFeeManagement] Session valid, user:', session.user.email);
-      console.log('[ClassificationFeeManagement] Starting save for', feeStructures.length, 'fee structures');
+      console.log('[ClassificationFeeManagement] Starting save for', allFeeStructures.length, 'fee structures');
       
-      for (const fee of feeStructures) {
+      for (const fee of allFeeStructures) {
         const updateData = {
           site_visit_base_fee_cents: fee.site_visit_base_fee_cents,
           complexity_multiplier: useMultiplier ? fee.complexity_multiplier : 1.0,
@@ -461,7 +501,7 @@ const ClassificationFeeManagement = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Classification Fee Management</h1>
-            <p className="text-muted-foreground">Set fees for each data collector classification level</p>
+            <p className="text-muted-foreground">Set fees for each classification level by role type</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -507,17 +547,37 @@ const ClassificationFeeManagement = () => {
         </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {['A', 'B', 'C'].map(level => (
-          <Card key={level} className="relative">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-2">
-                <Badge className={LEVEL_LABELS[level].color}>
-                  {LEVEL_LABELS[level].label}
-                </Badge>
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <Users className="h-4 w-4" />
-                  <span className="text-sm">{userCounts[level] || 0} users</span>
+      {/* Role Scope Tabs */}
+      <Tabs value={selectedRoleScope} onValueChange={(v) => setSelectedRoleScope(v as RoleScope)}>
+        <TabsList className="grid w-full grid-cols-3">
+          {(Object.keys(ROLE_SCOPE_LABELS) as RoleScope[]).map(scope => {
+            const RoleIcon = ROLE_SCOPE_LABELS[scope].icon;
+            return (
+              <TabsTrigger key={scope} value={scope} className="flex items-center gap-2">
+                <RoleIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">{ROLE_SCOPE_LABELS[scope].label}</span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+
+        <div className="mt-2 mb-4">
+          <p className="text-sm text-muted-foreground">
+            {ROLE_SCOPE_LABELS[selectedRoleScope].description}
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {['A', 'B', 'C'].map(level => (
+            <Card key={level} className="relative">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge className={LEVEL_LABELS[level].color}>
+                    {LEVEL_LABELS[level].label}
+                  </Badge>
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <Users className="h-4 w-4" />
+                    <span className="text-sm">{currentUserCounts[level] || 0} users</span>
                 </div>
               </div>
               <CardDescription className="mt-2">
@@ -578,7 +638,7 @@ const ClassificationFeeManagement = () => {
 
                   <div className="pt-4 border-t">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Enumerator Receives:</span>
+                      <span className="text-sm text-muted-foreground">Staff Receives:</span>
                       <span className="text-xl font-bold text-foreground" data-testid={`text-final-fee-${level}`}>
                         {calculateFinalFee(
                           feeStructures.find(f => f.classification_level === level)?.site_visit_base_fee_cents || 0,
@@ -600,6 +660,7 @@ const ClassificationFeeManagement = () => {
           </Card>
         ))}
       </div>
+      </Tabs>
 
       <Card>
         <CardHeader>
