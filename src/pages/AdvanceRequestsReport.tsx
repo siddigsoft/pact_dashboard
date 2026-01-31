@@ -31,7 +31,10 @@ import {
   Receipt,
   ExternalLink,
   Plus,
-  FileText
+  FileText,
+  MapPin,
+  FolderKanban,
+  Truck
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -118,13 +121,14 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests]);
 
   const byTeamMember = useMemo(() => {
-    const grouped: Record<string, { name: string, requests: number, totalRequested: number, totalApproved: number, pending: number }> = {};
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       if (!grouped[req.requestedBy]) {
-        grouped[req.requestedBy] = { name: getProfileName(req.requestedBy), requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 };
+        grouped[req.requestedBy] = { id: req.requestedBy, name: getProfileName(req.requestedBy), requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
       }
       grouped[req.requestedBy].requests++;
       grouped[req.requestedBy].totalRequested += req.requestedAmount;
+      grouped[req.requestedBy].items.push(req);
       if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
         grouped[req.requestedBy].totalApproved += req.requestedAmount;
       }
@@ -136,19 +140,50 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests, users]);
 
   const byHub = useMemo(() => {
-    const grouped: Record<string, { name: string, requests: number, totalRequested: number, totalApproved: number, pending: number }> = {};
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const hubKey = req.hubId || 'unknown';
       if (!grouped[hubKey]) {
-        grouped[hubKey] = { name: req.hubName || 'Unknown Hub', requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 };
+        grouped[hubKey] = { id: hubKey, name: req.hubName || 'Unknown Hub', requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
       }
       grouped[hubKey].requests++;
       grouped[hubKey].totalRequested += req.requestedAmount;
+      grouped[hubKey].items.push(req);
       if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
         grouped[hubKey].totalApproved += req.requestedAmount;
       }
       if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
         grouped[hubKey].pending++;
+      }
+    });
+    return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
+  }, [filteredRequests]);
+
+  // Group by payment type (status-based grouping)
+  const byStatus = useMemo(() => {
+    const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
+    filteredRequests.forEach(req => {
+      const statusKey = req.status;
+      const statusLabels: Record<string, string> = {
+        'pending_supervisor': 'Pending Supervisor',
+        'pending_admin': 'Pending Admin',
+        'approved': 'Approved',
+        'partially_paid': 'Partially Paid',
+        'fully_paid': 'Fully Paid',
+        'rejected': 'Rejected',
+        'cancelled': 'Cancelled',
+      };
+      if (!grouped[statusKey]) {
+        grouped[statusKey] = { id: statusKey, name: statusLabels[statusKey] || statusKey, requests: 0, totalRequested: 0, totalApproved: 0, pending: 0, items: [] };
+      }
+      grouped[statusKey].requests++;
+      grouped[statusKey].totalRequested += req.requestedAmount;
+      grouped[statusKey].items.push(req);
+      if (['approved', 'partially_paid', 'fully_paid'].includes(req.status)) {
+        grouped[statusKey].totalApproved += req.requestedAmount;
+      }
+      if (['pending_supervisor', 'pending_admin'].includes(req.status)) {
+        grouped[statusKey].pending++;
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
@@ -274,6 +309,211 @@ function AdvanceRequestsReportContent() {
     doc.save(`transportation_advance_cost_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
+  // Helper function to add PACT header to PDF
+  const addPdfHeader = (doc: jsPDF, title: string) => {
+    let yPos = 15;
+    doc.setFillColor(245, 247, 250);
+    doc.rect(0, 0, 210, 40, 'F');
+    doc.setFontSize(18);
+    doc.setTextColor(30, 64, 175);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PACT', 14, yPos + 5);
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Field Operations Command Center', 14, yPos + 12);
+    doc.setFontSize(8);
+    doc.text(`Generated: ${format(new Date(), 'PPP p')}`, 150, yPos + 5);
+    yPos += 30;
+    doc.setDrawColor(30, 64, 175);
+    doc.setLineWidth(0.5);
+    doc.line(14, yPos, 196, yPos);
+    yPos += 10;
+    doc.setFontSize(16);
+    doc.setTextColor(0);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, 14, yPos);
+    return yPos + 10;
+  };
+
+  // Export By Team Member
+  const exportTeamToExcel = () => {
+    const summaryData = byTeamMember.map(m => ({
+      'Team Member': m.name,
+      'Total Requests': m.requests,
+      'Total Requested (SDG)': m.totalRequested,
+      'Total Approved (SDG)': m.totalApproved,
+      'Pending Requests': m.pending,
+    }));
+    const detailData = filteredRequests.map(req => ({
+      'Team Member': getProfileName(req.requestedBy),
+      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
+      'Site': req.siteName,
+      'Hub': req.hubName || 'N/A',
+      'Amount (SDG)': req.requestedAmount,
+      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
+      'Paid (SDG)': req.totalPaidAmount || 0,
+      'Remaining (SDG)': req.remainingAmount || 0,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by Team');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
+    XLSX.writeFile(wb, `advance_by_team_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  const exportTeamToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = addPdfHeader(doc, 'Advance Requests by Team Member');
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Team Member', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
+      body: byTeamMember.map(m => [m.name, m.requests, m.totalRequested.toLocaleString(), m.totalApproved.toLocaleString(), m.pending]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
+      bodyStyles: { fontSize: 8 },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detailed Requests', 14, yPos);
+    yPos += 5;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'Team Member', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
+      body: filteredRequests.slice(0, 100).map(r => [
+        format(parseISO(r.requestedAt), 'MMM dd'),
+        getProfileName(r.requestedBy).substring(0, 20),
+        r.siteName.substring(0, 20),
+        (r.hubName || 'N/A').substring(0, 15),
+        r.requestedAmount.toLocaleString(),
+        r.status.replace(/_/g, ' '),
+        (r.totalPaidAmount || 0).toLocaleString()
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
+      bodyStyles: { fontSize: 6 },
+    });
+    doc.save(`advance_by_team_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
+  // Export By Hub
+  const exportHubToExcel = () => {
+    const summaryData = byHub.map(h => ({
+      'Hub': h.name,
+      'Total Requests': h.requests,
+      'Total Requested (SDG)': h.totalRequested,
+      'Total Approved (SDG)': h.totalApproved,
+      'Pending Requests': h.pending,
+    }));
+    const detailData = filteredRequests.map(req => ({
+      'Hub': req.hubName || 'N/A',
+      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
+      'Requested By': getProfileName(req.requestedBy),
+      'Site': req.siteName,
+      'Amount (SDG)': req.requestedAmount,
+      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
+      'Paid (SDG)': req.totalPaidAmount || 0,
+      'Remaining (SDG)': req.remainingAmount || 0,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by Hub');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
+    XLSX.writeFile(wb, `advance_by_hub_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  const exportHubToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = addPdfHeader(doc, 'Advance Requests by Hub');
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Hub', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
+      body: byHub.map(h => [h.name, h.requests, h.totalRequested.toLocaleString(), h.totalApproved.toLocaleString(), h.pending]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
+      bodyStyles: { fontSize: 8 },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detailed Requests', 14, yPos);
+    yPos += 5;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'Hub', 'Team Member', 'Site', 'Amount', 'Status', 'Paid']],
+      body: filteredRequests.slice(0, 100).map(r => [
+        format(parseISO(r.requestedAt), 'MMM dd'),
+        (r.hubName || 'N/A').substring(0, 15),
+        getProfileName(r.requestedBy).substring(0, 20),
+        r.siteName.substring(0, 20),
+        r.requestedAmount.toLocaleString(),
+        r.status.replace(/_/g, ' '),
+        (r.totalPaidAmount || 0).toLocaleString()
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
+      bodyStyles: { fontSize: 6 },
+    });
+    doc.save(`advance_by_hub_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
+  // Export By Status
+  const exportStatusToExcel = () => {
+    const summaryData = byStatus.map(s => ({
+      'Status': s.name,
+      'Total Requests': s.requests,
+      'Total Requested (SDG)': s.totalRequested,
+      'Total Approved (SDG)': s.totalApproved,
+    }));
+    const detailData = filteredRequests.map(req => ({
+      'Status': req.status.replace(/_/g, ' ').toUpperCase(),
+      'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
+      'Requested By': getProfileName(req.requestedBy),
+      'Site': req.siteName,
+      'Hub': req.hubName || 'N/A',
+      'Amount (SDG)': req.requestedAmount,
+      'Paid (SDG)': req.totalPaidAmount || 0,
+      'Remaining (SDG)': req.remainingAmount || 0,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Summary by Status');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'All Requests');
+    XLSX.writeFile(wb, `advance_by_status_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  const exportStatusToPDF = () => {
+    const doc = new jsPDF();
+    let yPos = addPdfHeader(doc, 'Advance Requests by Status');
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Status', 'Requests', 'Requested (SDG)', 'Approved (SDG)']],
+      body: byStatus.map(s => [s.name, s.requests, s.totalRequested.toLocaleString(), s.totalApproved.toLocaleString()]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
+      bodyStyles: { fontSize: 8 },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detailed Requests', 14, yPos);
+    yPos += 5;
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Date', 'Status', 'Team Member', 'Site', 'Amount', 'Paid']],
+      body: filteredRequests.slice(0, 100).map(r => [
+        format(parseISO(r.requestedAt), 'MMM dd'),
+        r.status.replace(/_/g, ' '),
+        getProfileName(r.requestedBy).substring(0, 20),
+        r.siteName.substring(0, 20),
+        r.requestedAmount.toLocaleString(),
+        (r.totalPaidAmount || 0).toLocaleString()
+      ]),
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
+      bodyStyles: { fontSize: 6 },
+    });
+    doc.save(`advance_by_status_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
   if (!isAdmin && !isSupervisor && !isFOM) {
     return (
       <div className="p-6">
@@ -294,43 +534,42 @@ function AdvanceRequestsReportContent() {
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-7 w-7 text-primary" />
-            Transportation Advance Cost
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Track and analyze transportation advance costs from your team
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button size="sm" asChild data-testid="button-request-advance">
-            <Link to="/site-visits?status=accepted">
-              <Plus className="h-4 w-4 mr-1" />
-              Request Advance
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild data-testid="button-goto-reconciliation">
-            <Link to="/cost-submission?tab=outstanding">
-              <Receipt className="h-4 w-4 mr-1" />
-              Cost Submission
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => refreshRequests()} data-testid="button-refresh-report">
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Refresh
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportToPDF} data-testid="button-export-pdf">
-            <FileText className="h-4 w-4 mr-1" />
-            PDF
-          </Button>
-          <Button onClick={exportToExcel} size="sm" data-testid="button-export-excel">
-            <Download className="h-4 w-4 mr-1" />
-            Excel
-          </Button>
-        </div>
-      </div>
+      <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <img src="/pact-logo.png" alt="PACT" className="h-12 w-auto" />
+              <div>
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <Truck className="h-6 w-6 text-primary" />
+                  Transportation Advance Cost
+                </h1>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Track and analyze transportation advance costs from your team
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button size="sm" asChild data-testid="button-request-advance">
+                <Link to="/site-visits?status=accepted">
+                  <Plus className="h-4 w-4 mr-1" />
+                  Request Advance
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild data-testid="button-goto-reconciliation">
+                <Link to="/cost-submission?tab=outstanding">
+                  <Receipt className="h-4 w-4 mr-1" />
+                  Cost Submission
+                </Link>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => refreshRequests()} data-testid="button-refresh-report">
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
@@ -445,7 +684,7 @@ function AdvanceRequestsReportContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="overview" className="gap-1" data-testid="tab-overview">
             <FileSpreadsheet className="h-4 w-4" />
             All Requests
@@ -457,6 +696,10 @@ function AdvanceRequestsReportContent() {
           <TabsTrigger value="byHub" className="gap-1" data-testid="tab-by-hub">
             <Building2 className="h-4 w-4" />
             By Hub
+          </TabsTrigger>
+          <TabsTrigger value="byStatus" className="gap-1" data-testid="tab-by-status">
+            <Clock className="h-4 w-4" />
+            By Status
           </TabsTrigger>
         </TabsList>
 
@@ -550,11 +793,21 @@ function AdvanceRequestsReportContent() {
         </TabsContent>
 
         <TabsContent value="byTeam" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={exportTeamToPDF} data-testid="button-team-pdf">
+              <FileText className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button size="sm" onClick={exportTeamToExcel} data-testid="button-team-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Requests by Team Member
+                Summary by Team Member
               </CardTitle>
               <CardDescription>Breakdown of advance requests per team member</CardDescription>
             </CardHeader>
@@ -595,14 +848,70 @@ function AdvanceRequestsReportContent() {
               )}
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Requests (Detailed)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Team Member</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead className="text-right">Amount (SDG)</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Remaining</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRequests.slice(0, 50).map(req => {
+                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      return (
+                        <TableRow key={req.id}>
+                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
+                          <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
+                          <TableCell>{req.hubName || 'N/A'}</TableCell>
+                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
+                          <TableCell className="text-center">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate('/down-payment-approval')}>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="byHub" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={exportHubToPDF} data-testid="button-hub-pdf">
+              <FileText className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button size="sm" onClick={exportHubToExcel} data-testid="button-hub-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-5 w-5" />
-                Requests by Hub
+                Summary by Hub
               </CardTitle>
               <CardDescription>Breakdown of advance requests per hub/location</CardDescription>
             </CardHeader>
@@ -641,6 +950,152 @@ function AdvanceRequestsReportContent() {
                   </Table>
                 </div>
               )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Requests (Detailed)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead>Team Member</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead className="text-right">Amount (SDG)</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Remaining</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRequests.slice(0, 50).map(req => {
+                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      return (
+                        <TableRow key={req.id}>
+                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className="font-medium">{req.hubName || 'N/A'}</TableCell>
+                          <TableCell>{getProfileName(req.requestedBy)}</TableCell>
+                          <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
+                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
+                          <TableCell className="text-center">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate('/down-payment-approval')}>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="byStatus" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={exportStatusToPDF} data-testid="button-status-pdf">
+              <FileText className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button size="sm" onClick={exportStatusToExcel} data-testid="button-status-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Summary by Status
+              </CardTitle>
+              <CardDescription>Breakdown of advance requests by approval status</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : byStatus.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No data available</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Requests</TableHead>
+                        <TableHead className="text-right">Total Requested (SDG)</TableHead>
+                        <TableHead className="text-right">Total Approved (SDG)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {byStatus.map((status, idx) => (
+                        <TableRow key={idx} data-testid={`row-status-${idx}`}>
+                          <TableCell className="font-medium">{status.name}</TableCell>
+                          <TableCell className="text-right">{status.requests}</TableCell>
+                          <TableCell className="text-right font-mono">{status.totalRequested.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{status.totalApproved.toLocaleString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Requests (Detailed)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Team Member</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead>Hub</TableHead>
+                      <TableHead className="text-right">Amount (SDG)</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Remaining</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRequests.slice(0, 50).map(req => {
+                      const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                      return (
+                        <TableRow key={req.id}>
+                          <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell>{getStatusBadge(req.status)}</TableCell>
+                          <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
+                          <TableCell className="max-w-[180px] truncate">{req.siteName}</TableCell>
+                          <TableCell>{req.hubName || 'N/A'}</TableCell>
+                          <TableCell className="text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono text-green-600">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className="text-right font-mono">{remaining > 0 ? <span className="text-amber-600">{remaining.toLocaleString()}</span> : '0'}</TableCell>
+                          <TableCell className="text-center">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => navigate('/down-payment-approval')}>
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
