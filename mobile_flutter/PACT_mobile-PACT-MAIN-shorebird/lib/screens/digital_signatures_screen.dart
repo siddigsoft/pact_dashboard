@@ -16,7 +16,8 @@ class DigitalSignaturesScreen extends StatefulWidget {
   const DigitalSignaturesScreen({super.key});
 
   @override
-  State<DigitalSignaturesScreen> createState() => _DigitalSignaturesScreenState();
+  State<DigitalSignaturesScreen> createState() =>
+      _DigitalSignaturesScreenState();
 }
 
 class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
@@ -62,8 +63,12 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
 
       if (mounted) {
         setState(() {
-          _signatures = List<Map<String, dynamic>>.from(signaturesResponse as List);
-          _signatureHistory = List<Map<String, dynamic>>.from(historyResponse as List);
+          _signatures = List<Map<String, dynamic>>.from(
+            signaturesResponse as List,
+          );
+          _signatureHistory = List<Map<String, dynamic>>.from(
+            historyResponse as List,
+          );
           _isLoading = false;
         });
       }
@@ -108,13 +113,13 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
       for (final sig in userSignatures) {
         final sigId = sig['id']?.toString();
         if (sigId == null) continue;
-        
+
         // Skip if already synced (by source_signature_id)
         if (existingSourceIds.contains(sigId)) continue;
-        
+
         final sigName = sig['name'] ?? 'My Signature';
         final sigData = sig['signature_data'] ?? '';
-        
+
         try {
           await Supabase.instance.client.from('digital_signatures').insert({
             'user_id': userId,
@@ -257,7 +262,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
   Widget _buildSignatureCard(Map<String, dynamic> signature, bool isArabic) {
     final isDefault = signature['is_default'] == true;
     final signatureData = signature['signature_data'] as String?;
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
@@ -280,7 +285,8 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
                       Row(
                         children: [
                           Text(
-                            signature['name'] ?? (isArabic ? 'توقيع' : 'Signature'),
+                            signature['name'] ??
+                                (isArabic ? 'توقيع' : 'Signature'),
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
@@ -320,7 +326,8 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
                   ),
                 ),
                 PopupMenuButton<String>(
-                  onSelected: (value) => _handleSignatureAction(value, signature, isArabic),
+                  onSelected: (value) =>
+                      _handleSignatureAction(value, signature, isArabic),
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'default',
@@ -374,22 +381,19 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
         final bytes = base64Decode(base64Data);
         return ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: Image.memory(
-            Uint8List.fromList(bytes),
-            fit: BoxFit.contain,
-          ),
+          child: Image.memory(Uint8List.fromList(bytes), fit: BoxFit.contain),
         );
       }
       return Center(
         child: Text(
-          signatureData.length > 50 ? '${signatureData.substring(0, 50)}...' : signatureData,
+          signatureData.length > 50
+              ? '${signatureData.substring(0, 50)}...'
+              : signatureData,
           style: GoogleFonts.poppins(color: Colors.grey[600]),
         ),
       );
     } catch (e) {
-      return Center(
-        child: Icon(Icons.draw, size: 40, color: Colors.grey[400]),
-      );
+      return Center(child: Icon(Icons.draw, size: 40, color: Colors.grey[400]));
     }
   }
 
@@ -432,7 +436,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
 
   Widget _buildHistoryCard(Map<String, dynamic> history, bool isArabic) {
     final document = history['document'] as Map<String, dynamic>?;
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -447,7 +451,9 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
           child: Icon(Icons.check_circle, color: AppColors.primaryGreen),
         ),
         title: Text(
-          document?['name'] ?? history['document_type'] ?? (isArabic ? 'مستند' : 'Document'),
+          document?['name'] ??
+              history['document_type'] ??
+              (isArabic ? 'مستند' : 'Document'),
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
         subtitle: Column(
@@ -462,7 +468,10 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
               const SizedBox(height: 2),
               Text(
                 'IP: ${history['ip_address']}',
-                style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey[500]),
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.grey[500],
+                ),
               ),
             ],
           ],
@@ -478,15 +487,45 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
     try {
       final date = DateTime.parse(dateStr);
       final months = isArabic
-          ? ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
-          : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          ? [
+              'يناير',
+              'فبراير',
+              'مارس',
+              'أبريل',
+              'مايو',
+              'يونيو',
+              'يوليو',
+              'أغسطس',
+              'سبتمبر',
+              'أكتوبر',
+              'نوفمبر',
+              'ديسمبر',
+            ]
+          : [
+              'Jan',
+              'Feb',
+              'Mar',
+              'Apr',
+              'May',
+              'Jun',
+              'Jul',
+              'Aug',
+              'Sep',
+              'Oct',
+              'Nov',
+              'Dec',
+            ];
       return '${date.day} ${months[date.month - 1]} ${date.year}';
     } catch (e) {
       return dateStr;
     }
   }
 
-  void _handleSignatureAction(String action, Map<String, dynamic> signature, bool isArabic) async {
+  void _handleSignatureAction(
+    String action,
+    Map<String, dynamic> signature,
+    bool isArabic,
+  ) async {
     if (action == 'default') {
       await _setDefaultSignature(signature['id']);
     } else if (action == 'delete') {
@@ -514,7 +553,11 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_currentLocale == 'ar' ? 'تم تعيين التوقيع الافتراضي' : 'Default signature set'),
+            content: Text(
+              _currentLocale == 'ar'
+                  ? 'تم تعيين التوقيع الافتراضي'
+                  : 'Default signature set',
+            ),
             backgroundColor: AppColors.primaryGreen,
           ),
         );
@@ -522,10 +565,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -570,7 +610,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
           .select('name, user_id')
           .eq('id', signatureId)
           .maybeSingle();
-      
+
       final sigName = sigData?['name'];
       final userId = sigData?['user_id'];
 
@@ -588,7 +628,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
             .delete()
             .eq('source_signature_id', signatureId);
         debugPrint('Synced deletion by source_signature_id');
-        
+
         // Fallback: Also delete legacy templates by matching document_name pattern
         // (for signatures created before source_signature_id was added)
         if (sigName != null && userId != null) {
@@ -602,7 +642,9 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
           debugPrint('Cleaned up legacy template entries');
         }
       } catch (syncError) {
-        debugPrint('Note: Could not sync deletion to digital_signatures: $syncError');
+        debugPrint(
+          'Note: Could not sync deletion to digital_signatures: $syncError',
+        );
         // Non-critical - main signature is already deleted
       }
 
@@ -611,7 +653,9 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_currentLocale == 'ar' ? 'تم حذف التوقيع' : 'Signature deleted'),
+            content: Text(
+              _currentLocale == 'ar' ? 'تم حذف التوقيع' : 'Signature deleted',
+            ),
             backgroundColor: AppColors.primaryGreen,
           ),
         );
@@ -619,10 +663,7 @@ class _DigitalSignaturesScreenState extends State<DigitalSignaturesScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -788,7 +829,9 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
             controller: _nameController,
             decoration: InputDecoration(
               labelText: widget.isArabic ? 'اسم التوقيع' : 'Signature Name',
-              hintText: widget.isArabic ? 'مثال: توقيعي الرسمي' : 'e.g., My Official Signature',
+              hintText: widget.isArabic
+                  ? 'مثال: توقيعي الرسمي'
+                  : 'e.g., My Official Signature',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -797,10 +840,7 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
           const SizedBox(height: 16),
           Text(
             widget.isArabic ? 'ارسم توقيعك أدناه' : 'Draw your signature below',
-            style: GoogleFonts.poppins(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
+            style: GoogleFonts.poppins(color: Colors.grey[600], fontSize: 14),
           ),
           const SizedBox(height: 8),
           Container(
@@ -855,8 +895,8 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
             child: ElevatedButton(
               onPressed: _isSaving ? null : () => _saveSignature(),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _points.where((p) => p != null).isNotEmpty 
-                    ? AppColors.primaryBlue 
+                backgroundColor: _points.where((p) => p != null).isNotEmpty
+                    ? AppColors.primaryBlue
                     : Colors.grey,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -874,7 +914,11 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
                     )
                   : Text(
                       widget.isArabic ? 'حفظ التوقيع' : 'Save Signature',
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
             ),
           ),
@@ -886,13 +930,15 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
 
   Future<void> _saveSignature() async {
     final hasDrawnPoints = _points.where((p) => p != null).isNotEmpty;
-    
+
     if (!hasDrawnPoints) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(widget.isArabic 
-              ? 'يرجى رسم توقيعك أولاً' 
-              : 'Please draw your signature first'),
+          content: Text(
+            widget.isArabic
+                ? 'يرجى رسم توقيعك أولاً'
+                : 'Please draw your signature first',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -910,13 +956,17 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
       debugPrint('Saving signature for user: $userId');
 
       String signatureData;
-      
+
       try {
-        final boundary = _canvasKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+        final boundary =
+            _canvasKey.currentContext?.findRenderObject()
+                as RenderRepaintBoundary?;
         if (boundary != null) {
           debugPrint('Capturing signature image...');
           final image = await boundary.toImage(pixelRatio: 2.0);
-          final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+          final byteData = await image.toByteData(
+            format: ui.ImageByteFormat.png,
+          );
           if (byteData != null) {
             final bytes = byteData.buffer.asUint8List();
             signatureData = 'data:image/png;base64,${base64Encode(bytes)}';
@@ -945,7 +995,7 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
           .from('user_signatures')
           .select('id')
           .eq('user_id', userId);
-      
+
       final isFirstSignature = (existingSignatures as List).isEmpty;
       debugPrint('Is first signature: $isFirstSignature');
 
@@ -953,7 +1003,7 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
       final signatureName = _nameController.text.isNotEmpty
           ? _nameController.text
           : (widget.isArabic ? 'توقيعي' : 'My Signature');
-      
+
       // Insert and get the new signature ID
       final insertResponse = await Supabase.instance.client
           .from('user_signatures')
@@ -968,7 +1018,7 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
 
       final newSignatureId = insertResponse['id'];
       debugPrint('Signature saved to user_signatures with id: $newSignatureId');
-      
+
       // Also sync to digital_signatures for web admin visibility with template flag
       try {
         await Supabase.instance.client.from('digital_signatures').insert({
@@ -981,18 +1031,24 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
           'is_template': true,
           'source_signature_id': newSignatureId,
         });
-        debugPrint('Signature synced to digital_signatures for admin visibility');
+        debugPrint(
+          'Signature synced to digital_signatures for admin visibility',
+        );
       } catch (syncError) {
         debugPrint('Note: Could not sync to digital_signatures: $syncError');
         // Non-critical - signature is still saved in user_signatures
       }
 
       debugPrint('Signature saved successfully!');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.isArabic ? 'تم حفظ التوقيع بنجاح' : 'Signature saved successfully'),
+            content: Text(
+              widget.isArabic
+                  ? 'تم حفظ التوقيع بنجاح'
+                  : 'Signature saved successfully',
+            ),
             backgroundColor: AppColors.primaryGreen,
             duration: const Duration(seconds: 2),
           ),
@@ -1003,18 +1059,20 @@ class _SignatureCreationSheetState extends State<SignatureCreationSheet> {
     } catch (e, stackTrace) {
       debugPrint('Error saving signature: $e');
       debugPrint('Stack trace: $stackTrace');
-      
+
       if (mounted) {
         String errorMessage = e.toString();
         if (errorMessage.contains('user_signatures')) {
-          errorMessage = widget.isArabic 
+          errorMessage = widget.isArabic
               ? 'خطأ في قاعدة البيانات: تحقق من إعداد الجدول'
               : 'Database error: Check table setup';
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.isArabic ? 'خطأ: $errorMessage' : 'Error: $errorMessage'),
+            content: Text(
+              widget.isArabic ? 'خطأ: $errorMessage' : 'Error: $errorMessage',
+            ),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 4),
           ),
