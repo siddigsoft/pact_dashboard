@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'dart:async';
+import 'bilingual_notification_strings.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -273,9 +274,8 @@ class NotificationService {
 
     await _notifications.show(
       999, // Fixed ID for updates - will replace previous update notification
-      '🎉 App Update Available',
-      description ??
-          'A new version ($version) is ready to install. Tap to update now!',
+      BilingualNotificationStrings.appUpdateAvailableTitle,
+      description ?? BilingualNotificationStrings.appUpdateAvailableBody(version),
       platformDetails,
       payload: 'update:$version',
     );
@@ -312,8 +312,8 @@ class NotificationService {
 
     await _notifications.show(
       998, // Fixed ID for download progress
-      'Downloading Update',
-      'Please wait while the update is being downloaded...',
+      BilingualNotificationStrings.downloadingUpdateTitle,
+      BilingualNotificationStrings.downloadingUpdateBody,
       platformDetails,
     );
   }
@@ -349,8 +349,8 @@ class NotificationService {
 
     await _notifications.show(
       997, // Fixed ID for installed notification
-      '✅ Update Installed Successfully',
-      'Your app is now up to date. Restart to apply changes.',
+      BilingualNotificationStrings.updateInstalledTitle,
+      BilingualNotificationStrings.updateInstalledBody,
       platformDetails,
     );
   }
@@ -383,8 +383,8 @@ class NotificationService {
 
     await _notifications.show(
       submissionId.hashCode,
-      'Cost Submission Approved',
-      'Your cost submission for site visit $siteVisitId has been approved. Amount: ${approvedAmount.toStringAsFixed(2)} $currency',
+      BilingualNotificationStrings.costSubmissionApprovedTitle,
+      BilingualNotificationStrings.costSubmissionApprovedBody(siteVisitId, approvedAmount, currency),
       platformDetails,
       payload: 'cost_submission_approved:$submissionId',
     );
@@ -415,8 +415,8 @@ class NotificationService {
 
     await _notifications.show(
       submissionId.hashCode,
-      'Cost Submission Rejected',
-      'Your cost submission for site visit $siteVisitId has been rejected. Reason: $rejectionReason',
+      BilingualNotificationStrings.costSubmissionRejectedTitle,
+      BilingualNotificationStrings.costSubmissionRejectedBody(siteVisitId, rejectionReason),
       platformDetails,
       payload: 'cost_submission_rejected:$submissionId',
     );
@@ -447,8 +447,8 @@ class NotificationService {
 
     await _notifications.show(
       submissionId.hashCode,
-      'Revision Requested',
-      'Your cost submission for site visit $siteVisitId requires revision. Notes: $revisionNotes',
+      BilingualNotificationStrings.revisionRequestedTitle,
+      BilingualNotificationStrings.revisionRequestedBody(siteVisitId, revisionNotes),
       platformDetails,
       payload: 'cost_submission_revision:$submissionId',
     );
@@ -477,8 +477,8 @@ class NotificationService {
 
     await _notifications.show(
       'offline_sync'.hashCode,
-      'Offline Sync Completed',
-      '$syncedCount cost submission(s) have been synchronized successfully.',
+      BilingualNotificationStrings.offlineSyncCompletedTitle,
+      BilingualNotificationStrings.offlineSyncCompletedBody(syncedCount),
       platformDetails,
       payload: 'offline_sync_completed',
     );
@@ -509,8 +509,8 @@ class NotificationService {
 
     await _notifications.show(
       'budget_alert_$siteVisitId'.hashCode,
-      'Budget Alert',
-      'Your remaining budget for site visit $siteVisitId is ${remainingBudget.toStringAsFixed(2)} $currency. Consider reviewing your expenses.',
+      BilingualNotificationStrings.budgetAlertTitle,
+      BilingualNotificationStrings.budgetAlertBody(siteVisitId, remainingBudget, currency),
       platformDetails,
       payload: 'budget_alert:$siteVisitId',
     );
