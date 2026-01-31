@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useToast } from '@/hooks/use-toast';
 import { useWithdrawalRealtime } from '@/hooks/useWithdrawalRealtime';
 import { 
@@ -57,6 +58,7 @@ export default function SupervisorApprovals() {
   } = useWallet();
   const { users } = useUser();
   const { currentUser } = useAppContext();
+  const { isSuperAdmin } = useSuperAdmin();
   const { toast } = useToast();
   const [selectedRequest, setSelectedRequest] = useState<SupervisedRequest | null>(null);
   const [dialogType, setDialogType] = useState<'approve' | 'reject' | 'batch_approve' | null>(null);
@@ -77,7 +79,7 @@ export default function SupervisorApprovals() {
 
   const userRole = currentUser?.role?.toLowerCase();
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
-  const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'ict' || userRole === 'superadmin';
+  const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'ict' || userRole === 'superadmin' || isSuperAdmin;
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
 
   const supervisorHubId = currentUser?.hubId;

@@ -1,4 +1,5 @@
 import { useUser } from '@/context/user/UserContext';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { DownPaymentProvider } from '@/context/downPayment/DownPaymentContext';
 import { DownPaymentApprovalPanel } from '@/components/downPayment/DownPaymentApprovalPanel';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,12 +9,14 @@ import { DollarSign, Shield, AlertTriangle, Info } from 'lucide-react';
 
 export default function DownPaymentApproval() {
   const { currentUser } = useUser();
+  const { isSuperAdmin } = useSuperAdmin();
   
   const userRole = currentUser?.role?.toLowerCase();
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
-  const isAdmin = userRole === 'admin' || userRole === 'financialadmin';
+  const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
+  const isFOM = userRole === 'fom' || userRole === 'field operation manager';
   
-  if (!isSupervisor && !isAdmin) {
+  if (!isSupervisor && !isAdmin && !isFOM) {
     return (
       <div className="p-6">
         <Card>
