@@ -121,10 +121,11 @@ export default function UnifiedCostRequestForm({
       return;
     }
 
-    if (supportingDocuments.length === 0) {
+    // Documents required for reimbursements (proof of payment), optional for advances
+    if (values.fundingType === 'reimbursement' && supportingDocuments.length === 0) {
       toast({
         title: "Documents Required",
-        description: "Please upload at least one supporting document",
+        description: "Please upload receipts or proof of payment for reimbursement requests",
         variant: "destructive"
       });
       return;
@@ -474,11 +475,13 @@ export default function UnifiedCostRequestForm({
 
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium mb-2">Supporting Documents *</h3>
+                <h3 className="text-sm font-medium mb-2">
+                  Supporting Documents {watchedFundingType === 'reimbursement' ? '*' : '(Optional)'}
+                </h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   {watchedFundingType === 'advance' 
-                    ? "Upload quotes, estimates, or supporting documentation for your request."
-                    : "Upload receipts, invoices, or proof of payment."}
+                    ? "Upload quotes, estimates, or supporting documentation if available."
+                    : "Upload receipts, invoices, or proof of payment (required)."}
                 </p>
                 <CostDocumentUpload
                   documents={supportingDocuments}
