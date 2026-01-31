@@ -222,6 +222,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       // Convert locality name to locality ID for matching
       // Need to find the state first to get the correct locality
       let localityData: { id: string; name: string } | undefined;
+      let foundInState: string | undefined;
       for (const state of sudanStates) {
         const locality = state.localities.find(
           (l) => l.name.toLowerCase() === selectedLocality.toLowerCase() ||
@@ -229,23 +230,35 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         );
         if (locality) {
           localityData = locality;
+          foundInState = state.name;
           break;
         }
       }
+      
+      console.log(`[DispatchSitesDialog] Looking for locality: "${selectedLocality}"`);
+      console.log(`[DispatchSitesDialog] Found in sudanStates: ${localityData ? `id="${localityData.id}", name="${localityData.name}" (in ${foundInState})` : 'NOT FOUND'}`);
+      console.log(`[DispatchSitesDialog] Total collectors before filter: ${filtered.length}`);
+      
       if (localityData) {
         // Match collectors by: locality_id equals localityData.id OR localityData.name
         filtered = filtered.filter((c) => {
-          if (!c.locality_id) return false;
+          if (!c.locality_id) {
+            console.log(`  [SKIP] ${c.full_name}: no locality_id`);
+            return false;
+          }
           const collectorLocalityId = c.locality_id.toLowerCase();
-          return collectorLocalityId === localityData!.id.toLowerCase() || 
-                 collectorLocalityId === localityData!.name.toLowerCase();
+          const matches = collectorLocalityId === localityData!.id.toLowerCase() || 
+                         collectorLocalityId === localityData!.name.toLowerCase();
+          console.log(`  [${matches ? 'MATCH' : 'NO MATCH'}] ${c.full_name}: locality_id="${c.locality_id}" vs id="${localityData!.id}" or name="${localityData!.name}"`);
+          return matches;
         });
-        console.log(`[DispatchSitesDialog] Locality filter: "${selectedLocality}" -> found ${filtered.length} collectors`);
+        console.log(`[DispatchSitesDialog] After locality filter: ${filtered.length} collectors/coordinators`);
       } else {
         // Fallback: try direct case-insensitive match
         filtered = filtered.filter((c) => 
           c.locality_id?.toLowerCase() === selectedLocality.toLowerCase()
         );
+        console.log(`[DispatchSitesDialog] Locality fallback filter: ${filtered.length} collectors`);
       }
     }
 
