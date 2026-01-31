@@ -2412,6 +2412,13 @@ const MMP = () => {
     // Format all entries
     const formattedEntries = allSiteEntries.map(formatSiteEntry);
 
+    // Debug: Log what we have for filtering
+    const dispatchedEntries = formattedEntries.filter(e => String(e.status || '').toLowerCase() === 'dispatched');
+    console.log(`📊 [EnumeratorData Debug] Total entries: ${formattedEntries.length}, Dispatched: ${dispatchedEntries.length}, Collector State: "${collectorStateName}"`);
+    if (dispatchedEntries.length > 0) {
+      console.log(`📊 [EnumeratorData Debug] Sample dispatched entry states:`, dispatchedEntries.slice(0, 3).map(e => ({ state: e.state, status: e.status, accepted_by: e.accepted_by })));
+    }
+
     // Filter available sites: status = "Dispatched", accepted_by = null, in collector's STATE
     // Users can see all dispatched sites within their assigned state (not restricted to locality)
     const availableSites = formattedEntries.filter(entry => {
@@ -2421,7 +2428,13 @@ const MMP = () => {
 
       // Filter by STATE only - users can claim any site in their state
       if (collectorStateName) {
-        return String(entry.state || '').toLowerCase() === collectorStateName.toLowerCase();
+        const entryState = String(entry.state || '').toLowerCase();
+        const matches = entryState === collectorStateName.toLowerCase();
+        if (!matches && dispatchedEntries.length > 0) {
+          // Only log first few mismatches
+          console.log(`📊 [State Mismatch] Entry state: "${entry.state}" vs Collector state: "${collectorStateName}"`);
+        }
+        return matches;
       }
       return false; // No state assigned = no sites
     }).sort((a, b) => {
