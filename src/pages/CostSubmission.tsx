@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, Briefcase, Wallet } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt } from "lucide-react";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
@@ -12,8 +12,7 @@ import { useProjectContext } from "@/context/project/ProjectContext";
 import { useUserProjects } from "@/hooks/useUserProjects";
 import { AppRole } from "@/types";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
-import OperationalCostForm from "@/components/cost-submission/OperationalCostForm";
-import CostRequestForm from "@/components/cost-submission/CostRequestForm";
+import UnifiedCostRequestForm from "@/components/cost-submission/UnifiedCostRequestForm";
 import CostReconciliationForm from "@/components/cost-submission/CostReconciliationForm";
 import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvances";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,7 +33,6 @@ const CostSubmission = () => {
   const { projects: allProjects } = useProjectContext();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { toast } = useToast();
-  const [isBudgetSubmitting, setIsBudgetSubmitting] = useState(false);
   
   // Check if user is admin or supervisor
   const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
@@ -63,11 +61,10 @@ const CostSubmission = () => {
   // Determine default tab based on role
   const getDefaultTab = () => {
     if (canViewTeamSubmissions) return "history";
-    if (canSubmitOperationalCosts) return "operational";
-    return "budget"; // Default to advance/reimburse for field staff
+    return "submit"; // Default to submit for field staff
   };
   
-  const [activeTab, setActiveTab] = useState<"operational" | "budget" | "reconciliation" | "outstanding" | "history">(getDefaultTab());
+  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">(getDefaultTab());
   const [showGuide, setShowGuide] = useState(false);
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
@@ -153,29 +150,6 @@ const CostSubmission = () => {
     name: p.name,
     budgetRemaining: (p as any).budgetRemaining
   }));
-
-  // Handle budget request submission
-  const handleBudgetRequestSubmit = async (data: any) => {
-    setIsBudgetSubmitting(true);
-    try {
-      // TODO: Integrate with backend service when enhanced_cost_requests table is available
-      console.log('Budget request submitted:', data);
-      toast({
-        title: data.requestType === 'advance' ? 'Advance Request Submitted' : 'Reimbursement Request Submitted',
-        description: `Your ${data.requestType} request for ${data.currency} ${data.requestedAmount?.toLocaleString()} has been submitted for approval.`,
-      });
-      setActiveTab("history");
-    } catch (error) {
-      console.error('Error submitting budget request:', error);
-      toast({
-        title: 'Submission Failed',
-        description: 'There was an error submitting your request. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsBudgetSubmitting(false);
-    }
-  };
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -417,20 +391,20 @@ const CostSubmission = () => {
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
         <TabsList className="flex-wrap gap-1">
-          {/* Operational Costs */}
+          {/* Submit Request */}
           {canSubmitOperationalCosts && (
-            <TabsTrigger value="operational" data-testid="tab-operational" className="gap-1.5">
+            <TabsTrigger value="submit" data-testid="tab-submit" className="gap-1.5">
               <Receipt className="h-4 w-4" />
-              <span className="hidden sm:inline">Operational</span>
-              <span className="sm:hidden">Ops</span>
+              <span className="hidden sm:inline">Submit Request</span>
+              <span className="sm:hidden">Submit</span>
             </TabsTrigger>
           )}
           
-          {/* Advance/Reimburse */}
-          <TabsTrigger value="budget" data-testid="tab-budget" className="gap-1.5">
-            <Wallet className="h-4 w-4" />
-            <span className="hidden sm:inline">Advance/Reimburse</span>
-            <span className="sm:hidden">Advance</span>
+          {/* Outstanding */}
+          <TabsTrigger value="outstanding" data-testid="tab-outstanding" className="gap-1.5">
+            <CircleDollarSign className="h-4 w-4" />
+            <span className="hidden sm:inline">Outstanding</span>
+            <span className="sm:hidden">Due</span>
           </TabsTrigger>
           
           {/* Reconciliation */}
@@ -438,13 +412,6 @@ const CostSubmission = () => {
             <RefreshCw className="h-4 w-4" />
             <span className="hidden sm:inline">Reconciliation</span>
             <span className="sm:hidden">Reconcile</span>
-          </TabsTrigger>
-          
-          {/* Outstanding Advances */}
-          <TabsTrigger value="outstanding" data-testid="tab-outstanding" className="gap-1.5">
-            <CircleDollarSign className="h-4 w-4" />
-            <span className="hidden sm:inline">Outstanding</span>
-            <span className="sm:hidden">Due</span>
           </TabsTrigger>
           
           {/* History */}
@@ -457,48 +424,15 @@ const CostSubmission = () => {
           </TabsTrigger>
         </TabsList>
 
-        {/* Operational Costs Tab */}
+        {/* Submit Request Tab - Unified form for all field costs */}
         {canSubmitOperationalCosts && (
-          <TabsContent value="operational" className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Receipt className="h-5 w-5 text-emerald-600" />
-                  <CardTitle>Operational Expense Submission</CardTitle>
-                </div>
-                <CardDescription>
-                  Submit operational expenses for permits, training, communications, and other field operation costs. 
-                  Requires two-tier approval (Supervisor/FOM → Admin).
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <OperationalCostForm 
+          <TabsContent value="submit" className="space-y-4">
+            <UnifiedCostRequestForm 
+              projects={projectsForForm}
               onSuccess={() => setActiveTab("history")}
             />
           </TabsContent>
         )}
-
-        {/* Advance/Reimburse Tab */}
-        <TabsContent value="budget" className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-indigo-600" />
-                <CardTitle>Advance Payment & Reimbursement</CardTitle>
-              </div>
-              <CardDescription>
-                Request advance funds for planned activities or submit reimbursement claims for expenses you've already paid. 
-                Advances must be reconciled with receipts after spending.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-          <CostRequestForm 
-            projects={projectsForForm}
-            onSubmit={handleBudgetRequestSubmit}
-            onCancel={() => setActiveTab("history")}
-            isSubmitting={isBudgetSubmitting}
-          />
-        </TabsContent>
 
         {/* Reconciliation Tab */}
         <TabsContent value="reconciliation" className="space-y-4">
