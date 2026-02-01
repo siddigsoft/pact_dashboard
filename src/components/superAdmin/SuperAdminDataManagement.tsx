@@ -134,7 +134,12 @@ interface StatsCardProps {
   color?: 'primary' | 'success' | 'warning' | 'danger';
 }
 
-function StatsCard({ title, value, subtitle, icon: Icon, trend, trendValue, color = 'primary' }: StatsCardProps) {
+interface ClickableStatsCardProps extends StatsCardProps {
+  onClick?: () => void;
+  isActive?: boolean;
+}
+
+function StatsCard({ title, value, subtitle, icon: Icon, trend, trendValue, color = 'primary', onClick, isActive }: ClickableStatsCardProps) {
   const colorClasses = {
     primary: 'bg-primary/10 text-primary',
     success: 'bg-green-500/10 text-green-600 dark:text-green-400',
@@ -142,33 +147,43 @@ function StatsCard({ title, value, subtitle, icon: Icon, trend, trendValue, colo
     danger: 'bg-red-500/10 text-red-600 dark:text-red-400',
   };
 
+  const borderClasses = {
+    primary: 'border-primary/50',
+    success: 'border-green-500/50',
+    warning: 'border-yellow-500/50',
+    danger: 'border-red-500/50',
+  };
+
   return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-3xl font-bold">{value}</p>
+    <Card 
+      className={`transition-all duration-200 ${onClick ? 'cursor-pointer hover-elevate' : ''} ${isActive ? `ring-2 ring-offset-2 ${borderClasses[color]}` : ''}`}
+      onClick={onClick}
+    >
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0 flex-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+            <p className="text-2xl font-bold tabular-nums">{value}</p>
             {subtitle && (
-              <p className="text-sm text-muted-foreground">{subtitle}</p>
+              <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
             )}
             {trend && trendValue && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 mt-1">
                 {trend === 'up' ? (
-                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  <TrendingUp className="h-3 w-3 text-green-500" />
                 ) : trend === 'down' ? (
-                  <TrendingDown className="h-4 w-4 text-red-500" />
+                  <TrendingDown className="h-3 w-3 text-red-500" />
                 ) : (
-                  <Activity className="h-4 w-4 text-muted-foreground" />
+                  <Activity className="h-3 w-3 text-muted-foreground" />
                 )}
-                <span className={`text-sm ${trend === 'up' ? 'text-green-500' : trend === 'down' ? 'text-red-500' : 'text-muted-foreground'}`}>
+                <span className={`text-xs ${trend === 'up' ? 'text-green-500' : trend === 'down' ? 'text-red-500' : 'text-muted-foreground'}`}>
                   {trendValue}
                 </span>
               </div>
             )}
           </div>
-          <div className={`p-3 rounded-full ${colorClasses[color]}`}>
-            <Icon className="h-6 w-6" />
+          <div className={`p-2.5 rounded-xl ${colorClasses[color]} shrink-0`}>
+            <Icon className="h-5 w-5" />
           </div>
         </div>
       </CardContent>
@@ -750,93 +765,102 @@ export function SuperAdminDataManagement() {
   }
 
   return (
-    <div className="space-y-6 p-6" data-testid="page-super-admin-data-management">
-      <div className="flex justify-between items-start gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Shield className="h-8 w-8 text-primary" />
-            </div>
-            Data Management Center
-          </h1>
-          <p className="text-muted-foreground mt-2 max-w-2xl">
-            Comprehensive data management for site visits, wallets, transactions, claimed sites, and MMPs. 
-            All actions are logged and audited for compliance.
-          </p>
+    <div className="space-y-5 p-4 md:p-6" data-testid="page-super-admin-data-management">
+      {/* Compact Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">
+            <Shield className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold">Data Management Center</h1>
+            <p className="text-xs text-muted-foreground hidden sm:block">
+              Manage site visits, wallets, transactions & MMPs
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshCurrentTab}
+            disabled={loading}
+            data-testid="button-refresh"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline ml-2">Refresh</span>
+          </Button>
           <Button variant="outline" size="sm" data-testid="button-export">
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline ml-2">Export</span>
           </Button>
         </div>
       </div>
 
-      <Card className="border-yellow-300/50 dark:border-yellow-900/50 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20">
-        <CardContent className="p-4">
-          <div className="flex gap-3">
-            <div className="p-2 rounded-full bg-yellow-500/10">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
-            </div>
-            <div>
-              <p className="font-semibold text-yellow-800 dark:text-yellow-200">
-                Administrative Actions Dashboard
-              </p>
-              <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                All modifications are permanently logged in the audit trail. Affected users receive automatic notifications.
-                Deleted data remains accessible in the deletion audit log for compliance review.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Compact Warning Banner */}
+      <div className="flex items-center gap-3 p-3 rounded-lg border border-yellow-300/50 dark:border-yellow-900/50 bg-gradient-to-r from-yellow-50/80 to-orange-50/80 dark:from-yellow-950/20 dark:to-orange-950/20">
+        <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-500 shrink-0" />
+        <p className="text-xs text-yellow-700 dark:text-yellow-300">
+          <span className="font-medium">Admin Mode:</span> All actions are logged. Affected users receive notifications.
+        </p>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Clickable Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatsCard
-          title="Completed Site Visits"
+          title="Site Visits"
           value={stats.totalSiteVisits}
           subtitle={`${stats.verifiedVisits} verified`}
           icon={MapPin}
           color="success"
+          onClick={() => setActiveTab('site-visits')}
+          isActive={activeTab === 'site-visits'}
         />
         <StatsCard
-          title="Active Wallets"
+          title="Wallets"
           value={stats.totalWallets}
-          subtitle={`${stats.totalEarned.toLocaleString()} SDG earned`}
+          subtitle={`${stats.totalEarned.toLocaleString()} SDG`}
           icon={Wallet}
           color="primary"
+          onClick={() => setActiveTab('wallets')}
+          isActive={activeTab === 'wallets'}
         />
         <StatsCard
-          title="Total Transactions"
+          title="Transactions"
           value={stats.totalTransactions}
-          subtitle={`${stats.creditTransactions} credits, ${stats.debitTransactions} debits`}
+          subtitle={`${stats.creditTransactions} cr / ${stats.debitTransactions} db`}
           icon={DollarSign}
           color="warning"
+          onClick={() => setActiveTab('transactions')}
+          isActive={activeTab === 'transactions'}
         />
         <StatsCard
           title="Claimed Sites"
           value={stats.totalClaimedSites}
-          subtitle={`${stats.assignedSites} actively assigned`}
+          subtitle={`${stats.assignedSites} assigned`}
           icon={Users}
           color="danger"
+          onClick={() => setActiveTab('claimed-sites')}
+          isActive={activeTab === 'claimed-sites'}
         />
       </div>
 
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="relative flex-1 min-w-[250px] max-w-md">
+      {/* Search and Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by name, code, or user..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 h-9"
             data-testid="input-search"
           />
         </div>
         
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
-            <Filter className="h-4 w-4 mr-2" />
+          <SelectTrigger className="w-full sm:w-[160px] h-9" data-testid="select-status-filter">
+            <Filter className="h-3.5 w-3.5 mr-2" />
             <SelectValue placeholder="Filter" />
           </SelectTrigger>
           <SelectContent>
@@ -847,62 +871,57 @@ export function SuperAdminDataManagement() {
             ))}
           </SelectContent>
         </Select>
-
-        <Button
-          variant="outline"
-          onClick={refreshCurrentTab}
-          disabled={loading}
-          data-testid="button-refresh"
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
       </div>
 
+      {/* Tabs with horizontal scroll on mobile */}
       <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setStatusFilter('all'); }}>
-        <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
-          <TabsTrigger value="site-visits" className="gap-2" data-testid="tab-site-visits">
-            <MapPin className="h-4 w-4" />
-            <span className="hidden sm:inline">Site Visits</span>
-            <Badge variant="secondary" className="ml-1 hidden lg:inline-flex">{filteredSiteVisits.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="wallets" className="gap-2" data-testid="tab-wallets">
-            <Wallet className="h-4 w-4" />
-            <span className="hidden sm:inline">Wallets</span>
-            <Badge variant="secondary" className="ml-1 hidden lg:inline-flex">{filteredWallets.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="transactions" className="gap-2" data-testid="tab-transactions">
-            <DollarSign className="h-4 w-4" />
-            <span className="hidden sm:inline">Transactions</span>
-            <Badge variant="secondary" className="ml-1 hidden lg:inline-flex">{filteredTransactions.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="claimed-sites" className="gap-2" data-testid="tab-claimed-sites">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Claimed Sites</span>
-            <Badge variant="secondary" className="ml-1 hidden lg:inline-flex">{filteredClaimedSites.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="mmps" className="gap-2" data-testid="tab-mmps">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">MMPs</span>
-            <Badge variant="secondary" className="ml-1 hidden lg:inline-flex">{filteredMMPs.length}</Badge>
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+          <TabsList className="inline-flex w-auto min-w-full md:min-w-0 h-10 p-1 bg-muted/50">
+            <TabsTrigger value="site-visits" className="gap-1.5 px-3 text-xs sm:text-sm whitespace-nowrap" data-testid="tab-site-visits">
+              <MapPin className="h-3.5 w-3.5" />
+              <span>Visits</span>
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{filteredSiteVisits.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="wallets" className="gap-1.5 px-3 text-xs sm:text-sm whitespace-nowrap" data-testid="tab-wallets">
+              <Wallet className="h-3.5 w-3.5" />
+              <span>Wallets</span>
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{filteredWallets.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="transactions" className="gap-1.5 px-3 text-xs sm:text-sm whitespace-nowrap" data-testid="tab-transactions">
+              <DollarSign className="h-3.5 w-3.5" />
+              <span>Transactions</span>
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{filteredTransactions.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="claimed-sites" className="gap-1.5 px-3 text-xs sm:text-sm whitespace-nowrap" data-testid="tab-claimed-sites">
+              <Users className="h-3.5 w-3.5" />
+              <span>Claimed</span>
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{filteredClaimedSites.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="mmps" className="gap-1.5 px-3 text-xs sm:text-sm whitespace-nowrap" data-testid="tab-mmps">
+              <FileText className="h-3.5 w-3.5" />
+              <span>MMPs</span>
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{filteredMMPs.length}</Badge>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="site-visits" className="mt-6">
+        <TabsContent value="site-visits" className="mt-4">
           <Card>
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-green-600" />
-                    Completed Site Visits
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    Reset completed visits back to assigned status. This removes associated earnings.
-                  </CardDescription>
+            <CardHeader className="border-b py-3 px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-green-500/10">
+                    <MapPin className="h-4 w-4 text-green-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Completed Site Visits</CardTitle>
+                    <CardDescription className="text-xs">
+                      Reset visits to remove associated earnings
+                    </CardDescription>
+                  </div>
                 </div>
-                <Badge variant="outline" className="text-lg px-3 py-1">
-                  {filteredSiteVisits.length} records
+                <Badge variant="outline" className="text-sm px-2 py-0.5">
+                  {filteredSiteVisits.length}
                 </Badge>
               </div>
             </CardHeader>
@@ -988,21 +1007,23 @@ export function SuperAdminDataManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="wallets" className="mt-6">
+        <TabsContent value="wallets" className="mt-4">
           <Card>
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Wallet className="h-5 w-5 text-blue-600" />
-                    User Wallets
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    View and reset user wallet balances. Reset removes all transactions.
-                  </CardDescription>
+            <CardHeader className="border-b py-3 px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-primary/10">
+                    <Wallet className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">User Wallets</CardTitle>
+                    <CardDescription className="text-xs">
+                      Reset balances removes all transactions
+                    </CardDescription>
+                  </div>
                 </div>
-                <Badge variant="outline" className="text-lg px-3 py-1">
-                  {filteredWallets.length} wallets
+                <Badge variant="outline" className="text-sm px-2 py-0.5">
+                  {filteredWallets.length}
                 </Badge>
               </div>
             </CardHeader>
@@ -1075,21 +1096,23 @@ export function SuperAdminDataManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="transactions" className="mt-6">
+        <TabsContent value="transactions" className="mt-4">
           <Card>
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <DollarSign className="h-5 w-5 text-yellow-600" />
-                    Wallet Transactions
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    View and delete individual transactions. Wallet balances are adjusted automatically.
-                  </CardDescription>
+            <CardHeader className="border-b py-3 px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-yellow-500/10">
+                    <DollarSign className="h-4 w-4 text-yellow-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Wallet Transactions</CardTitle>
+                    <CardDescription className="text-xs">
+                      Delete transactions to adjust wallet balances
+                    </CardDescription>
+                  </div>
                 </div>
-                <Badge variant="outline" className="text-lg px-3 py-1">
-                  {filteredTransactions.length} transactions
+                <Badge variant="outline" className="text-sm px-2 py-0.5">
+                  {filteredTransactions.length}
                 </Badge>
               </div>
             </CardHeader>
@@ -1165,26 +1188,28 @@ export function SuperAdminDataManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="claimed-sites" className="mt-6">
+        <TabsContent value="claimed-sites" className="mt-4">
           <Card>
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-red-600" />
-                    Claimed Sites
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    View all sites claimed by data collectors. Reclaim sites to release them back to the dispatch pool.
-                  </CardDescription>
+            <CardHeader className="border-b py-3 px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-red-500/10">
+                    <Users className="h-4 w-4 text-red-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Claimed Sites</CardTitle>
+                    <CardDescription className="text-xs">
+                      Reclaim to release back to dispatch pool
+                    </CardDescription>
+                  </div>
                 </div>
-                <Badge variant="outline" className="text-lg px-3 py-1">
-                  {filteredClaimedSites.length} sites
+                <Badge variant="outline" className="text-sm px-2 py-0.5">
+                  {filteredClaimedSites.length}
                 </Badge>
               </div>
               
               {/* Advanced Filters for Claimed Sites */}
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Activity</Label>
                   <Select value={activityFilter} onValueChange={setActivityFilter}>
@@ -1356,21 +1381,23 @@ export function SuperAdminDataManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="mmps" className="mt-6">
+        <TabsContent value="mmps" className="mt-4">
           <Card>
-            <CardHeader className="border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-purple-600" />
-                    Monthly Monitoring Plans
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    View and archive MMP files. Archived MMPs are hidden from regular views.
-                  </CardDescription>
+            <CardHeader className="border-b py-3 px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-purple-500/10">
+                    <FileText className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Monthly Monitoring Plans</CardTitle>
+                    <CardDescription className="text-xs">
+                      Archive MMPs to hide from regular views
+                    </CardDescription>
+                  </div>
                 </div>
-                <Badge variant="outline" className="text-lg px-3 py-1">
-                  {filteredMMPs.length} MMPs
+                <Badge variant="outline" className="text-sm px-2 py-0.5">
+                  {filteredMMPs.length}
                 </Badge>
               </div>
             </CardHeader>
