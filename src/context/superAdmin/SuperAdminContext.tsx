@@ -38,6 +38,14 @@ export interface ResetWalletParams {
   deletedByRole: string;
 }
 
+export interface ReclaimSiteParams {
+  siteEntryId: string;
+  reason: string;
+  reclaimedBy: string;
+  reclaimedByName: string;
+  reclaimedByRole: string;
+}
+
 interface SuperAdminContextType {
   superAdmins: SuperAdmin[];
   deletionLogs: DeletionAuditLog[];
@@ -55,6 +63,7 @@ interface SuperAdminContextType {
   resetSiteVisit: (params: ResetSiteVisitParams) => Promise<boolean>;
   deleteWalletTransaction: (params: DeleteWalletTransactionParams) => Promise<boolean>;
   resetWallet: (params: ResetWalletParams) => Promise<boolean>;
+  reclaimSite: (params: ReclaimSiteParams) => Promise<boolean>;
 }
 
 const SuperAdminContext = createContext<SuperAdminContextType | undefined>(undefined);
@@ -874,6 +883,99 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const reclaimSite = async (params: ReclaimSiteParams): Promise<boolean> => {
+    try {
+      const { siteEntryId, reason, reclaimedBy, reclaimedByName, reclaimedByRole } = params;
+
+      // 1. Get the site entry details first
+      const { data: siteEntry, error: fetchError } = await supabase
+        .from('mmp_site_entries')
+        .select('*')
+        .eq('id', siteEntryId)
+        .single();
+
+      if (fetchError || !siteEntry) {
+        toast({
+          title: 'Error',
+          description: 'Site entry not found',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const formerAssigneeId = siteEntry.accepted_by;
+      const siteName = siteEntry.site_name || siteEntry.site_code || 'Unknown Site';
+
+      if (!formerAssigneeId) {
+        toast({
+          title: 'Info',
+          description: 'This site is not currently claimed by anyone',
+        });
+        return false;
+      }
+
+      // 2. Update the site entry to release it back to dispatched status
+      const { error: updateError } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          accepted_by: null,
+          accepted_at: null,
+          status: 'dispatched',
+          confirmation_deadline: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', siteEntryId);
+
+      if (updateError) {
+        throw new Error(`Failed to reclaim site: ${updateError.message}`);
+      }
+
+      // 3. Log the reclaim action for audit trail
+      await logDeletion({
+        tableName: 'mmp_site_entries',
+        recordId: siteEntryId,
+        recordData: { 
+          ...siteEntry, 
+          action: 'site_reclaimed',
+          former_assignee: formerAssigneeId,
+          reclaim_reason: reason 
+        },
+        deletedBy: reclaimedBy,
+        deletedByRole: reclaimedByRole,
+        deletedByName: reclaimedByName,
+        deletionReason: `Site reclaimed: ${reason}`,
+        isRestorable: true,
+      });
+
+      // 4. Send notification to the former assignee
+      if (formerAssigneeId) {
+        await sendNotificationToUser(
+          formerAssigneeId,
+          'Site Reclaimed',
+          `Your site "${siteName}" has been reclaimed by ${reclaimedByName}. Reason: ${reason}`,
+          'warning',
+          siteEntryId,
+          'site_visit'
+        );
+      }
+
+      toast({
+        title: 'Site Reclaimed',
+        description: `Site "${siteName}" has been released back to the dispatch pool.`,
+      });
+
+      return true;
+    } catch (error: any) {
+      console.error('Failed to reclaim site:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reclaim site',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const value: SuperAdminContextType = {
     superAdmins,
     deletionLogs,
@@ -891,6 +993,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     resetSiteVisit,
     deleteWalletTransaction,
     resetWallet,
+    reclaimSite,
   };
 
   return <SuperAdminContext.Provider value={value}>{children}</SuperAdminContext.Provider>;

@@ -60,6 +60,21 @@ interface SiteVisitData {
   enumerator_fee?: number;
 }
 
+interface ClaimedSiteData {
+  id: string;
+  site_name: string;
+  site_code: string;
+  state: string;
+  locality: string;
+  status: string;
+  accepted_by: string;
+  accepted_by_name?: string;
+  accepted_at?: string;
+  confirmation_deadline?: string;
+  enumerator_fee?: number;
+  transport_fee?: number;
+}
+
 interface WalletData {
   id: string;
   user_id: string;
@@ -85,7 +100,7 @@ interface TransactionData {
 
 export function SuperAdminDataManagement() {
   const { currentUser, users } = useUser();
-  const { isSuperAdmin, resetSiteVisit, deleteWalletTransaction, resetWallet } = useSuperAdmin();
+  const { isSuperAdmin, resetSiteVisit, deleteWalletTransaction, resetWallet, reclaimSite } = useSuperAdmin();
 
   const [activeTab, setActiveTab] = useState('site-visits');
   const [loading, setLoading] = useState(false);
@@ -94,8 +109,11 @@ export function SuperAdminDataManagement() {
   const [siteVisits, setSiteVisits] = useState<SiteVisitData[]>([]);
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
+  const [claimedSites, setClaimedSites] = useState<ClaimedSiteData[]>([]);
 
   const [selectedSiteVisit, setSelectedSiteVisit] = useState<SiteVisitData | null>(null);
+  const [selectedClaimedSite, setSelectedClaimedSite] = useState<ClaimedSiteData | null>(null);
+  const [showReclaimSiteDialog, setShowReclaimSiteDialog] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionData | null>(null);
 
@@ -211,11 +229,40 @@ export function SuperAdminDataManagement() {
     }
   };
 
+  const loadClaimedSites = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, confirmation_deadline, enumerator_fee, transport_fee')
+        .not('accepted_by', 'is', null)
+        .order('accepted_at', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+
+      const enriched = (data || []).map(site => {
+        const collector = users.find(u => u.id === site.accepted_by);
+        return {
+          ...site,
+          accepted_by_name: collector?.name || 'Unknown',
+        };
+      });
+
+      setClaimedSites(enriched);
+    } catch (error) {
+      console.error('Failed to load claimed sites:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isSuperAdmin) {
       if (activeTab === 'site-visits') loadSiteVisits();
       else if (activeTab === 'wallets') loadWallets();
       else if (activeTab === 'transactions') loadTransactions();
+      else if (activeTab === 'claimed-sites') loadClaimedSites();
     }
   }, [activeTab, isSuperAdmin, users]);
 
@@ -301,6 +348,33 @@ export function SuperAdminDataManagement() {
     setShowDeleteTransactionDialog(true);
   };
 
+  const openReclaimSiteDialog = (site: ClaimedSiteData) => {
+    setSelectedClaimedSite(site);
+    setReason('');
+    setShowReclaimSiteDialog(true);
+  };
+
+  const handleReclaimSite = async () => {
+    if (!selectedClaimedSite || !currentUser || !reason.trim()) return;
+
+    setProcessing(true);
+    const success = await reclaimSite({
+      siteEntryId: selectedClaimedSite.id,
+      reason: reason.trim(),
+      reclaimedBy: currentUser.id,
+      reclaimedByName: currentUser.name || currentUser.email || 'Super Admin',
+      reclaimedByRole: currentUser.role || 'superadmin',
+    });
+
+    setProcessing(false);
+    if (success) {
+      setShowReclaimSiteDialog(false);
+      setSelectedClaimedSite(null);
+      setReason('');
+      loadClaimedSites();
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'completed':
@@ -328,6 +402,14 @@ export function SuperAdminDataManagement() {
     t.user_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredClaimedSites = claimedSites.filter(site =>
+    site.site_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    site.site_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    site.accepted_by_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    site.state?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    site.locality?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (!isSuperAdmin) {
@@ -394,6 +476,7 @@ export function SuperAdminDataManagement() {
             if (activeTab === 'site-visits') loadSiteVisits();
             else if (activeTab === 'wallets') loadWallets();
             else if (activeTab === 'transactions') loadTransactions();
+            else if (activeTab === 'claimed-sites') loadClaimedSites();
           }}
           disabled={loading}
           data-testid="button-refresh"
@@ -416,6 +499,10 @@ export function SuperAdminDataManagement() {
           <TabsTrigger value="transactions" data-testid="tab-transactions">
             <Trash2 className="h-4 w-4 mr-2" />
             Transactions
+          </TabsTrigger>
+          <TabsTrigger value="claimed-sites" data-testid="tab-claimed-sites">
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Claimed Sites
           </TabsTrigger>
         </TabsList>
 
@@ -600,7 +687,138 @@ export function SuperAdminDataManagement() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="claimed-sites" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RotateCcw className="h-5 w-5" />
+                Claimed Sites ({filteredClaimedSites.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-center text-muted-foreground py-8">Loading...</p>
+              ) : filteredClaimedSites.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No claimed sites found</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Site Name</TableHead>
+                        <TableHead>Site Code</TableHead>
+                        <TableHead>State / Locality</TableHead>
+                        <TableHead>Claimed By</TableHead>
+                        <TableHead>Claimed At</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Fees</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredClaimedSites.map((site) => (
+                        <TableRow key={site.id} data-testid={`row-claimed-site-${site.id}`}>
+                          <TableCell className="font-medium">{site.site_name}</TableCell>
+                          <TableCell>{site.site_code}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>{site.state || '—'}</div>
+                              <div className="text-muted-foreground">{site.locality || '—'}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{site.accepted_by_name}</TableCell>
+                          <TableCell>
+                            {site.accepted_at ? format(new Date(site.accepted_at), 'MMM d, yyyy HH:mm') : '—'}
+                          </TableCell>
+                          <TableCell>{getStatusBadge(site.status)}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div>Enum: ${site.enumerator_fee?.toFixed(2) || '—'}</div>
+                              <div className="text-muted-foreground">Trans: ${site.transport_fee?.toFixed(2) || '—'}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => openReclaimSiteDialog(site)}
+                              data-testid={`button-reclaim-${site.id}`}
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                              Reclaim
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <Dialog open={showReclaimSiteDialog} onOpenChange={setShowReclaimSiteDialog}>
+        <DialogContent data-testid="dialog-reclaim-site">
+          <DialogHeader>
+            <DialogTitle>Reclaim Site from Data Collector</DialogTitle>
+            <DialogDescription>
+              This will release the site back to the dispatch pool, making it available for other data collectors to claim.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-destructive/10 border border-destructive/20 p-3 rounded-md">
+              <p className="text-sm font-medium">
+                Site: {selectedClaimedSite?.site_name} ({selectedClaimedSite?.site_code})
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Currently Claimed By: {selectedClaimedSite?.accepted_by_name}
+              </p>
+              {selectedClaimedSite?.accepted_at && (
+                <p className="text-sm text-muted-foreground">
+                  Claimed At: {format(new Date(selectedClaimedSite.accepted_at), 'MMM d, yyyy HH:mm')}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="reclaim-reason">Reason for Reclaim *</Label>
+              <Textarea
+                id="reclaim-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Explain why this site is being reclaimed..."
+                rows={3}
+                data-testid="textarea-reclaim-reason"
+              />
+            </div>
+
+            <ul className="text-sm text-muted-foreground list-disc pl-4 space-y-1">
+              <li>Site will be released back to "dispatched" status</li>
+              <li>The site will be available for other data collectors to claim</li>
+              <li>The former assignee will be notified</li>
+              <li>This action is logged for audit purposes</li>
+            </ul>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReclaimSiteDialog(false)} data-testid="button-cancel-reclaim">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReclaimSite}
+              disabled={processing || !reason.trim()}
+              data-testid="button-confirm-reclaim"
+            >
+              {processing ? 'Reclaiming...' : 'Reclaim Site'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showResetSiteVisitDialog} onOpenChange={setShowResetSiteVisitDialog}>
         <DialogContent data-testid="dialog-reset-site-visit">
