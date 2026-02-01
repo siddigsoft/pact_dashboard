@@ -65,8 +65,8 @@ interface SiteVisitData {
   status: string;
   accepted_by: string;
   accepted_by_name?: string;
-  supervisor_id?: string;
-  supervisor_name?: string;
+  visit_completed_by?: string;
+  completed_by_name?: string;
   visit_completed_at?: string;
   enumerator_fee?: number;
   state?: string;
@@ -83,7 +83,6 @@ interface ClaimedSiteData {
   accepted_by: string;
   accepted_by_name?: string;
   accepted_at?: string;
-  confirmation_deadline?: string;
   enumerator_fee?: number;
   transport_fee?: number;
 }
@@ -211,7 +210,7 @@ export function SuperAdminDataManagement() {
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, status, accepted_by, supervisor_id, visit_completed_at, enumerator_fee, state, locality')
+        .select('id, site_name, site_code, status, accepted_by, visit_completed_at, visit_completed_by, enumerator_fee, state, locality')
         .in('status', ['completed', 'verified'])
         .order('visit_completed_at', { ascending: false })
         .limit(200);
@@ -220,11 +219,11 @@ export function SuperAdminDataManagement() {
 
       const enriched = (data || []).map(sv => {
         const collector = users.find(u => u.id === sv.accepted_by);
-        const supervisor = users.find(u => u.id === sv.supervisor_id);
+        const completedBy = users.find(u => u.id === sv.visit_completed_by);
         return {
           ...sv,
           accepted_by_name: collector?.name || 'Unknown',
-          supervisor_name: supervisor?.name || 'N/A',
+          completed_by_name: completedBy?.name || 'N/A',
         };
       });
 
@@ -316,7 +315,7 @@ export function SuperAdminDataManagement() {
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, confirmation_deadline, enumerator_fee, transport_fee')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee')
         .not('accepted_by', 'is', null)
         .order('accepted_at', { ascending: false })
         .limit(300);
