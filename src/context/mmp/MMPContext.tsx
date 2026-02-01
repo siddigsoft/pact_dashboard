@@ -382,7 +382,7 @@ export const useMMPProvider = () => {
         approvedCostedResult,
         totalResult
       ] = await Promise.all([
-        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'dispatched'),
+        supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'dispatched').is('accepted_by', null),
         supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'accepted'),
         supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).ilike('status', 'assigned'),
         supabase.from('mmp_site_entries').select('*', { count: 'exact', head: true }).or('status.ilike.inprogress,status.ilike.in_progress,status.ilike.ongoing'),
