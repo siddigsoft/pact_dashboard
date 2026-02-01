@@ -60,6 +60,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const { currentUser } = useUser();
   const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
   const [dispatchedByName, setDispatchedByName] = useState<string | null>(null);
+  const [verifiedByName, setVerifiedByName] = useState<string | null>(null);
   const [classificationFee, setClassificationFee] = useState<number | null>(null);
 
   const isFieldWorker = currentUser?.role === 'dataCollector' || 
@@ -300,6 +301,42 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     fetchProfile();
     return () => { cancelled = true; };
   }, [row?.dispatchedBy, users]);
+
+  // Look up verified by user name
+  useEffect(() => {
+    const id = row?.verifiedBy as string | undefined;
+    if (!id) {
+      setVerifiedByName(null);
+      return;
+    }
+    const looksLikeUUID = typeof id === 'string' && /[0-9a-fA-F-]{30,}/.test(id);
+    if (!looksLikeUUID) {
+      setVerifiedByName(id);
+      return;
+    }
+    const local = users?.find(u => u.id === id);
+    if (local) {
+      setVerifiedByName(local.fullName || local.name || local.username || local.email || id);
+      return;
+    }
+    let cancelled = false;
+    const fetchProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name,username,email')
+          .eq('id', id)
+          .single();
+        if (!cancelled) {
+          setVerifiedByName(data?.full_name || data?.username || data?.email || id);
+        }
+      } catch {
+        if (!cancelled) setVerifiedByName(id);
+      }
+    };
+    fetchProfile();
+    return () => { cancelled = true; };
+  }, [row?.verifiedBy, users]);
 
   // Initialize draft when entering edit mode
   useEffect(() => {
@@ -1007,7 +1044,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 {row.verifiedBy && (
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Verified By</Label>
-                    <p className="font-medium text-gray-900 mt-1">{row.verifiedBy}</p>
+                    <p className="font-medium text-gray-900 mt-1">{verifiedByName || row.verifiedBy}</p>
                   </div>
                 )}
                 {row.verifiedAt && (
@@ -1283,8 +1320,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
             siteName: row.siteName,
             siteCode: row.siteCode,
             visitDate: row.visitDate,
-            visitDateFrom: row.visitDateFrom,
-            visitDateTo: row.visitDateTo,
+            visitDateFrom: site.additional_data?.visit_date_from || site.additional_data?.visitDateFrom || undefined,
+            visitDateTo: site.additional_data?.visit_date_to || site.additional_data?.visitDateTo || undefined,
             mainActivity: row.siteActivity,
             postponementHistory: site.postponementHistory || site.additional_data?.postponementHistory || [],
             verificationStarted: ['verified', 'approved', 'dispatched', 'completed'].includes((row.status || site?.status || '').toLowerCase())
