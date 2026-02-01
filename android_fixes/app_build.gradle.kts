@@ -16,7 +16,7 @@ val flutterVersionCode = localProperties.getProperty("flutter.versionCode") ?: "
 val flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "1.0"
 
 android {
-    namespace = "com.pact.mobile"
+    namespace = "com.example.pact_mobile"
     compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
@@ -31,7 +31,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.pact.mobile"
+        applicationId = "com.example.pact_mobile"
         minSdk = 24
         targetSdk = 35
         versionCode = flutterVersionCode.toInt()
