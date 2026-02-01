@@ -921,7 +921,6 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           accepted_by: null,
           accepted_at: null,
           status: 'dispatched',
-          confirmation_deadline: null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', siteEntryId);
