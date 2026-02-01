@@ -89,8 +89,9 @@ export function useClaimFeeCalculation(): UseClaimFeeCalculationResult {
         }
 
         if (feeStructure) {
-          // Fees are stored directly in SDG, not cents
-          const baseFee = Number(feeStructure.site_visit_base_fee_cents) || 0;
+          // Convert from cents to SDG (divide by 100)
+          const baseFeeInCents = Number(feeStructure.site_visit_base_fee_cents) || 0;
+          const baseFee = baseFeeInCents / 100; // Convert cents to SDG
           const multiplier = Number(feeStructure.complexity_multiplier) || 1.0;
           enumeratorFee = Math.round(baseFee * multiplier * 100) / 100; // Round to 2 decimals
           feeSource = 'classification';
@@ -161,8 +162,9 @@ export async function calculateEnumeratorFeeForUser(userId: string): Promise<{
       };
     }
 
-    // Fees are stored directly in SDG, not cents
-    const baseFee = Number(feeStructure.site_visit_base_fee_cents) || 0;
+    // Convert from cents to SDG (divide by 100)
+    const baseFeeInCents = Number(feeStructure.site_visit_base_fee_cents) || 0;
+    const baseFee = baseFeeInCents / 100; // Convert cents to SDG
     const multiplier = Number(feeStructure.complexity_multiplier) || 1.0;
     const fee = Math.round(baseFee * multiplier * 100) / 100; // Round to 2 decimals
 
