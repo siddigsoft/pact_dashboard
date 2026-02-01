@@ -696,18 +696,20 @@ class _MMPScreenState extends State<MMPScreen> {
           .select('*, mmp_files(project_id)')
           .ilike('status', 'Dispatched');
 
-      // Filter by location if names are available
-      // Only filter if we have actual names, not IDs
-      if (_userLocalityName != null && _userLocalityName!.isNotEmpty) {
-        debugPrint('Filtering by locality: $_userLocalityName');
-        query = query.ilike('locality', _userLocalityName!);
-      } else if (_userStateName != null && _userStateName!.isNotEmpty) {
-        debugPrint('Filtering by state: $_userStateName');
-        query = query.ilike('state', _userStateName!);
-      } else {
-        // If no location info, show all dispatched sites (remove location filter)
-        debugPrint('No location info available - showing all dispatched sites');
+      // Filter by state - must match web behavior exactly
+      // Web app: Users MUST have a state_id assigned to see claimable sites
+      // If user has no state assigned, return empty list (no sites to claim)
+      if (_userStateName == null || _userStateName!.isEmpty) {
+        debugPrint('[_loadAvailableSites] No state assigned to user - returning empty list (matching web behavior)');
+        debugPrint('[_loadAvailableSites] User stateId: $_userStateId, stateName: $_userStateName');
+        _availableSites = [];
+        return;
       }
+      
+      // Filter by state (all sites in user's state are claimable, not just locality)
+      // This matches web behavior: users can claim any site in their assigned state
+      debugPrint('Filtering by state: $_userStateName');
+      query = query.ilike('state', '%$_userStateName%');
 
       final response = await query
           .order('created_at', ascending: false)
