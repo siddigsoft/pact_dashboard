@@ -30,6 +30,7 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI for a res
 *   **Dispatch & Coverage:** A Smart Dispatch System for optimal collector assignment and a Coverage Gap Notification System to alert admins about insufficient coverage.
 *   **Workflow Management:** Flexible Locality Permit Requirement Workflow for streamlined permit verification. An MMP Verification Workflow for progression to approval/costing/dispatch.
 *   **Document Management:** A Document Registry & Indexing System with metadata indexing, deduplication, and filtering.
+*   **Super Admin Data Management Center:** Comprehensive admin interface for managing site visits, wallets, transactions, claimed sites, dispatched sites, and MMPs. Features include clickable stats cards with compact headers, advanced multi-filter search, Return-to-Approved functionality for dispatched sites, site reclaim actions, and full audit logging for all administrative actions.
 *   **Security & Tracking:** A Security-Hardened Activity Tracking System for comprehensive user activity logging with data minimization.
 *   **Reporting & Analytics:** A Comprehensive Coverage Analytics Dashboard with various reports and export functionality.
 *   **Mobile Specific Features:**
