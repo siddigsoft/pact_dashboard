@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
-import { DownPaymentProvider, useDownPayment } from '@/context/downPayment/DownPaymentContext';
+import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1491,9 +1491,6 @@ function AdvanceRequestsReportContent() {
 }
 
 export default function AdvanceRequestsReport() {
-  return (
-    <DownPaymentProvider>
-      <AdvanceRequestsReportContent />
-    </DownPaymentProvider>
-  );
+  // DownPaymentProvider is already provided by AppContext.tsx - no need to wrap again
+  return <AdvanceRequestsReportContent />;
 }
