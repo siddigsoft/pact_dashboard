@@ -1,6 +1,5 @@
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
-import { DownPaymentProvider } from '@/context/downPayment/DownPaymentContext';
 import { DownPaymentApprovalPanel } from '@/components/downPayment/DownPaymentApprovalPanel';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,8 +35,8 @@ export default function DownPaymentApproval() {
 
   const approvalRole = isSupervisor ? 'supervisor' : 'admin';
 
+  // DownPaymentProvider is already provided by AppContext.tsx - no need to wrap again
   return (
-    <DownPaymentProvider>
       <div className="p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -77,6 +76,5 @@ export default function DownPaymentApproval() {
 
         <DownPaymentApprovalPanel userRole={approvalRole} />
       </div>
-    </DownPaymentProvider>
   );
 }
