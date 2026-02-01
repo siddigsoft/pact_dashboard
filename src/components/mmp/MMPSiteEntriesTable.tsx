@@ -80,13 +80,13 @@ const MMPSiteEntriesTable = ({
       const newFees: Record<string, number> = {};
       let viewerFee: number | null = null;
 
-      // Determine if we need viewer fee once for multiple sites
+      // Always recalculate fees to ensure they reflect current fee structure
       const needsViewerFee = Boolean(
         currentUserId && siteEntries.some((site) => {
           const acceptedBy = site.accepted_by || site.acceptedBy;
           const status = (site.status || '').toString().toLowerCase();
           const isDispatched = status === 'dispatched';
-          return !acceptedBy && isDispatched && !calculatedFees[site.id];
+          return !acceptedBy && isDispatched;
         })
       );
 
@@ -101,8 +101,6 @@ const MMPSiteEntriesTable = ({
       }
 
       for (const site of siteEntries) {
-        if (calculatedFees[site.id]) continue;
-
         const acceptedBy = site.accepted_by || site.acceptedBy;
         const status = (site.status || '').toString().toLowerCase();
         const isDispatched = status === 'dispatched';
@@ -120,9 +118,8 @@ const MMPSiteEntriesTable = ({
         }
       }
 
-      if (Object.keys(newFees).length > 0) {
-        setCalculatedFees(prev => ({ ...prev, ...newFees }));
-      }
+      // Always update calculated fees to reflect current fee structure
+      setCalculatedFees(newFees);
     };
 
     loadFees();
