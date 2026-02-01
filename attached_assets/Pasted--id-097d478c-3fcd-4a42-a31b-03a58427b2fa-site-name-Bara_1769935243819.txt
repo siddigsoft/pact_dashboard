@@ -1,0 +1,162 @@
+[
+  {
+    "id": "097d478c-3fcd-4a42-a31b-03a58427b2fa",
+    "site_name": "Baraka",
+    "state": "Northern",
+    "locality": "Al Borgag",
+    "status": "Pending",
+    "accepted_by": null
+  },
+  {
+    "id": "48373d03-5e93-4041-a8e3-3f2d17883d2e",
+    "site_name": "Abu Ushar",
+    "state": "Northern",
+    "locality": "Al Borgag",
+    "status": "Pending",
+    "accepted_by": null
+  },
+  {
+    "id": "5dba9dbc-7845-4f18-870f-6da468347334",
+    "site_name": "Mankoott",
+    "state": "Northern",
+    "locality": "Dongola",
+    "status": "Pending",
+    "accepted_by": null
+  },
+  {
+    "id": "7d0878f2-7c98-4089-bd31-56cc2f371afd",
+    "site_name": "Alkubri Shamalt",
+    "state": "Northern",
+    "locality": "Dongola",
+    "status": "Pending",
+    "accepted_by": null
+  },
+  {
+    "id": "5d9b06e7-95d2-4ce0-b9ba-ff9bcd1da8bb",
+    "site_name": "Alkubri Yamaeent",
+    "state": "Northern",
+    "locality": "Delgo",
+    "status": "Pending",
+    "accepted_by": null
+  },
+  {
+    "id": "7e7c6afb-2325-4be2-baa8-068a3d876d8d",
+    "site_name": "Alhajiz-Alhajiz Almarmadiebt",
+    "state": "Northern",
+    "locality": "Delgo",
+    "status": "Pending",
+    "accepted_by": null
+  },
+  {
+    "id": "a0498cd6-b3e4-48fb-8f80-5fb633f98da0",
+    "site_name": "AL TADHAMAN HOS",
+    "state": "Northern",
+    "locality": "Aldaba",
+    "status": "Accepted",
+    "accepted_by": "3deaa1af-0bfe-4722-b5d7-2b485c621980"
+  },
+  {
+    "id": "b4176bf8-4108-425b-badd-e09cc7b5d1f8",
+    "site_name": "HI AL SHORTA & AL MOZFIEN",
+    "state": "Northern",
+    "locality": "Wadi Halfa",
+    "status": "Accepted",
+    "accepted_by": "95d2893a-c08e-41c3-97c5-bbe63aed68d8"
+  },
+  {
+    "id": "162b5150-e2c0-43a3-b513-0af8c7320e88",
+    "site_name": "KAREMA HOS",
+    "state": "Northern",
+    "locality": "Marawai",
+    "status": "Accepted",
+    "accepted_by": "49657140-2707-467b-b2f9-8698794a8f68"
+  },
+  {
+    "id": "5c7aa510-90e6-4b98-89f2-60e95d0c2a76",
+    "site_name": "ALSHATEE HC",
+    "state": "Northern",
+    "locality": "Marawai",
+    "status": "Accepted",
+    "accepted_by": "49657140-2707-467b-b2f9-8698794a8f68"
+  },
+  {
+    "id": "fbd4c64d-3ea4-497b-96d6-b23626594a85",
+    "site_name": "AL AFFADH",
+    "state": "Northern",
+    "locality": "Aldaba",
+    "status": "Accepted",
+    "accepted_by": "95d2893a-c08e-41c3-97c5-bbe63aed68d8"
+  },
+  {
+    "id": "ad6b4f25-ce8e-4062-9105-d79f6872a25e",
+    "site_name": "KORTI HOS",
+    "state": "Northern",
+    "locality": "Marawai",
+    "status": "Accepted",
+    "accepted_by": "49657140-2707-467b-b2f9-8698794a8f68"
+  },
+  {
+    "id": "ba453284-acba-47c4-a3b6-e1664b6e152c",
+    "site_name": "ALSAHIL ALSAHRAA",
+    "state": "Northern",
+    "locality": "Aldaba",
+    "status": "Accepted",
+    "accepted_by": "95d2893a-c08e-41c3-97c5-bbe63aed68d8"
+  },
+  {
+    "id": "7cc2b700-b204-4461-98cc-7decc9264fe9",
+    "site_name": "HUSH MELLEET",
+    "state": "Northern",
+    "locality": "Aldaba",
+    "status": "Accepted",
+    "accepted_by": "95d2893a-c08e-41c3-97c5-bbe63aed68d8"
+  },
+  {
+    "id": "e661c20d-605d-4c7b-955d-8d092edfbc81",
+    "site_name": "AL DABA HOS",
+    "state": "Northern",
+    "locality": "Aldaba",
+    "status": "Accepted",
+    "accepted_by": "95d2893a-c08e-41c3-97c5-bbe63aed68d8"
+  },
+  {
+    "id": "2b457b61-ef6e-44da-a85d-b50ceb99f271",
+    "site_name": "SALLY HC",
+    "state": "Northern",
+    "locality": "Algolid",
+    "status": "Accepted",
+    "accepted_by": "49657140-2707-467b-b2f9-8698794a8f68"
+  },
+  {
+    "id": "5d219e04-1377-4876-bfd5-2ed569fbd521",
+    "site_name": "ARABHAJ HOS",
+    "state": "Northern",
+    "locality": "Algolid",
+    "status": "Accepted",
+    "accepted_by": "49657140-2707-467b-b2f9-8698794a8f68"
+  },
+  {
+    "id": "b5847a20-bc3c-47b2-a924-71c0b123197f",
+    "site_name": "ALGOLD HOS",
+    "state": "Northern",
+    "locality": "Algolid",
+    "status": "Accepted",
+    "accepted_by": "49657140-2707-467b-b2f9-8698794a8f68"
+  },
+  {
+    "id": "36fb2d38-bf96-4274-8dbb-26dfc4199bb1",
+    "site_name": "AL-AFAT HC",
+    "state": "Northern",
+    "locality": "Aldaba",
+    "status": "Accepted",
+    "accepted_by": "95d2893a-c08e-41c3-97c5-bbe63aed68d8"
+  },
+  {
+    "id": "820d8b0b-affe-400a-b62c-7634186acbf8",
+    "site_name": "ALTHAWRA HC",
+    "state": "Northern",
+    "locality": "Marawai",
+    "status": "Accepted",
+    "accepted_by": "49657140-2707-467b-b2f9-8698794a8f68"
+  }
+]
