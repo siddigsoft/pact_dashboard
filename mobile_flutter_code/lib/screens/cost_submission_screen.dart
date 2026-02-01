@@ -13,16 +13,16 @@ import '../services/cost_submission_service.dart';
 /// 4. History - Submission history
 
 class CostSubmissionScreen extends StatefulWidget {
-  final CostSubmissionService costService;
-  final String userRole;
+  final CostSubmissionService? costService;
+  final String? userRole;
   final String? hubId;
   final String? projectId;
   final bool isArabic;
 
   const CostSubmissionScreen({
     Key? key,
-    required this.costService,
-    required this.userRole,
+    this.costService,
+    this.userRole,
     this.hubId,
     this.projectId,
     this.isArabic = false,
@@ -35,13 +35,16 @@ class CostSubmissionScreen extends StatefulWidget {
 class _CostSubmissionScreenState extends State<CostSubmissionScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late CostSubmissionService _costService;
   List<OperationalCostSubmission> _submissions = [];
   CostSubmissionStats _stats = CostSubmissionStats.empty();
   bool _isLoading = true;
 
+  String get _userRole => widget.userRole ?? 'user';
+
   // Check if user can submit operational costs
   bool get canSubmitOperationalCosts {
-    final role = widget.userRole.toLowerCase();
+    final role = _userRole.toLowerCase();
     return role.contains('fom') ||
         role.contains('coordinator') ||
         role.contains('country') ||
@@ -50,7 +53,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
 
   // Check if user can view team submissions
   bool get canViewTeamSubmissions {
-    final role = widget.userRole.toLowerCase();
+    final role = _userRole.toLowerCase();
     return role.contains('admin') ||
         role.contains('supervisor') ||
         role.contains('country');
@@ -59,6 +62,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
   @override
   void initState() {
     super.initState();
+    _costService = widget.costService ?? CostSubmissionService();
     _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
@@ -72,7 +76,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final submissions = await widget.costService.getUserSubmissions();
+      final submissions = await _costService.getUserSubmissions();
       final stats = CostSubmissionStats.fromSubmissions(submissions);
       setState(() {
         _submissions = submissions;
@@ -228,7 +232,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
         isArabic: widget.isArabic,
         hubId: widget.hubId,
         projectId: widget.projectId,
-        userRole: widget.userRole,
+        userRole: _userRole,
         onSubmit: _handleSubmit,
       ),
     );
@@ -558,7 +562,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
     try {
       final docs = formData['supportingDocuments'] as List<SupportingDocument>? ?? [];
       
-      await widget.costService.submitOperationalCost(
+      await _costService.submitOperationalCost(
         expenseCategory: formData['expenseCategory'] as OperationalExpenseCategory,
         amountCents: formData['amountCents'] as int,
         description: formData['description'] as String,
@@ -569,7 +573,7 @@ class _CostSubmissionScreenState extends State<CostSubmissionScreen>
         referenceNumber: formData['referenceNumber'] as String?,
         currency: formData['currency'] as String? ?? 'SDG',
         supportingDocuments: docs,
-        submitterRole: widget.userRole,
+        submitterRole: _userRole,
       );
 
       _showSuccess(widget.isArabic
