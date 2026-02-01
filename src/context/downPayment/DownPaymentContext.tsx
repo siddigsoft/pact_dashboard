@@ -104,6 +104,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         hubId: currentUser.hubId
       });
 
+      // Note: The join with mmp_site_entries may fail if RLS blocks access
+      // We'll try with the join first, then fallback to without if it fails
       let query = supabase.from('down_payment_requests').select(`
         *,
         mmp_site_entries (
@@ -157,7 +159,43 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         query = query.eq('requested_by', currentUser.id);
       }
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+      let { data, error } = await query.order('created_at', { ascending: false });
+
+      // If the join with mmp_site_entries fails, try without the join
+      if (error) {
+        console.warn('[DownPayment] Query with join failed, trying without join:', error.message);
+        
+        // Rebuild query without the join
+        let fallbackQuery = supabase.from('down_payment_requests').select('*');
+        
+        // Re-apply the same filters
+        if (userRole === 'datacollector' || userRole === 'coordinator') {
+          fallbackQuery = fallbackQuery.eq('requested_by', currentUser.id);
+        } else if (userRole === 'supervisor' || userRole === 'hubsupervisor') {
+          if (currentUser.hubId) {
+            let hubFilter = `requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId}`;
+            if (currentUser.secondaryHubId) {
+              hubFilter += `,hub_id.eq.${currentUser.secondaryHubId}`;
+            }
+            fallbackQuery = fallbackQuery.or(hubFilter);
+          } else {
+            fallbackQuery = fallbackQuery.eq('requested_by', currentUser.id);
+          }
+        } else if (!(
+          userRole === 'admin' || userRole === 'financialadmin' || 
+          userRole === 'superadmin' || userRole === 'super_admin' ||
+          userRole === 'ict' || userRole === 'fom' || 
+          userRole === 'field operation manager' ||
+          userRole === 'countrydirector' || userRole === 'country_director' ||
+          userRole === 'datateam' || userRole === 'data_team'
+        )) {
+          fallbackQuery = fallbackQuery.eq('requested_by', currentUser.id);
+        }
+        
+        const fallbackResult = await fallbackQuery.order('created_at', { ascending: false });
+        data = fallbackResult.data;
+        error = fallbackResult.error;
+      }
 
       if (error) {
         // Suppress RLS permission errors - just log them
