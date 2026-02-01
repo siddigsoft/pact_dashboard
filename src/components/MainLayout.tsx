@@ -83,9 +83,9 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
       <UpdateDialog />
       <NotificationInitializer />
       <SidebarProvider>
-        <div className={`min-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
+        <div className={`min-h-screen max-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
           {!isMobile && !isTablet && <AppSidebar />}
-          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-hidden h-screen`}>
+          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 h-screen max-h-screen`}>
             {/* Realtime Connection Banner - Shows when offline/reconnecting */}
             <RealtimeBanner 
               onRefresh={handleGlobalRefresh}
@@ -105,7 +105,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             )}
             {/* Global Refresh Bar - Available on all pages */}
             <GlobalRefreshBar />
-            <div className={`flex-1 flex flex-col ${isMobile ? 'px-1 pb-12 pt-0.5' : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 scroll-container overflow-y-auto'} relative z-0 min-w-0 min-h-0`}>
+            <div className={`flex-1 flex flex-col ${isMobile ? 'px-1 pb-12 pt-0.5' : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-y-auto overflow-x-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 overflow-y-auto overflow-x-hidden'} relative z-0 min-w-0 min-h-0 scroll-smooth`}>
               {children || <Outlet />}
             </div>
             {isMobile && <MobileBottomNav />}
