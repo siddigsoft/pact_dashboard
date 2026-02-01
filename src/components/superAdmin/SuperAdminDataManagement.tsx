@@ -782,7 +782,6 @@ export function SuperAdminDataManagement() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            size="sm"
             onClick={refreshCurrentTab}
             disabled={loading}
             data-testid="button-refresh"
@@ -790,7 +789,7 @@ export function SuperAdminDataManagement() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline ml-2">Refresh</span>
           </Button>
-          <Button variant="outline" size="sm" data-testid="button-export">
+          <Button variant="outline" data-testid="button-export">
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline ml-2">Export</span>
           </Button>
@@ -853,14 +852,14 @@ export function SuperAdminDataManagement() {
             placeholder="Search by name, code, or user..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-9"
+            className="pl-10"
             data-testid="input-search"
           />
         </div>
         
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[160px] h-9" data-testid="select-status-filter">
-            <Filter className="h-3.5 w-3.5 mr-2" />
+          <SelectTrigger className="w-full sm:w-[160px]" data-testid="select-status-filter">
+            <Filter className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Filter" />
           </SelectTrigger>
           <SelectContent>
