@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -214,12 +214,29 @@ export function SuperAdminDataManagement() {
   const [activeTab, setActiveTab] = useState('site-visits');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [stateFilter, setStateFilter] = useState('all');
   const [localityFilter, setLocalityFilter] = useState('all');
   const [activityFilter, setActivityFilter] = useState('all');
   const [claimedByFilter, setClaimedByFilter] = useState('all');
   const [hubFilter, setHubFilter] = useState('all');
+
+  // Cache for loaded tabs to avoid reloading
+  const loadedTabsRef = useRef<Set<string>>(new Set());
+
+  // Create userMap for O(1) lookups instead of O(n) array.find()
+  const userMap = useMemo(() => {
+    const map = new Map<string, { name: string; email?: string }>();
+    users.forEach(u => map.set(u.id, { name: u.name || 'Unknown', email: u.email }));
+    return map;
+  }, [users]);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const [siteVisits, setSiteVisits] = useState<SiteVisitData[]>([]);
   const [wallets, setWallets] = useState<WalletData[]>([]);
@@ -257,17 +274,14 @@ export function SuperAdminDataManagement() {
 
       if (error) throw error;
 
-      const enriched = (data || []).map(sv => {
-        const collector = users.find(u => u.id === sv.accepted_by);
-        const completedBy = users.find(u => u.id === sv.visit_completed_by);
-        return {
-          ...sv,
-          accepted_by_name: collector?.name || 'Unknown',
-          completed_by_name: completedBy?.name || 'N/A',
-        };
-      });
+      const enriched = (data || []).map(sv => ({
+        ...sv,
+        accepted_by_name: userMap.get(sv.accepted_by)?.name || 'Unknown',
+        completed_by_name: sv.visit_completed_by ? userMap.get(sv.visit_completed_by)?.name || 'N/A' : 'N/A',
+      }));
 
       setSiteVisits(enriched);
+      loadedTabsRef.current.add('site-visits');
     } catch (error) {
       console.error('Failed to load site visits:', error);
     } finally {
@@ -294,20 +308,18 @@ export function SuperAdminDataManagement() {
         countMap[t.wallet_id] = (countMap[t.wallet_id] || 0) + 1;
       });
 
-      const enriched = (walletsData || []).map(w => {
-        const user = users.find(u => u.id === w.user_id);
-        return {
-          id: w.id,
-          user_id: w.user_id,
-          user_name: user?.name || 'Unknown',
-          balances: w.balances || {},
-          total_earned: parseFloat(w.total_earned) || 0,
-          total_withdrawn: parseFloat(w.total_withdrawn) || 0,
-          transaction_count: countMap[w.id] || 0,
-        };
-      });
+      const enriched = (walletsData || []).map(w => ({
+        id: w.id,
+        user_id: w.user_id,
+        user_name: userMap.get(w.user_id)?.name || 'Unknown',
+        balances: w.balances || {},
+        total_earned: parseFloat(w.total_earned) || 0,
+        total_withdrawn: parseFloat(w.total_withdrawn) || 0,
+        transaction_count: countMap[w.id] || 0,
+      }));
 
       setWallets(enriched);
+      loadedTabsRef.current.add('wallets');
     } catch (error) {
       console.error('Failed to load wallets:', error);
     } finally {
@@ -326,23 +338,21 @@ export function SuperAdminDataManagement() {
 
       if (error) throw error;
 
-      const enriched = (data || []).map(t => {
-        const user = users.find(u => u.id === t.user_id);
-        return {
-          id: t.id,
-          wallet_id: t.wallet_id,
-          user_id: t.user_id,
-          user_name: user?.name || 'Unknown',
-          type: t.type,
-          amount: parseFloat(t.amount),
-          currency: t.currency,
-          description: t.description,
-          site_visit_id: t.site_visit_id,
-          created_at: t.created_at,
-        };
-      });
+      const enriched = (data || []).map(t => ({
+        id: t.id,
+        wallet_id: t.wallet_id,
+        user_id: t.user_id,
+        user_name: userMap.get(t.user_id)?.name || 'Unknown',
+        type: t.type,
+        amount: parseFloat(t.amount),
+        currency: t.currency,
+        description: t.description,
+        site_visit_id: t.site_visit_id,
+        created_at: t.created_at,
+      }));
 
       setTransactions(enriched);
+      loadedTabsRef.current.add('transactions');
     } catch (error) {
       console.error('Failed to load transactions:', error);
     } finally {
@@ -362,16 +372,14 @@ export function SuperAdminDataManagement() {
 
       if (error) throw error;
 
-      const enriched = (data || []).map(site => {
-        const collector = users.find(u => u.id === site.accepted_by);
-        return {
-          ...site,
-          accepted_by_name: collector?.name || 'Unknown',
-          main_activity: site.main_activity || site.activity_at_site || null,
-        };
-      });
+      const enriched = (data || []).map(site => ({
+        ...site,
+        accepted_by_name: userMap.get(site.accepted_by)?.name || 'Unknown',
+        main_activity: site.main_activity || site.activity_at_site || null,
+      }));
 
       setClaimedSites(enriched);
+      loadedTabsRef.current.add('claimed-sites');
     } catch (error) {
       console.error('Failed to load claimed sites:', error);
     } finally {
@@ -392,16 +400,14 @@ export function SuperAdminDataManagement() {
 
       if (error) throw error;
 
-      const enriched = (data || []).map(site => {
-        const dispatcher = users.find(u => u.id === site.dispatched_by);
-        return {
-          ...site,
-          dispatched_by_name: dispatcher?.name || 'Unknown',
-          main_activity: site.main_activity || site.activity_at_site || null,
-        };
-      });
+      const enriched = (data || []).map(site => ({
+        ...site,
+        dispatched_by_name: userMap.get(site.dispatched_by)?.name || 'Unknown',
+        main_activity: site.main_activity || site.activity_at_site || null,
+      }));
 
       setDispatchedSites(enriched);
+      loadedTabsRef.current.add('dispatched-sites');
     } catch (error) {
       console.error('Failed to load dispatched sites:', error);
     } finally {
@@ -457,6 +463,7 @@ export function SuperAdminDataManagement() {
       }));
 
       setMMPs(enriched);
+      loadedTabsRef.current.add('mmps');
     } catch (error) {
       console.error('Failed to load MMPs:', error);
     } finally {
@@ -464,16 +471,30 @@ export function SuperAdminDataManagement() {
     }
   };
 
+  // Force refresh function for manual refresh button
+  const forceRefreshCurrentTab = useCallback(() => {
+    loadedTabsRef.current.delete(activeTab);
+    if (activeTab === 'site-visits') loadSiteVisits();
+    else if (activeTab === 'wallets') loadWallets();
+    else if (activeTab === 'transactions') loadTransactions();
+    else if (activeTab === 'claimed-sites') loadClaimedSites();
+    else if (activeTab === 'dispatched-sites') loadDispatchedSites();
+    else if (activeTab === 'mmps') loadMMPs();
+  }, [activeTab, userMap]);
+
   useEffect(() => {
-    if (isSuperAdmin) {
-      if (activeTab === 'site-visits') loadSiteVisits();
-      else if (activeTab === 'wallets') loadWallets();
-      else if (activeTab === 'transactions') loadTransactions();
-      else if (activeTab === 'claimed-sites') loadClaimedSites();
-      else if (activeTab === 'dispatched-sites') loadDispatchedSites();
-      else if (activeTab === 'mmps') loadMMPs();
+    if (isSuperAdmin && userMap.size > 0) {
+      // Only load if tab hasn't been loaded yet (use cache)
+      if (!loadedTabsRef.current.has(activeTab)) {
+        if (activeTab === 'site-visits') loadSiteVisits();
+        else if (activeTab === 'wallets') loadWallets();
+        else if (activeTab === 'transactions') loadTransactions();
+        else if (activeTab === 'claimed-sites') loadClaimedSites();
+        else if (activeTab === 'dispatched-sites') loadDispatchedSites();
+        else if (activeTab === 'mmps') loadMMPs();
+      }
     }
-  }, [activeTab, isSuperAdmin, users]);
+  }, [activeTab, isSuperAdmin, userMap]);
 
   const handleResetSiteVisit = async () => {
     if (!selectedSiteVisit || !currentUser || !reason.trim()) return;
@@ -725,47 +746,47 @@ export function SuperAdminDataManagement() {
   const filteredSiteVisits = useMemo(() => {
     return siteVisits.filter(sv => {
       const matchesSearch = 
-        sv.site_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sv.site_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        sv.accepted_by_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        sv.site_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        sv.site_code?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        sv.accepted_by_name?.toLowerCase().includes(debouncedSearch.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || sv.status === statusFilter;
       
       return matchesSearch && matchesStatus;
     });
-  }, [siteVisits, searchQuery, statusFilter]);
+  }, [siteVisits, debouncedSearch, statusFilter]);
 
   const filteredWallets = useMemo(() => {
     return wallets.filter(w => {
-      const matchesSearch = w.user_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = w.user_name?.toLowerCase().includes(debouncedSearch.toLowerCase());
       const matchesFilter = statusFilter === 'all' || 
         (statusFilter === 'has-balance' && Object.values(w.balances).some(b => b > 0)) ||
         (statusFilter === 'no-balance' && Object.values(w.balances).every(b => b <= 0));
       return matchesSearch && matchesFilter;
     });
-  }, [wallets, searchQuery, statusFilter]);
+  }, [wallets, debouncedSearch, statusFilter]);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       const matchesSearch = 
-        t.user_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.description?.toLowerCase().includes(searchQuery.toLowerCase());
+        t.user_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        t.type?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        t.description?.toLowerCase().includes(debouncedSearch.toLowerCase());
       
       const matchesType = statusFilter === 'all' || t.type === statusFilter;
       
       return matchesSearch && matchesType;
     });
-  }, [transactions, searchQuery, statusFilter]);
+  }, [transactions, debouncedSearch, statusFilter]);
 
   const filteredClaimedSites = useMemo(() => {
     return claimedSites.filter(site => {
       const matchesSearch = 
-        site.site_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.site_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.accepted_by_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.state?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.locality?.toLowerCase().includes(searchQuery.toLowerCase());
+        site.site_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.site_code?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.accepted_by_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.state?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.locality?.toLowerCase().includes(debouncedSearch.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || site.status === statusFilter;
       const matchesState = stateFilter === 'all' || site.state === stateFilter;
@@ -775,7 +796,7 @@ export function SuperAdminDataManagement() {
       
       return matchesSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy;
     });
-  }, [claimedSites, searchQuery, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter]);
+  }, [claimedSites, debouncedSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter]);
 
   // Get unique values for claimed sites filters
   const claimedSitesFilterOptions = useMemo(() => {
@@ -794,12 +815,12 @@ export function SuperAdminDataManagement() {
   const filteredDispatchedSites = useMemo(() => {
     return dispatchedSites.filter(site => {
       const matchesSearch = 
-        site.site_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.site_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.dispatched_by_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.state?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.locality?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        site.hub_office?.toLowerCase().includes(searchQuery.toLowerCase());
+        site.site_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.site_code?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.dispatched_by_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.state?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.locality?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        site.hub_office?.toLowerCase().includes(debouncedSearch.toLowerCase());
       
       const matchesState = stateFilter === 'all' || site.state === stateFilter;
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
@@ -808,7 +829,7 @@ export function SuperAdminDataManagement() {
       
       return matchesSearch && matchesState && matchesLocality && matchesActivity && matchesHub;
     });
-  }, [dispatchedSites, searchQuery, stateFilter, localityFilter, activityFilter, hubFilter]);
+  }, [dispatchedSites, debouncedSearch, stateFilter, localityFilter, activityFilter, hubFilter]);
 
   // Get unique values for dispatched sites filters
   const dispatchedSitesFilterOptions = useMemo(() => {
@@ -827,14 +848,14 @@ export function SuperAdminDataManagement() {
   const filteredMMPs = useMemo(() => {
     return mmps.filter(mmp => {
       const matchesSearch = 
-        mmp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        mmp.project_name?.toLowerCase().includes(searchQuery.toLowerCase());
+        mmp.name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        mmp.project_name?.toLowerCase().includes(debouncedSearch.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || mmp.status === statusFilter;
       
       return matchesSearch && matchesStatus;
     });
-  }, [mmps, searchQuery, statusFilter]);
+  }, [mmps, debouncedSearch, statusFilter]);
 
   const getFilterOptions = () => {
     switch (activeTab) {
