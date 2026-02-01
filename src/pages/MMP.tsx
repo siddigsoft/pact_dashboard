@@ -1936,6 +1936,61 @@ const MMP = () => {
 
     loadDispatchedSitesForEnumerator();
   }, [canClaimSites, currentUser?.id, currentUser?.stateId]);
+
+  // Direct database load of MY SITES (accepted by current user)
+  // This ensures "My Sites" tab shows data even if MMP context hasn't loaded site entries yet
+  useEffect(() => {
+    const loadMySitesForEnumerator = async () => {
+      if (!canClaimSites || !currentUser?.id) {
+        console.log('[MMP My Sites Load] Skipped - canClaimSites:', canClaimSites, 'userId:', currentUser?.id);
+        return;
+      }
+      
+      console.log('[MMP My Sites Load] Loading sites accepted by user:', currentUser?.id);
+      
+      try {
+        // Query all sites accepted by this user (My Sites)
+        const { data: mySitesData, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('accepted_by', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        if (error) {
+          console.error('[MMP My Sites Load] DB Error:', error);
+          return;
+        }
+
+        console.log(`📊 [MMP My Sites Load] Found ${mySitesData?.length || 0} sites accepted by user`);
+
+        if (mySitesData && mySitesData.length > 0) {
+          // Format entries for display
+          const formattedEntries = mySitesData.map(entry => ({
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            mmp_file_id: entry.mmp_file_id,
+            mmpId: entry.mmp_file_id,
+            enumerator_fee: entry.enumerator_fee,
+            transport_fee: entry.transport_fee,
+            additionalData: entry.additional_data || {}
+          }));
+          
+          setEnumeratorMySites(formattedEntries);
+          console.log('[MMP My Sites Load] Successfully loaded My Sites:', formattedEntries.length);
+        } else {
+          console.log('[MMP My Sites Load] No accepted sites found for this user');
+          setEnumeratorMySites([]);
+        }
+      } catch (error) {
+        console.error('[MMP My Sites Load] Failed:', error);
+      }
+    };
+
+    loadMySitesForEnumerator();
+  }, [canClaimSites, currentUser?.id]);
+
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
