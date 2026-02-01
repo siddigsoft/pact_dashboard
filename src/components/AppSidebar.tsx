@@ -345,6 +345,9 @@
       if (!isHidden('/mobile-document-sync')) {
         superAdminItems.push({ id: 'mobile-document-sync', title: "Mobile Document Sync", url: "/mobile-document-sync", icon: RefreshCw, priority: 11, isPinned: isPinned('/mobile-document-sync') });
       }
+      if (!isHidden('/super-admin-data')) {
+        superAdminItems.push({ id: 'super-admin-data', title: "Data Management", url: "/super-admin-data", icon: Database, priority: 12, isPinned: isPinned('/super-admin-data') });
+      }
       if (superAdminItems.length) groups.push({ id: 'super-admin', label: "Super Admin", order: 8, items: superAdminItems });
     }
 
