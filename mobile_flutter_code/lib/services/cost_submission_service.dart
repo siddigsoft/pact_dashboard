@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/cost_submission.dart';
 
@@ -169,10 +170,11 @@ class CostSubmissionService {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final storagePath = 'cost-documents/$currentUserId/$timestamp-$filename';
 
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage using File object
+      final file = File(filePath);
       await _supabase.storage.from('documents').upload(
         storagePath,
-        await _readFileBytes(filePath),
+        file,
         fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
       );
 
@@ -192,13 +194,6 @@ class CostSubmissionService {
       print('Error uploading document: $e');
       rethrow;
     }
-  }
-
-  // Helper to read file bytes (implement based on platform)
-  Future<List<int>> _readFileBytes(String filePath) async {
-    // Implementation depends on your file handling approach
-    // For image_picker, use File(filePath).readAsBytes()
-    throw UnimplementedError('Implement file reading for your platform');
   }
 
   /// Approve a submission (Tier 1 or Tier 2)
