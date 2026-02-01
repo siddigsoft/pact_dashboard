@@ -685,6 +685,22 @@ export function SuperAdminDataManagement() {
     });
   }, [mmps, searchQuery, statusFilter]);
 
+  // Calculate total fees per claiming person
+  const claimedSitesTotals = useMemo(() => {
+    const totals: Record<string, { name: string; totalFees: number; siteCount: number }> = {};
+    
+    filteredClaimedSites.forEach(site => {
+      const name = site.accepted_by_name || 'Unknown';
+      if (!totals[name]) {
+        totals[name] = { name, totalFees: 0, siteCount: 0 };
+      }
+      totals[name].totalFees += (site.enumerator_fee || 0) + (site.transport_fee || 0);
+      totals[name].siteCount += 1;
+    });
+    
+    return Object.values(totals).sort((a, b) => b.totalFees - a.totalFees);
+  }, [filteredClaimedSites]);
+
   const getFilterOptions = () => {
     switch (activeTab) {
       case 'site-visits':
@@ -1260,6 +1276,34 @@ export function SuperAdminDataManagement() {
                   </Select>
                 </div>
               </div>
+              
+              {/* Totals per Claiming Person */}
+              {claimedSitesTotals.length > 0 && (
+                <div className="mt-4 p-3 bg-muted/30 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DollarSign className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Total Fees by Person</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {claimedSitesTotals.map(item => (
+                      <Badge 
+                        key={item.name} 
+                        variant="secondary" 
+                        className="px-3 py-1.5 text-sm"
+                        data-testid={`badge-total-${item.name}`}
+                      >
+                        <span className="font-medium">{item.name}:</span>
+                        <span className="ml-1 text-primary font-semibold">
+                          ${item.totalFees.toLocaleString()}
+                        </span>
+                        <span className="ml-1 text-muted-foreground">
+                          ({item.siteCount} sites)
+                        </span>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="p-0">
               {loading ? (
