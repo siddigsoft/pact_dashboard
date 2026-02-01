@@ -100,8 +100,6 @@ interface DispatchedSiteData {
   dispatched_by: string;
   dispatched_by_name?: string;
   dispatched_at?: string;
-  enumerator_fee?: number;
-  transport_fee?: number;
   main_activity?: string;
   hub_office?: string;
 }
@@ -386,7 +384,7 @@ export function SuperAdminDataManagement() {
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, hub_office')
+        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office')
         .eq('status', 'dispatched')
         .is('accepted_by', null)
         .order('dispatched_at', { ascending: false })
@@ -1634,7 +1632,6 @@ export function SuperAdminDataManagement() {
                         <TableHead className="font-semibold">Location</TableHead>
                         <TableHead className="font-semibold">Hub</TableHead>
                         <TableHead className="font-semibold">Dispatched At</TableHead>
-                        <TableHead className="font-semibold">Fees</TableHead>
                         <TableHead className="text-right font-semibold">Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1663,12 +1660,6 @@ export function SuperAdminDataManagement() {
                           </TableCell>
                           <TableCell>
                             {site.dispatched_at ? format(new Date(site.dispatched_at), 'MMM d, yyyy h:mm a') : 'N/A'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm">
-                              {site.enumerator_fee && <p>Enum: {site.enumerator_fee.toLocaleString()} SDG</p>}
-                              {site.transport_fee && <p className="text-muted-foreground">Trans: {site.transport_fee.toLocaleString()} SDG</p>}
-                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
