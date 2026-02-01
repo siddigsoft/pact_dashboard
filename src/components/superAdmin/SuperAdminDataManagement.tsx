@@ -102,8 +102,6 @@ interface DispatchedSiteData {
   dispatched_at?: string;
   main_activity?: string;
   hub_office?: string;
-  accepted_by?: string;
-  accepted_by_name?: string;
 }
 
 interface WalletData {
@@ -386,8 +384,9 @@ export function SuperAdminDataManagement() {
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office, accepted_by')
-        .or('status.ilike.dispatched,dispatched_at.not.is.null')
+        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office')
+        .eq('status', 'dispatched')
+        .is('accepted_by', null)
         .order('dispatched_at', { ascending: false })
         .limit(500);
 
@@ -395,11 +394,9 @@ export function SuperAdminDataManagement() {
 
       const enriched = (data || []).map(site => {
         const dispatcher = users.find(u => u.id === site.dispatched_by);
-        const claimer = site.accepted_by ? users.find(u => u.id === site.accepted_by) : null;
         return {
           ...site,
           dispatched_by_name: dispatcher?.name || 'Unknown',
-          accepted_by_name: claimer?.name || null,
           main_activity: site.main_activity || site.activity_at_site || null,
         };
       });
@@ -1544,7 +1541,7 @@ export function SuperAdminDataManagement() {
                   </div>
                   <div>
                     <CardTitle className="text-base">Dispatched Sites</CardTitle>
-                    <CardDescription className="text-xs">All dispatched site entries</CardDescription>
+                    <CardDescription className="text-xs">Sites awaiting data collector claims</CardDescription>
                   </div>
                 </div>
                 <Badge variant="outline" className="text-sm px-2 py-0.5">
@@ -1635,7 +1632,6 @@ export function SuperAdminDataManagement() {
                         <TableHead className="font-semibold">Location</TableHead>
                         <TableHead className="font-semibold">Hub</TableHead>
                         <TableHead className="font-semibold">Dispatched At</TableHead>
-                        <TableHead className="font-semibold">Claimed By</TableHead>
                         <TableHead className="text-right font-semibold">Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1664,17 +1660,6 @@ export function SuperAdminDataManagement() {
                           </TableCell>
                           <TableCell>
                             {site.dispatched_at ? format(new Date(site.dispatched_at), 'MMM d, yyyy h:mm a') : 'N/A'}
-                          </TableCell>
-                          <TableCell>
-                            {site.accepted_by_name ? (
-                              <Badge variant="secondary" className="text-xs">
-                                {site.accepted_by_name}
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-xs text-orange-600 border-orange-500/30">
-                                Unclaimed
-                              </Badge>
-                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
