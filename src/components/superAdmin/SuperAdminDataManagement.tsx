@@ -85,6 +85,7 @@ interface ClaimedSiteData {
   accepted_at?: string;
   enumerator_fee?: number;
   transport_fee?: number;
+  main_activity?: string;
 }
 
 interface WalletData {
@@ -183,6 +184,9 @@ export function SuperAdminDataManagement() {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
+  const [localityFilter, setLocalityFilter] = useState('all');
+  const [activityFilter, setActivityFilter] = useState('all');
 
   const [siteVisits, setSiteVisits] = useState<SiteVisitData[]>([]);
   const [wallets, setWallets] = useState<WalletData[]>([]);
@@ -315,10 +319,10 @@ export function SuperAdminDataManagement() {
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee, main_activity')
         .not('accepted_by', 'is', null)
         .order('accepted_at', { ascending: false })
-        .limit(300);
+        .limit(500);
 
       if (error) throw error;
 
@@ -644,10 +648,26 @@ export function SuperAdminDataManagement() {
         site.locality?.toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || site.status === statusFilter;
+      const matchesState = stateFilter === 'all' || site.state === stateFilter;
+      const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
+      const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
       
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesState && matchesLocality && matchesActivity;
     });
-  }, [claimedSites, searchQuery, statusFilter]);
+  }, [claimedSites, searchQuery, statusFilter, stateFilter, localityFilter, activityFilter]);
+
+  // Get unique values for claimed sites filters
+  const claimedSitesFilterOptions = useMemo(() => {
+    const states = [...new Set(claimedSites.map(s => s.state).filter(Boolean))].sort();
+    const localities = [...new Set(
+      claimedSites
+        .filter(s => stateFilter === 'all' || s.state === stateFilter)
+        .map(s => s.locality)
+        .filter(Boolean)
+    )].sort();
+    const activities = [...new Set(claimedSites.map(s => s.main_activity).filter(Boolean))].sort();
+    return { states, localities, activities };
+  }, [claimedSites, stateFilter]);
 
   const filteredMMPs = useMemo(() => {
     return mmps.filter(mmp => {
@@ -1158,6 +1178,70 @@ export function SuperAdminDataManagement() {
                   {filteredClaimedSites.length} sites
                 </Badge>
               </div>
+              
+              {/* Advanced Filters for Claimed Sites */}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Activity</Label>
+                  <Select value={activityFilter} onValueChange={setActivityFilter}>
+                    <SelectTrigger data-testid="select-activity-filter">
+                      <SelectValue placeholder="All Activities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Activities</SelectItem>
+                      {claimedSitesFilterOptions.activities.map(activity => (
+                        <SelectItem key={activity} value={activity}>{activity}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">State</Label>
+                  <Select value={stateFilter} onValueChange={(val) => {
+                    setStateFilter(val);
+                    setLocalityFilter('all');
+                  }}>
+                    <SelectTrigger data-testid="select-state-filter">
+                      <SelectValue placeholder="All States" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {claimedSitesFilterOptions.states.map(state => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Locality</Label>
+                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                    <SelectTrigger data-testid="select-locality-filter">
+                      <SelectValue placeholder="All Localities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Localities</SelectItem>
+                      {claimedSitesFilterOptions.localities.map(locality => (
+                        <SelectItem key={locality} value={locality}>{locality}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger data-testid="select-status-filter-claimed">
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="assigned">Assigned</SelectItem>
+                      <SelectItem value="dispatched">Dispatched</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="verified">Verified</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {loading ? (
@@ -1175,6 +1259,7 @@ export function SuperAdminDataManagement() {
                     <TableHeader>
                       <TableRow className="bg-muted/50">
                         <TableHead className="font-semibold">Site</TableHead>
+                        <TableHead className="font-semibold">Activity</TableHead>
                         <TableHead className="font-semibold">Location</TableHead>
                         <TableHead className="font-semibold">Claimed By</TableHead>
                         <TableHead className="font-semibold">Claimed At</TableHead>
@@ -1191,6 +1276,11 @@ export function SuperAdminDataManagement() {
                               <p className="font-medium">{site.site_name}</p>
                               <p className="text-sm text-muted-foreground">{site.site_code}</p>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="whitespace-nowrap">
+                              {site.main_activity || '—'}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
