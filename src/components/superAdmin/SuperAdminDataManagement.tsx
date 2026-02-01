@@ -319,7 +319,7 @@ export function SuperAdminDataManagement() {
     try {
       const { data, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee, main_activity')
+        .select('id, site_name, site_code, state, locality, status, accepted_by, accepted_at, enumerator_fee, transport_fee, main_activity, activity_at_site')
         .not('accepted_by', 'is', null)
         .order('accepted_at', { ascending: false })
         .limit(500);
@@ -331,6 +331,7 @@ export function SuperAdminDataManagement() {
         return {
           ...site,
           accepted_by_name: collector?.name || 'Unknown',
+          main_activity: site.main_activity || site.activity_at_site || null,
         };
       });
 
