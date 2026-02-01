@@ -11,12 +11,16 @@ Copy these files to your local Flutter project at `C:\Users\PC\PACT_mobile\lib\`
 
 ### 2. Services  
 - `lib/services/cost_submission_service.dart` - Supabase service for CRUD operations
+- `lib/services/document_upload_service.dart` - Document/image upload to Supabase Storage
 
 ### 3. Screens
 - `lib/screens/cost_submission_screen.dart` - Main cost submission screen with 4 tabs
+- `lib/screens/cost_approvals_screen.dart` - Approval screen for supervisors/admins
 
 ### 4. Widgets
 - `lib/widgets/cost_approval_widgets.dart` - Reusable approval UI components
+- `lib/widgets/document_upload_widget.dart` - Camera/gallery document upload widget
+- `lib/widgets/cost_reconciliation_form.dart` - Reconciliation form for advances
 
 ## Features Included
 
@@ -60,6 +64,21 @@ Copy these files to your local Flutter project at `C:\Users\PC\PACT_mobile\lib\`
 ### Bilingual Support
 - Full English/Arabic support for all labels and messages
 
+### Document Upload Features
+- Camera capture with image compression
+- Gallery selection (single or multiple)
+- Upload progress indicator
+- Document type selection (Receipt, Invoice, Photo, Other)
+- File size display
+- Document deletion
+
+### Approval Screen Features
+- Tier 1 pending approvals queue
+- Tier 2 pending approvals queue
+- Processed submissions history
+- Approve/Reject with notes
+- Role-based access control
+
 ## Required Dependencies
 
 Add these to your `pubspec.yaml`:
@@ -68,21 +87,20 @@ Add these to your `pubspec.yaml`:
 dependencies:
   supabase_flutter: ^2.0.0
   intl: ^0.18.0
-  image_picker: ^1.0.0  # For document upload
-  file_picker: ^6.0.0   # Alternative for document upload
+  image_picker: ^1.0.0
+  path: ^1.8.0
 ```
 
-## Usage Example
+## Usage Examples
 
+### Cost Submission Screen
 ```dart
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/cost_submission_screen.dart';
 import 'services/cost_submission_service.dart';
 
-// Initialize service
 final costService = CostSubmissionService(Supabase.instance.client);
 
-// Navigate to screen
 Navigator.push(
   context,
   MaterialPageRoute(
@@ -91,10 +109,44 @@ Navigator.push(
       userRole: 'Coordinator',
       hubId: currentUser.hubId,
       projectId: currentUser.projectId,
+      isArabic: false, // Set to true for Arabic
+    ),
+  ),
+);
+```
+
+### Cost Approvals Screen (for Supervisors/Admins)
+```dart
+import 'screens/cost_approvals_screen.dart';
+
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (_) => CostApprovalsScreen(
+      costService: costService,
+      userRole: 'Admin',
+      hubId: currentUser.hubId,
       isArabic: false,
     ),
   ),
 );
+```
+
+### Document Upload Widget
+```dart
+import 'services/document_upload_service.dart';
+import 'widgets/document_upload_widget.dart';
+
+final uploadService = DocumentUploadService(Supabase.instance.client);
+List<SupportingDocument> documents = [];
+
+DocumentUploadWidget(
+  uploadService: uploadService,
+  documents: documents,
+  onDocumentsChanged: (docs) => setState(() => documents = docs),
+  isArabic: false,
+  maxDocuments: 5,
+)
 ```
 
 ## Database Table Required
@@ -136,12 +188,55 @@ CREATE TABLE operational_cost_submissions (
 );
 ```
 
-## Notes
+## Supabase Storage Setup
 
-1. **Document Upload**: The document upload functionality needs to be implemented using `image_picker` or `file_picker` packages based on your preference.
+Create a storage bucket named `documents` with these policies:
 
-2. **Realtime Updates**: The service includes a `subscribeToUserSubmissions` method for realtime updates using Supabase Realtime.
+```sql
+-- Allow authenticated users to upload to their folder
+CREATE POLICY "Users can upload documents"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'documents' AND auth.uid()::text = (storage.foldername(name))[2]);
 
-3. **Offline Support**: Consider adding offline support using Hive or similar for caching submissions when offline.
+-- Allow users to read their own documents
+CREATE POLICY "Users can read own documents"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (bucket_id = 'documents' AND auth.uid()::text = (storage.foldername(name))[2]);
 
-4. **Navigation Integration**: Add this screen to your navigation/routing system.
+-- Allow public read for cost documents (optional)
+CREATE POLICY "Public can read cost documents"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'documents');
+```
+
+## Integration Notes
+
+1. **Realtime Updates**: The service includes `subscribeToUserSubmissions` for live updates.
+
+2. **Offline Support**: Consider adding Hive for offline caching.
+
+3. **Navigation**: Add screens to your app's routing system.
+
+4. **Permissions**: Add camera and photo library permissions to `AndroidManifest.xml` and `Info.plist`.
+
+## Android Permissions
+
+Add to `android/app/src/main/AndroidManifest.xml`:
+```xml
+<uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+```
+
+## iOS Permissions
+
+Add to `ios/Runner/Info.plist`:
+```xml
+<key>NSCameraUsageDescription</key>
+<string>We need camera access to take photos of receipts</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>We need photo library access to upload receipts</string>
+```
