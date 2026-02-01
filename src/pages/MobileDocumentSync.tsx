@@ -18,16 +18,12 @@ import {
   Upload, 
   Cloud, 
   CloudOff,
-  Smartphone,
   Search,
   RefreshCw,
   Check,
   AlertTriangle,
   Folder,
-  Image,
-  File,
   HardDrive,
-  Activity,
   Clock,
   User,
   RotateCcw,
@@ -50,7 +46,6 @@ interface SyncedDocument {
   device_id?: string;
   user_name?: string;
   storage_path?: string;
-  version: number;
 }
 
 export default function MobileDocumentSync() {
@@ -67,7 +62,16 @@ export default function MobileDocumentSync() {
       let query = supabase
         .from('mobile_documents')
         .select(`
-          *,
+          id,
+          user_id,
+          document_name,
+          document_type,
+          file_path,
+          file_size,
+          sync_status,
+          last_synced_at,
+          device_id,
+          created_at,
           profiles:user_id (full_name)
         `)
         .order('last_synced_at', { ascending: false });
@@ -78,8 +82,18 @@ export default function MobileDocumentSync() {
 
       const { data, error } = await query;
       if (error) throw error;
+      
       return (data || []).map((d: any) => ({
-        ...d,
+        id: d.id,
+        user_id: d.user_id,
+        name: d.document_name || 'Unnamed Document',
+        file_type: d.document_type || 'unknown',
+        file_size: d.file_size || 0,
+        sync_status: d.sync_status || 'pending',
+        last_synced_at: d.last_synced_at || d.created_at,
+        created_at: d.created_at,
+        device_id: d.device_id,
+        storage_path: d.file_path,
         user_name: d.profiles?.full_name || 'Unknown',
       }));
     },
@@ -386,10 +400,6 @@ export default function MobileDocumentSync() {
                             <span className="flex items-center gap-1">
                               <HardDrive className="w-3 h-3" />
                               {formatFileSize(doc.file_size)}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Activity className="w-3 h-3" />
-                              v{doc.version}
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
