@@ -54,7 +54,9 @@ import {
   Filter,
   Calendar,
   Eye,
-  Archive
+  Archive,
+  Send,
+  Undo2
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -86,6 +88,22 @@ interface ClaimedSiteData {
   enumerator_fee?: number;
   transport_fee?: number;
   main_activity?: string;
+}
+
+interface DispatchedSiteData {
+  id: string;
+  site_name: string;
+  site_code: string;
+  state: string;
+  locality: string;
+  status: string;
+  dispatched_by: string;
+  dispatched_by_name?: string;
+  dispatched_at?: string;
+  enumerator_fee?: number;
+  transport_fee?: number;
+  main_activity?: string;
+  hub_office?: string;
 }
 
 interface WalletData {
@@ -203,16 +221,20 @@ export function SuperAdminDataManagement() {
   const [localityFilter, setLocalityFilter] = useState('all');
   const [activityFilter, setActivityFilter] = useState('all');
   const [claimedByFilter, setClaimedByFilter] = useState('all');
+  const [hubFilter, setHubFilter] = useState('all');
 
   const [siteVisits, setSiteVisits] = useState<SiteVisitData[]>([]);
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [claimedSites, setClaimedSites] = useState<ClaimedSiteData[]>([]);
+  const [dispatchedSites, setDispatchedSites] = useState<DispatchedSiteData[]>([]);
   const [mmps, setMMPs] = useState<MMPData[]>([]);
 
   const [selectedSiteVisit, setSelectedSiteVisit] = useState<SiteVisitData | null>(null);
   const [selectedClaimedSite, setSelectedClaimedSite] = useState<ClaimedSiteData | null>(null);
+  const [selectedDispatchedSite, setSelectedDispatchedSite] = useState<DispatchedSiteData | null>(null);
   const [showReclaimSiteDialog, setShowReclaimSiteDialog] = useState(false);
+  const [showReturnToApprovedDialog, setShowReturnToApprovedDialog] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletData | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionData | null>(null);
   const [selectedMMP, setSelectedMMP] = useState<MMPData | null>(null);
@@ -359,6 +381,36 @@ export function SuperAdminDataManagement() {
     }
   };
 
+  const loadDispatchedSites = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, enumerator_fee, transport_fee, main_activity, activity_at_site, hub_office')
+        .eq('status', 'dispatched')
+        .is('accepted_by', null)
+        .order('dispatched_at', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+
+      const enriched = (data || []).map(site => {
+        const dispatcher = users.find(u => u.id === site.dispatched_by);
+        return {
+          ...site,
+          dispatched_by_name: dispatcher?.name || 'Unknown',
+          main_activity: site.main_activity || site.activity_at_site || null,
+        };
+      });
+
+      setDispatchedSites(enriched);
+    } catch (error) {
+      console.error('Failed to load dispatched sites:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadMMPs = async () => {
     setLoading(true);
     try {
@@ -420,6 +472,7 @@ export function SuperAdminDataManagement() {
       else if (activeTab === 'wallets') loadWallets();
       else if (activeTab === 'transactions') loadTransactions();
       else if (activeTab === 'claimed-sites') loadClaimedSites();
+      else if (activeTab === 'dispatched-sites') loadDispatchedSites();
       else if (activeTab === 'mmps') loadMMPs();
     }
   }, [activeTab, isSuperAdmin, users]);
@@ -506,6 +559,49 @@ export function SuperAdminDataManagement() {
       setSelectedClaimedSite(null);
       setReason('');
       loadClaimedSites();
+    }
+  };
+
+  const handleReturnToApproved = async () => {
+    if (!selectedDispatchedSite || !currentUser || !reason.trim()) return;
+
+    setProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'approved',
+          dispatched_by: null,
+          dispatched_at: null,
+        })
+        .eq('id', selectedDispatchedSite.id);
+
+      if (error) throw error;
+
+      await supabase.from('super_admin_audit_logs').insert({
+        action_type: 'return_to_approved',
+        entity_type: 'mmp_site_entry',
+        entity_id: selectedDispatchedSite.id,
+        performed_by: currentUser.id,
+        performed_by_name: currentUser.name || currentUser.email || 'Super Admin',
+        performed_by_role: currentUser.role || 'superadmin',
+        reason: reason.trim(),
+        details: {
+          site_name: selectedDispatchedSite.site_name,
+          site_code: selectedDispatchedSite.site_code,
+          previous_status: 'dispatched',
+          new_status: 'approved',
+        },
+      });
+
+      setShowReturnToApprovedDialog(false);
+      setSelectedDispatchedSite(null);
+      setReason('');
+      loadDispatchedSites();
+    } catch (error) {
+      console.error('Failed to return site to approved:', error);
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -599,6 +695,13 @@ export function SuperAdminDataManagement() {
     const totalClaimedSites = claimedSites.length;
     const assignedSites = claimedSites.filter(s => s.status === 'assigned').length;
     
+    const totalDispatchedSites = dispatchedSites.length;
+    const dispatchedByState = dispatchedSites.reduce((acc, s) => {
+      acc[s.state] = (acc[s.state] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const uniqueStatesDispatched = Object.keys(dispatchedByState).length;
+    
     const totalMMPs = mmps.length;
     const activeMMPs = mmps.filter(m => m.status === 'active').length;
     
@@ -614,10 +717,12 @@ export function SuperAdminDataManagement() {
       debitTransactions,
       totalClaimedSites,
       assignedSites,
+      totalDispatchedSites,
+      uniqueStatesDispatched,
       totalMMPs,
       activeMMPs,
     };
-  }, [siteVisits, wallets, transactions, claimedSites, mmps]);
+  }, [siteVisits, wallets, transactions, claimedSites, dispatchedSites, mmps]);
 
   const filteredSiteVisits = useMemo(() => {
     return siteVisits.filter(sv => {
@@ -688,6 +793,39 @@ export function SuperAdminDataManagement() {
     return { states, localities, activities, claimedByUsers };
   }, [claimedSites, stateFilter]);
 
+  const filteredDispatchedSites = useMemo(() => {
+    return dispatchedSites.filter(site => {
+      const matchesSearch = 
+        site.site_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        site.site_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        site.dispatched_by_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        site.state?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        site.locality?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        site.hub_office?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesState = stateFilter === 'all' || site.state === stateFilter;
+      const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
+      const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
+      const matchesHub = hubFilter === 'all' || site.hub_office === hubFilter;
+      
+      return matchesSearch && matchesState && matchesLocality && matchesActivity && matchesHub;
+    });
+  }, [dispatchedSites, searchQuery, stateFilter, localityFilter, activityFilter, hubFilter]);
+
+  // Get unique values for dispatched sites filters
+  const dispatchedSitesFilterOptions = useMemo(() => {
+    const states = [...new Set(dispatchedSites.map(s => s.state).filter(Boolean))].sort();
+    const localities = [...new Set(
+      dispatchedSites
+        .filter(s => stateFilter === 'all' || s.state === stateFilter)
+        .map(s => s.locality)
+        .filter(Boolean)
+    )].sort();
+    const activities = [...new Set(dispatchedSites.map(s => s.main_activity).filter(Boolean))].sort();
+    const hubs = [...new Set(dispatchedSites.map(s => s.hub_office).filter(Boolean))].sort();
+    return { states, localities, activities, hubs };
+  }, [dispatchedSites, stateFilter]);
+
   const filteredMMPs = useMemo(() => {
     return mmps.filter(mmp => {
       const matchesSearch = 
@@ -745,6 +883,7 @@ export function SuperAdminDataManagement() {
     else if (activeTab === 'wallets') loadWallets();
     else if (activeTab === 'transactions') loadTransactions();
     else if (activeTab === 'claimed-sites') loadClaimedSites();
+    else if (activeTab === 'dispatched-sites') loadDispatchedSites();
     else if (activeTab === 'mmps') loadMMPs();
   };
 
@@ -842,6 +981,15 @@ export function SuperAdminDataManagement() {
           onClick={() => setActiveTab('claimed-sites')}
           isActive={activeTab === 'claimed-sites'}
         />
+        <StatsCard
+          title="Dispatched Sites"
+          value={stats.totalDispatchedSites}
+          subtitle={`${stats.uniqueStatesDispatched} states`}
+          icon={Send}
+          color="warning"
+          onClick={() => setActiveTab('dispatched-sites')}
+          isActive={activeTab === 'dispatched-sites'}
+        />
       </div>
 
       {/* Search and Filter Bar */}
@@ -895,6 +1043,11 @@ export function SuperAdminDataManagement() {
               <Users className="h-3.5 w-3.5" />
               <span>Claimed</span>
               <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{filteredClaimedSites.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="dispatched-sites" className="gap-1.5 px-3 text-xs sm:text-sm whitespace-nowrap" data-testid="tab-dispatched-sites">
+              <Send className="h-3.5 w-3.5" />
+              <span>Dispatched</span>
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{filteredDispatchedSites.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="mmps" className="gap-1.5 px-3 text-xs sm:text-sm whitespace-nowrap" data-testid="tab-mmps">
               <FileText className="h-3.5 w-3.5" />
@@ -1380,6 +1533,173 @@ export function SuperAdminDataManagement() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="dispatched-sites" className="mt-4">
+          <Card>
+            <CardHeader className="border-b py-3 px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-orange-500/10">
+                    <Send className="h-4 w-4 text-orange-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">Dispatched Sites</CardTitle>
+                    <CardDescription className="text-xs">Sites awaiting data collector claims</CardDescription>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-sm px-2 py-0.5">
+                  {filteredDispatchedSites.length}
+                </Badge>
+              </div>
+              
+              {/* Filters for Dispatched Sites */}
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Activity</Label>
+                  <Select value={activityFilter} onValueChange={setActivityFilter}>
+                    <SelectTrigger data-testid="select-dispatched-activity-filter">
+                      <SelectValue placeholder="All Activities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Activities</SelectItem>
+                      {dispatchedSitesFilterOptions.activities.map(activity => (
+                        <SelectItem key={activity} value={activity}>{activity}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">State</Label>
+                  <Select value={stateFilter} onValueChange={(val) => {
+                    setStateFilter(val);
+                    setLocalityFilter('all');
+                  }}>
+                    <SelectTrigger data-testid="select-dispatched-state-filter">
+                      <SelectValue placeholder="All States" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {dispatchedSitesFilterOptions.states.map(state => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Locality</Label>
+                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                    <SelectTrigger data-testid="select-dispatched-locality-filter">
+                      <SelectValue placeholder="All Localities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Localities</SelectItem>
+                      {dispatchedSitesFilterOptions.localities.map(locality => (
+                        <SelectItem key={locality} value={locality}>{locality}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Hub</Label>
+                  <Select value={hubFilter} onValueChange={setHubFilter}>
+                    <SelectTrigger data-testid="select-dispatched-hub-filter">
+                      <SelectValue placeholder="All Hubs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Hubs</SelectItem>
+                      {dispatchedSitesFilterOptions.hubs.map(hub => (
+                        <SelectItem key={hub} value={hub}>{hub}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="flex items-center justify-center py-16">
+                  <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredDispatchedSites.length === 0 ? (
+                <div className="text-center py-16">
+                  <Send className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No dispatched sites found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="font-semibold">Site</TableHead>
+                        <TableHead className="font-semibold">Activity</TableHead>
+                        <TableHead className="font-semibold">Location</TableHead>
+                        <TableHead className="font-semibold">Hub</TableHead>
+                        <TableHead className="font-semibold">Dispatched At</TableHead>
+                        <TableHead className="font-semibold">Fees</TableHead>
+                        <TableHead className="text-right font-semibold">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredDispatchedSites.slice(0, 50).map((site) => (
+                        <TableRow key={site.id} className="hover:bg-muted/30" data-testid={`row-dispatched-site-${site.id}`}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{site.site_name}</p>
+                              <p className="text-sm text-muted-foreground">{site.site_code}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="whitespace-nowrap">
+                              {site.main_activity || 'N/A'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <p>{site.state}</p>
+                              <p className="text-muted-foreground">{site.locality}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm">{site.hub_office || 'N/A'}</p>
+                          </TableCell>
+                          <TableCell>
+                            {site.dispatched_at ? format(new Date(site.dispatched_at), 'MMM d, yyyy h:mm a') : 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {site.enumerator_fee && <p>Enum: {site.enumerator_fee.toLocaleString()} SDG</p>}
+                              {site.transport_fee && <p className="text-muted-foreground">Trans: {site.transport_fee.toLocaleString()} SDG</p>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() => {
+                                setSelectedDispatchedSite(site);
+                                setShowReturnToApprovedDialog(true);
+                              }}
+                              data-testid={`button-return-to-approved-${site.id}`}
+                            >
+                              <Undo2 className="h-3.5 w-3.5" />
+                              Return to Approved
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {filteredDispatchedSites.length > 50 && (
+                    <div className="text-center py-4 text-sm text-muted-foreground border-t">
+                      Showing 50 of {filteredDispatchedSites.length} results. Use search to find specific records.
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="mmps" className="mt-4">
           <Card>
             <CardHeader className="border-b py-3 px-4">
@@ -1558,6 +1878,74 @@ export function SuperAdminDataManagement() {
             >
               {processing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
               {processing ? 'Reclaiming...' : 'Reclaim Site'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return to Approved Dialog */}
+      <Dialog open={showReturnToApprovedDialog} onOpenChange={setShowReturnToApprovedDialog}>
+        <DialogContent className="max-w-md" data-testid="dialog-return-to-approved">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-orange-600" />
+              Return Site to Approved
+            </DialogTitle>
+            <DialogDescription>
+              Move this dispatched site back to approved status so it can be re-dispatched.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-orange-500/5 border border-orange-500/20 p-4 rounded-lg">
+              <p className="font-semibold">{selectedDispatchedSite?.site_name}</p>
+              <p className="text-sm text-muted-foreground">{selectedDispatchedSite?.site_code}</p>
+              <div className="mt-2 pt-2 border-t border-orange-500/10">
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Location:</span> {selectedDispatchedSite?.state}, {selectedDispatchedSite?.locality}
+                </p>
+                {selectedDispatchedSite?.dispatched_at && (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Dispatched:</span> {format(new Date(selectedDispatchedSite.dispatched_at), 'MMM d, yyyy HH:mm')}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="return-reason">Reason for Return <span className="text-destructive">*</span></Label>
+              <Textarea
+                id="return-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Explain why this site is being returned to approved status..."
+                rows={3}
+                data-testid="textarea-return-reason"
+              />
+            </div>
+
+            <div className="bg-muted/50 p-3 rounded-lg">
+              <p className="text-sm font-medium mb-2">This action will:</p>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Change status from dispatched to approved</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Clear dispatch information</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Log action for audit trail</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReturnToApprovedDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={handleReturnToApproved}
+              disabled={processing || !reason.trim()}
+              data-testid="button-confirm-return-to-approved"
+            >
+              {processing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Undo2 className="h-4 w-4 mr-2" />}
+              {processing ? 'Returning...' : 'Return to Approved'}
             </Button>
           </DialogFooter>
         </DialogContent>
