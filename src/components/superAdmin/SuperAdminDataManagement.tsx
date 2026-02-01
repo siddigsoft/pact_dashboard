@@ -187,6 +187,7 @@ export function SuperAdminDataManagement() {
   const [stateFilter, setStateFilter] = useState('all');
   const [localityFilter, setLocalityFilter] = useState('all');
   const [activityFilter, setActivityFilter] = useState('all');
+  const [claimedByFilter, setClaimedByFilter] = useState('all');
 
   const [siteVisits, setSiteVisits] = useState<SiteVisitData[]>([]);
   const [wallets, setWallets] = useState<WalletData[]>([]);
@@ -652,10 +653,11 @@ export function SuperAdminDataManagement() {
       const matchesState = stateFilter === 'all' || site.state === stateFilter;
       const matchesLocality = localityFilter === 'all' || site.locality === localityFilter;
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
+      const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
       
-      return matchesSearch && matchesStatus && matchesState && matchesLocality && matchesActivity;
+      return matchesSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy;
     });
-  }, [claimedSites, searchQuery, statusFilter, stateFilter, localityFilter, activityFilter]);
+  }, [claimedSites, searchQuery, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter]);
 
   // Get unique values for claimed sites filters
   const claimedSitesFilterOptions = useMemo(() => {
@@ -667,7 +669,8 @@ export function SuperAdminDataManagement() {
         .filter(Boolean)
     )].sort();
     const activities = [...new Set(claimedSites.map(s => s.main_activity).filter(Boolean))].sort();
-    return { states, localities, activities };
+    const claimedByUsers = [...new Set(claimedSites.map(s => s.accepted_by_name).filter(Boolean))].sort();
+    return { states, localities, activities, claimedByUsers };
   }, [claimedSites, stateFilter]);
 
   const filteredMMPs = useMemo(() => {
@@ -1181,7 +1184,7 @@ export function SuperAdminDataManagement() {
               </div>
               
               {/* Advanced Filters for Claimed Sites */}
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Activity</Label>
                   <Select value={activityFilter} onValueChange={setActivityFilter}>
@@ -1239,6 +1242,20 @@ export function SuperAdminDataManagement() {
                       <SelectItem value="dispatched">Dispatched</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
                       <SelectItem value="verified">Verified</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Claimed By</Label>
+                  <Select value={claimedByFilter} onValueChange={setClaimedByFilter}>
+                    <SelectTrigger data-testid="select-claimed-by-filter">
+                      <SelectValue placeholder="All Users" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Users</SelectItem>
+                      {claimedSitesFilterOptions.claimedByUsers.map(user => (
+                        <SelectItem key={user} value={user}>{user}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
