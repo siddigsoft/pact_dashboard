@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { DownPaymentApprovalPanel } from '@/components/downPayment/DownPaymentApprovalPanel';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { DollarSign, Shield, AlertTriangle, Info } from 'lucide-react';
+import { DollarSign, Shield, AlertTriangle, Info, Users, UserCheck } from 'lucide-react';
 
 export default function DownPaymentApproval() {
   const { currentUser } = useUser();
@@ -14,6 +16,8 @@ export default function DownPaymentApproval() {
   const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
   const isAdmin = userRole === 'admin' || userRole === 'financialadmin' || userRole === 'superadmin' || userRole === 'ict' || isSuperAdmin;
   const isFOM = userRole === 'fom' || userRole === 'field operation manager';
+  
+  const [selectedTier, setSelectedTier] = useState<'tier1' | 'tier2'>(isAdmin ? 'tier2' : 'tier1');
   
   if (!isSupervisor && !isAdmin && !isFOM) {
     return (
@@ -33,9 +37,8 @@ export default function DownPaymentApproval() {
     );
   }
 
-  const approvalRole = isSupervisor ? 'supervisor' : 'admin';
+  const approvalRole = selectedTier === 'tier1' ? 'supervisor' : 'admin';
 
-  // DownPaymentProvider is already provided by AppContext.tsx - no need to wrap again
   return (
       <div className="p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -45,29 +48,57 @@ export default function DownPaymentApproval() {
               Down-Payment Approval
             </h1>
             <p className="text-muted-foreground mt-1">
-              {isSupervisor 
-                ? 'Review and approve transportation advance requests from your team'
+              {selectedTier === 'tier1' 
+                ? 'Review and approve transportation advance requests from team members'
                 : 'Process approved down-payment requests and manage payments'
               }
             </p>
           </div>
-          <Badge variant="outline" className="self-start flex items-center gap-1">
-            <Shield className="h-3 w-3" />
-            {isSupervisor ? 'Tier 1: Supervisor Review' : 'Tier 2: Admin Processing'}
-          </Badge>
+          
+          {isAdmin && (
+            <div className="flex items-center gap-2 p-1 bg-muted rounded-lg">
+              <Button
+                variant={selectedTier === 'tier1' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setSelectedTier('tier1')}
+                className="gap-2"
+                data-testid="button-tier1"
+              >
+                <Users className="h-4 w-4" />
+                Tier 1: Supervisor
+              </Button>
+              <Button
+                variant={selectedTier === 'tier2' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setSelectedTier('tier2')}
+                className="gap-2"
+                data-testid="button-tier2"
+              >
+                <UserCheck className="h-4 w-4" />
+                Tier 2: Admin
+              </Button>
+            </div>
+          )}
+          
+          {!isAdmin && (
+            <Badge variant="outline" className="self-start flex items-center gap-1">
+              <Shield className="h-3 w-3" />
+              {isSupervisor ? 'Tier 1: Supervisor Review' : 'Tier 2: Admin Processing'}
+            </Badge>
+          )}
         </div>
 
-        <Alert>
+        <Alert className={selectedTier === 'tier1' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : ''}>
           <Info className="h-4 w-4" />
           <AlertDescription>
-            {isSupervisor ? (
+            {selectedTier === 'tier1' ? (
               <>
-                <strong>Supervisor Approval Flow:</strong> Review down-payment requests from data collectors and coordinators in your hub. 
-                Approved requests will be forwarded to the finance team for final processing and payment.
+                <strong>Tier 1 - Supervisor Approval Flow:</strong> Review down-payment requests from data collectors and coordinators. 
+                Approved requests will be forwarded to Tier 2 (Admin) for final processing and payment.
               </>
             ) : (
               <>
-                <strong>Admin Processing Flow:</strong> Process requests that have been approved by supervisors. 
+                <strong>Tier 2 - Admin Processing Flow:</strong> Process requests that have been approved by supervisors. 
                 You can approve, reject, or process payments directly to the requester's wallet.
               </>
             )}
