@@ -58,13 +58,8 @@ const CostSubmission = () => {
   // Admins and supervisors can see team submissions and approval status
   const canViewTeamSubmissions = isAdmin || isSupervisor || isCountryDirector;
   
-  // Determine default tab based on role
-  const getDefaultTab = () => {
-    if (canViewTeamSubmissions) return "history";
-    return "submit"; // Default to submit for field staff
-  };
-  
-  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">(getDefaultTab());
+  // Default to Submit Request tab for all users
+  const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
   const [showGuide, setShowGuide] = useState(false);
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
@@ -389,40 +384,71 @@ const CostSubmission = () => {
       </Card>
 
       {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
-        <TabsList className="flex-wrap gap-1">
-          {/* Submit Request */}
-          {canSubmitOperationalCosts && (
-            <TabsTrigger value="submit" data-testid="tab-submit" className="gap-1.5">
-              <Receipt className="h-4 w-4" />
-              <span className="hidden sm:inline">Submit Request</span>
-              <span className="sm:hidden">Submit</span>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-6">
+        <div className="relative">
+          <TabsList className="w-full h-auto p-1.5 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800 dark:via-slate-900 dark:to-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-wrap gap-2 justify-start">
+            {/* Submit Request */}
+            {canSubmitOperationalCosts && (
+              <TabsTrigger 
+                value="submit" 
+                data-testid="tab-submit" 
+                className="relative flex-1 min-w-[140px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+              >
+                <Receipt className="h-4 w-4" />
+                <span className="hidden sm:inline">Submit Request</span>
+                <span className="sm:hidden">Submit</span>
+                {activeTab === "submit" && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                )}
+              </TabsTrigger>
+            )}
+            
+            {/* Outstanding */}
+            <TabsTrigger 
+              value="outstanding" 
+              data-testid="tab-outstanding" 
+              className="relative flex-1 min-w-[120px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-amber-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+            >
+              <CircleDollarSign className="h-4 w-4" />
+              <span className="hidden sm:inline">Outstanding</span>
+              <span className="sm:hidden">Due</span>
+              {submissionStats.pending > 0 && activeTab !== "outstanding" && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 border-0">
+                  {submissionStats.pending}
+                </Badge>
+              )}
             </TabsTrigger>
-          )}
-          
-          {/* Outstanding */}
-          <TabsTrigger value="outstanding" data-testid="tab-outstanding" className="gap-1.5">
-            <CircleDollarSign className="h-4 w-4" />
-            <span className="hidden sm:inline">Outstanding</span>
-            <span className="sm:hidden">Due</span>
-          </TabsTrigger>
-          
-          {/* Reconciliation */}
-          <TabsTrigger value="reconciliation" data-testid="tab-reconciliation" className="gap-1.5">
-            <RefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">Reconciliation</span>
-            <span className="sm:hidden">Reconcile</span>
-          </TabsTrigger>
-          
-          {/* History */}
-          <TabsTrigger value="history" data-testid="tab-history" className="gap-1.5">
-            <ClipboardCheck className="h-4 w-4" />
-            <span className="hidden sm:inline">
-              {isAdmin ? "All Submissions" : isSupervisor ? "Team" : isCountryDirector ? "Overview" : "My Submissions"}
-            </span>
-            <span className="sm:hidden">History</span>
-          </TabsTrigger>
-        </TabsList>
+            
+            {/* Reconciliation */}
+            <TabsTrigger 
+              value="reconciliation" 
+              data-testid="tab-reconciliation" 
+              className="relative flex-1 min-w-[130px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-purple-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span className="hidden sm:inline">Reconciliation</span>
+              <span className="sm:hidden">Reconcile</span>
+            </TabsTrigger>
+            
+            {/* History */}
+            <TabsTrigger 
+              value="history" 
+              data-testid="tab-history" 
+              className="relative flex-1 min-w-[140px] gap-2 py-3 px-4 rounded-lg font-medium transition-all duration-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/25 data-[state=inactive]:text-slate-600 data-[state=inactive]:dark:text-slate-400 data-[state=inactive]:hover:bg-slate-200/50 data-[state=inactive]:dark:hover:bg-slate-700/50"
+            >
+              <ClipboardCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">
+                {isAdmin ? "All Submissions" : isSupervisor ? "Team" : isCountryDirector ? "Overview" : "My Submissions"}
+              </span>
+              <span className="sm:hidden">History</span>
+              {submissionStats.total > 0 && activeTab !== "history" && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300 border-0">
+                  {submissionStats.total}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Submit Request Tab - Unified form for all field costs */}
         {canSubmitOperationalCosts && (
