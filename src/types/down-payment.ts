@@ -22,6 +22,12 @@ export type AdminStatus =
   | 'approved' 
   | 'rejected';
 
+export type ApprovalType = 
+  | 'full'           // Approve full requested amount
+  | 'half'           // Approve 50% of requested amount
+  | 'percentage'     // Approve custom percentage
+  | 'custom';        // Approve custom fixed amount
+
 export interface InstallmentPlan {
   amount: number;
   stage: string; // 'before_travel' | 'after_completion' | etc.
@@ -47,6 +53,20 @@ export interface SupportingDocument {
   fileType?: string;
 }
 
+export interface ApprovalAuditEntry {
+  id: string;
+  action: 'created' | 'supervisor_approved' | 'supervisor_rejected' | 'admin_approved' | 'admin_rejected' | 'payment_processed' | 'amount_modified' | 'cancelled' | 'restored';
+  performedBy: string;
+  performedByName?: string;
+  performedByRole?: string;
+  timestamp: string;
+  previousValue?: any;
+  newValue?: any;
+  notes?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
 export interface DownPaymentRequest {
   id: string;
   
@@ -57,10 +77,13 @@ export interface DownPaymentRequest {
   
   // Geographic information (from related MMP entry)
   stateName?: string;
+  localityName?: string;
   projectName?: string;
+  activityType?: string;
   
   // Requester information
   requestedBy: string;
+  requestedByName?: string;
   requestedAt: string;
   requesterRole: 'dataCollector' | 'coordinator';
   hubId?: string;
@@ -69,6 +92,9 @@ export interface DownPaymentRequest {
   // Payment details
   totalTransportationBudget: number;
   requestedAmount: number;
+  approvedAmount?: number;  // May differ from requested if partial approval
+  approvalType?: ApprovalType;
+  approvalPercentage?: number;
   paymentType: PaymentType;
   
   // Installment details
@@ -83,16 +109,20 @@ export interface DownPaymentRequest {
   supervisorId?: string;
   supervisorStatus?: SupervisorStatus;
   supervisorApprovedBy?: string;
+  supervisorApprovedByName?: string;
   supervisorApprovedAt?: string;
   supervisorNotes?: string;
   supervisorRejectionReason?: string;
+  supervisorApprovedAmount?: number;
   
   // Admin approval (TIER 2)
   adminStatus?: AdminStatus;
   adminProcessedBy?: string;
+  adminProcessedByName?: string;
   adminProcessedAt?: string;
   adminNotes?: string;
   adminRejectionReason?: string;
+  adminApprovedAmount?: number;
   
   // Payment tracking
   status: DownPaymentStatus;
@@ -101,6 +131,9 @@ export interface DownPaymentRequest {
   
   // Wallet transactions
   walletTransactionIds: string[];
+  
+  // Audit trail
+  auditLog: ApprovalAuditEntry[];
   
   // Audit
   createdAt: string;
@@ -124,17 +157,24 @@ export interface CreateDownPaymentRequest {
   installmentPlan?: InstallmentPlan[];
   justification: string;
   supportingDocuments?: SupportingDocument[];
+  localityName?: string;
+  activityType?: string;
 }
 
 export interface ApproveDownPaymentRequest {
   requestId: string;
   approvedBy: string;
+  approvedByName?: string;
   notes?: string;
+  approvalType?: ApprovalType;
+  approvalPercentage?: number;
+  customAmount?: number;
 }
 
 export interface RejectDownPaymentRequest {
   requestId: string;
   rejectedBy: string;
+  rejectedByName?: string;
   rejectionReason: string;
 }
 
@@ -143,5 +183,46 @@ export interface ProcessPayment {
   installmentIndex?: number; // For installment payments
   amount: number;
   processedBy: string;
+  processedByName?: string;
   notes?: string;
+}
+
+export interface DownPaymentFilter {
+  status?: DownPaymentStatus[];
+  hubId?: string;
+  stateName?: string;
+  localityName?: string;
+  siteName?: string;
+  activityType?: string;
+  dataCollectorId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  amountMin?: number;
+  amountMax?: number;
+  searchTerm?: string;
+}
+
+export interface DownPaymentReportConfig {
+  filters: DownPaymentFilter;
+  includeAuditLog: boolean;
+  includeSignature: boolean;
+  signatureData?: {
+    signerName: string;
+    signerTitle: string;
+    signatureImage?: string;
+    stampImage?: string;
+    signedAt: string;
+  };
+  reportTitle?: string;
+  reportNotes?: string;
+}
+
+export interface BulkApprovalRequest {
+  requestIds: string[];
+  approvalType: ApprovalType;
+  approvalPercentage?: number;
+  customAmount?: number;
+  notes?: string;
+  approvedBy: string;
+  approvedByName?: string;
 }

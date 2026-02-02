@@ -10,6 +10,9 @@ import {
   RejectDownPaymentRequest,
   ProcessPayment,
   DownPaymentStatus,
+  ApprovalAuditEntry,
+  BulkApprovalRequest,
+  ApprovalType,
 } from '@/types/down-payment';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
@@ -24,6 +27,8 @@ interface DownPaymentContextType {
   adminReject: (data: RejectDownPaymentRequest) => Promise<boolean>;
   processPayment: (data: ProcessPayment) => Promise<boolean>;
   cancelRequest: (requestId: string) => Promise<boolean>;
+  bulkApprove: (data: BulkApprovalRequest) => Promise<{ success: number; failed: number }>;
+  addAuditEntry: (requestId: string, entry: Omit<ApprovalAuditEntry, 'id' | 'timestamp'>) => Promise<boolean>;
 }
 
 const DownPaymentContext = createContext<DownPaymentContextType | undefined>(undefined);
@@ -46,14 +51,20 @@ function transformFromDB(data: any): DownPaymentRequest {
     mmpSiteEntryId: data.mmp_site_entry_id,
     siteName: data.site_name,
     stateName: mmpEntry?.state || data.metadata?.state_name || undefined,
+    localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
     projectName: mmpEntry?.cp_name || data.metadata?.project_name || undefined,
+    activityType: mmpEntry?.activity_type || data.metadata?.activity_type || undefined,
     requestedBy: data.requested_by,
+    requestedByName: data.metadata?.requested_by_name || undefined,
     requestedAt: data.requested_at,
     requesterRole: data.requester_role,
     hubId: data.hub_id,
     hubName: data.hub_name,
     totalTransportationBudget: parseFloat(data.total_transportation_budget),
     requestedAmount: parseFloat(data.requested_amount),
+    approvedAmount: data.approved_amount ? parseFloat(data.approved_amount) : undefined,
+    approvalType: data.approval_type,
+    approvalPercentage: data.approval_percentage,
     paymentType: data.payment_type,
     installmentPlan: data.installment_plan || [],
     paidInstallments: data.paid_installments || [],
@@ -62,18 +73,23 @@ function transformFromDB(data: any): DownPaymentRequest {
     supervisorId: data.supervisor_id,
     supervisorStatus: data.supervisor_status,
     supervisorApprovedBy: data.supervisor_approved_by,
+    supervisorApprovedByName: data.metadata?.supervisor_approved_by_name || undefined,
     supervisorApprovedAt: data.supervisor_approved_at,
     supervisorNotes: data.supervisor_notes,
     supervisorRejectionReason: data.supervisor_rejection_reason,
+    supervisorApprovedAmount: data.supervisor_approved_amount ? parseFloat(data.supervisor_approved_amount) : undefined,
     adminStatus: data.admin_status,
     adminProcessedBy: data.admin_processed_by,
+    adminProcessedByName: data.metadata?.admin_processed_by_name || undefined,
     adminProcessedAt: data.admin_processed_at,
     adminNotes: data.admin_notes,
     adminRejectionReason: data.admin_rejection_reason,
+    adminApprovedAmount: data.admin_approved_amount ? parseFloat(data.admin_approved_amount) : undefined,
     status: data.status,
     totalPaidAmount: parseFloat(data.total_paid_amount || 0),
     remainingAmount: parseFloat(data.remaining_amount || 0),
     walletTransactionIds: data.wallet_transaction_ids || [],
+    auditLog: data.audit_log || [],
     createdAt: data.created_at,
     updatedAt: data.updated_at,
     metadata: data.metadata || {},
@@ -686,6 +702,126 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const calculateApprovedAmount = (
+    requestedAmount: number,
+    approvalType: ApprovalType,
+    approvalPercentage?: number,
+    customAmount?: number
+  ): number => {
+    switch (approvalType) {
+      case 'full':
+        return requestedAmount;
+      case 'half':
+        return requestedAmount / 2;
+      case 'percentage':
+        return requestedAmount * ((approvalPercentage || 100) / 100);
+      case 'custom':
+        return customAmount || requestedAmount;
+      default:
+        return requestedAmount;
+    }
+  };
+
+  const addAuditEntry = async (
+    requestId: string,
+    entry: Omit<ApprovalAuditEntry, 'id' | 'timestamp'>
+  ): Promise<boolean> => {
+    try {
+      const request = requests.find(r => r.id === requestId);
+      if (!request) return false;
+
+      const newEntry: ApprovalAuditEntry = {
+        ...entry,
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+      };
+
+      const updatedAuditLog = [...(request.auditLog || []), newEntry];
+
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update({
+          audit_log: updatedAuditLog,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+      return true;
+    } catch (error: any) {
+      console.error('Failed to add audit entry:', error);
+      return false;
+    }
+  };
+
+  const bulkApprove = async (
+    data: BulkApprovalRequest
+  ): Promise<{ success: number; failed: number }> => {
+    let success = 0;
+    let failed = 0;
+
+    for (const requestId of data.requestIds) {
+      const request = requests.find(r => r.id === requestId);
+      if (!request) {
+        failed++;
+        continue;
+      }
+
+      const approvedAmount = calculateApprovedAmount(
+        request.requestedAmount,
+        data.approvalType,
+        data.approvalPercentage,
+        data.customAmount
+      );
+
+      try {
+        const userRole = currentUser?.role?.toLowerCase();
+        const isSupervisor = userRole === 'supervisor' || userRole === 'hubsupervisor';
+
+        if (isSupervisor && request.status === 'pending_supervisor') {
+          const result = await supervisorApprove({
+            requestId,
+            approvedBy: data.approvedBy,
+            approvedByName: data.approvedByName,
+            notes: data.notes,
+            approvalType: data.approvalType,
+            approvalPercentage: data.approvalPercentage,
+            customAmount: approvedAmount,
+          });
+          if (result) success++;
+          else failed++;
+        } else if (!isSupervisor && request.status === 'pending_admin') {
+          const result = await adminApprove({
+            requestId,
+            approvedBy: data.approvedBy,
+            approvedByName: data.approvedByName,
+            notes: data.notes,
+            approvalType: data.approvalType,
+            approvalPercentage: data.approvalPercentage,
+            customAmount: approvedAmount,
+          });
+          if (result) success++;
+          else failed++;
+        } else {
+          failed++;
+        }
+      } catch (error) {
+        console.error('Bulk approve error for request:', requestId, error);
+        failed++;
+      }
+    }
+
+    if (success > 0) {
+      toast({
+        title: 'Bulk Approval Complete',
+        description: `${success} request(s) approved successfully${failed > 0 ? `, ${failed} failed` : ''}`,
+      });
+    }
+
+    await refreshRequests();
+    return { success, failed };
+  };
+
   const value: DownPaymentContextType = {
     requests,
     loading,
@@ -697,6 +833,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     adminReject,
     processPayment,
     cancelRequest,
+    bulkApprove,
+    addAuditEntry,
   };
 
   return <DownPaymentContext.Provider value={value}>{children}</DownPaymentContext.Provider>;
