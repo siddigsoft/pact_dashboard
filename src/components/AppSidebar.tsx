@@ -80,8 +80,12 @@
   } from "@/components/ui/dropdown-menu";
   import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
   import { ChevronDown } from "lucide-react";
-  import { useState, useMemo } from "react";
+  import { useState, useMemo, useCallback } from "react";
   import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from "@/types/user-preferences";
+  import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+  import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+  import { CSS } from '@dnd-kit/utilities';
+  import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
   const ICON_MAP: Record<string, any> = {
     LayoutDashboard,
@@ -118,6 +122,91 @@
     Map,
     ScrollText,
     Mail
+  };
+
+  interface FavoriteItem {
+    id: string;
+    title: string;
+    url: string;
+    icon: any;
+  }
+
+  interface SortableFavoriteItemProps {
+    item: FavoriteItem;
+    isActive: boolean;
+    onRemove: (url: string) => void;
+  }
+
+  const SortableFavoriteItem = ({ item, isActive, onRemove }: SortableFavoriteItemProps) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: item.url });
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+      <SidebarMenuItem ref={setNodeRef} style={style} className="py-0 group/fav">
+        <div className="flex items-center w-full">
+          <Button
+            variant="ghost"
+            size="icon"
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing opacity-0 group-hover/fav:opacity-100 transition-opacity shrink-0"
+            aria-label="Drag to reorder"
+            data-testid={`drag-handle-${item.id}`}
+          >
+            <GripVertical className="h-3 w-3 text-muted-foreground" />
+          </Button>
+          <SidebarMenuButton
+            asChild
+            isActive={isActive}
+            tooltip={item.title}
+            className={`flex-1 rounded text-[13px] font-medium transition-all duration-200 
+              ${isActive
+                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 font-semibold"
+                : ""
+              }`}
+          >
+            <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-favorite-${item.id}`}>
+              <item.icon
+                className={`h-4 w-4 ${isActive
+                  ? "text-amber-700 dark:text-amber-300"
+                  : "text-amber-600 dark:text-amber-400"
+                }`}
+              />
+              <span className="truncate flex-1">{item.title}</span>
+            </Link>
+          </SidebarMenuButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => { e.stopPropagation(); onRemove(item.url); }}
+                className="opacity-0 group-hover/fav:opacity-100 transition-opacity shrink-0"
+                aria-label="Remove from favorites"
+                data-testid={`button-unfavorite-${item.id}`}
+              >
+                <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>Remove from favorites</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </SidebarMenuItem>
+    );
   };
 
 
@@ -368,7 +457,7 @@
     const { currentUser, logout, roles } = useAppContext();
     const { showDueReminders } = useSiteVisitReminders();
     const { isSuperAdmin } = useSuperAdmin();
-    const { userSettings } = useSettings();
+    const { userSettings, updateMenuPreferences, menuPreferences: contextMenuPrefs } = useSettings();
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
     const isAdmin = hasAnyRole(['admin']);
@@ -378,11 +467,52 @@
                             currentUser?.role?.toLowerCase() === 'data collector';
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const [isFavoritesCollapsed, setIsFavoritesCollapsed] = useState(false);
 
     const menuPrefs: MenuPreferences = useMemo(() => {
       const savedPrefs = userSettings?.settings?.menuPreferences;
       return savedPrefs ? { ...DEFAULT_MENU_PREFERENCES, ...savedPrefs } : DEFAULT_MENU_PREFERENCES;
     }, [userSettings?.settings?.menuPreferences]);
+
+    const sensors = useSensors(
+      useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+      useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
+
+    const toggleFavorite = useCallback(async (url: string, title: string, iconName: string) => {
+      const currentFavorites = menuPrefs.favoritePages || [];
+      const isFavorite = currentFavorites.includes(url);
+      
+      if (isFavorite) {
+        await updateMenuPreferences({
+          favoritePages: currentFavorites.filter(f => f !== url)
+        });
+      } else {
+        await updateMenuPreferences({
+          favoritePages: [...currentFavorites, url]
+        });
+      }
+    }, [menuPrefs.favoritePages, updateMenuPreferences]);
+
+    const removeFavorite = useCallback(async (url: string) => {
+      const currentFavorites = menuPrefs.favoritePages || [];
+      await updateMenuPreferences({
+        favoritePages: currentFavorites.filter(f => f !== url)
+      });
+    }, [menuPrefs.favoritePages, updateMenuPreferences]);
+
+    const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+      const { active, over } = event;
+      
+      if (over && active.id !== over.id) {
+        const currentFavorites = menuPrefs.favoritePages || [];
+        const oldIndex = currentFavorites.indexOf(active.id as string);
+        const newIndex = currentFavorites.indexOf(over.id as string);
+        
+        const newOrder = arrayMove(currentFavorites, oldIndex, newIndex);
+        await updateMenuPreferences({ favoritePages: newOrder });
+      }
+    }, [menuPrefs.favoritePages, updateMenuPreferences]);
 
     const perms = {
       dashboard: true,
@@ -445,6 +575,27 @@
       }, 1500);
     };
 
+    const allMenuItems = useMemo(() => {
+      const items: Array<{ id: string; title: string; url: string; icon: any }> = [];
+      menuGroups.forEach(group => {
+        group.items.forEach(item => {
+          items.push({ id: item.id, title: item.title, url: item.url, icon: item.icon });
+        });
+      });
+      return items;
+    }, [menuGroups]);
+
+    const favoriteItems: FavoriteItem[] = useMemo(() => {
+      const favorites = menuPrefs.favoritePages || [];
+      return favorites
+        .map(url => allMenuItems.find(item => item.url === url))
+        .filter((item): item is FavoriteItem => !!item);
+    }, [menuPrefs.favoritePages, allMenuItems]);
+
+    const isFavorite = useCallback((url: string) => {
+      return (menuPrefs.favoritePages || []).includes(url);
+    }, [menuPrefs.favoritePages]);
+
     return (
       <Sidebar collapsible="icon" className="border-r bg-white dark:bg-gray-900">
 
@@ -456,6 +607,51 @@
         </SidebarHeader>
 
         <SidebarContent className="px-0 py-0">
+          {favoriteItems.length > 0 && (
+            <Collapsible open={!isFavoritesCollapsed} className="">
+              <SidebarGroup className="py-0 px-0">
+                <CollapsibleTrigger asChild>
+                  <SidebarGroupLabel 
+                    className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-amber-600 dark:text-amber-400 cursor-pointer flex items-center justify-between hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded transition-colors"
+                    onClick={() => setIsFavoritesCollapsed(!isFavoritesCollapsed)}
+                    data-testid="group-label-favorites"
+                  >
+                    <span className="flex items-center gap-1">
+                      <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+                      Favorites
+                    </span>
+                    <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isFavoritesCollapsed ? '-rotate-90' : ''}`} />
+                  </SidebarGroupLabel>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <SidebarGroupContent>
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <SortableContext
+                        items={favoriteItems.map(item => item.url)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <SidebarMenu className="space-y-0">
+                          {favoriteItems.map((item) => (
+                            <SortableFavoriteItem
+                              key={item.url}
+                              item={item}
+                              isActive={pathname === item.url}
+                              onRemove={removeFavorite}
+                            />
+                          ))}
+                        </SidebarMenu>
+                      </SortableContext>
+                    </DndContext>
+                  </SidebarGroupContent>
+                </CollapsibleContent>
+              </SidebarGroup>
+            </Collapsible>
+          )}
+
           {menuGroups.map((group, index) => {
             const isCollapsed = collapsedGroups.has(group.id);
             
@@ -475,35 +671,67 @@
                   <CollapsibleContent>
                     <SidebarGroupContent>
                       <SidebarMenu className="space-y-0">
-                        {group.items.map((item, itemIndex) => (
-                          <SidebarMenuItem key={item.id} index={itemIndex} className="py-0">
-                            <SidebarMenuButton
-                              asChild
-                              isActive={pathname === item.url}
-                              tooltip={item.title}
-                              className={`h-7 px-1 rounded text-[13px] font-medium transition-all duration-200 
-                                ${
-                                  pathname === item.url
-                                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
-                                    : "hover:bg-blue-50 dark:hover:bg-blue-800"
-                                }`}
-                            >
-                              <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-link-${item.id}`}>
-                                <item.icon
-                                  className={`h-4 w-4 ${
-                                    pathname === item.url
-                                      ? "text-blue-700 dark:text-blue-300"
-                                      : "text-blue-600 dark:text-blue-400"
-                                  }`}
-                                />
-                                <span className="truncate flex-1">{item.title}</span>
-                                {item.isPinned && (
-                                  <Pin className="h-2 w-2 text-amber-500" />
-                                )}
-                              </Link>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        ))}
+                        {group.items.map((item, itemIndex) => {
+                          const isItemFavorite = isFavorite(item.url);
+                          return (
+                            <SidebarMenuItem key={item.id} index={itemIndex} className="py-0 group/item">
+                              <div className="flex items-center w-full">
+                                <SidebarMenuButton
+                                  asChild
+                                  isActive={pathname === item.url}
+                                  tooltip={item.title}
+                                  className={`flex-1 rounded text-[13px] font-medium transition-all duration-200 
+                                    ${
+                                      pathname === item.url
+                                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
+                                        : ""
+                                    }`}
+                                >
+                                  <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-link-${item.id}`}>
+                                    <item.icon
+                                      className={`h-4 w-4 ${
+                                        pathname === item.url
+                                          ? "text-blue-700 dark:text-blue-300"
+                                          : "text-blue-600 dark:text-blue-400"
+                                      }`}
+                                    />
+                                    <span className="truncate flex-1">{item.title}</span>
+                                  </Link>
+                                </SidebarMenuButton>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={(e) => { 
+                                        e.stopPropagation(); 
+                                        toggleFavorite(item.url, item.title, item.icon?.name || 'Star'); 
+                                      }}
+                                      className={`transition-opacity shrink-0 ${
+                                        isItemFavorite 
+                                          ? 'opacity-100' 
+                                          : 'opacity-0 group-hover/item:opacity-100'
+                                      }`}
+                                      aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                                      data-testid={`button-favorite-${item.id}`}
+                                    >
+                                      <Star 
+                                        className={`h-3 w-3 ${
+                                          isItemFavorite 
+                                            ? 'text-amber-500 fill-amber-500' 
+                                            : 'text-muted-foreground'
+                                        }`} 
+                                      />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right">
+                                    <p>{isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </SidebarMenuItem>
+                          );
+                        })}
                       </SidebarMenu>
                     </SidebarGroupContent>
                   </CollapsibleContent>
