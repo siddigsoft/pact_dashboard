@@ -11,6 +11,13 @@ dependencies:
   vibration: ^2.1.0
   permission_handler: ^11.3.1
   uuid: ^4.5.1
+  
+  # Fix record package version conflict (record_linux vs record_platform_interface):
+  # Option 1: Pin to compatible versions
+  record: ^5.1.2
+  # Option 2: If you don't need audio recording, add to dependency_overrides:
+  # dependency_overrides:
+  #   record_linux: ^1.0.0
 
 # Android Configuration (android/app/build.gradle.kts):
 # Make sure you have:

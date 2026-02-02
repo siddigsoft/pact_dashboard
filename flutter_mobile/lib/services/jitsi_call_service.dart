@@ -8,13 +8,39 @@ class CallStateData {
   final bool isInCall;
   final String? callId;
   final String? remoteUserId;
+  final String? remoteUserName;
+  final String? callToken;
+  final bool isAudioOnly;
 
   CallStateData({
     required this.status,
     this.isInCall = false,
     this.callId,
     this.remoteUserId,
+    this.remoteUserName,
+    this.callToken,
+    this.isAudioOnly = true,
   });
+
+  CallStateData copyWith({
+    CallStatus? status,
+    bool? isInCall,
+    String? callId,
+    String? remoteUserId,
+    String? remoteUserName,
+    String? callToken,
+    bool? isAudioOnly,
+  }) {
+    return CallStateData(
+      status: status ?? this.status,
+      isInCall: isInCall ?? this.isInCall,
+      callId: callId ?? this.callId,
+      remoteUserId: remoteUserId ?? this.remoteUserId,
+      remoteUserName: remoteUserName ?? this.remoteUserName,
+      callToken: callToken ?? this.callToken,
+      isAudioOnly: isAudioOnly ?? this.isAudioOnly,
+    );
+  }
 }
 
 class JitsiCallService {
@@ -182,6 +208,10 @@ class JitsiCallService {
       status: status,
       isInCall: status == CallStatus.inProgress || status == CallStatus.ringing,
       callId: _currentCallId,
+      remoteUserId: _currentCallData?['targetUserId'] as String?,
+      remoteUserName: _currentCallData?['targetUserName'] as String?,
+      callToken: _currentCallId,
+      isAudioOnly: !(_currentCallData?['isVideo'] == true),
     );
     _callStatusController.add(status);
     _callStateController.add(_callState);
