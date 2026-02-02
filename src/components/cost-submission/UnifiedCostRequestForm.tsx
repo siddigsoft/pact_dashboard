@@ -1,29 +1,39 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { 
   DollarSign, 
   FileText, 
   Building2, 
   Wallet, 
   Receipt,
-  AlertCircle,
   Info,
   Loader2,
   Calendar,
-  Send
+  Send,
+  Ticket,
+  Gift,
+  Wifi,
+  GraduationCap,
+  Car,
+  Package,
+  Printer,
+  Coffee,
+  FolderOpen,
+  MoreHorizontal,
+  CheckCircle2,
+  ArrowRight
 } from "lucide-react";
 import { SupportingDocument } from "@/types/cost-submission";
 import CostDocumentUpload from "./CostDocumentUpload";
@@ -31,16 +41,16 @@ import { useAppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 
 const EXPENSE_CATEGORIES = {
-  permits: "Permits & Licenses",
-  incentives: "Incentives & Allowances",
-  communications: "Internet & Communications",
-  training: "Training & Capacity Building",
-  transport: "Transportation & Travel",
-  equipment: "Equipment & Supplies",
-  printing: "Printing & Stationery",
-  meetings: "Meetings & Refreshments",
-  office_admin: "Office & Administration",
-  other: "Other Expenses"
+  permits: { label: "Permits & Licenses", icon: Ticket, color: "from-purple-500 to-purple-600" },
+  incentives: { label: "Incentives & Allowances", icon: Gift, color: "from-pink-500 to-pink-600" },
+  communications: { label: "Internet & Comms", icon: Wifi, color: "from-blue-500 to-blue-600" },
+  training: { label: "Training", icon: GraduationCap, color: "from-emerald-500 to-emerald-600" },
+  transport: { label: "Transportation", icon: Car, color: "from-orange-500 to-orange-600" },
+  equipment: { label: "Equipment & Supplies", icon: Package, color: "from-cyan-500 to-cyan-600" },
+  printing: { label: "Printing & Stationery", icon: Printer, color: "from-slate-500 to-slate-600" },
+  meetings: { label: "Meetings", icon: Coffee, color: "from-amber-500 to-amber-600" },
+  office_admin: { label: "Office Admin", icon: FolderOpen, color: "from-indigo-500 to-indigo-600" },
+  other: { label: "Other", icon: MoreHorizontal, color: "from-gray-500 to-gray-600" }
 } as const;
 
 type ExpenseCategory = keyof typeof EXPENSE_CATEGORIES;
@@ -110,6 +120,18 @@ export default function UnifiedCostRequestForm({
 
   const watchedFundingType = form.watch('fundingType');
   const watchedAmount = form.watch('amount');
+  const watchedCategory = form.watch('expenseCategory');
+  const watchedTitle = form.watch('title');
+
+  const formProgress = useMemo(() => {
+    let completed = 0;
+    if (watchedCategory) completed++;
+    if (watchedTitle && watchedTitle.length >= 3) completed++;
+    if (watchedAmount > 0) completed++;
+    if (form.watch('description')?.length >= 10) completed++;
+    if (form.watch('justification')?.length >= 10) completed++;
+    return Math.round((completed / 5) * 100);
+  }, [watchedCategory, watchedTitle, watchedAmount, form.watch('description'), form.watch('justification')]);
 
   const onSubmit = async (values: FormValues) => {
     if (!currentUser) {
@@ -121,7 +143,6 @@ export default function UnifiedCostRequestForm({
       return;
     }
 
-    // Documents required for reimbursements (proof of payment), optional for advances
     if (values.fundingType === 'reimbursement' && supportingDocuments.length === 0) {
       toast({
         title: "Documents Required",
@@ -154,8 +175,8 @@ export default function UnifiedCostRequestForm({
       if (error) throw error;
 
       toast({
-        title: values.fundingType === 'advance' ? "Advance Request Submitted" : "Reimbursement Request Submitted",
-        description: `Your ${values.fundingType} request for ${values.currency} ${values.amount.toLocaleString()} has been submitted for approval.`,
+        title: values.fundingType === 'advance' ? "Advance Request Submitted" : "Reimbursement Submitted",
+        description: `Your request for ${values.currency} ${values.amount.toLocaleString()} has been submitted.`,
       });
 
       form.reset();
@@ -173,91 +194,154 @@ export default function UnifiedCostRequestForm({
     }
   };
 
+  const selectedCategory = watchedCategory ? EXPENSE_CATEGORIES[watchedCategory as ExpenseCategory] : null;
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
-              Field Cost Request
-            </CardTitle>
-            <CardDescription>
-              Request funds for field operations. All requests require approval and reconciliation after spending.
-            </CardDescription>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <Card className="overflow-hidden border-0 shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                  <Wallet className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Field Cost Request</h2>
+                  <p className="text-blue-100 text-xs sm:text-sm">Request funds for field operations</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  <div className="text-xs text-blue-200">Progress</div>
+                  <div className="text-lg font-bold">{formProgress}%</div>
+                </div>
+                <div className="w-12 h-12 rounded-full border-2 border-white/30 flex items-center justify-center relative">
+                  <svg className="absolute inset-0 w-full h-full -rotate-90">
+                    <circle
+                      cx="24" cy="24" r="20"
+                      fill="none"
+                      stroke="rgba(255,255,255,0.2)"
+                      strokeWidth="3"
+                    />
+                    <circle
+                      cx="24" cy="24" r="20"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="3"
+                      strokeDasharray={`${formProgress * 1.26} 126`}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  {formProgress === 100 ? (
+                    <CheckCircle2 className="h-5 w-5 text-white" />
+                  ) : (
+                    <span className="text-xs font-bold">{Math.round(formProgress / 20)}/5</span>
+                  )}
+                </div>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <FormField
-              control={form.control}
-              name="fundingType"
-              render={({ field }) => (
-                <FormItem className="space-y-3">
-                  <FormLabel>Request Type *</FormLabel>
-                  <FormControl>
-                    <RadioGroup
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      className="flex gap-4"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="advance" id="advance" />
-                        <label htmlFor="advance" className="text-sm font-medium cursor-pointer">
-                          <Badge variant="outline" className="gap-1">
-                            <Wallet className="h-3 w-3" />
-                            Advance
-                          </Badge>
-                          <span className="ml-2 text-muted-foreground">I need funds upfront</span>
-                        </label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="reimbursement" id="reimbursement" />
-                        <label htmlFor="reimbursement" className="text-sm font-medium cursor-pointer">
-                          <Badge variant="outline" className="gap-1">
-                            <Receipt className="h-3 w-3" />
-                            Reimbursement
-                          </Badge>
-                          <span className="ml-2 text-muted-foreground">I already paid</span>
-                        </label>
-                      </div>
-                    </RadioGroup>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
-            <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
-              <Info className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+          <CardContent className="p-4 sm:p-6 space-y-6">
+            <div className="flex gap-2 p-1 bg-muted rounded-lg">
+              <Button
+                type="button"
+                variant={watchedFundingType === 'advance' ? 'default' : 'ghost'}
+                className={cn(
+                  "flex-1 gap-2 transition-all",
+                  watchedFundingType === 'advance' && "shadow-md"
+                )}
+                onClick={() => form.setValue('fundingType', 'advance')}
+                data-testid="button-advance"
+              >
+                <Wallet className="h-4 w-4" />
+                <span className="hidden sm:inline">Advance</span>
+                <span className="sm:hidden">Adv</span>
+                <span className="text-xs opacity-70 hidden md:inline">- Get funds first</span>
+              </Button>
+              <Button
+                type="button"
+                variant={watchedFundingType === 'reimbursement' ? 'default' : 'ghost'}
+                className={cn(
+                  "flex-1 gap-2 transition-all",
+                  watchedFundingType === 'reimbursement' && "shadow-md"
+                )}
+                onClick={() => form.setValue('fundingType', 'reimbursement')}
+                data-testid="button-reimbursement"
+              >
+                <Receipt className="h-4 w-4" />
+                <span className="hidden sm:inline">Reimbursement</span>
+                <span className="sm:hidden">Reimb</span>
+                <span className="text-xs opacity-70 hidden md:inline">- Already paid</span>
+              </Button>
+            </div>
+
+            <Alert className={cn(
+              "border transition-colors",
+              watchedFundingType === 'advance' 
+                ? "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30"
+                : "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30"
+            )}>
+              <Info className={cn(
+                "h-4 w-4",
+                watchedFundingType === 'advance' ? "text-blue-600" : "text-green-600"
+              )} />
+              <AlertDescription className={cn(
+                "text-sm",
+                watchedFundingType === 'advance' 
+                  ? "text-blue-700 dark:text-blue-300"
+                  : "text-green-700 dark:text-green-300"
+              )}>
                 {watchedFundingType === 'advance' 
-                  ? "Advance: You'll receive funds before spending. You must reconcile with receipts after the activity."
-                  : "Reimbursement: You've already paid. Attach receipts to get your money back."}
+                  ? "You'll receive funds upfront. Reconcile with receipts after spending."
+                  : "Attach receipts to get reimbursed for expenses you've already paid."}
               </AlertDescription>
             </Alert>
 
-            <Separator />
+            <div>
+              <FormLabel className="text-sm font-medium mb-3 block">
+                Expense Category <span className="text-destructive">*</span>
+              </FormLabel>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                {Object.entries(EXPENSE_CATEGORIES).map(([key, { label, icon: Icon, color }]) => (
+                  <Button
+                    key={key}
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      "h-auto py-3 px-2 flex-col gap-1.5 border-2 transition-all",
+                      watchedCategory === key 
+                        ? `bg-gradient-to-br ${color} text-white border-transparent shadow-lg scale-[1.02]`
+                        : "hover-elevate"
+                    )}
+                    onClick={() => form.setValue('expenseCategory', key)}
+                    data-testid={`category-${key}`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="text-[10px] sm:text-xs font-medium text-center leading-tight">{label}</span>
+                  </Button>
+                ))}
+              </div>
+              {form.formState.errors.expenseCategory && (
+                <p className="text-sm text-destructive mt-2">{form.formState.errors.expenseCategory.message}</p>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="expenseCategory"
+                name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Expense Category *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-expense-category">
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.entries(EXPENSE_CATEGORIES).map(([key, label]) => (
-                          <SelectItem key={key} value={key} data-testid={`category-${key}`}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Request Title <span className="text-destructive">*</span></FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="e.g., Training materials for workshop" 
+                        {...field}
+                        data-testid="input-title"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -291,31 +375,13 @@ export default function UnifiedCostRequestForm({
               )}
             </div>
 
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Request Title *</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="e.g., Training materials for January workshop" 
-                      {...field}
-                      data-testid="input-title"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               <FormField
                 control={form.control}
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Amount *</FormLabel>
+                    <FormLabel>Amount <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -361,12 +427,10 @@ export default function UnifiedCostRequestForm({
                 name="expenseDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      {watchedFundingType === 'advance' ? 'Planned Date' : 'Expense Date'}
-                    </FormLabel>
+                    <FormLabel>Date</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                         <Input
                           type="date"
                           className="pl-9"
@@ -386,18 +450,15 @@ export default function UnifiedCostRequestForm({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description *</FormLabel>
+                  <FormLabel>Description <span className="text-destructive">*</span></FormLabel>
                   <FormControl>
                     <Textarea 
-                      placeholder="Describe what this expense is for..."
-                      className="min-h-[80px]"
+                      placeholder="What is this expense for? Provide details..."
+                      className="min-h-[70px] resize-none"
                       {...field}
                       data-testid="input-description"
                     />
                   </FormControl>
-                  <FormDescription>
-                    Provide details about the expense and what it will be used for.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -408,18 +469,15 @@ export default function UnifiedCostRequestForm({
               name="justification"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Justification *</FormLabel>
+                  <FormLabel>Justification <span className="text-destructive">*</span></FormLabel>
                   <FormControl>
                     <Textarea 
-                      placeholder="Explain why this expense is necessary..."
-                      className="min-h-[80px]"
+                      placeholder="Why is this expense necessary for field operations?"
+                      className="min-h-[70px] resize-none"
                       {...field}
                       data-testid="input-justification"
                     />
                   </FormControl>
-                  <FormDescription>
-                    Explain why this expense is needed for field operations.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -453,7 +511,7 @@ export default function UnifiedCostRequestForm({
                 name="referenceNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Reference Number (Optional)</FormLabel>
+                    <FormLabel>Reference # (Optional)</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -471,61 +529,64 @@ export default function UnifiedCostRequestForm({
               />
             </div>
 
-            <Separator />
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-medium mb-2">
-                  Supporting Documents {watchedFundingType === 'reimbursement' ? '*' : '(Optional)'}
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Documents {watchedFundingType === 'reimbursement' && <Badge variant="destructive" className="text-[10px]">Required</Badge>}
                 </h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {watchedFundingType === 'advance' 
-                    ? "Upload quotes, estimates, or supporting documentation if available."
-                    : "Upload receipts, invoices, or proof of payment (required)."}
-                </p>
-                <CostDocumentUpload
-                  documents={supportingDocuments}
-                  onChange={setSupportingDocuments}
-                />
+                <span className="text-xs text-muted-foreground">
+                  {supportingDocuments.length} file{supportingDocuments.length !== 1 ? 's' : ''} attached
+                </span>
               </div>
+              <CostDocumentUpload
+                documents={supportingDocuments}
+                onChange={setSupportingDocuments}
+              />
             </div>
           </CardContent>
 
-          <CardFooter className="flex justify-between border-t pt-6">
-            <div className="text-sm text-muted-foreground">
-              {watchedAmount > 0 && (
-                <span className="font-medium">
-                  Total: {form.watch('currency')} {watchedAmount.toLocaleString()}
-                </span>
-              )}
-            </div>
+          <CardFooter className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-t bg-muted/30 p-4 sm:p-6">
+            {watchedAmount > 0 && selectedCategory ? (
+              <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
+                <div className={cn(
+                  "p-2 rounded-lg bg-gradient-to-br",
+                  selectedCategory.color
+                )}>
+                  <selectedCategory.icon className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">{selectedCategory.label}</div>
+                  <div className="font-bold text-lg">{form.watch('currency')} {watchedAmount.toLocaleString()}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Fill in required fields to submit
+              </div>
+            )}
+            
             <Button 
               type="submit" 
-              disabled={isSubmitting}
+              disabled={isSubmitting || formProgress < 100}
+              className="gap-2"
               data-testid="button-submit-request"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Submitting...
                 </>
               ) : (
                 <>
-                  <Send className="h-4 w-4 mr-2" />
+                  <Send className="h-4 w-4" />
                   Submit Request
+                  <ArrowRight className="h-4 w-4" />
                 </>
               )}
             </Button>
           </CardFooter>
         </Card>
-
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Reminder:</strong> All approved requests require reconciliation. 
-            After spending, you must submit receipts documenting how the funds were used.
-          </AlertDescription>
-        </Alert>
       </form>
     </Form>
   );
