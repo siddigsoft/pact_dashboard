@@ -153,7 +153,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           notes,
           approvalType,
           approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
-          customAmount: approvalType === 'custom' || approvalType === 'half' ? finalAmount : undefined,
+          customAmount: finalAmount,
         })
       : await adminApprove({
           requestId: selectedRequest.id,
@@ -162,7 +162,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           notes,
           approvalType,
           approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
-          customAmount: approvalType === 'custom' || approvalType === 'half' ? finalAmount : undefined,
+          customAmount: finalAmount,
         });
 
     setProcessing(false);
@@ -337,12 +337,17 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       { key: 'complete', label: 'Complete', done: isComplete },
     ];
     
-    const rejectedStep = isRejected 
-      ? ((request as any).adminRejectedById ? 2 : 1)
-      : -1;
+    const getRejectedStep = () => {
+      if (!isRejected) return -1;
+      if (request.adminProcessedBy && request.adminStatus === 'rejected') return 2;
+      if (request.supervisorApprovedBy && request.supervisorStatus === 'rejected') return 1;
+      return 1;
+    };
+    
+    const rejectedStep = getRejectedStep();
     
     return (
-      <div className="flex items-center gap-1 text-xs">
+      <div className="flex items-center gap-1 text-xs" data-testid={`timeline-${request.id}`}>
         {steps.map((step, idx) => (
           <div key={step.key} className="flex items-center">
             <div className={`w-2 h-2 rounded-full ${
@@ -428,7 +433,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Requested</Label>
-              <p className="font-medium text-primary">{request.requestedAmount.toLocaleString()} SDG</p>
+              <p className="font-medium">{request.requestedAmount.toLocaleString()} SDG</p>
             </div>
             {request.approvedAmount && (
               <div>
@@ -502,7 +507,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             {userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
               <Button
                 size="sm"
-                className="bg-green-600 hover:bg-green-700"
+                variant="default"
                 onClick={() => openActionDialog(request, 'pay')}
                 data-testid={`button-process-payment-${request.id}`}
               >
@@ -529,28 +534,28 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   );
 
   const StatsCards = () => (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-      <Card>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4" data-testid="stats-cards-container">
+      <Card data-testid="card-stats-total">
         <CardContent className="p-4">
-          <div className="text-2xl font-bold">{stats.counts.total}</div>
+          <div className="text-2xl font-bold" data-testid="text-stats-total-count">{stats.counts.total}</div>
           <div className="text-sm text-muted-foreground">Total Requests</div>
         </CardContent>
       </Card>
-      <Card>
+      <Card data-testid="card-stats-pending">
         <CardContent className="p-4">
-          <div className="text-2xl font-bold text-yellow-600">{stats.counts.pendingSupervisor + stats.counts.pendingAdmin}</div>
+          <div className="text-2xl font-bold text-yellow-600" data-testid="text-stats-pending-count">{stats.counts.pendingSupervisor + stats.counts.pendingAdmin}</div>
           <div className="text-sm text-muted-foreground">Pending</div>
         </CardContent>
       </Card>
-      <Card>
+      <Card data-testid="card-stats-paid">
         <CardContent className="p-4">
-          <div className="text-2xl font-bold text-green-600">{stats.amounts.totalPaid.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-green-600" data-testid="text-stats-paid-amount">{stats.amounts.totalPaid.toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">Total Paid (SDG)</div>
         </CardContent>
       </Card>
-      <Card>
+      <Card data-testid="card-stats-remaining">
         <CardContent className="p-4">
-          <div className="text-2xl font-bold text-orange-600">{stats.amounts.totalRemaining.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-orange-600" data-testid="text-stats-remaining-amount">{stats.amounts.totalRemaining.toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">Remaining (SDG)</div>
         </CardContent>
       </Card>
@@ -558,14 +563,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   );
 
   const FilterPanel = () => (
-    <Card className="mb-4">
+    <Card className="mb-4" data-testid="card-filters">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-medium flex items-center gap-2">
             <Filter className="h-4 w-4" />
             Filters
           </h3>
-          <Button variant="ghost" size="sm" onClick={resetFilters}>
+          <Button variant="ghost" size="sm" onClick={resetFilters} data-testid="button-clear-filters">
             <X className="h-4 w-4 mr-1" />
             Clear
           </Button>
@@ -1057,7 +1062,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-payment">
               Cancel
             </Button>
-            <Button className="bg-green-600 hover:bg-green-700" onClick={handleProcessPayment} disabled={processing} data-testid="button-confirm-payment">
+            <Button variant="default" onClick={handleProcessPayment} disabled={processing} data-testid="button-confirm-payment">
               {processing ? 'Processing...' : 'Process Payment'}
             </Button>
           </DialogFooter>
