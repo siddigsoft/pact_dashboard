@@ -1,0 +1,205 @@
+Command: shorebird release android --artifact apk
+
+2026-02-02T17:09:54.608633 [Process.run] git for-each-ref --contains latest --format %(refname:short) refs/remotes/origin/flutter_release/* (in C:\Users\PC\.shorebird\bin\cache\flutter\1102488790c5aaedda2e21d5f666792f09f76368)
+2026-02-02T17:09:54.978953 Exited with code 129
+2026-02-02T17:09:54.979957 
+stderr:
+error: malformed object name latest
+
+2026-02-02T17:09:55.069600 No checksum provided for patch.exe, skipping file corruption validation
+2026-02-02T17:09:55.868653 No checksum provided for aot-tools.dill, skipping file corruption validation
+2026-02-02T17:09:55.892005 [HTTP] POST https://oauth2.googleapis.com/token
+2026-02-02T17:09:55.973592 [?7l[2K
+[92m⠙[0m Fetching apps... [90m(91ms)[0m
+2026-02-02T17:09:56.058015 [?7l[2K
+[92m⠹[0m Fetching apps... [90m(0.2s)[0m
+2026-02-02T17:09:56.136931 [?7l[2K
+[92m⠸[0m Fetching apps... [90m(0.3s)[0m
+2026-02-02T17:09:56.297136 [?7l[2K
+[92m⠼[0m Fetching apps... [90m(0.4s)[0m
+2026-02-02T17:09:56.368319 [?7l[2K
+[92m⠴[0m Fetching apps... [90m(0.5s)[0m
+2026-02-02T17:09:56.446197 [?7l[2K
+[92m⠦[0m Fetching apps... [90m(0.6s)[0m
+2026-02-02T17:09:56.525967 [?7l[2K
+[92m⠧[0m Fetching apps... [90m(0.6s)[0m
+2026-02-02T17:09:56.660570 [?7l[2K
+[92m⠇[0m Fetching apps... [90m(0.8s)[0m
+2026-02-02T17:09:56.774050 [?7l[2K
+[92m⠏[0m Fetching apps... [90m(0.9s)[0m
+2026-02-02T17:09:56.895884 [?7l[2K
+[92m⠋[0m Fetching apps... [90m(1.0s)[0m
+2026-02-02T17:09:57.116241 [?7l[2K
+[92m⠙[0m Fetching apps... [90m(1.2s)[0m
+2026-02-02T17:09:57.175069 [?7l[2K
+[92m⠹[0m Fetching apps... [90m(1.3s)[0m
+2026-02-02T17:09:57.254332 [?7l[2K
+[92m⠸[0m Fetching apps... [90m(1.4s)[0m
+2026-02-02T17:09:57.360090 [?7l[2K
+[92m⠼[0m Fetching apps... [90m(1.5s)[0m
+2026-02-02T17:09:57.494582 [?7l[2K
+[92m⠴[0m Fetching apps... [90m(1.6s)[0m
+2026-02-02T17:09:57.621785 [?7l[2K
+[92m⠦[0m Fetching apps... [90m(1.7s)[0m
+2026-02-02T17:09:57.758145 [?7l[2K
+[92m⠧[0m Fetching apps... [90m(1.9s)[0m
+2026-02-02T17:09:57.958256 [?7l[2K
+[92m⠇[0m Fetching apps... [90m(2.1s)[0m
+2026-02-02T17:09:57.995535 [?7l[2K
+[92m⠏[0m Fetching apps... [90m(2.1s)[0m
+2026-02-02T17:09:58.129887 [HTTP] GET https://api.shorebird.dev/api/v1/apps
+2026-02-02T17:09:58.229221 [?7l[2K
+[92m⠋[0m Fetching apps... [90m(2.3s)[0m
+2026-02-02T17:09:58.335648 [?7l[2K
+[92m⠙[0m Fetching apps... [90m(2.5s)[0m
+2026-02-02T17:09:58.441103 [?7l[2K
+[92m⠹[0m Fetching apps... [90m(2.6s)[0m
+2026-02-02T17:09:58.543860 [?7l[2K
+[92m⠸[0m Fetching apps... [90m(2.7s)[0m
+2026-02-02T17:09:58.662932 [?7l[2K
+[92m⠼[0m Fetching apps... [90m(2.8s)[0m
+2026-02-02T17:09:58.764583 [?7l[2K
+[92m⠴[0m Fetching apps... [90m(2.9s)[0m
+2026-02-02T17:09:58.897417 [?7l[2K
+[92m⠦[0m Fetching apps... [90m(3.0s)[0m
+2026-02-02T17:09:58.989935 [?7l[2K
+[92m⠧[0m Fetching apps... [90m(3.1s)[0m
+2026-02-02T17:09:59.068272 [?7l[2K
+[92m⠇[0m Fetching apps... [90m(3.2s)[0m
+2026-02-02T17:09:59.140983 [?7l[2K
+[92m⠏[0m Fetching apps... [90m(3.3s)[0m
+2026-02-02T17:09:59.227903 [?7l[2K
+[92m⠋[0m Fetching apps... [90m(3.3s)[0m
+2026-02-02T17:09:59.318243 [?7l[2K
+[92m⠙[0m Fetching apps... [90m(3.4s)[0m
+2026-02-02T17:09:59.440958 [?7l[2K
+[92m⠹[0m Fetching apps... [90m(3.6s)[0m
+2026-02-02T17:09:59.563090 [?7l[2K
+[92m⠸[0m Fetching apps... [90m(3.7s)[0m
+2026-02-02T17:09:59.688725 [?7l[2K
+[92m⠼[0m Fetching apps... [90m(3.8s)[0m
+2026-02-02T17:09:59.839386 [?7h[2K
+[92m✓[0m Fetching apps [90m(4.0s)[0m
+
+2026-02-02T17:09:59.957144 No checksum provided for patch.exe, skipping file corruption validation
+2026-02-02T17:10:02.007850 No checksum provided for aot-tools.dill, skipping file corruption validation
+2026-02-02T17:10:02.012872 [Process.run] git for-each-ref --contains 1102488790c5aaedda2e21d5f666792f09f76368 --format %(refname:short) refs/remotes/origin/flutter_release/* (in C:\Users\PC\.shorebird\bin\cache\flutter\1102488790c5aaedda2e21d5f666792f09f76368)
+2026-02-02T17:10:04.948750 Exited with code 0
+2026-02-02T17:10:04.950976 
+stdout:
+origin/flutter_release/3.38.7
+
+2026-02-02T17:10:05.063565 Building Android app bundle with Flutter 3.38.7 (1102488790)
+2026-02-02T17:10:05.228824 [Process.start] C:\Users\PC\.shorebird\bin\cache\flutter\1102488790c5aaedda2e21d5f666792f09f76368\bin\flutter.bat build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+2026-02-02T17:36:51.878873 [Process.runSync] where.exe flutter
+2026-02-02T17:36:52.468701 Exited with code 0
+2026-02-02T17:36:52.469702 
+stdout:
+C:\Users\PC\fvm\versions\3.27.0\bin\flutter
+C:\Users\PC\fvm\versions\3.27.0\bin\flutter.bat
+C:\src\flutter\bin\flutter
+C:\src\flutter\bin\flutter.bat
+
+2026-02-02T17:36:52.559253 [Process.run] flutter --no-version-check pub get --offline
+2026-02-02T17:38:37.741893 Exited with code 0
+2026-02-02T17:38:37.743923 
+stdout:
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 85.0.0 (92.0.0 available)
+  analyzer 7.7.1 (9.0.0 available)
+  archive 3.6.1 (4.0.7 available)
+  build 3.0.1 (4.0.4 available)
+  build_config 1.1.2 (1.2.0 available)
+  build_runner 2.6.1 (2.10.5 available)
+  dart_style 3.1.1 (3.1.3 available)
+  file_picker 8.3.7 (10.3.9 available)
+  flutter_map 6.2.1 (8.2.2 available)
+  flutter_map_marker_cluster 1.3.6 (8.2.2 available)
+  flutter_map_marker_popup 6.1.2 (8.1.0 available)
+  flutter_map_tile_caching 9.0.1 (10.1.1 available)
+  flutter_riverpod 2.6.1 (3.2.0 available)
+  geolocator 11.1.0 (14.0.2 available)
+  geolocator_android 4.6.2 (5.0.2 available)
+  geolocator_web 3.0.0 (4.1.3 available)
+  image 4.3.0 (4.5.4 available)
+  js 0.6.7 (0.7.2 available)
+  json_serializable 6.11.2 (6.11.3 available)
+  local_auth 2.3.0 (3.0.0 available)
+  local_auth_android 1.0.51 (2.0.4 available)
+  local_auth_darwin 1.6.0 (2.0.1 available)
+  local_auth_windows 1.0.11 (2.0.1 available)
+  location 5.0.3 (8.0.1 available)
+  location_platform_interface 3.1.2 (6.0.1 available)
+  location_web 4.2.0 (6.0.1 available)
+  matcher 0.12.17 (0.12.18 available)
+  mime 1.0.6 (2.0.0 available)
+  objectbox 2.5.1 (4.3.1 available)
+  objectbox_flutter_libs 2.5.1 (4.3.1 available)
+  pointycastle 3.9.1 (4.0.0 available)
+  riverpod 2.6.1 (3.2.0 available)
+  shorebird_code_push 1.1.6 (2.0.5 available)
+  source_gen 4.0.0 (4.2.0 available)
+  source_helper 1.3.8 (1.3.9 available)
+  test 1.26.3 (1.28.0 available)
+  test_api 0.7.7 (0.7.8 available)
+  test_core 0.6.12 (0.6.14 available)
+Got dependencies!
+38 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+
+2026-02-02T17:38:37.841162 [91mFailed to build AAB.
+Command: flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+Reason: Exited with code 1.[0m
+2026-02-02T17:38:37.935891 
+[1m💡 Fix Recommendations[22m
+
+• Check that running `flutter build` with the same command-line arguments
+completes successfully by running the following command:
+
+[96mflutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64[0m
+
+If the above command fails, then this is likely not a Shorebird issue and
+the underlying `flutter build` failure must be resolved for Shorebird to
+build a release.
+
+• If `flutter build` completes successfully, please ensure that you are
+providing the desired flutter version to the release command via 
+the `--flutter-version` option. If you do not specify a `--flutter-version`
+Shorebird will default to the latest stable version of Flutter.
+We strongly encourage always specifying an explicit Flutter version:
+
+[96mshorebird release <platform> --flutter-version=3.29.0[0m
+
+• If `flutter build` completes successfully and `shorebird release`
+fails when using the same flutter version, please file an issue:
+]8;;https://github.com/shorebirdtech/shorebird/issues/new\https://github.com/shorebirdtech/shorebird/issues/new]8;;\
+
+2026-02-02T17:38:38.040782 
+If you aren't sure why this command failed, re-run with the [96m--verbose[0m flag to see more information.
+
+You can also ]8;;https://github.com/shorebirdtech/shorebird/issues/new/choose\file an issue]8;;\ if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1770041394037_shorebird.log
+
+2026-02-02T17:38:38.146626 [Process.run] git symbolic-ref HEAD (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-02T17:38:38.494633 Exited with code 0
+2026-02-02T17:38:38.495633 
+stdout:
+refs/heads/stable
+
+2026-02-02T17:38:38.583971 [Process.run] git rev-parse --verify HEAD (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-02T17:38:38.880495 Exited with code 0
+2026-02-02T17:38:38.881500 
+stdout:
+cbef35914efa17a6a7f8cece7f23b3e6af119208
+
+2026-02-02T17:38:38.963531 [Process.run] git remote prune origin (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-02T17:38:41.117606 Exited with code 0
+2026-02-02T17:38:41.119610 [Process.run] git fetch --tags (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-02T17:38:44.081435 Exited with code 0
+2026-02-02T17:38:44.082434 [Process.run] git rev-parse --verify @{upstream} (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-02T17:38:44.329583 Exited with code 0
+2026-02-02T17:38:44.330238 
+stdout:
+cbef35914efa17a6a7f8cece7f23b3e6af119208
+
