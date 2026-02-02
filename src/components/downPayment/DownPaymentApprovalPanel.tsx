@@ -149,7 +149,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       ? await supervisorApprove({
           requestId: selectedRequest.id,
           approvedBy: currentUser.id,
-          approvedByName: currentUser.displayName || currentUser.email,
+          approvedByName: currentUser.fullName || currentUser.email,
           notes,
           approvalType,
           approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
@@ -158,7 +158,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       : await adminApprove({
           requestId: selectedRequest.id,
           approvedBy: currentUser.id,
-          approvedByName: currentUser.displayName || currentUser.email,
+          approvedByName: currentUser.fullName || currentUser.email,
           notes,
           approvalType,
           approvalPercentage: approvalType === 'percentage' ? customPercentage : undefined,
@@ -184,13 +184,13 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       ? await supervisorReject({
           requestId: selectedRequest.id,
           rejectedBy: currentUser.id,
-          rejectedByName: currentUser.displayName || currentUser.email,
+          rejectedByName: currentUser.fullName || currentUser.email,
           rejectionReason,
         })
       : await adminReject({
           requestId: selectedRequest.id,
           rejectedBy: currentUser.id,
-          rejectedByName: currentUser.displayName || currentUser.email,
+          rejectedByName: currentUser.fullName || currentUser.email,
           rejectionReason,
         });
 
@@ -213,7 +213,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       requestId: selectedRequest.id,
       amount: paymentAmount,
       processedBy: currentUser.id,
-      processedByName: currentUser.displayName || currentUser.email,
+      processedByName: currentUser.fullName || currentUser.email,
       notes,
     });
 
@@ -234,7 +234,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       customAmount: approvalType === 'custom' ? customAmount : undefined,
       notes,
       approvedBy: currentUser.id,
-      approvedByName: currentUser.displayName || currentUser.email,
+      approvedByName: currentUser.fullName || currentUser.email,
     });
     setProcessing(false);
     setSelectedIds(new Set());
@@ -881,44 +881,88 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <p><strong>Requested Amount:</strong> {selectedRequest.requestedAmount.toLocaleString()} SDG</p>
               </div>
 
-              <div className="space-y-3">
-                <Label>Approval Amount</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant={approvalType === 'full' ? 'default' : 'outline'}
-                    onClick={() => setApprovalType('full')}
-                    data-testid="button-approval-full"
-                  >
-                    Full Amount
-                  </Button>
-                  <Button
-                    variant={approvalType === 'half' ? 'default' : 'outline'}
-                    onClick={() => setApprovalType('half')}
-                    data-testid="button-approval-half"
-                  >
-                    50%
-                  </Button>
-                  <Button
-                    variant={approvalType === 'percentage' ? 'default' : 'outline'}
-                    onClick={() => setApprovalType('percentage')}
-                    data-testid="button-approval-percentage"
-                  >
-                    <Percent className="h-4 w-4 mr-1" />
-                    Custom %
-                  </Button>
-                  <Button
-                    variant={approvalType === 'custom' ? 'default' : 'outline'}
-                    onClick={() => setApprovalType('custom')}
-                    data-testid="button-approval-custom"
-                  >
-                    <DollarSign className="h-4 w-4 mr-1" />
-                    Fixed Amount
-                  </Button>
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Quick Approval Options</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div 
+                      onClick={() => setApprovalType('full')}
+                      className={`cursor-pointer rounded-md border p-3 text-center transition-colors hover-elevate ${
+                        approvalType === 'full' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-border bg-muted/30'
+                      }`}
+                      data-testid="button-approval-full"
+                    >
+                      <span className="text-lg font-bold block">100%</span>
+                      <span className="text-xs text-muted-foreground" data-testid="text-amount-100">{selectedRequest.requestedAmount.toLocaleString()}</span>
+                    </div>
+                    <div 
+                      onClick={() => { setApprovalType('percentage'); setCustomPercentage(75); }}
+                      className={`cursor-pointer rounded-md border p-3 text-center transition-colors hover-elevate ${
+                        approvalType === 'percentage' && customPercentage === 75 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-border bg-muted/30'
+                      }`}
+                      data-testid="button-approval-75"
+                    >
+                      <span className="text-lg font-bold block">75%</span>
+                      <span className="text-xs text-muted-foreground" data-testid="text-amount-75">{Math.round(selectedRequest.requestedAmount * 0.75).toLocaleString()}</span>
+                    </div>
+                    <div 
+                      onClick={() => setApprovalType('half')}
+                      className={`cursor-pointer rounded-md border p-3 text-center transition-colors hover-elevate ${
+                        approvalType === 'half' 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-border bg-muted/30'
+                      }`}
+                      data-testid="button-approval-half"
+                    >
+                      <span className="text-lg font-bold block">50%</span>
+                      <span className="text-xs text-muted-foreground" data-testid="text-amount-50">{Math.round(selectedRequest.requestedAmount * 0.5).toLocaleString()}</span>
+                    </div>
+                    <div 
+                      onClick={() => { setApprovalType('percentage'); setCustomPercentage(25); }}
+                      className={`cursor-pointer rounded-md border p-3 text-center transition-colors hover-elevate ${
+                        approvalType === 'percentage' && customPercentage === 25 
+                          ? 'border-primary bg-primary/10' 
+                          : 'border-border bg-muted/30'
+                      }`}
+                      data-testid="button-approval-25"
+                    >
+                      <span className="text-lg font-bold block">25%</span>
+                      <span className="text-xs text-muted-foreground" data-testid="text-amount-25">{Math.round(selectedRequest.requestedAmount * 0.25).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Custom Approval</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant={approvalType === 'percentage' && ![75, 25].includes(customPercentage) ? 'default' : 'outline'}
+                      onClick={() => setApprovalType('percentage')}
+                      data-testid="button-approval-percentage"
+                    >
+                      <Percent className="h-4 w-4 mr-1" />
+                      Custom %
+                    </Button>
+                    <Button
+                      variant={approvalType === 'custom' ? 'default' : 'outline'}
+                      onClick={() => setApprovalType('custom')}
+                      data-testid="button-approval-custom"
+                    >
+                      <DollarSign className="h-4 w-4 mr-1" />
+                      Fixed Amount
+                    </Button>
+                  </div>
                 </div>
 
                 {approvalType === 'percentage' && (
-                  <div className="flex items-center gap-2">
-                    <Label>Percentage:</Label>
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
+                    <Label className="whitespace-nowrap">Percentage:</Label>
                     <Input
                       type="number"
                       value={customPercentage}
@@ -929,12 +973,15 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                       data-testid="input-custom-percentage"
                     />
                     <span>%</span>
+                    <span className="text-muted-foreground text-sm ml-auto">
+                      = {Math.round(selectedRequest.requestedAmount * (customPercentage / 100)).toLocaleString()} SDG
+                    </span>
                   </div>
                 )}
 
                 {approvalType === 'custom' && (
-                  <div className="flex items-center gap-2">
-                    <Label>Amount (SDG):</Label>
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
+                    <Label className="whitespace-nowrap">Amount:</Label>
                     <Input
                       type="number"
                       value={customAmount}
@@ -943,14 +990,28 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                       className="w-32"
                       data-testid="input-custom-amount"
                     />
+                    <span>SDG</span>
+                    <span className="text-muted-foreground text-sm ml-auto">
+                      = {customAmount > 0 ? Math.round((customAmount / selectedRequest.requestedAmount) * 100) : 0}% of requested
+                    </span>
                   </div>
                 )}
 
-                <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-md">
-                  <p className="text-sm text-green-700 dark:text-green-300">
-                    <strong>Approved Amount:</strong> {calculateApprovedAmount().toLocaleString()} SDG
-                    {approvalType === 'percentage' && ` (${customPercentage}% of ${selectedRequest.requestedAmount.toLocaleString()})`}
-                    {approvalType === 'half' && ` (50% of ${selectedRequest.requestedAmount.toLocaleString()})`}
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 p-4 rounded-md" data-testid="container-approval-summary">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Final Approved Amount</p>
+                      <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300" data-testid="text-final-approved-amount">
+                        {calculateApprovedAmount().toLocaleString()} SDG
+                      </p>
+                    </div>
+                    <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2" data-testid="text-approval-description">
+                    {approvalType === 'full' && 'Approving the full requested amount.'}
+                    {approvalType === 'half' && `Approving 50% of the ${selectedRequest.requestedAmount.toLocaleString()} SDG requested.`}
+                    {approvalType === 'percentage' && `Approving ${customPercentage}% of the ${selectedRequest.requestedAmount.toLocaleString()} SDG requested.`}
+                    {approvalType === 'custom' && `Approving a fixed amount of ${customAmount.toLocaleString()} SDG.`}
                   </p>
                 </div>
               </div>
@@ -983,35 +1044,76 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       <Dialog open={action === 'reject'} onOpenChange={() => closeDialog()}>
         <DialogContent data-testid="dialog-reject">
           <DialogHeader>
-            <DialogTitle>Reject Request</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <XCircle className="h-5 w-5" />
+              Reject Request
+            </DialogTitle>
+            <DialogDescription>
+              This action will notify the requester and mark this request as rejected.
+            </DialogDescription>
           </DialogHeader>
 
           {selectedRequest && (
             <div className="space-y-4">
-              <div className="bg-muted/50 p-3 rounded-md space-y-2">
-                <p><strong>Site:</strong> {selectedRequest.siteName}</p>
-                <p><strong>Amount:</strong> {selectedRequest.requestedAmount.toLocaleString()} SDG</p>
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-md space-y-2" data-testid="container-rejection-details">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Site:</span>
+                    <p className="font-medium" data-testid="text-reject-site">{selectedRequest.siteName}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Amount:</span>
+                    <p className="font-medium" data-testid="text-reject-amount">{selectedRequest.requestedAmount.toLocaleString()} SDG</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Requester:</span>
+                    <p className="font-medium" data-testid="text-reject-requester">{selectedRequest.requestedByName || 'Unknown'}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Requested:</span>
+                    <p className="font-medium" data-testid="text-reject-date">{format(new Date(selectedRequest.requestedAt), 'MMM d, yyyy')}</p>
+                  </div>
+                </div>
               </div>
 
+              <Alert variant="destructive" data-testid="alert-rejection-warning">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  The requester will receive a notification with your rejection reason.
+                  They will need to submit a new request if they want to try again.
+                </AlertDescription>
+              </Alert>
+
               <div>
-                <Label htmlFor="rejection-reason">Rejection Reason *</Label>
+                <Label htmlFor="rejection-reason" className="flex items-center gap-1">
+                  Rejection Reason <span className="text-destructive">*</span>
+                </Label>
                 <Textarea
                   id="rejection-reason"
                   value={rejectionReason}
                   onChange={e => setRejectionReason(e.target.value)}
-                  placeholder="Explain why this request is being rejected..."
-                  rows={3}
+                  placeholder="Explain why this request is being rejected (e.g., insufficient justification, budget exceeded, duplicate request, etc.)..."
+                  rows={4}
+                  className="mt-2"
                   data-testid="textarea-rejection-reason"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Be specific so the requester understands what went wrong.
+                </p>
               </div>
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-reject">
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleReject} disabled={processing} data-testid="button-confirm-reject">
+            <Button 
+              variant="destructive" 
+              onClick={handleReject} 
+              disabled={processing || !rejectionReason.trim()} 
+              data-testid="button-confirm-reject"
+            >
               {processing ? 'Processing...' : 'Reject'}
             </Button>
           </DialogFooter>
