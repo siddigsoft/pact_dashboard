@@ -13,6 +13,7 @@ import '../services/realtime_notification_service.dart';
 import '../services/user_notification_service.dart';
 import '../widgets/biometric_setup_dialog.dart';
 import '../l10n/app_localizations.dart';
+import '../screens/welcome_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -236,8 +237,15 @@ class _LoginScreenState extends State<LoginScreen>
           await RealtimeNotificationService().initialize();
           await UserNotificationService().initialize();
 
+          // Fetch user profile for welcome screen
+          final profile = await _fetchUserProfile(response.user!.id);
+          
+          // Show welcome screen then navigate to main
           if (mounted) {
-            Navigator.pushReplacementNamed(context, '/main');
+            await _navigateWithWelcome(
+              profile['fullName'] ?? email?.split('@').first ?? 'User',
+              profile['avatarUrl'],
+            );
           }
         } else {
           debugPrint('❌ Login failed with stored credentials');
@@ -378,6 +386,48 @@ class _LoginScreenState extends State<LoginScreen>
     return 'Login failed. Please try again or contact support if the problem persists.';
   }
 
+  /// Fetch user profile data for welcome screen
+  Future<Map<String, String?>> _fetchUserProfile(String userId) async {
+    try {
+      final response = await AuthService().supabase
+          .from('profiles')
+          .select('full_name, username, avatar_url')
+          .eq('id', userId)
+          .maybeSingle();
+      
+      if (response != null) {
+        return {
+          'fullName': response['full_name'] as String? ?? 
+                      response['username'] as String? ?? 
+                      _emailController.text.split('@').first,
+          'avatarUrl': response['avatar_url'] as String?,
+        };
+      }
+    } catch (e) {
+      debugPrint('Error fetching user profile: $e');
+    }
+    return {
+      'fullName': _emailController.text.split('@').first,
+      'avatarUrl': null,
+    };
+  }
+
+  /// Navigate to main screen with welcome screen
+  Future<void> _navigateWithWelcome(String fullName, String? avatarUrl) async {
+    if (!mounted) return;
+    
+    await showWelcomeScreen(
+      context: context,
+      fullName: fullName,
+      avatarUrl: avatarUrl,
+      onContinue: () {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/main');
+        }
+      },
+    );
+  }
+
   // Handle login logic with improved animations and role check
   Future<void> _handleLogin() async {
     // Validate form fields
@@ -430,8 +480,14 @@ class _LoginScreenState extends State<LoginScreen>
               await RealtimeNotificationService().initialize();
               await UserNotificationService().initialize();
 
-              // Navigate to main screen
-              Navigator.pushReplacementNamed(context, '/main');
+              // Fetch user profile for welcome screen
+              final profile = await _fetchUserProfile(userId);
+              
+              // Show welcome screen then navigate to main
+              await _navigateWithWelcome(
+                profile['fullName'] ?? _emailController.text.split('@').first,
+                profile['avatarUrl'],
+              );
             }
           } else {
             // User doesn't have the role, assign it and proceed
@@ -461,8 +517,14 @@ class _LoginScreenState extends State<LoginScreen>
                 await RealtimeNotificationService().initialize();
                 await UserNotificationService().initialize();
 
-                // Navigate to main screen
-                Navigator.pushReplacementNamed(context, '/main');
+                // Fetch user profile for welcome screen
+                final profile = await _fetchUserProfile(userId);
+                
+                // Show welcome screen then navigate to main
+                await _navigateWithWelcome(
+                  profile['fullName'] ?? _emailController.text.split('@').first,
+                  profile['avatarUrl'],
+                );
               }
             } catch (roleError) {
               // If role assignment fails, still allow login but show warning
@@ -483,7 +545,14 @@ class _LoginScreenState extends State<LoginScreen>
                   );
                 }
 
-                Navigator.pushReplacementNamed(context, '/main');
+                // Fetch user profile for welcome screen
+                final profile = await _fetchUserProfile(userId);
+                
+                // Show welcome screen then navigate to main
+                await _navigateWithWelcome(
+                  profile['fullName'] ?? _emailController.text.split('@').first,
+                  profile['avatarUrl'],
+                );
               }
             }
           }

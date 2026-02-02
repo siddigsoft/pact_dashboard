@@ -34,6 +34,7 @@ The frontend uses React 18, TypeScript, Tailwind CSS v3, and Shadcn UI for a res
 *   **Security & Tracking:** A Security-Hardened Activity Tracking System for comprehensive user activity logging with data minimization.
 *   **Reporting & Analytics:** A Comprehensive Coverage Analytics Dashboard with various reports and export functionality.
 *   **Mobile Specific Features:**
+    *   **Bilingual Welcome Screen:** Professional welcome landing page shown after login with time-based greeting (Good Morning/Afternoon/Evening) in English and Arabic, user's full name display, animated transitions, and auto-continue functionality.
     *   **Admin-Managed Support Contacts System:** Centralized bilingual support contact management.
     *   **Mobile Admin Dashboard:** Flutter-based admin screens for user, role, audit log, and email tracking management with Supabase Realtime sync.
     *   **Permission Handler Service:** Centralized permission management for device features.
