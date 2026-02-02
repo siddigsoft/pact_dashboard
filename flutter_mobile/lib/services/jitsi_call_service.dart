@@ -1,9 +1,21 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'webrtc_call_service.dart';
-
-export '../models/call_state.dart' show CallStatus;
 import '../models/call_state.dart';
+
+class CallStateData {
+  final CallStatus status;
+  final bool isInCall;
+  final String? callId;
+  final String? remoteUserId;
+
+  CallStateData({
+    required this.status,
+    this.isInCall = false,
+    this.callId,
+    this.remoteUserId,
+  });
+}
 
 class JitsiCallService {
   static final JitsiCallService _instance = JitsiCallService._internal();
@@ -15,6 +27,9 @@ class JitsiCallService {
   final _callStatusController = StreamController<CallStatus>.broadcast();
   Stream<CallStatus> get callStatusStream => _callStatusController.stream;
 
+  final _callStateController = StreamController<CallStateData>.broadcast();
+  Stream<CallStateData> get callStateStream => _callStateController.stream;
+
   final _incomingCallController =
       StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get incomingCallStream =>
@@ -22,6 +37,9 @@ class JitsiCallService {
 
   CallStatus _currentStatus = CallStatus.idle;
   CallStatus get currentStatus => _currentStatus;
+
+  CallStateData _callState = CallStateData(status: CallStatus.idle);
+  CallStateData get callState => _callState;
 
   String? _currentCallId;
   String? get currentCallId => _currentCallId;
@@ -31,11 +49,11 @@ class JitsiCallService {
 
   bool _isInitialized = false;
 
-  Future<void> initialize({
-    required String odId,
-    required String userName,
+  Future<void> initialize(
+    String odId,
+    String userName, [
     String? userAvatar,
-  }) async {
+  ]) async {
     if (_isInitialized) return;
 
     await _webrtcService.initialize(
@@ -45,22 +63,24 @@ class JitsiCallService {
     );
 
     _webrtcService.callStateStream.listen((state) {
+      CallStatus status;
       switch (state) {
         case CallState.idle:
-          _updateStatus(CallStatus.idle);
+          status = CallStatus.idle;
           break;
         case CallState.outgoing:
         case CallState.incoming:
-          _updateStatus(CallStatus.ringing);
+          status = CallStatus.ringing;
           break;
         case CallState.connecting:
         case CallState.connected:
-          _updateStatus(CallStatus.inProgress);
+          status = CallStatus.inProgress;
           break;
         case CallState.ended:
-          _updateStatus(CallStatus.ended);
+          status = CallStatus.ended;
           break;
       }
+      _updateStatus(status);
     });
 
     _webrtcService.incomingCallStream.listen((signal) {
@@ -106,12 +126,12 @@ class JitsiCallService {
     return success;
   }
 
-  Future<bool> initiateCall({
-    required String targetUserId,
-    required String targetUserName,
+  Future<bool> initiateCall(
+    String targetUserId,
+    String targetUserName, [
     String? targetUserAvatar,
     bool isVideoCall = false,
-  }) async {
+  ]) async {
     return startCall(
       odId: '',
       targetUserId: targetUserId,
@@ -158,12 +178,19 @@ class JitsiCallService {
 
   void _updateStatus(CallStatus status) {
     _currentStatus = status;
+    _callState = CallStateData(
+      status: status,
+      isInCall: status == CallStatus.inProgress || status == CallStatus.ringing,
+      callId: _currentCallId,
+    );
     _callStatusController.add(status);
+    _callStateController.add(_callState);
   }
 
   Future<void> dispose() async {
     await _webrtcService.dispose();
     await _callStatusController.close();
+    await _callStateController.close();
     await _incomingCallController.close();
   }
 }
