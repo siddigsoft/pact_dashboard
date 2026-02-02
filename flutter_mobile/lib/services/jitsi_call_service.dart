@@ -1,13 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'webrtc_call_service.dart';
-
-enum CallStatus {
-  idle,
-  ringing,
-  inProgress,
-  ended,
-}
+import '../models/call_state.dart';
 
 class JitsiCallService {
   static final JitsiCallService _instance = JitsiCallService._internal();
