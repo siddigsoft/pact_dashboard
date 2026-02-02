@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'webrtc_call_service.dart';
+
+export '../models/call_state.dart' show CallStatus;
 import '../models/call_state.dart';
 
 class JitsiCallService {
@@ -12,9 +14,11 @@ class JitsiCallService {
 
   final _callStatusController = StreamController<CallStatus>.broadcast();
   Stream<CallStatus> get callStatusStream => _callStatusController.stream;
-  
-  final _incomingCallController = StreamController<Map<String, dynamic>>.broadcast();
-  Stream<Map<String, dynamic>> get incomingCallStream => _incomingCallController.stream;
+
+  final _incomingCallController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get incomingCallStream =>
+      _incomingCallController.stream;
 
   CallStatus _currentStatus = CallStatus.idle;
   CallStatus get currentStatus => _currentStatus;
@@ -70,7 +74,9 @@ class JitsiCallService {
     });
 
     _isInitialized = true;
-    debugPrint('[JitsiCallService] Compatibility layer initialized (using WebRTC)');
+    debugPrint(
+      '[JitsiCallService] Compatibility layer initialized (using WebRTC)',
+    );
   }
 
   Future<bool> startCall({
