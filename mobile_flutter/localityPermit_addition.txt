@@ -1,0 +1,29 @@
+=====================================
+ADD TO: lib/l10n/app_en.arb
+=====================================
+Add this BEFORE the last closing brace }:
+
+  "localityPermit": "Locality Permit",
+  "@localityPermit": {
+    "description": "Locality permit label"
+  },
+
+
+=====================================
+ADD TO: lib/l10n/app_ar.arb  
+=====================================
+Add this BEFORE the last closing brace }:
+
+  "localityPermit": "تصريح المحلية",
+  "@localityPermit": {
+    "description": "Locality permit label"
+  },
+
+
+=====================================
+AFTER ADDING, RUN:
+=====================================
+flutter gen-l10n
+flutter pub get
+flutter clean
+shorebird release android --artifact apk
