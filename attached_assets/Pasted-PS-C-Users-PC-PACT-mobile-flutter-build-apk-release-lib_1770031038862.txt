@@ -1,0 +1,60 @@
+PS C:\Users\PC\PACT_mobile> flutter build apk --release
+lib/screens/field_operations_enhanced_screen.dart:2078:58: Error: Too many positional arguments: 0 allowed, but 2 found.
+Try removing the extra positional arguments.
+      final success = await jitsiCallService.initiateCall(
+                                                         ^
+lib/screens/chat_screen.dart:871:58: Error: Too many positional arguments: 0 allowed, but 2 found.
+Try removing the extra positional arguments.
+      final success = await jitsiCallService.initiateCall(
+                                                         ^
+lib/screens/help_support_screen.dart:1088:58: Error: Too many positional arguments: 0 allowed, but 2 found.
+Try removing the extra positional arguments.
+      final success = await jitsiCallService.initiateCall(
+                                                         ^
+lib/screens/help_support_screen.dart:1706:42: Error: Too many positional arguments: 0 allowed, but 2 found.
+Try removing the extra positional arguments.
+      await jitsiCallService.initiateCall(
+                                         ^
+lib/screens/communications_screen.dart:612:54: Error: Too many positional arguments: 0 allowed, but 2 found.
+Try removing the extra positional arguments.
+    final success = await _webrtcService.initiateCall(
+                                                     ^
+lib/screens/communications_screen.dart:692:13: Error: No named parameter with the name 'targetUserName'.
+            targetUserName: user.userName,
+            ^^^^^^^^^^^^^^
+lib/screens/jitsi_call_screen.dart:27:9: Context: Found this candidate, but the arguments don't match.
+  const JitsiCallScreen({
+        ^^^^^^^^^^^^^^^
+lib/screens/communications_screen.dart:680:7: Error: No named parameter with the name 'targetUserName'.
+      targetUserName: user.userName,
+      ^^^^^^^^^^^^^^
+lib/screens/field_team_map_screen.dart:694:32: Error: Local variable 'JitsiCallService' can't be referenced before it is declared.
+      final JitsiCallService = JitsiCallService();
+                               ^^^^^^^^^^^^^^^^
+lib/screens/field_team_map_screen.dart:694:13: Context: This is the declaration of the variable 'JitsiCallService'.
+      final JitsiCallService = JitsiCallService();
+            ^^^^^^^^^^^^^^^^
+lib/screens/field_team_map_screen.dart:695:13: Error: The getter 'jitsiCallService' isn't defined for the type '_FieldTeamMapScreenState'.
+ - '_FieldTeamMapScreenState' is from 'package:pact_mobile/screens/field_team_map_screen.dart' ('lib/screens/field_team_map_screen.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'jitsiCallService'.
+      await jitsiCallService.initiateCall(
+            ^^^^^^^^^^^^^^^^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command 'C:\Users\PC\fvm\versions\3.27.0\bin\flutter.bat'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 46s
+Running Gradle task 'assembleRelease'...                           47.6s
+Gradle task assembleRelease failed with exit code 1
+PS C:\Users\PC\PACT_mobile> 
