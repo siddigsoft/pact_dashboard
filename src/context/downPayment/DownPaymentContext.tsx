@@ -373,6 +373,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const supervisorApprove = async (data: ApproveDownPaymentRequest): Promise<boolean> => {
     try {
       const request = requests.find(r => r.id === data.requestId);
+      if (!request) throw new Error('Request not found');
+      
+      const approvedAmount = data.customAmount !== undefined 
+        ? data.customAmount 
+        : request.requestedAmount;
       
       const { error } = await supabase
         .from('down_payment_requests')
@@ -381,20 +386,28 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           supervisor_approved_by: data.approvedBy,
           supervisor_approved_at: new Date().toISOString(),
           supervisor_notes: data.notes,
+          supervisor_approved_amount: approvedAmount,
+          approval_type: data.approvalType || 'full',
+          approval_percentage: data.approvalPercentage,
+          approved_amount: approvedAmount,
+          remaining_amount: approvedAmount,
           status: 'pending_admin',
           admin_status: 'pending',
           updated_at: new Date().toISOString(),
+          metadata: {
+            ...request.metadata,
+            supervisor_approved_by_name: data.approvedByName,
+          },
         })
         .eq('id', data.requestId);
 
       if (error) throw error;
 
-      // Send email notification to requester
-      if (request?.requestedBy) {
+      if (request.requestedBy) {
         await NotificationTriggerService.send({
           userId: request.requestedBy,
           title: 'Down-Payment Request Approved by Supervisor',
-          message: `Your down-payment request for "${request.siteName}" (${request.requestedAmount.toLocaleString()} SDG) has been approved by supervisor and forwarded to admin.`,
+          message: `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been approved by supervisor and forwarded to admin.`,
           type: 'success',
           category: 'financial',
           priority: 'high',
@@ -406,7 +419,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       toast({
         title: 'Request Approved',
-        description: 'Down-payment request forwarded to admin for processing',
+        description: `Approved ${approvedAmount.toLocaleString()} SDG - forwarded to admin`,
       });
 
       await refreshRequests();
@@ -477,6 +490,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const adminApprove = async (data: ApproveDownPaymentRequest): Promise<boolean> => {
     try {
       const request = requests.find(r => r.id === data.requestId);
+      if (!request) throw new Error('Request not found');
+      
+      const approvedAmount = data.customAmount !== undefined 
+        ? data.customAmount 
+        : (request.approvedAmount || request.requestedAmount);
       
       const { error } = await supabase
         .from('down_payment_requests')
@@ -485,19 +503,25 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           admin_processed_by: data.approvedBy,
           admin_processed_at: new Date().toISOString(),
           admin_notes: data.notes,
+          admin_approved_amount: approvedAmount,
+          approved_amount: approvedAmount,
+          remaining_amount: approvedAmount - request.totalPaidAmount,
           status: 'approved',
           updated_at: new Date().toISOString(),
+          metadata: {
+            ...request.metadata,
+            admin_processed_by_name: data.approvedByName,
+          },
         })
         .eq('id', data.requestId);
 
       if (error) throw error;
 
-      // Send email notification to requester
-      if (request?.requestedBy) {
+      if (request.requestedBy) {
         await NotificationTriggerService.send({
           userId: request.requestedBy,
           title: 'Down-Payment Request Fully Approved',
-          message: `Your down-payment request for "${request.siteName}" (${request.requestedAmount.toLocaleString()} SDG) has been approved and is ready for payment processing.`,
+          message: `Your down-payment request for "${request.siteName}" (${approvedAmount.toLocaleString()} SDG) has been approved and is ready for payment processing.`,
           type: 'success',
           category: 'financial',
           priority: 'high',
@@ -509,7 +533,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       toast({
         title: 'Request Approved',
-        description: 'Down-payment request approved. Ready for payment processing.',
+        description: `Approved ${approvedAmount.toLocaleString()} SDG - ready for payment`,
       });
 
       await refreshRequests();
