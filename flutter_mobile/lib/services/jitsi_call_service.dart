@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'webrtc_call_service.dart';
+import 'webrtc_call_service.dart' as webrtc;
 import '../models/call_state.dart';
 
 class CallStateData {
@@ -48,7 +48,7 @@ class JitsiCallService {
   factory JitsiCallService() => _instance;
   JitsiCallService._internal();
 
-  final WebRTCCallService _webrtcService = WebRTCCallService();
+  final webrtc.WebRTCCallService _webrtcService = webrtc.WebRTCCallService();
 
   final _callStatusController = StreamController<CallStatus>.broadcast();
   Stream<CallStatus> get callStatusStream => _callStatusController.stream;
@@ -74,6 +74,8 @@ class JitsiCallService {
   Map<String, dynamic>? get currentCallData => _currentCallData;
 
   bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
+  bool get isFullyReady => _isInitialized;
 
   Future<void> initialize(
     String odId,
@@ -91,18 +93,18 @@ class JitsiCallService {
     _webrtcService.callStateStream.listen((state) {
       CallStatus status;
       switch (state) {
-        case CallState.idle:
+        case webrtc.CallState.idle:
           status = CallStatus.idle;
           break;
-        case CallState.outgoing:
-        case CallState.incoming:
+        case webrtc.CallState.outgoing:
+        case webrtc.CallState.incoming:
           status = CallStatus.ringing;
           break;
-        case CallState.connecting:
-        case CallState.connected:
+        case webrtc.CallState.connecting:
+        case webrtc.CallState.connected:
           status = CallStatus.inProgress;
           break;
-        case CallState.ended:
+        case webrtc.CallState.ended:
           status = CallStatus.ended;
           break;
       }
@@ -110,6 +112,13 @@ class JitsiCallService {
     });
 
     _webrtcService.incomingCallStream.listen((signal) {
+      _currentCallData = {
+        'targetUserId': signal.from,
+        'targetUserName': signal.fromName,
+        'targetUserAvatar': signal.fromAvatar,
+        'isVideo': !(signal.isAudioOnly ?? true),
+      };
+      _currentCallId = signal.callId;
       _incomingCallController.add({
         'callerId': signal.from,
         'callerName': signal.fromName,
@@ -131,12 +140,13 @@ class JitsiCallService {
     required String targetUserName,
     String? targetUserAvatar,
     bool isVideo = false,
+    bool isAudioOnly = true,
   }) async {
     final success = await _webrtcService.initiateCall(
       targetUserId: targetUserId,
       targetUserName: targetUserName,
       targetUserAvatar: targetUserAvatar,
-      isAudioOnly: !isVideo,
+      isAudioOnly: isAudioOnly,
     );
 
     if (success) {
@@ -145,7 +155,7 @@ class JitsiCallService {
         'targetUserId': targetUserId,
         'targetUserName': targetUserName,
         'targetUserAvatar': targetUserAvatar,
-        'isVideo': isVideo,
+        'isVideo': !isAudioOnly,
       };
     }
 
@@ -164,10 +174,15 @@ class JitsiCallService {
       targetUserName: targetUserName,
       targetUserAvatar: targetUserAvatar,
       isVideo: isVideoCall,
+      isAudioOnly: !isVideoCall,
     );
   }
 
   Future<void> acceptCall() async {
+    await _webrtcService.acceptCall();
+  }
+
+  Future<void> answerCall({bool videoEnabled = false}) async {
     await _webrtcService.acceptCall();
   }
 
