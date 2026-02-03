@@ -32,6 +32,9 @@ class JitsiCallService {
 
   CallState _callState = CallState();
   CallState get callState => _callState;
+  
+  /// Alias for callState to support legacy code
+  CallState get currentState => _callState;
 
   String? _currentCallId;
   String? get currentCallId => _currentCallId;
