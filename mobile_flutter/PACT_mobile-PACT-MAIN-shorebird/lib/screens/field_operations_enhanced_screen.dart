@@ -1562,6 +1562,134 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
+  /// Reclaim a site - release it back to the dispatch pool (Admin only)
+  Future<void> _reclaimSite(Map<String, dynamic> site) async {
+    if (!_isAdminOrSuperUser) return;
+    
+    final siteName = site['site_name'] ?? site['siteName'] ?? 'Unknown Site';
+    final siteId = site['id'];
+    
+    // Show confirmation dialog
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text('Reclaim Site'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Release "$siteName" back to the dispatch pool?'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'Reason for reclaim',
+                  hintText: 'Enter reason...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (controller.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a reason')),
+                  );
+                  return;
+                }
+                Navigator.pop(context, controller.text.trim());
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Reclaim', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+    
+    if (reason == null || reason.isEmpty) return;
+    
+    try {
+      // Try using RPC first
+      try {
+        final result = await Supabase.instance.client.rpc(
+          'reclaim_site_visit',
+          params: {
+            'p_site_id': siteId,
+            'p_admin_id': _userId,
+            'p_reason': reason,
+          },
+        );
+        
+        final reclaimResult = result as Map<String, dynamic>?;
+        
+        if (reclaimResult != null && reclaimResult['success'] == true) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Site "$siteName" reclaimed successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+          // Reload data
+          await _loadDataCollectorData();
+          if (mounted) setState(() {});
+          return;
+        } else {
+          final errorMsg = reclaimResult?['message'] ?? 'Failed to reclaim site';
+          throw Exception(errorMsg);
+        }
+      } catch (rpcError) {
+        // RPC might not exist, fall back to direct update
+        debugPrint('[_reclaimSite] RPC failed, trying direct update: $rpcError');
+        
+        // Direct update as fallback
+        await Supabase.instance.client
+            .from('mmp_site_entries')
+            .update({
+              'status': 'Dispatched',
+              'accepted_by': null,
+              'accepted_at': null,
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', siteId);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Site "$siteName" reclaimed successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+        
+        // Reload data
+        await _loadDataCollectorData();
+        if (mounted) setState(() {});
+      }
+    } catch (e) {
+      debugPrint('Error reclaiming site: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _requestAdvance(Map<String, dynamic> site) async {
     try {
       if (_userId == null) return;
@@ -1870,6 +1998,33 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
           );
         }
+      }
+    }
+
+    // Reclaim Button (Admin only) - for claimed/accepted sites that belong to other users
+    if (_isAdminOrSuperUser) {
+      final statusLower = status.toLowerCase();
+      final acceptedBy = site['accepted_by']?.toString();
+      final isClaimedOrAccepted = statusLower == 'claimed' || 
+                                   statusLower == 'accepted' || 
+                                   statusLower == 'assigned';
+      final isOtherUser = acceptedBy != null && acceptedBy != _userId;
+      
+      if (isClaimedOrAccepted && isOtherUser) {
+        buttons.add(
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _reclaimSite(site),
+              icon: const Icon(Icons.rotate_left, size: 18),
+              label: const Text('Reclaim'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        );
       }
     }
 
