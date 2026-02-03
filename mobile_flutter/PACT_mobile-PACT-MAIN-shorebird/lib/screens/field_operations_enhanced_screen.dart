@@ -1489,6 +1489,9 @@ class _MMPScreenState extends State<MMPScreen> {
           if (claimResult?['error'] == 'ALREADY_CLAIMED') {
             description =
                 'Another enumerator claimed this site first. Try a different site.';
+            // Immediately remove this site from the claimable list
+            _availableSites.removeWhere((s) => s['id'] == site['id']);
+            if (mounted) setState(() {});
           } else if (claimResult?['error'] == 'CLAIM_IN_PROGRESS') {
             description =
                 'Someone else is claiming this site right now. Try again in a moment.';
@@ -1499,6 +1502,11 @@ class _MMPScreenState extends State<MMPScreen> {
               SnackBar(content: Text(description), backgroundColor: Colors.red),
             );
           }
+          
+          // Refresh the list in background to get updated data
+          _loadAvailableSites().then((_) {
+            if (mounted) setState(() {});
+          });
           return;
         }
 
