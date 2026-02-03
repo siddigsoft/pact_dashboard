@@ -164,18 +164,17 @@ class JitsiCallService {
 
   Future<bool> initiateCall(
     String targetUserId,
-    String targetUserName, {
+    String targetUserName, [
     String? targetUserAvatar,
     bool isVideoCall = false,
-    bool isAudioOnly = true,
-  }) async {
+  ]) async {
     return startCall(
       odId: '',
       targetUserId: targetUserId,
       targetUserName: targetUserName,
       targetUserAvatar: targetUserAvatar,
-      isVideo: !isAudioOnly,
-      isAudioOnly: isAudioOnly,
+      isVideo: isVideoCall,
+      isAudioOnly: !isVideoCall,
     );
   }
 
