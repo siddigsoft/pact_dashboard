@@ -29,12 +29,12 @@ BEGIN
   FROM public.profiles
   WHERE id = p_admin_id;
 
-  -- Verify admin has permission to reclaim
-  IF v_admin_role IS NULL OR v_admin_role NOT IN ('admin', 'super_admin', 'superadmin', 'finance', 'fom') THEN
+  -- Verify admin has permission to reclaim (admin/super_admin only)
+  IF v_admin_role IS NULL OR LOWER(v_admin_role) NOT IN ('admin', 'super_admin', 'superadmin') THEN
     RETURN jsonb_build_object(
       'success', false,
       'error', 'PERMISSION_DENIED',
-      'message', 'You do not have permission to reclaim sites.'
+      'message', 'You do not have permission to reclaim sites. Only admins can reclaim.'
     );
   END IF;
 
@@ -63,8 +63,8 @@ BEGIN
     WHERE id = v_former_assignee::uuid;
   END IF;
 
-  -- Check if site is actually claimed
-  IF v_site.accepted_by IS NULL AND LOWER(v_site.status) NOT IN ('claimed', 'accepted', 'in_progress') THEN
+  -- Check if site is actually claimed (handle various status formats)
+  IF v_site.accepted_by IS NULL AND LOWER(REPLACE(v_site.status, ' ', '_')) NOT IN ('claimed', 'accepted', 'in_progress', 'ongoing', 'assigned') THEN
     RETURN jsonb_build_object(
       'success', false,
       'error', 'NOT_CLAIMED',
