@@ -39,7 +39,8 @@ import {
   FileText,
   Shield,
   Briefcase,
-  Plus
+  Plus,
+  GitBranch
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -51,7 +52,9 @@ import SiteVisitsOverview from '../SiteVisitsOverview';
 import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
 import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
 import { DashboardCalendar } from '../DashboardCalendar';
+import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
 import { useUserProjects } from '@/hooks/useUserProjects';
+import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
 
 interface MMPFile {
   id: string;
@@ -80,6 +83,7 @@ export const FOMZone: React.FC = () => {
   const { siteVisits } = useSiteVisitContext();
   const navigate = useNavigate();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+  const mmpAnalytics = useZoneMmpAnalytics();
   const [activeTab, setActiveTab] = useState('overview');
   const [filters, setFilters] = useState<Filters>({
     hub: '',
@@ -464,7 +468,7 @@ export const FOMZone: React.FC = () => {
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
         <CardContent className="p-2 sm:p-3">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 h-auto p-0.5 bg-transparent border border-border/30 gap-1 mx-auto">
+            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 h-auto p-0.5 bg-transparent border border-border/30 gap-1 mx-auto">
               <TabsTrigger 
                 value="overview" 
                 className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
@@ -473,6 +477,15 @@ export const FOMZone: React.FC = () => {
                   <FileText className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-primary" />
                 </div>
                 <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Overview</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="mmp-analytics" 
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-orange-500/10 data-[state=active]:border-orange-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
+              >
+                <div className="w-5 h-5 rounded bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                  <GitBranch className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">MMPs</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="permits" 
@@ -511,6 +524,24 @@ export const FOMZone: React.FC = () => {
                 <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Finance</span>
               </TabsTrigger>
             </TabsList>
+
+            {/* MMP Analytics Tab */}
+            <TabsContent value="mmp-analytics" className="mt-3">
+              <ZoneMmpAnalyticsTab
+                filters={mmpAnalytics.filters}
+                onFilterChange={mmpAnalytics.setFilters}
+                filteredMmpFiles={mmpAnalytics.filteredMmpFiles}
+                filteredSiteVisits={mmpAnalytics.filteredSiteVisits}
+                mmpStats={mmpAnalytics.mmpStats}
+                uniqueHubs={mmpAnalytics.uniqueHubs}
+                uniqueRegions={mmpAnalytics.uniqueRegions}
+                selectedMmpId={mmpAnalytics.selectedMmpId}
+                onSelectMmp={mmpAnalytics.setSelectedMmpId}
+                selectedMmp={mmpAnalytics.selectedMmp}
+                canAccessVersioning={mmpAnalytics.canAccessVersioning}
+                zoneColor="orange"
+              />
+            </TabsContent>
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="mt-3 space-y-4">

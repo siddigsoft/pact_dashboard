@@ -19,7 +19,8 @@ import {
   Zap,
   Target,
   BarChart3,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import SiteVisitsOverview from '../SiteVisitsOverview';
 import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
 import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
 import { DashboardCalendar } from '../DashboardCalendar';
+import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -36,6 +38,7 @@ import { getStateName, sudanStates } from '@/data/sudanStates';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { supabase } from '@/integrations/supabase/client';
+import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
 
@@ -57,6 +60,8 @@ export const OperationsZone: React.FC = () => {
   const [supervisorHubName, setSupervisorHubName] = useState<string | null>(null);
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { mmpFiles: contextMmpFiles, loading: contextLoading } = useMMP();
+
+  const mmpAnalytics = useZoneMmpAnalytics();
 
   // Check if user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -423,7 +428,7 @@ export const OperationsZone: React.FC = () => {
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
         <CardContent className="p-2 sm:p-3">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 h-auto p-0.5 bg-transparent border border-border/30 gap-1">
+            <TabsList className="grid w-full grid-cols-5 h-auto p-0.5 bg-transparent border border-border/30 gap-1">
               <TabsTrigger 
                 value="overview" 
                 className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
@@ -433,6 +438,16 @@ export const OperationsZone: React.FC = () => {
                   <ClipboardList className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-primary" />
                 </div>
                 <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Overview</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="mmps" 
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
+                data-testid="tab-mmps"
+              >
+                <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <FileText className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">MMPs</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="upcoming" 
@@ -468,6 +483,23 @@ export const OperationsZone: React.FC = () => {
 
             <TabsContent value="overview" className="mt-3 space-y-3">
               <SiteVisitsOverview siteVisits={siteVisits} />
+            </TabsContent>
+
+            <TabsContent value="mmps" className="mt-3">
+              <ZoneMmpAnalyticsTab
+                filters={mmpAnalytics.filters}
+                onFilterChange={mmpAnalytics.setFilters}
+                filteredMmpFiles={mmpAnalytics.filteredMmpFiles}
+                filteredSiteVisits={mmpAnalytics.filteredSiteVisits}
+                mmpStats={mmpAnalytics.mmpStats}
+                uniqueHubs={mmpAnalytics.uniqueHubs}
+                uniqueRegions={mmpAnalytics.uniqueRegions}
+                selectedMmpId={mmpAnalytics.selectedMmpId}
+                onSelectMmp={mmpAnalytics.setSelectedMmpId}
+                selectedMmp={mmpAnalytics.selectedMmp}
+                canAccessVersioning={mmpAnalytics.canAccessVersioning}
+                zoneColor="blue"
+              />
             </TabsContent>
 
             <TabsContent value="upcoming" className="mt-3">

@@ -51,15 +51,7 @@ export const ZoneMmpAnalyticsTab: React.FC<ZoneMmpAnalyticsTabProps> = ({
   return (
     <div className="space-y-4">
       <DashboardFilters
-        filters={{
-          dateRange: filters.dateRange,
-          selectedMonth: filters.selectedMonth,
-          selectedYear: filters.selectedYear,
-          hub: filters.hub,
-          region: filters.region,
-          mmpClassification: filters.mmpClassification,
-          showActiveOnly: filters.showActiveOnly,
-        }}
+        filters={filters}
         onFilterChange={handleFilterChange}
         mmpFiles={filteredMmpFiles}
         hubs={uniqueHubs}

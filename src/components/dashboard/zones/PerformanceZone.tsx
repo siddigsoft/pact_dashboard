@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TrendingUp, Trophy, Activity, DollarSign } from 'lucide-react';
+import { TrendingUp, Trophy, Activity, DollarSign, FileText, BarChart3 } from 'lucide-react';
 import { AchievementTracker } from '../AchievementTracker';
 import { EnhancedActivityFeed } from '../EnhancedActivityFeed';
+import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
 import { startOfMonth } from 'date-fns';
 
 export const PerformanceZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('achievements');
   const { roles } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
+  const mmpAnalytics = useZoneMmpAnalytics();
 
   const isFinanceOrAdmin = roles?.some(r => r.toLowerCase() === 'admin' || r.toLowerCase() === 'financialadmin');
 
@@ -44,10 +47,14 @@ export const PerformanceZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto h-auto p-1 bg-muted/30">
+        <TabsList className="grid w-full grid-cols-3 max-w-lg mx-auto h-auto p-1 bg-muted/30">
           <TabsTrigger value="achievements" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-3 py-2 sm:py-1.5">
             <Trophy className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">Achievements</span>
+          </TabsTrigger>
+          <TabsTrigger value="mmp-analytics" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-3 py-2 sm:py-1.5">
+            <BarChart3 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="text-xs sm:text-xs">MMP Analytics</span>
           </TabsTrigger>
           <TabsTrigger value="activity" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-3 py-2 sm:py-1.5">
             <Activity className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
@@ -57,6 +64,23 @@ export const PerformanceZone: React.FC = () => {
 
         <TabsContent value="achievements" className="mt-4">
           <AchievementTracker />
+        </TabsContent>
+
+        <TabsContent value="mmp-analytics" className="mt-4">
+          <ZoneMmpAnalyticsTab
+            filters={mmpAnalytics.filters}
+            onFilterChange={mmpAnalytics.setFilters}
+            filteredMmpFiles={mmpAnalytics.filteredMmpFiles}
+            filteredSiteVisits={mmpAnalytics.filteredSiteVisits}
+            mmpStats={mmpAnalytics.mmpStats}
+            uniqueHubs={mmpAnalytics.uniqueHubs}
+            uniqueRegions={mmpAnalytics.uniqueRegions}
+            selectedMmpId={mmpAnalytics.selectedMmpId}
+            onSelectMmp={mmpAnalytics.setSelectedMmpId}
+            selectedMmp={mmpAnalytics.selectedMmp}
+            canAccessVersioning={mmpAnalytics.canAccessVersioning}
+            zoneColor="purple"
+          />
         </TabsContent>
 
         <TabsContent value="activity" className="mt-4">

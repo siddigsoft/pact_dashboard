@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2 } from 'lucide-react';
+import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2, FileText, BarChart3 } from 'lucide-react';
 import { TeamCommunication } from '../TeamCommunication';
 import TeamLocationMap from '../TeamLocationMap';
+import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +17,7 @@ import { useAppContext } from '@/context/AppContext';
 import { fetchHubs } from '@/services/mmpActions';
 import { useCall } from '@/context/communications/CallContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
+import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -29,6 +31,7 @@ export const TeamZone: React.FC = () => {
   const { currentUser, roles } = useAppContext();
   const { initiateCall } = useCall();
   const { openChatForEntity } = useCommunication();
+  const mmpAnalytics = useZoneMmpAnalytics();
 
   // Check if current user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -191,10 +194,14 @@ export const TeamZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl h-auto p-1 bg-muted/30 mx-auto">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl h-auto p-1 bg-muted/30 mx-auto">
           <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <UserCircle className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-            <span className="text-xs sm:text-xs">Team Overview</span>
+            <span className="text-xs sm:text-xs">Team</span>
+          </TabsTrigger>
+          <TabsTrigger value="mmp-analytics" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+            <BarChart3 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="text-xs sm:text-xs">MMPs</span>
           </TabsTrigger>
           <TabsTrigger value="map" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <MapPin className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
@@ -202,9 +209,26 @@ export const TeamZone: React.FC = () => {
           </TabsTrigger>
           <TabsTrigger value="communication" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <MessageSquare className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-            <span className="text-xs sm:text-xs">Communication</span>
+            <span className="text-xs sm:text-xs">Comms</span>
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="mmp-analytics" className="mt-4">
+          <ZoneMmpAnalyticsTab
+            filters={mmpAnalytics.filters}
+            onFilterChange={mmpAnalytics.setFilters}
+            filteredMmpFiles={mmpAnalytics.filteredMmpFiles}
+            filteredSiteVisits={mmpAnalytics.filteredSiteVisits}
+            mmpStats={mmpAnalytics.mmpStats}
+            uniqueHubs={mmpAnalytics.uniqueHubs}
+            uniqueRegions={mmpAnalytics.uniqueRegions}
+            selectedMmpId={mmpAnalytics.selectedMmpId}
+            onSelectMmp={mmpAnalytics.setSelectedMmpId}
+            selectedMmp={mmpAnalytics.selectedMmp}
+            canAccessVersioning={mmpAnalytics.canAccessVersioning}
+            zoneColor="cyan"
+          />
+        </TabsContent>
 
         <TabsContent value="overview" className="mt-4 space-y-3">
           {assignableTeamMembers && assignableTeamMembers.length > 0 ? (
