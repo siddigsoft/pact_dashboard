@@ -3027,75 +3027,121 @@ const MMP = () => {
     return [...filteredVisitRows, ...rows];
   };
 
-  // Pre-compute all subcategory site rows using buildSiteRowsFromMMPs for consistent counts
+  // Pre-compute all subcategory site rows in a SINGLE PASS for optimal performance
   // This ensures badge counts match table data (both use same deduplication logic)
   const precomputedSubcategorySites = useMemo(() => {
     const allVerifiedMMPs = categorizedMMPs.verified || [];
     
+    const result = {
+      newSites: [] as SiteVisitRow[],
+      dispatched: [] as SiteVisitRow[],
+      accepted: [] as SiteVisitRow[],
+      smartAssigned: [] as SiteVisitRow[],
+      ongoing: [] as SiteVisitRow[],
+      completed: [] as SiteVisitRow[],
+      rejected: [] as SiteVisitRow[],
+      approvedCosted: [] as SiteVisitRow[]
+    };
+    
     if (allVerifiedMMPs.length === 0) {
-      return {
-        newSites: [],
-        dispatched: [],
-        accepted: [],
-        smartAssigned: [],
-        ongoing: [],
-        completed: [],
-        rejected: [],
-        approvedCosted: []
-      };
+      return result;
     }
     
-    // Use buildSiteRowsFromMMPs with same filters as verifiedCategorySiteRows
-    // "New Sites" shows verified sites that haven't progressed to costed/dispatched/accepted stages
-    // Include multiple verified status variations: verified, cp_verified, permits_verified, locality_permit_verified
-    const newSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      const status = row.status?.toLowerCase() || '';
-      // Include sites with various verified statuses (before costing/dispatch)
-      const isVerified = status === 'verified' || 
-                         status === 'cp_verified' || 
-                         status === 'permits_verified' || 
-                         status === 'locality_permit_verified' ||
-                         (status === 'approved' && !status.includes('costed'));
-      return isVerified;
-    });
+    // Build MMP ID set for quick lookup
+    const mmpIds = new Set(allVerifiedMMPs.map(m => m.id));
     
-    const dispatched = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+    // Get all siteVisitRows for verified MMPs
+    const visitRows = siteVisitRows.filter(r => mmpIds.has(r.mmpId));
+    
+    // Track which site entry IDs have visit rows to avoid duplicates
+    const visitRowSiteIds = new Set(visitRows.map(r => r.id));
+    
+    // Helper to categorize a single row - returns the category key or null
+    const categorizeRow = (row: SiteVisitRow): keyof typeof result | null => {
       const status = row.status?.toLowerCase() || '';
       const acceptedBy = (row as any).accepted_by;
-      return status === 'dispatched' && !acceptedBy;
-    });
+      
+      // Check categories in order of specificity
+      if (status.includes('approved') && status.includes('costed')) {
+        return 'approvedCosted';
+      }
+      if (status === 'completed') {
+        return 'completed';
+      }
+      if (status === 'rejected' || status === 'declined') {
+        return 'rejected';
+      }
+      if (/inprogress|in_progress|ongoing/.test(status)) {
+        return 'ongoing';
+      }
+      if (status === 'accepted') {
+        return 'accepted';
+      }
+      if (status === 'assigned') {
+        return 'smartAssigned';
+      }
+      if (status === 'dispatched' && !acceptedBy) {
+        return 'dispatched';
+      }
+      // New sites - verified statuses before costing/dispatch
+      if (status === 'verified' || 
+          status === 'cp_verified' || 
+          status === 'permits_verified' || 
+          status === 'locality_permit_verified' ||
+          (status === 'approved' && !status.includes('costed'))) {
+        return 'newSites';
+      }
+      return null;
+    };
     
-    const accepted = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      const status = row.status?.toLowerCase() || '';
-      return status === 'accepted';
-    });
+    // Process visit rows in single pass
+    for (const row of visitRows) {
+      const category = categorizeRow(row);
+      if (category) {
+        result[category].push(row);
+      }
+    }
     
-    const smartAssigned = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      const status = row.status?.toLowerCase() || '';
-      return status === 'assigned';
-    });
+    // Process site entries from MMPs that don't have visit rows
+    // Use deterministic index-based ID generation matching buildSiteRowsFromMMPs
+    let siteEntryIndex = 0;
+    for (const mmp of allVerifiedMMPs) {
+      if (Array.isArray(mmp.siteEntries)) {
+        for (let i = 0; i < mmp.siteEntries.length; i++) {
+          const se = mmp.siteEntries[i];
+          // Use deterministic ID: prefer se.id, then index-based fallback matching original logic
+          const siteId = se.id || `${mmp.id}-site-${siteEntryIndex}`;
+          siteEntryIndex++;
+          
+          // Skip if this site entry already has a visit row
+          if (visitRowSiteIds.has(siteId)) continue;
+          
+          const row = {
+            id: siteId,
+            mmpId: mmp.id,
+            siteName: se.siteName || se.siteCode || se.state || 'Site',
+            siteCode: se.siteCode,
+            state: se.state,
+            locality: se.locality,
+            status: (se.status || 'pending'),
+            feesTotal: 0,
+            assignedAt: undefined,
+            completedAt: undefined,
+            rejectionReason: undefined,
+            accepted_by: se.accepted_by,
+            dispatched_by: se.dispatched_by,
+            verified_by: se.verified_by,
+          } as SiteVisitRow;
+          
+          const category = categorizeRow(row);
+          if (category) {
+            result[category].push(row);
+          }
+        }
+      }
+    }
     
-    const ongoing = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      const status = row.status?.toLowerCase() || '';
-      return /inprogress|in_progress|ongoing/.test(status);
-    });
-    
-    const completed = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      const status = row.status?.toLowerCase() || '';
-      return status === 'completed';
-    });
-    
-    const rejected = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      const status = row.status?.toLowerCase() || '';
-      return status === 'rejected' || status === 'declined';
-    });
-    
-    const approvedCosted = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      const status = row.status?.toLowerCase() || '';
-      return status.includes('approved') && status.includes('costed');
-    });
-    
-    return { newSites, dispatched, accepted, smartAssigned, ongoing, completed, rejected, approvedCosted };
+    return result;
   }, [categorizedMMPs.verified, siteVisitRows]);
 
   // Calculate total verified sites count from precomputed data
