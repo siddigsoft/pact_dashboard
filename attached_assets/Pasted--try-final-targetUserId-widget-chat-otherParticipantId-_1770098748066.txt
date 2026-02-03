@@ -1,0 +1,97 @@
+   }
+
+    try {
+      final targetUserId = widget.chat.otherParticipantId!;
+      final targetUserName = _getChatTitle();
+
+      // Check if WebRTC service is initialized
+      final jitsiCallService = JitsiCallService();
+
+      // Debug: Check if service is ready
+      debugPrint('[ChatScreen] Attempting call to $targetUserName');
+      debugPrint(
+        '[ChatScreen] WebRTC initialized: ${jitsiCallService.isInitialized}',
+      );
+      debugPrint(
+        '[ChatScreen] WebRTC fully ready: ${jitsiCallService.isFullyReady}',
+      );
+      debugPrint('[ChatScreen] Call type: ${isAudioOnly ? "Audio" : "Video"}');
+
+      if (!jitsiCallService.isInitialized) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Call service not ready. Please try again in a moment.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show loading indicator
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Text('Calling $targetUserName...'),
+              ],
+            ),
+            duration: const Duration(seconds: 45), // Call timeout duration
+          ),
+        );
+      }
+
+      // Initiate the call
+      final success = await jitsiCallService.initiateCall(
+        targetUserId,
+        targetUserName,
+        isAudioOnly: isAudioOnly,
+      );
+
+      debugPrint('[ChatScreen] Call initiation result: $success');
+
+      if (success && mounted) {
+        // Clear loading snackbar
+        ScaffoldMessenger.of(context).clearSnackBars();
+
+        // Navigate to call screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => CallScreen(targetUserName: targetUserName),
+          ),
+        );
+      } else if (!success && mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('User is busy or unavailable'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Call error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to initiate call: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
