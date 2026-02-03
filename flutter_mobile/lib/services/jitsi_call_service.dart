@@ -1,47 +1,14 @@
+// lib/services/jitsi_call_service.dart
+// Compatibility layer for JitsiCallService using WebRTC
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'webrtc_call_service.dart' as webrtc;
 import '../models/call_state.dart';
 
-class CallStateData {
-  final CallStatus status;
-  final bool isInCall;
-  final String? callId;
-  final String? remoteUserId;
-  final String? remoteUserName;
-  final String? callToken;
-  final bool isAudioOnly;
-
-  CallStateData({
-    required this.status,
-    this.isInCall = false,
-    this.callId,
-    this.remoteUserId,
-    this.remoteUserName,
-    this.callToken,
-    this.isAudioOnly = true,
-  });
-
-  CallStateData copyWith({
-    CallStatus? status,
-    bool? isInCall,
-    String? callId,
-    String? remoteUserId,
-    String? remoteUserName,
-    String? callToken,
-    bool? isAudioOnly,
-  }) {
-    return CallStateData(
-      status: status ?? this.status,
-      isInCall: isInCall ?? this.isInCall,
-      callId: callId ?? this.callId,
-      remoteUserId: remoteUserId ?? this.remoteUserId,
-      remoteUserName: remoteUserName ?? this.remoteUserName,
-      callToken: callToken ?? this.callToken,
-      isAudioOnly: isAudioOnly ?? this.isAudioOnly,
-    );
-  }
-}
+// Re-export CallState as CallStateData for backward compatibility
+// This ensures all screens using CallStateData get the full CallState properties
+typedef CallStateData = CallState;
 
 class JitsiCallService {
   static final JitsiCallService _instance = JitsiCallService._internal();
@@ -53,8 +20,8 @@ class JitsiCallService {
   final _callStatusController = StreamController<CallStatus>.broadcast();
   Stream<CallStatus> get callStatusStream => _callStatusController.stream;
 
-  final _callStateController = StreamController<CallStateData>.broadcast();
-  Stream<CallStateData> get callStateStream => _callStateController.stream;
+  final _callStateController = StreamController<CallState>.broadcast();
+  Stream<CallState> get callStateStream => _callStateController.stream;
 
   final _incomingCallController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -64,8 +31,8 @@ class JitsiCallService {
   CallStatus _currentStatus = CallStatus.idle;
   CallStatus get currentStatus => _currentStatus;
 
-  CallStateData _callState = CallStateData(status: CallStatus.idle);
-  CallStateData get callState => _callState;
+  CallState _callState = CallState();
+  CallState get callState => _callState;
 
   String? _currentCallId;
   String? get currentCallId => _currentCallId;
@@ -102,7 +69,7 @@ class JitsiCallService {
           break;
         case webrtc.CallState.connecting:
         case webrtc.CallState.connected:
-          status = CallStatus.inProgress;
+          status = CallStatus.connected;
           break;
         case webrtc.CallState.ended:
           status = CallStatus.ended;
@@ -219,12 +186,12 @@ class JitsiCallService {
 
   void _updateStatus(CallStatus status) {
     _currentStatus = status;
-    _callState = CallStateData(
+    _callState = CallState(
       status: status,
-      isInCall: status == CallStatus.inProgress || status == CallStatus.ringing,
       callId: _currentCallId,
       remoteUserId: _currentCallData?['targetUserId'] as String?,
       remoteUserName: _currentCallData?['targetUserName'] as String?,
+      remoteUserAvatar: _currentCallData?['targetUserAvatar'] as String?,
       callToken: _currentCallId,
       isAudioOnly: !(_currentCallData?['isVideo'] == true),
     );
