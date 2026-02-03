@@ -101,6 +101,77 @@ export async function isClientFrozen(): Promise<boolean> {
 /**
  * Attempts to recover from frozen client state
  */
+/**
+ * Ensures a valid session exists before database operations
+ * This is the primary function to call before any database write operations
+ * to prevent RLS failures due to expired sessions.
+ * 
+ * @returns Object with success status, user info, and optional error
+ */
+export async function ensureValidSession(): Promise<{
+  success: boolean;
+  user?: { id: string; email?: string };
+  error?: string;
+}> {
+  try {
+    console.log('[SessionHealth] 🔐 Ensuring valid session for database operation...');
+    
+    // First try to refresh via Supabase client (preferred method)
+    const { data: sessionData, error: refreshError } = await supabase.auth.refreshSession();
+    
+    if (!refreshError && sessionData?.session) {
+      console.log('[SessionHealth] ✅ Session valid/refreshed:', {
+        userId: sessionData.session.user?.id,
+        expiresAt: sessionData.session.expires_at 
+          ? new Date(sessionData.session.expires_at * 1000).toISOString() 
+          : 'unknown',
+        expiresIn: sessionData.session.expires_at 
+          ? `${sessionData.session.expires_at - Math.floor(Date.now() / 1000)}s` 
+          : 'unknown',
+      });
+      return {
+        success: true,
+        user: {
+          id: sessionData.session.user.id,
+          email: sessionData.session.user.email,
+        },
+      };
+    }
+    
+    // If refresh failed, try recovery via native fetch
+    console.warn('[SessionHealth] ⚠️ Supabase refresh failed, attempting recovery...');
+    const recovered = await recoverFromFrozenClient();
+    
+    if (recovered) {
+      // Get session after recovery
+      const { data: recoveredSession } = await supabase.auth.getSession();
+      if (recoveredSession?.session) {
+        console.log('[SessionHealth] ✅ Session recovered successfully');
+        return {
+          success: true,
+          user: {
+            id: recoveredSession.session.user.id,
+            email: recoveredSession.session.user.email,
+          },
+        };
+      }
+    }
+    
+    // Session is truly expired/invalid
+    console.error('[SessionHealth] ❌ Unable to ensure valid session');
+    return {
+      success: false,
+      error: refreshError?.message || 'Session expired. Please log in again.',
+    };
+  } catch (error: any) {
+    console.error('[SessionHealth] ❌ Error ensuring valid session:', error);
+    return {
+      success: false,
+      error: error.message || 'Authentication error. Please log in again.',
+    };
+  }
+}
+
 export async function recoverFromFrozenClient(): Promise<boolean> {
   console.warn('[SessionHealth] Attempting to recover from frozen client...');
   
