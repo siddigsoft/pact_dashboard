@@ -1,0 +1,613 @@
+PS C:\Users\PC\PACT_mobile> flutter clean                                                   
+Deleting build...                                                    5ms                    
+Deleting .dart_tool...                                              40ms
+Deleting ephemeral...                                                1ms
+Deleting Generated.xcconfig...                                       1ms
+Deleting flutter_export_environment.sh...                            3ms
+Deleting ephemeral...                                               26ms
+Deleting ephemeral...                                                3ms
+Deleting ephemeral...                                               19ms
+Deleting .flutter-plugins-dependencies...                            3ms
+PS C:\Users\PC\PACT_mobile> shorebird release android --artifact apk                        
+Rebuilding shorebird...
+Updating Flutter...
+remote: Enumerating objects: 2, done.
+remote: Counting objects: 100% (1/1), done.
+remote: Total 2 (delta 0), reused 1 (delta 0), pack-reused 1 (from 1)
+Receiving objects: 100% (2/2), 1.65 KiB | 563.00 KiB/s, done.
+From https://github.com/shorebirdtech/flutter
+   165ae239c..c15ddb521  shorebird/dev -> origin/shorebird/dev
+HEAD is now at 110248879 chore: roll engine to 50b8af000ba26227acfba511ab40d9199c102625
+Flutter 3.38.7 • channel [user-branch] • unknown source
+Framework • revision 1102488790 (10 days ago) • 2026-01-23 17:40:51 -0800
+Engine • hash f76ef242766d65efe2ddcd9d09ab5fea6a964690 (revision 50b8af000b) (10 days ago) •
+2026-01-23 23:30:24.000Z
+Tools • Dart 3.10.7 • DevTools 2.51.1
+Resolving dependencies in `C:\Users\PC\.shorebird`... (2.0s)
+Downloading packages... (1.5s)
+  _fe_analyzer_shared 92.0.0 (94.0.0 available)
+  analyzer 9.0.0 (10.0.2 available)
+  build 4.0.3 (4.0.4 available)
+  build_runner 2.10.4 (2.10.5 available)
+  built_value 8.12.1 (8.12.3 available)
+  code_builder 4.11.0 (4.11.1 available)
+  dart_style 3.1.3 (3.1.5 available)
+  equatable 2.0.7 (2.0.8 available)
+  ffi 2.1.4 (2.1.5 available)
+  json_annotation 4.9.0 (4.10.0 available)
+  json_path 0.8.0 (0.9.0 available)
+  json_serializable 6.11.3 (6.12.0 available)
+  maybe_just_nothing 0.5.3 (0.6.0 available)
+  meta 1.17.0 (1.18.1 available)
+  source_gen 4.1.1 (4.2.0 available)
+  source_helper 1.3.9 (1.3.10 available)
+  test 1.28.0 (1.29.0 available)
+  test_api 0.7.8 (0.7.9 available)
+  test_core 0.6.14 (0.6.15 available)
+  very_good_analysis 10.0.0 (10.1.0 available)
+  watcher 1.1.4 (1.2.1 available)
+  yaml_edit 2.2.2 (2.2.3 available)
+Got dependencies in `C:\Users\PC\.shorebird`!
+22 packages have newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+Compiling shorebird...
+✓ Fetching apps (1.1s)
+Building Android app bundle with Flutter 3.38.7 (1102488790)
+Resolving dependencies... (1.2s)
+Downloading packages...
+  _fe_analyzer_shared 91.0.0 (94.0.0 available)
+  analyzer 8.4.1 (10.0.2 available)
+  app_links 6.4.1 (7.0.0 available)
+  archive 3.6.1 (4.0.7 available)
+  characters 1.4.0 (1.4.1 available)
+  dart_jsonwebtoken 3.1.1 (3.3.1 available)
+  dart_style 3.1.3 (3.1.5 available)
+  device_info_plus 11.5.0 (12.3.0 available)
+  file_picker 8.3.7 (10.3.10 available)
+  flat_buffers 23.5.26 (25.9.23 available)
+  flutter_local_notifications 19.5.0 (20.0.0 available)
+  flutter_local_notifications_linux 6.0.0 (7.0.0 available)
+  flutter_local_notifications_platform_interface 9.1.0 (10.0.0 available)
+  flutter_local_notifications_windows 1.0.3 (2.0.0 available)
+  flutter_map 6.2.1 (8.2.2 available)
+  flutter_map_marker_cluster 1.3.6 (8.2.2 available)
+  flutter_map_marker_popup 6.1.2 (8.1.0 available)
+  flutter_map_tile_caching 9.0.1 (10.1.1 available)
+  flutter_riverpod 2.6.1 (3.2.0 available)
+  freezed 3.2.3 (3.2.4 available)
+  geocoding_platform_interface 3.2.0 (5.0.0 available)
+  geolocator 11.1.0 (14.0.2 available)
+  geolocator_android 4.6.2 (5.0.2 available)
+  geolocator_web 3.0.0 (4.1.3 available)
+  image 4.3.0 (4.7.2 available)
+  js 0.6.7 (0.7.2 available)
+  json_annotation 4.9.0 (4.10.0 available)
+  json_serializable 6.11.2 (6.12.0 available)
+  local_auth 2.3.0 (3.0.0 available)
+  local_auth_android 1.0.51 (2.0.4 available)
+  local_auth_darwin 1.6.0 (2.0.1 available)
+  local_auth_windows 1.0.11 (2.0.1 available)
+  location 5.0.3 (8.0.1 available)
+  location_platform_interface 3.1.2 (6.0.1 available)
+  location_web 4.2.0 (6.0.1 available)
+  matcher 0.12.17 (0.12.18 available)
+  material_color_utilities 0.11.1 (0.13.0 available)
+  meta 1.17.0 (1.18.1 available)
+  mgrs_dart 2.0.0 (3.0.0 available)
+  objectbox 2.5.1 (5.2.0 available)
+  objectbox_flutter_libs 2.5.1 (5.2.0 available)
+  pointycastle 3.9.1 (4.0.0 available)
+  proj4dart 2.1.0 (3.0.0 available)
+  riverpod 2.6.1 (3.2.0 available)
+  shorebird_code_push 1.1.6 (2.0.5 available)
+  source_helper 1.3.8 (1.3.10 available)
+  syncfusion_flutter_core 29.2.11 (32.1.25 available)
+  syncfusion_flutter_pdf 29.2.11 (32.1.25 available)
+  syncfusion_flutter_xlsio 29.2.11 (32.1.25 available)
+  syncfusion_officecore 29.2.11 (32.1.25 available)
+  test 1.26.3 (1.29.0 available)
+  test_api 0.7.7 (0.7.9 available)
+  test_core 0.6.12 (0.6.15 available)
+  timezone 0.10.1 (0.11.0 available)
+  unicode 0.3.1 (1.1.9 available)
+  vibration 2.1.0 (3.1.5 available)
+  vibration_platform_interface 0.0.3 (0.1.1 available)
+Got dependencies!
+57 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+lib/widgets/floating_call_overlay.dart:34:22: Error: Type 'CallStateData' not found.
+  StreamSubscription<CallStateData>? _callStateSubscription;
+                     ^^^^^^^^^^^^^
+lib/widgets/floating_call_overlay.dart:35:3: Error: Type 'CallStateData' not found.
+  CallStateData? _callState = CallStateData();
+  ^^^^^^^^^^^^^
+lib/screens/call_screen.dart:11:1: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+import '../models/call_state.dart';
+^^^^^^^^^^
+lib/screens/main_screen.dart:69:32: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+    if (currentState.status == CallStatus.ringing &&
+                               ^^^^^^^^^^
+lib/screens/main_screen.dart:260:29: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+        if (state.status == CallStatus.ringing &&
+                            ^^^^^^^^^^
+lib/screens/field_operations_enhanced_screen.dart:2093:33: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+        if (callState.status == CallStatus.busy) {
+                                ^^^^^^^^^^
+lib/screens/call_screen.dart:44:44: Error: Required named parameter 'status' must be provided.
+  CallStateData? _callState = CallStateData();
+                                           ^
+lib/services/jitsi_call_service.dart:15:3: Context: Found this candidate, but the arguments don't match.     
+  CallStateData({
+  ^^^^^^^^^^^^^
+lib/screens/call_screen.dart:104:24: Error: Property 'isAudioOnly' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+        if (_callState.isAudioOnly && _isNear) {
+                       ^^^^^^^^^^^
+lib/screens/call_screen.dart:195:27: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      if (state.status == CallStatus.connected && _durationTimer == null) {
+                          ^^^^^^^^^^
+lib/screens/call_screen.dart:199:34: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      } else if (state.status == CallStatus.reconnecting) {
+                                 ^^^^^^^^^^
+lib/screens/call_screen.dart:201:34: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      } else if (state.status == CallStatus.unreachable ||
+                                 ^^^^^^^^^^
+lib/screens/call_screen.dart:202:27: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+          state.status == CallStatus.failed ||
+                          ^^^^^^^^^^
+lib/screens/call_screen.dart:203:27: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+          state.status == CallStatus.busy ||
+                          ^^^^^^^^^^
+lib/screens/call_screen.dart:204:27: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+          state.status == CallStatus.rejected) {
+                          ^^^^^^^^^^
+lib/screens/call_screen.dart:218:34: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      } else if (state.status == CallStatus.ended) {
+                                 ^^^^^^^^^^
+lib/screens/call_screen.dart:190:41: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+      final previousStatus = _callState.status;
+                                        ^^^^^^
+lib/screens/call_screen.dart:211:28: Error: The argument type 'CallStateData' can't be assigned to the parameter type 'CallState'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+ - 'CallState' is from 'package:pact_mobile/models/call_state.dart' ('lib/models/call_state.dart').
+        _saveCallToHistory(state, previousStatus);
+                           ^
+lib/screens/call_screen.dart:220:28: Error: The argument type 'CallStateData' can't be assigned to the parameter type 'CallState'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+ - 'CallState' is from 'package:pact_mobile/models/call_state.dart' ('lib/models/call_state.dart').
+        _saveCallToHistory(state, previousStatus);
+                           ^
+lib/screens/call_screen.dart:221:25: Error: The getter 'shouldShowCallScreen' isn't defined for the type 'CallStateData'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'shouldShowCallScreen'.
+      } else if (!state.shouldShowCallScreen) {
+                        ^^^^^^^^^^^^^^^^^^^^
+lib/screens/call_screen.dart:262:29: Error: The getter 'qualityBars' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'qualityBars'.
+    final bars = _callState.qualityBars;
+                            ^^^^^^^^^^^
+lib/screens/call_screen.dart:295:27: Error: The getter 'latencyMs' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'latencyMs'.  
+            '${_callState.latencyMs ?? 0}ms',
+                          ^^^^^^^^^
+lib/screens/call_screen.dart:304:40: Error: The getter 'callNotes' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'callNotes'.  
+    _notesController.text = _callState.callNotes ?? '';
+                                       ^^^^^^^^^
+lib/screens/call_screen.dart:436:12: Error: Not a constant expression.
+      case CallStatus.calling:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:436:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.calling:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:438:12: Error: Not a constant expression.
+      case CallStatus.ringing:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:438:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.ringing:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:440:12: Error: Not a constant expression.
+      case CallStatus.connected:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:440:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.connected:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:442:12: Error: Not a constant expression.
+      case CallStatus.reconnecting:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:442:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.reconnecting:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:444:12: Error: Not a constant expression.
+      case CallStatus.busy:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:444:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.busy:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:446:12: Error: Not a constant expression.
+      case CallStatus.rejected:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:446:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.rejected:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:448:12: Error: Not a constant expression.
+      case CallStatus.ended:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:448:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.ended:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:450:12: Error: Not a constant expression.
+      case CallStatus.unreachable:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:450:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.unreachable:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:452:12: Error: Not a constant expression.
+      case CallStatus.failed:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:452:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.failed:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:431:21: Error: The getter 'isOnHold' isn't defined for the type 'CallStateData'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isOnHold'.   
+    if (_callState?.isOnHold ?? false) {
+                    ^^^^^^^^
+lib/screens/call_screen.dart:461:12: Error: Not a constant expression.
+      case CallStatus.connected:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:461:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.connected:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:463:12: Error: Not a constant expression.
+      case CallStatus.busy:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:463:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.busy:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:464:12: Error: Not a constant expression.
+      case CallStatus.rejected:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:464:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.rejected:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:466:12: Error: Not a constant expression.
+      case CallStatus.unreachable:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:466:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.unreachable:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:467:12: Error: Not a constant expression.
+      case CallStatus.failed:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:467:12: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      case CallStatus.failed:
+           ^^^^^^^^^^
+lib/screens/call_screen.dart:460:24: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+    switch (_callState.status) {
+                       ^^^^^^
+lib/screens/call_screen.dart:523:38: Error: The getter 'isSpeakerOn' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isSpeakerOn'.
+                subtitle: _callState.isSpeakerOn ? 'On' : 'Off',
+                                     ^^^^^^^^^^^
+lib/screens/call_screen.dart:525:37: Error: The getter 'isSpeakerOn' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isSpeakerOn'.
+                  value: _callState.isSpeakerOn,
+                                    ^^^^^^^^^^^
+lib/screens/call_screen.dart:549:34: Error: The getter 'isSpeakerOn' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isSpeakerOn'.
+                  if (_callState.isSpeakerOn) {
+                                 ^^^^^^^^^^^
+lib/screens/call_screen.dart:555:31: Error: Property 'isAudioOnly' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+              if (!_callState.isAudioOnly) ...[
+                              ^^^^^^^^^^^
+lib/screens/call_screen.dart:633:30: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+        _callState.status == CallStatus.calling ||
+                             ^^^^^^^^^^
+lib/screens/call_screen.dart:634:30: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+        _callState.status == CallStatus.ringing;
+                             ^^^^^^^^^^
+lib/screens/call_screen.dart:635:46: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+    final isConnected = _callState.status == CallStatus.connected;
+                                             ^^^^^^^^^^
+lib/screens/call_screen.dart:631:40: Error: Property 'isAudioOnly' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+    final isVideoEnabled = !_callState.isAudioOnly && _callState.isVideoEnabled;
+                                       ^^^^^^^^^^^
+lib/screens/call_screen.dart:631:66: Error: The getter 'isVideoEnabled' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isVideoEnabled'.
+    final isVideoEnabled = !_callState.isAudioOnly && _callState.isVideoEnabled;
+                                                                 ^^^^^^^^^^^^^^
+lib/screens/call_screen.dart:633:20: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+        _callState.status == CallStatus.calling ||
+                   ^^^^^^
+lib/screens/call_screen.dart:634:20: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+        _callState.status == CallStatus.ringing;
+                   ^^^^^^
+lib/screens/call_screen.dart:635:36: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+    final isConnected = _callState.status == CallStatus.connected;
+                                   ^^^^^^
+lib/screens/call_screen.dart:851:30: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+        _callState.status == CallStatus.calling ||
+                             ^^^^^^^^^^
+lib/screens/call_screen.dart:852:30: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+        _callState.status == CallStatus.ringing;
+                             ^^^^^^^^^^
+lib/screens/call_screen.dart:983:38: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+            if (_callState.status == CallStatus.connected)
+                                     ^^^^^^^^^^
+lib/screens/call_screen.dart:1000:38: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+            if (_callState.status == CallStatus.unreachable ||
+                                     ^^^^^^^^^^
+lib/screens/call_screen.dart:1001:38: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+                _callState.status == CallStatus.failed)
+                                     ^^^^^^^^^^
+lib/screens/call_screen.dart:1029:34: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+        if (_callState.status == CallStatus.connected) ...[
+                                 ^^^^^^^^^^
+lib/screens/call_screen.dart:845:20: Error: Property 'remoteUserName' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+        _callState.remoteUserName ??
+                   ^^^^^^^^^^^^^^
+lib/screens/call_screen.dart:851:20: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+        _callState.status == CallStatus.calling ||
+                   ^^^^^^
+lib/screens/call_screen.dart:852:20: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+        _callState.status == CallStatus.ringing;
+                   ^^^^^^
+lib/screens/call_screen.dart:983:28: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+            if (_callState.status == CallStatus.connected)
+                           ^^^^^^
+lib/screens/call_screen.dart:1000:28: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+            if (_callState.status == CallStatus.unreachable ||
+                           ^^^^^^
+lib/screens/call_screen.dart:1001:28: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+                _callState.status == CallStatus.failed)
+                           ^^^^^^
+lib/screens/call_screen.dart:1029:24: Error: Property 'status' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+        if (_callState.status == CallStatus.connected) ...[
+                       ^^^^^^
+lib/screens/call_screen.dart:1054:28: Error: Property 'isAudioOnly' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+                _callState.isAudioOnly
+                           ^^^^^^^^^^^
+lib/screens/call_screen.dart:1062:28: Error: Property 'isAudioOnly' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+                _callState.isAudioOnly ? 'Voice Call' : 'Video Call',
+                           ^^^^^^^^^^^
+lib/screens/call_screen.dart:1151:42: Error: The getter 'isSpeakerOn' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isSpeakerOn'.
+                        icon: _callState.isSpeakerOn
+                                         ^^^^^^^^^^^
+lib/screens/call_screen.dart:1159:46: Error: The getter 'isSpeakerOn' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isSpeakerOn'.
+                        isActive: _callState.isSpeakerOn,
+                                             ^^^^^^^^^^^
+lib/screens/call_screen.dart:1161:39: Error: Property 'isAudioOnly' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+                      if (!_callState.isAudioOnly)
+                                      ^^^^^^^^^^^
+lib/screens/call_screen.dart:1163:44: Error: The getter 'isVideoEnabled' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isVideoEnabled'.
+                          icon: _callState.isVideoEnabled
+                                           ^^^^^^^^^^^^^^
+lib/screens/call_screen.dart:1171:48: Error: The getter 'isVideoEnabled' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isVideoEnabled'.
+                          isActive: _callState.isVideoEnabled,
+                                               ^^^^^^^^^^^^^^
+lib/screens/call_screen.dart:1173:39: Error: Property 'isAudioOnly' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+                      if (!_callState.isAudioOnly)
+                                      ^^^^^^^^^^^
+lib/screens/call_screen.dart:1184:42: Error: The getter 'isOnHold' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isOnHold'.   
+                        icon: _callState.isOnHold
+                                         ^^^^^^^^
+lib/screens/call_screen.dart:1187:43: Error: The getter 'isOnHold' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isOnHold'.   
+                        label: _callState.isOnHold ? 'Resume' : 'Hold',
+                                          ^^^^^^^^
+lib/screens/call_screen.dart:1192:46: Error: The getter 'isOnHold' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isOnHold'.   
+                        isActive: _callState.isOnHold,
+                                             ^^^^^^^^
+lib/screens/call_screen.dart:1212:42: Error: The getter 'isRecording' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isRecording'.
+                        icon: _callState.isRecording
+                                         ^^^^^^^^^^^
+lib/screens/call_screen.dart:1215:43: Error: The getter 'isRecording' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isRecording'.
+                        label: _callState.isRecording ? 'Stop Rec' : 'Record',
+                                          ^^^^^^^^^^^
+lib/screens/call_screen.dart:1220:46: Error: The getter 'isRecording' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isRecording'.
+                        isActive: _callState.isRecording,
+                                             ^^^^^^^^^^^
+lib/screens/call_screen.dart:1231:40: Error: The getter 'callNotes' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'callNotes'.  
+                            _callState.callNotes != null &&
+                                       ^^^^^^^^^
+lib/screens/call_screen.dart:1232:40: Error: The getter 'callNotes' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'callNotes'.  
+                            _callState.callNotes!.isNotEmpty,
+                                       ^^^^^^^^^
+lib/screens/call_screen.dart:1253:42: Error: The getter 'isSpeakerOn' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isSpeakerOn'.
+                        icon: _callState.isSpeakerOn
+                                         ^^^^^^^^^^^
+lib/screens/call_screen.dart:1261:46: Error: The getter 'isSpeakerOn' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isSpeakerOn'.
+                        isActive: _callState.isSpeakerOn,
+                                             ^^^^^^^^^^^
+lib/screens/call_screen.dart:1274:40: Error: The getter 'isMuted' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isMuted'.    
+                      icon: _callState.isMuted
+                                       ^^^^^^^
+lib/screens/call_screen.dart:1277:41: Error: The getter 'isMuted' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isMuted'.    
+                      label: _callState.isMuted ? 'Unmute' : 'Mute',
+                                        ^^^^^^^
+lib/screens/call_screen.dart:1282:45: Error: The getter 'isMuted' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isMuted'.    
+                      isActive: !_callState.isMuted,
+                                            ^^^^^^^
+lib/screens/call_screen.dart:1283:45: Error: The getter 'isMuted' isn't defined for the type 'CallStateData?'.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named 'isMuted'.    
+                      isWarning: _callState.isMuted,
+                                            ^^^^^^^
+lib/screens/call_screen.dart:1423:59: Error: Property 'remoteUserName' cannot be accessed on 'CallStateData?' because it is potentially null.
+ - 'CallStateData' is from 'package:pact_mobile/services/jitsi_call_service.dart' ('lib/services/jitsi_call_service.dart').
+Try accessing using ?. instead.
+      remoteUserName: widget.remoteUserName ?? _callState.remoteUserName,
+                                                          ^^^^^^^^^^^^^^
+lib/widgets/floating_call_overlay.dart:34:22: Error: 'CallStateData' isn't a type.
+  StreamSubscription<CallStateData>? _callStateSubscription;
+                     ^^^^^^^^^^^^^
+lib/widgets/floating_call_overlay.dart:35:3: Error: 'CallStateData' isn't a type.
+  CallStateData? _callState = CallStateData();
+  ^^^^^^^^^^^^^
+lib/widgets/floating_call_overlay.dart:35:31: Error: Method not found: 'CallStateData'.
+  CallStateData? _callState = CallStateData();
+                              ^^^^^^^^^^^^^
+lib/widgets/floating_call_overlay.dart:61:30: Error: The getter '_webrtcService' isn't defined for the type '_FloatingCallOverlayState'.
+ - '_FloatingCallOverlayState' is from 'package:pact_mobile/widgets/floating_call_overlay.dart' ('lib/widgets/floating_call_overlay.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named '_webrtcService'.
+    _callStateSubscription = _webrtcService.callStateStream.listen((state) {
+                             ^^^^^^^^^^^^^^
+lib/widgets/floating_call_overlay.dart:274:35: Error: The getter '_webrtcService' isn't defined for the type '_FloatingCallOverlayState'.
+ - '_FloatingCallOverlayState' is from 'package:pact_mobile/widgets/floating_call_overlay.dart' ('lib/widgets/floating_call_overlay.dart').
+Try correcting the name to the name of an existing getter, or defining a getter or field named '_webrtcService'.
+                            await _webrtcService.endCall();
+                                  ^^^^^^^^^^^^^^
+lib/screens/help_support_screen.dart:1083:11: Error: No named parameter with the name 'userAvatar'.
+          userAvatar: callerAvatar,
+          ^^^^^^^^^^
+lib/screens/communications_screen.dart:421:13: Error: No named parameter with the name 'userAvatar'.
+            userAvatar: userAvatar,
+            ^^^^^^^^^^
+lib/screens/communications_screen.dart:437:13: Error: No named parameter with the name 'userAvatar'.
+            userAvatar: userAvatar,
+            ^^^^^^^^^^
+lib/screens/communications_screen.dart:632:31: Error: 'CallStatus' is imported from both 'package:pact_mobile/models/call_state.dart' and 'package:pact_mobile/services/jitsi_call_service.dart'.
+      if (callState.status == CallStatus.busy) {
+                              ^^^^^^^^^^
+lib/screens/communications_screen.dart:690:13: Error: No named parameter with the name 'roomName'.
+            roomName: result.roomName!,
+            ^^^^^^^^
+lib/screens/jitsi_call_screen.dart:11:9: Context: Found this candidate, but the arguments don't match.
+  const JitsiCallScreen({
+        ^^^^^^^^^^^^^^^
+lib/screens/communications_screen.dart:672:9: Error: No named parameter with the name 'userId'.
+        userId: currentUserId,
+        ^^^^^^
+lib/screens/communications_screen.dart:678:49: Error: Too few positional arguments: 1 required, 0 given.     
+    final result = await _jitsiService.startCall(
+                                                ^
+Target kernel_snapshot_program failed: Exception
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileFlutterBuildRelease'.
+> Process 'command 'C:\Users\PC\.shorebird\bin\cache\flutter\1102488790c5aaedda2e21d5f666792f09f76368\bin\flutter.bat'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 2m 11s
+Running Gradle task 'bundleRelease'...                            133.3s
+Gradle task bundleRelease failed with exit code 1
+Failed to build AAB.
+Command: flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+Reason: Exited with code 1.
+
+💡 Fix Recommendations
+
+• Check that running `flutter build` with the same command-line arguments
+completes successfully by running the following command:
+
+flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+
+If the above command fails, then this is likely not a Shorebird issue and
+the underlying `flutter build` failure must be resolved for Shorebird to
+build a release.
+
+• If `flutter build` completes successfully, please ensure that you are
+providing the desired flutter version to the release command via
+the `--flutter-version` option. If you do not specify a `--flutter-version`
+Shorebird will default to the latest stable version of Flutter.
+We strongly encourage always specifying an explicit Flutter version:
+
+shorebird release <platform> --flutter-version=3.29.0
+
+• If `flutter build` completes successfully and `shorebird release`
+fails when using the same flutter version, please file an issue:
+https://github.com/shorebirdtech/shorebird/issues/new
+
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report: 
+C:\Users\PC\AppData\Roaming\shorebird\logs\1770107337241_shorebird.log
+
+PS C:\Users\PC\PACT_mobile> 
