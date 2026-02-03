@@ -1562,9 +1562,21 @@ class _MMPScreenState extends State<MMPScreen> {
     }
   }
 
-  /// Reclaim a site - release it back to the dispatch pool (Admin only)
+  /// Reclaim a site - release it back to the dispatch pool (Admin/Super Admin only)
   Future<void> _reclaimSite(Map<String, dynamic> site) async {
-    if (!_isAdminOrSuperUser) return;
+    // Strict admin check - only admin/super_admin can reclaim
+    final isAdminForReclaim = _userRole == 'admin' || _userRole == 'super_admin' || _userRole == 'superadmin';
+    if (!isAdminForReclaim) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Only admins can reclaim sites'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
     
     final siteName = site['site_name'] ?? site['siteName'] ?? 'Unknown Site';
     final siteId = site['id'];
@@ -2001,13 +2013,17 @@ class _MMPScreenState extends State<MMPScreen> {
       }
     }
 
-    // Reclaim Button (Admin only) - for claimed/accepted sites that belong to other users
-    if (_isAdminOrSuperUser) {
-      final statusLower = status.toLowerCase();
+    // Reclaim Button (Admin/Super Admin only) - for claimed/accepted sites that belong to other users
+    // More restrictive than _isAdminOrSuperUser - only true admins can reclaim
+    final isAdminForReclaim = _userRole == 'admin' || _userRole == 'super_admin' || _userRole == 'superadmin';
+    if (isAdminForReclaim) {
+      final statusLower = status.toLowerCase().replaceAll(' ', '_');
       final acceptedBy = site['accepted_by']?.toString();
       final isClaimedOrAccepted = statusLower == 'claimed' || 
                                    statusLower == 'accepted' || 
-                                   statusLower == 'assigned';
+                                   statusLower == 'assigned' ||
+                                   statusLower == 'in_progress' ||
+                                   statusLower == 'ongoing';
       final isOtherUser = acceptedBy != null && acceptedBy != _userId;
       
       if (isClaimedOrAccepted && isOtherUser) {
