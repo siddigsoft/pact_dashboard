@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DollarSign, CreditCard, TrendingUp, Receipt, Wallet, ArrowUpDown } from 'lucide-react';
+import { DollarSign, CreditCard, TrendingUp, Receipt, Wallet, ArrowUpDown, FileText, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAppContext } from '@/context/AppContext';
+import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
+import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
 
 export const FinancialZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const { roles } = useAppContext();
+  const mmpAnalytics = useZoneMmpAnalytics();
 
   const isFinanceOrAdmin = roles?.some(r => 
     r.toLowerCase() === 'admin' || r.toLowerCase() === 'financialadmin'
@@ -35,10 +38,14 @@ export const FinancialZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-lg mx-auto h-auto p-1 bg-muted/30">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 max-w-2xl mx-auto h-auto p-1 bg-muted/30">
           <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <TrendingUp className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="text-xs sm:text-xs">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="mmp-analytics" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+            <BarChart3 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="text-xs sm:text-xs">MMPs</span>
           </TabsTrigger>
           <TabsTrigger value="budget" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
             <DollarSign className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
@@ -112,6 +119,23 @@ export const FinancialZone: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="mmp-analytics" className="mt-4">
+          <ZoneMmpAnalyticsTab
+            filters={mmpAnalytics.filters}
+            onFilterChange={mmpAnalytics.setFilters}
+            filteredMmpFiles={mmpAnalytics.filteredMmpFiles}
+            filteredSiteVisits={mmpAnalytics.filteredSiteVisits}
+            mmpStats={mmpAnalytics.mmpStats}
+            uniqueHubs={mmpAnalytics.uniqueHubs}
+            uniqueRegions={mmpAnalytics.uniqueRegions}
+            selectedMmpId={mmpAnalytics.selectedMmpId}
+            onSelectMmp={mmpAnalytics.setSelectedMmpId}
+            selectedMmp={mmpAnalytics.selectedMmp}
+            canAccessVersioning={mmpAnalytics.canAccessVersioning}
+            zoneColor="green"
+          />
         </TabsContent>
 
         <TabsContent value="budget" className="mt-4">
