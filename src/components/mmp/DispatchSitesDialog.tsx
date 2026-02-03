@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
+import { ensureValidSession } from '@/lib/session-health';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, MapPin, TrendingUp, Sparkles, Wand2, Info } from 'lucide-react';
 import { sudanStates } from '@/data/sudanStates';
@@ -640,6 +641,18 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
     setLoading(true);
     try {
+      // 🔐 CRITICAL: Ensure valid session before database operations to prevent RLS failures
+      const sessionResult = await ensureValidSession();
+      if (!sessionResult.success) {
+        toast({
+          title: "Session Expired",
+          description: sessionResult.error || "Please refresh the page and log in again.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       // For 'open' dispatch, we don't filter by collectors - sites are available to all in matching areas
       const targetCollectors =
         dispatchType === "individual"
@@ -667,11 +680,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           dispatchType === "open") &&
         targetCollectors.length === 0;
 
-      // Get current user
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-      const assignedBy = authUser?.id;
+      // Get current user from validated session
+      const assignedBy = sessionResult.user?.id;
 
       // Step 0: Fetch Sites Registry to get GPS coordinates FIRST (needed for coverage gap check)
       console.log("📍 Fetching Sites Registry for GPS coordinates...");
@@ -1027,11 +1037,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       // Step 3: Mark site entries as dispatched
       console.log("📍 Step 3: Marking site entries as dispatched...");
       const dispatchedAt = new Date().toISOString();
-      const currentUserProfile = authUser
+      const currentUserProfile = sessionResult.user?.id
         ? await supabase
             .from("profiles")
             .select("full_name, username, email")
-            .eq("id", authUser.id)
+            .eq("id", sessionResult.user.id)
             .single()
         : null;
 
