@@ -73,6 +73,7 @@ BEGIN
   END IF;
 
   -- Update the site entry to release it back to dispatched
+  -- Clear ALL claim-related fields so the site can be claimed again
   UPDATE public.mmp_site_entries
   SET 
     status = 'Dispatched',
@@ -82,7 +83,11 @@ BEGIN
     visit_started_by = NULL,
     enumerator_fee = NULL,
     cost = NULL,
-    additional_data = COALESCE(additional_data, '{}'::jsonb) || jsonb_build_object(
+    -- Also clear claimed_by and claimed_at if they exist (some schemas use these)
+    additional_data = (
+      COALESCE(additional_data, '{}'::jsonb) 
+      - 'claimed_by' - 'claimed_at' - 'claim_type' - 'claim_fee_calculation'
+    ) || jsonb_build_object(
       'reclaimed_at', NOW()::TEXT,
       'reclaimed_by', p_admin_id::TEXT,
       'reclaimed_by_name', v_admin_name,

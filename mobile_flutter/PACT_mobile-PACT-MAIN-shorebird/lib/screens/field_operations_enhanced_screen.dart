@@ -1665,13 +1665,17 @@ class _MMPScreenState extends State<MMPScreen> {
         // RPC might not exist, fall back to direct update
         debugPrint('[_reclaimSite] RPC failed, trying direct update: $rpcError');
         
-        // Direct update as fallback
+        // Direct update as fallback - clear ALL claim-related fields
         await Supabase.instance.client
             .from('mmp_site_entries')
             .update({
               'status': 'Dispatched',
               'accepted_by': null,
               'accepted_at': null,
+              'visit_started_at': null,
+              'visit_started_by': null,
+              'enumerator_fee': null,
+              'cost': null,
               'updated_at': DateTime.now().toIso8601String(),
             })
             .eq('id', siteId);
