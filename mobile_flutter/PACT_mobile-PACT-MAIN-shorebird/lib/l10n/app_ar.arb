@@ -1708,5 +1708,11 @@
   "no": "لا",
   "ok": "موافق",
   "overdue": "متأخر",
-  "cancelled": "ملغي"
+  "cancelled": "ملغي",
+  "inbox": "الوارد",
+  "drafts": "المسودات",
+  "outbox": "الصادر",
+  "sent": "المرسلة",
+  "accepted": "مقبول",
+  "ongoing": "جاري"
 }

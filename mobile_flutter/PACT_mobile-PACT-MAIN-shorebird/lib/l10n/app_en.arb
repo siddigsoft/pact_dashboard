@@ -1708,5 +1708,11 @@
   "no": "No",
   "ok": "OK",
   "overdue": "Overdue",
-  "cancelled": "Cancelled"
+  "cancelled": "Cancelled",
+  "inbox": "Inbox",
+  "drafts": "Drafts",
+  "outbox": "Outbox",
+  "sent": "Sent",
+  "accepted": "Accepted",
+  "ongoing": "Ongoing"
 }
