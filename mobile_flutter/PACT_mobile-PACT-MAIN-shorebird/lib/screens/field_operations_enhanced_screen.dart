@@ -30,6 +30,7 @@ import '../widgets/request_advance_dialog.dart';
 import '../models/site_visit.dart';
 import 'visit_report_detail_screen.dart';
 import '../widgets/sync_status_indicator.dart';
+import '../l10n/app_localizations.dart';
 
 class FieldOperationsEnhancedScreen extends StatefulWidget {
   const FieldOperationsEnhancedScreen({super.key});
@@ -1852,10 +1853,11 @@ class _MMPScreenState extends State<MMPScreen> {
     }
 
     // Show Request Advance button
+    final l10n = AppLocalizations.of(context);
     return ElevatedButton.icon(
       onPressed: () => _requestAdvance(site),
       icon: const Icon(Icons.payment, size: 18),
-      label: const Text('Request Advance'),
+      label: Text(l10n?.requestAdvance ?? 'Request Advance'),
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.purple,
         foregroundColor: Colors.white,
@@ -1907,6 +1909,7 @@ class _MMPScreenState extends State<MMPScreen> {
     required bool showAcknowledgeButton,
     required bool showVisitActions,
   }) {
+    final l10n = AppLocalizations.of(context);
     final buttons = <Widget>[];
 
     // Claim Button
@@ -1916,7 +1919,7 @@ class _MMPScreenState extends State<MMPScreen> {
           child: ElevatedButton.icon(
             onPressed: () => _claimSite(site),
             icon: const Icon(Icons.handshake, size: 18),
-            label: const Text('Claim Site'),
+            label: Text(l10n?.claimSite ?? 'Claim Site'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryBlue,
               foregroundColor: Colors.white,
@@ -1934,7 +1937,7 @@ class _MMPScreenState extends State<MMPScreen> {
           child: ElevatedButton.icon(
             onPressed: () => _acknowledgeCost(site),
             icon: const Icon(Icons.check_circle, size: 18),
-            label: const Text('Acknowledge Cost'),
+            label: Text(l10n?.acknowledgeCost ?? 'Acknowledge Cost'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               foregroundColor: Colors.white,
@@ -1961,7 +1964,7 @@ class _MMPScreenState extends State<MMPScreen> {
             child: ElevatedButton.icon(
               onPressed: () => _startVisit(site),
               icon: const Icon(Icons.play_arrow, size: 18),
-              label: const Text('Start Visit'),
+              label: Text(l10n?.startVisit ?? 'Start Visit'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -1981,7 +1984,7 @@ class _MMPScreenState extends State<MMPScreen> {
             child: ElevatedButton.icon(
               onPressed: () => _completeVisit(site),
               icon: const Icon(Icons.check, size: 18),
-              label: const Text('Complete'),
+              label: Text(l10n?.completeVisit ?? 'Complete'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -2004,7 +2007,7 @@ class _MMPScreenState extends State<MMPScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _viewVisitReport(site),
                 icon: const Icon(Icons.visibility, size: 18),
-                label: const Text('View Report'),
+                label: Text(l10n?.viewReport ?? 'View Report'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
@@ -2036,7 +2039,7 @@ class _MMPScreenState extends State<MMPScreen> {
             child: ElevatedButton.icon(
               onPressed: () => _reclaimSite(site),
               icon: const Icon(Icons.rotate_left, size: 18),
-              label: const Text('Reclaim'),
+              label: Text(l10n?.reclaimSite ?? 'Reclaim'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
@@ -2275,50 +2278,55 @@ class _MMPScreenState extends State<MMPScreen> {
           // In-App Call button removed per user request - use Communications screen instead
           // External contact buttons (Phone, SMS, WhatsApp)
           if (phoneStr.isNotEmpty)
-            Row(
-              children: [
-                // Call Button (native phone)
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _makeCall(phoneStr),
-                    icon: const Icon(Icons.phone, size: 16),
-                    label: const Text('Call'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                      side: const BorderSide(color: Colors.green),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+            Builder(
+              builder: (context) {
+                final l10n = AppLocalizations.of(context);
+                return Row(
+                  children: [
+                    // Call Button (native phone)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _makeCall(phoneStr),
+                        icon: const Icon(Icons.phone, size: 16),
+                        label: Text(l10n?.call ?? 'Call'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.green,
+                          side: const BorderSide(color: Colors.green),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // SMS Button
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _sendSMS(phoneStr, message: 'Regarding site visit: $siteName'),
-                    icon: const Icon(Icons.message, size: 16),
-                    label: const Text('SMS'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.blue,
-                      side: const BorderSide(color: Colors.blue),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    const SizedBox(width: 8),
+                    // SMS Button
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _sendSMS(phoneStr, message: 'Regarding site visit: $siteName'),
+                        icon: const Icon(Icons.message, size: 16),
+                        label: Text(l10n?.sms ?? 'SMS'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.blue,
+                          side: const BorderSide(color: Colors.blue),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // WhatsApp Button
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _openWhatsApp(phoneStr, message: 'Hello, regarding site visit: $siteName'),
-                    icon: const Icon(Icons.chat, size: 16),
-                    label: const Text('WhatsApp'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF25D366),
-                      side: const BorderSide(color: Color(0xFF25D366)),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    const SizedBox(width: 8),
+                    // WhatsApp Button
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openWhatsApp(phoneStr, message: 'Hello, regarding site visit: $siteName'),
+                        icon: const Icon(Icons.chat, size: 16),
+                        label: Text(l10n?.whatsapp ?? 'WhatsApp'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF25D366),
+                          side: const BorderSide(color: Color(0xFF25D366)),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
         ],
       ),
@@ -3421,14 +3429,12 @@ class _MMPScreenState extends State<MMPScreen> {
           child: Column(
             children: [
               ReusableAppBar(
-                title: 'MMP Management',
+                title: AppLocalizations.of(context)?.mmpManagement ?? 'MMP Management',
                 scaffoldKey: _scaffoldKey,
-                showLanguageSwitcher: false,
+                showLanguageSwitcher: true,
                 showNotifications: true,
                 onNotificationTap: () => NotificationsPanel.show(context),
                 showUserAvatar: true,
-                
-                
               ),
               Expanded(
                 child: _isLoading
@@ -3445,6 +3451,7 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   Widget _buildNoAccessView() {
+    final l10n = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -3454,7 +3461,7 @@ class _MMPScreenState extends State<MMPScreen> {
             Icon(Icons.lock_outline, size: 64, color: AppColors.textLight),
             const SizedBox(height: 16),
             Text(
-              'Access Denied',
+              l10n?.accessDenied ?? 'Access Denied',
               style: GoogleFonts.poppins(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -3463,7 +3470,7 @@ class _MMPScreenState extends State<MMPScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'You don\'t have permission to access this page.',
+              l10n?.noPermission ?? 'You don\'t have permission to access this page.',
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 color: AppColors.textLight,
@@ -3477,6 +3484,7 @@ class _MMPScreenState extends State<MMPScreen> {
   }
 
   Widget _buildDataCollectorView() {
+    final l10n = AppLocalizations.of(context);
     return Column(
       children: [
         // Header
@@ -3519,7 +3527,7 @@ class _MMPScreenState extends State<MMPScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'My Assignments',
+                          l10n?.myAssignments ?? 'My Assignments',
                           style: GoogleFonts.poppins(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -3527,7 +3535,7 @@ class _MMPScreenState extends State<MMPScreen> {
                           ),
                         ),
                         Text(
-                          'Claim, manage, and complete site visits',
+                          l10n?.claimManageComplete ?? 'Claim, manage, and complete site visits',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             color: Colors.white.withOpacity(0.9),
@@ -3551,7 +3559,7 @@ class _MMPScreenState extends State<MMPScreen> {
               setState(() => _searchQuery = value);
             },
             decoration: InputDecoration(
-              hintText: 'Search sites...',
+              hintText: l10n?.searchSites ?? 'Search sites...',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
@@ -3581,7 +3589,7 @@ class _MMPScreenState extends State<MMPScreen> {
                   Expanded(
                     child: _buildTabButton(
                       'claimable',
-                      'Claimable',
+                      l10n?.claimable ?? 'Claimable',
                       Icons.handshake,
                       _availableSites.length,
                     ),
@@ -3589,7 +3597,7 @@ class _MMPScreenState extends State<MMPScreen> {
                   Expanded(
                     child: _buildTabButton(
                       'assigned',
-                      'Assigned',
+                      l10n?.assigned ?? 'Assigned',
                       Icons.assignment,
                       _smartAssignedSites.length,
                     ),
@@ -3597,7 +3605,7 @@ class _MMPScreenState extends State<MMPScreen> {
                   Expanded(
                     child: _buildTabButton(
                       'my-sites',
-                      'My Sites',
+                      l10n?.mySites ?? 'My Sites',
                       Icons.location_on,
                       _mySites.length,
                     ),
@@ -3611,28 +3619,28 @@ class _MMPScreenState extends State<MMPScreen> {
                     Expanded(
                       child: _buildSubTabButton(
                         'pending',
-                        'Inbox',
+                        l10n?.inbox ?? 'Inbox',
                         _getPendingCount(),
                       ),
                     ),
                     Expanded(
                       child: _buildSubTabButton(
                         'drafts',
-                        'Drafts',
+                        l10n?.drafts ?? 'Drafts',
                         _getDraftsCount(),
                       ),
                     ),
                     Expanded(
                       child: _buildSubTabButton(
                         'outbox',
-                        'Outbox',
+                        l10n?.outbox ?? 'Outbox',
                         _unsyncedCompletedVisits.length,
                       ),
                     ),
                     Expanded(
                       child: _buildSubTabButton(
                         'sent',
-                        'Sent',
+                        l10n?.sent ?? 'Sent',
                         _getSentCount(),
                       ),
                     ),

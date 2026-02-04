@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_colors.dart';
+import '../l10n/app_localizations.dart';
 
 class SiteVisitDetailScreen extends StatefulWidget {
   final String siteVisitId;
@@ -125,18 +126,19 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
 
   String _getStatusLabel(String? status) {
     final isArabic = _currentLocale == 'ar';
+    final l10n = AppLocalizations.of(context);
     switch (status?.toLowerCase()) {
       case 'completed':
-        return isArabic ? 'مكتمل' : 'Completed';
+        return l10n?.completed ?? (isArabic ? 'مكتمل' : 'Completed');
       case 'in_progress':
       case 'in progress':
-        return isArabic ? 'قيد التنفيذ' : 'In Progress';
+        return l10n?.inProgress ?? (isArabic ? 'قيد التنفيذ' : 'In Progress');
       case 'pending':
-        return isArabic ? 'معلق' : 'Pending';
+        return l10n?.pending ?? (isArabic ? 'معلق' : 'Pending');
       case 'overdue':
-        return isArabic ? 'متأخر' : 'Overdue';
+        return l10n?.overdue ?? (isArabic ? 'متأخر' : 'Overdue');
       case 'cancelled':
-        return isArabic ? 'ملغي' : 'Cancelled';
+        return l10n?.cancelled ?? (isArabic ? 'ملغي' : 'Cancelled');
       default:
         return status ?? '-';
     }
@@ -156,6 +158,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final isArabic = _currentLocale == 'ar';
+    final l10n = AppLocalizations.of(context);
 
     return Directionality(
       textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
@@ -169,7 +172,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(
-            isArabic ? 'تفاصيل الزيارة الميدانية' : 'Site Visit Details',
+            l10n?.visitDetails ?? (isArabic ? 'تفاصيل الزيارة الميدانية' : 'Site Visit Details'),
             style: GoogleFonts.poppins(
               color: Colors.white,
               fontSize: 18,
@@ -199,7 +202,7 @@ class _SiteVisitDetailScreenState extends State<SiteVisitDetailScreen> {
             : _siteVisit == null
                 ? Center(
                     child: Text(
-                      isArabic ? 'لم يتم العثور على الزيارة' : 'Site visit not found',
+                      l10n?.noData ?? (isArabic ? 'لم يتم العثور على الزيارة' : 'Site visit not found'),
                       style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
                     ),
                   )
