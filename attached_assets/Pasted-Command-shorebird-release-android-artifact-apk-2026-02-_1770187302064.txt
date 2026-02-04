@@ -1,0 +1,273 @@
+Command: shorebird release android --artifact apk
+
+2026-02-04T09:38:39.457110 [Process.run] git for-each-ref --contains latest --format %(refname:short) refs/remotes/origin/flutter_release/* (in C:\Users\PC\.shorebird\bin\cache\flutter\c89520b6e77a110e6459a9850401dc7f1f794c2b)
+2026-02-04T09:38:39.599861 Exited with code 129
+2026-02-04T09:38:39.599861 
+stderr:
+error: malformed object name latest
+
+2026-02-04T09:38:39.638445 No checksum provided for patch.exe, skipping file corruption validation
+2026-02-04T09:38:40.125376 [HTTP] GET https://storage.googleapis.com/download.shorebird.dev/shorebird/9f92dac1665d4af35c9590f0e14e3be303308fb8/aot-tools.dill
+2026-02-04T09:38:40.211307 [?7l[2K
+[92m⠙[0m Downloading aot-tools.dill...... [90m(88ms)[0m
+2026-02-04T09:38:40.294423 [?7l[2K
+[92m⠹[0m Downloading aot-tools.dill...... [90m(0.2s)[0m
+2026-02-04T09:38:40.372402 [?7l[2K
+[92m⠸[0m Downloading aot-tools.dill...... [90m(0.3s)[0m
+2026-02-04T09:38:40.451265 [?7l[2K
+[92m⠼[0m Downloading aot-tools.dill...... [90m(0.3s)[0m
+2026-02-04T09:38:40.529919 [?7l[2K
+[92m⠴[0m Downloading aot-tools.dill...... [90m(0.4s)[0m
+2026-02-04T09:38:40.608621 [?7l[2K
+[92m⠦[0m Downloading aot-tools.dill...... [90m(0.5s)[0m
+2026-02-04T09:38:40.685933 [?7l[2K
+[92m⠧[0m Downloading aot-tools.dill...... [90m(0.6s)[0m
+2026-02-04T09:38:40.753104 [?7h[2K
+[92m✓[0m Downloading aot-tools.dill... [90m(0.6s)[0m
+
+2026-02-04T09:38:40.844942 [?7l[2K
+[92m⠙[0m Extracting aot-tools.dill...... [90m(88ms)[0m
+2026-02-04T09:38:40.922033 [?7l[2K
+[92m⠹[0m Extracting aot-tools.dill...... [90m(0.2s)[0m
+2026-02-04T09:38:41.000384 [?7l[2K
+[92m⠸[0m Extracting aot-tools.dill...... [90m(0.2s)[0m
+2026-02-04T09:38:41.078544 [?7l[2K
+[92m⠼[0m Extracting aot-tools.dill...... [90m(0.3s)[0m
+2026-02-04T09:38:41.167629 [?7l[2K
+[92m⠴[0m Extracting aot-tools.dill...... [90m(0.4s)[0m
+2026-02-04T09:38:41.247339 [?7l[2K
+[92m⠦[0m Extracting aot-tools.dill...... [90m(0.5s)[0m
+2026-02-04T09:38:41.326658 [?7l[2K
+[92m⠧[0m Extracting aot-tools.dill...... [90m(0.6s)[0m
+2026-02-04T09:38:41.398879 [?7l[2K
+[92m⠇[0m Extracting aot-tools.dill...... [90m(0.6s)[0m
+2026-02-04T09:38:41.482423 [?7l[2K
+[92m⠏[0m Extracting aot-tools.dill...... [90m(0.7s)[0m
+2026-02-04T09:38:41.558142 [?7l[2K
+[92m⠋[0m Extracting aot-tools.dill...... [90m(0.8s)[0m
+2026-02-04T09:38:41.650665 [?7l[2K
+[92m⠙[0m Extracting aot-tools.dill...... [90m(0.9s)[0m
+2026-02-04T09:38:41.723235 [?7l[2K
+[92m⠹[0m Extracting aot-tools.dill...... [90m(1.0s)[0m
+2026-02-04T09:38:41.798078 [?7l[2K
+[92m⠸[0m Extracting aot-tools.dill...... [90m(1.0s)[0m
+2026-02-04T09:38:41.882399 [?7l[2K
+[92m⠼[0m Extracting aot-tools.dill...... [90m(1.1s)[0m
+2026-02-04T09:38:41.955769 [?7l[2K
+[92m⠴[0m Extracting aot-tools.dill...... [90m(1.2s)[0m
+2026-02-04T09:38:42.038780 [?7l[2K
+[92m⠦[0m Extracting aot-tools.dill...... [90m(1.3s)[0m
+2026-02-04T09:38:42.117228 [?7l[2K
+[92m⠧[0m Extracting aot-tools.dill...... [90m(1.4s)[0m
+2026-02-04T09:38:42.197135 [?7l[2K
+[92m⠇[0m Extracting aot-tools.dill...... [90m(1.4s)[0m
+2026-02-04T09:38:42.278183 [?7l[2K
+[92m⠏[0m Extracting aot-tools.dill...... [90m(1.5s)[0m
+2026-02-04T09:38:42.358982 [?7l[2K
+[92m⠋[0m Extracting aot-tools.dill...... [90m(1.6s)[0m
+2026-02-04T09:38:42.437146 [?7l[2K
+[92m⠙[0m Extracting aot-tools.dill...... [90m(1.7s)[0m
+2026-02-04T09:38:42.518309 [?7l[2K
+[92m⠹[0m Extracting aot-tools.dill...... [90m(1.8s)[0m
+2026-02-04T09:38:42.597252 [?7l[2K
+[92m⠸[0m Extracting aot-tools.dill...... [90m(1.8s)[0m
+2026-02-04T09:38:42.676996 [?7l[2K
+[92m⠼[0m Extracting aot-tools.dill...... [90m(1.9s)[0m
+2026-02-04T09:38:42.757090 [?7l[2K
+[92m⠴[0m Extracting aot-tools.dill...... [90m(2.0s)[0m
+2026-02-04T09:38:42.838155 [?7l[2K
+[92m⠦[0m Extracting aot-tools.dill...... [90m(2.1s)[0m
+2026-02-04T09:38:42.929982 [?7l[2K
+[92m⠧[0m Extracting aot-tools.dill...... [90m(2.2s)[0m
+2026-02-04T09:38:42.997673 [?7l[2K
+[92m⠇[0m Extracting aot-tools.dill...... [90m(2.2s)[0m
+2026-02-04T09:38:43.078457 [?7l[2K
+[92m⠏[0m Extracting aot-tools.dill...... [90m(2.3s)[0m
+2026-02-04T09:38:43.156664 [?7l[2K
+[92m⠋[0m Extracting aot-tools.dill...... [90m(2.4s)[0m
+2026-02-04T09:38:43.238277 [?7l[2K
+[92m⠙[0m Extracting aot-tools.dill...... [90m(2.5s)[0m
+2026-02-04T09:38:43.321177 [?7l[2K
+[92m⠹[0m Extracting aot-tools.dill...... [90m(2.6s)[0m
+2026-02-04T09:38:43.402423 [?7l[2K
+[92m⠸[0m Extracting aot-tools.dill...... [90m(2.6s)[0m
+2026-02-04T09:38:43.476575 [?7l[2K
+[92m⠼[0m Extracting aot-tools.dill...... [90m(2.7s)[0m
+2026-02-04T09:38:43.557236 [?7l[2K
+[92m⠴[0m Extracting aot-tools.dill...... [90m(2.8s)[0m
+2026-02-04T09:38:43.645884 [?7l[2K
+[92m⠦[0m Extracting aot-tools.dill...... [90m(2.9s)[0m
+2026-02-04T09:38:43.718850 [?7l[2K
+[92m⠧[0m Extracting aot-tools.dill...... [90m(3.0s)[0m
+2026-02-04T09:38:43.797027 [?7l[2K
+[92m⠇[0m Extracting aot-tools.dill...... [90m(3.0s)[0m
+2026-02-04T09:38:43.877284 [?7l[2K
+[92m⠏[0m Extracting aot-tools.dill...... [90m(3.1s)[0m
+2026-02-04T09:38:43.956134 [?7l[2K
+[92m⠋[0m Extracting aot-tools.dill...... [90m(3.2s)[0m
+2026-02-04T09:38:44.037483 [?7l[2K
+[92m⠙[0m Extracting aot-tools.dill...... [90m(3.3s)[0m
+2026-02-04T09:38:44.116206 [?7l[2K
+[92m⠹[0m Extracting aot-tools.dill...... [90m(3.4s)[0m
+2026-02-04T09:38:44.198960 [?7l[2K
+[92m⠸[0m Extracting aot-tools.dill...... [90m(3.4s)[0m
+2026-02-04T09:38:44.278708 [?7l[2K
+[92m⠼[0m Extracting aot-tools.dill...... [90m(3.5s)[0m
+2026-02-04T09:38:44.363530 [?7l[2K
+[92m⠴[0m Extracting aot-tools.dill...... [90m(3.6s)[0m
+2026-02-04T09:38:44.436560 [?7l[2K
+[92m⠦[0m Extracting aot-tools.dill...... [90m(3.7s)[0m
+2026-02-04T09:38:44.520314 [?7l[2K
+[92m⠧[0m Extracting aot-tools.dill...... [90m(3.8s)[0m
+2026-02-04T09:38:44.597679 [?7l[2K
+[92m⠇[0m Extracting aot-tools.dill...... [90m(3.8s)[0m
+2026-02-04T09:38:44.677707 [?7l[2K
+[92m⠏[0m Extracting aot-tools.dill...... [90m(3.9s)[0m
+2026-02-04T09:38:44.756296 [?7l[2K
+[92m⠋[0m Extracting aot-tools.dill...... [90m(4.0s)[0m
+2026-02-04T09:38:44.851477 [?7l[2K
+[92m⠙[0m Extracting aot-tools.dill...... [90m(4.1s)[0m
+2026-02-04T09:38:44.917904 [?7l[2K
+[92m⠹[0m Extracting aot-tools.dill...... [90m(4.2s)[0m
+2026-02-04T09:38:44.996954 [?7l[2K
+[92m⠸[0m Extracting aot-tools.dill...... [90m(4.2s)[0m
+2026-02-04T09:38:45.078234 [?7l[2K
+[92m⠼[0m Extracting aot-tools.dill...... [90m(4.3s)[0m
+2026-02-04T09:38:45.157614 [?7l[2K
+[92m⠴[0m Extracting aot-tools.dill...... [90m(4.4s)[0m
+2026-02-04T09:38:45.237354 [?7l[2K
+[92m⠦[0m Extracting aot-tools.dill...... [90m(4.5s)[0m
+2026-02-04T09:38:45.317407 [?7l[2K
+[92m⠧[0m Extracting aot-tools.dill...... [90m(4.6s)[0m
+2026-02-04T09:38:45.358405 [?7h[2K
+[92m✓[0m Extracting aot-tools.dill... [90m(4.6s)[0m
+
+2026-02-04T09:38:45.373003 [HTTP] GET https://api.shorebird.dev/api/v1/apps
+2026-02-04T09:38:45.455300 [?7l[2K
+[92m⠙[0m Fetching apps... [90m(84ms)[0m
+2026-02-04T09:38:45.532754 [?7l[2K
+[92m⠹[0m Fetching apps... [90m(0.2s)[0m
+2026-02-04T09:38:45.626507 [?7l[2K
+[92m⠸[0m Fetching apps... [90m(0.3s)[0m
+2026-02-04T09:38:45.707491 [?7l[2K
+[92m⠼[0m Fetching apps... [90m(0.3s)[0m
+2026-02-04T09:38:45.766880 [?7h[2K
+[92m✓[0m Fetching apps [90m(0.4s)[0m
+
+2026-02-04T09:38:45.772878 No checksum provided for patch.exe, skipping file corruption validation
+2026-02-04T09:38:46.276315 No checksum provided for aot-tools.dill, skipping file corruption validation
+2026-02-04T09:38:46.277343 [Process.run] git for-each-ref --contains c89520b6e77a110e6459a9850401dc7f1f794c2b --format %(refname:short) refs/remotes/origin/flutter_release/* (in C:\Users\PC\.shorebird\bin\cache\flutter\c89520b6e77a110e6459a9850401dc7f1f794c2b)
+2026-02-04T09:38:47.489279 Exited with code 0
+2026-02-04T09:38:47.490278 
+stdout:
+origin/flutter_release/3.38.9
+
+2026-02-04T09:38:47.526584 Building Android app bundle with Flutter 3.38.9 (c89520b6e7)
+2026-02-04T09:38:47.581379 [Process.start] C:\Users\PC\.shorebird\bin\cache\flutter\c89520b6e77a110e6459a9850401dc7f1f794c2b\bin\flutter.bat build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+2026-02-04T09:39:54.027664 [Process.runSync] where.exe flutter
+2026-02-04T09:39:54.214262 Exited with code 0
+2026-02-04T09:39:54.215261 
+stdout:
+C:\Users\PC\fvm\versions\3.27.0\bin\flutter
+C:\Users\PC\fvm\versions\3.27.0\bin\flutter.bat
+C:\src\flutter\bin\flutter
+C:\src\flutter\bin\flutter.bat
+
+2026-02-04T09:39:54.229262 [Process.run] flutter --no-version-check pub get --offline
+2026-02-04T09:40:29.102086 Exited with code 0
+2026-02-04T09:40:29.104084 
+stdout:
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 91.0.0 (92.0.0 available)
+  analyzer 8.4.1 (9.0.0 available)
+  archive 3.6.1 (4.0.7 available)
+  file_picker 8.3.7 (10.3.9 available)
+  flutter_map 6.2.1 (8.2.2 available)
+  flutter_map_marker_cluster 1.3.6 (8.2.2 available)
+  flutter_map_marker_popup 6.1.2 (8.1.0 available)
+  flutter_map_tile_caching 9.0.1 (10.1.1 available)
+  flutter_riverpod 2.6.1 (3.2.0 available)
+  flutter_webrtc 0.8.12 (1.3.0 available)
+  geolocator 11.1.0 (14.0.2 available)
+  geolocator_android 4.6.2 (5.0.2 available)
+  geolocator_web 3.0.0 (4.1.3 available)
+  image 4.3.0 (4.5.4 available)
+  js 0.6.7 (0.7.2 available)
+  json_serializable 6.11.2 (6.11.3 available)
+  local_auth 2.3.0 (3.0.0 available)
+  local_auth_android 1.0.51 (2.0.4 available)
+  local_auth_darwin 1.6.0 (2.0.1 available)
+  local_auth_windows 1.0.11 (2.0.1 available)
+  location 5.0.3 (8.0.1 available)
+  location_platform_interface 3.1.2 (6.0.1 available)
+  location_web 4.2.0 (6.0.1 available)
+  matcher 0.12.17 (0.12.18 available)
+  objectbox 2.5.1 (4.3.1 available)
+  objectbox_flutter_libs 2.5.1 (4.3.1 available)
+  pointycastle 3.9.1 (4.0.0 available)
+  riverpod 2.6.1 (3.2.0 available)
+  shorebird_code_push 1.1.6 (2.0.5 available)
+  source_helper 1.3.8 (1.3.9 available)
+  test 1.26.3 (1.28.0 available)
+  test_api 0.7.7 (0.7.8 available)
+  test_core 0.6.12 (0.6.14 available)
+Got dependencies!
+33 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+
+2026-02-04T09:40:29.153926 [91mFailed to build AAB.
+Command: flutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64
+Reason: Exited with code 1.[0m
+2026-02-04T09:40:29.212700 
+[1m💡 Fix Recommendations[22m
+
+• Check that running `flutter build` with the same command-line arguments
+completes successfully by running the following command:
+
+[96mflutter build appbundle --release --target-platform=android-arm,android-arm64,android-x64[0m
+
+If the above command fails, then this is likely not a Shorebird issue and
+the underlying `flutter build` failure must be resolved for Shorebird to
+build a release.
+
+• If `flutter build` completes successfully, please ensure that you are
+providing the desired flutter version to the release command via 
+the `--flutter-version` option. If you do not specify a `--flutter-version`
+Shorebird will default to the latest stable version of Flutter.
+We strongly encourage always specifying an explicit Flutter version:
+
+[96mshorebird release <platform> --flutter-version=3.29.0[0m
+
+• If `flutter build` completes successfully and `shorebird release`
+fails when using the same flutter version, please file an issue:
+]8;;https://github.com/shorebirdtech/shorebird/issues/new\https://github.com/shorebirdtech/shorebird/issues/new]8;;\
+
+2026-02-04T09:40:29.261306 
+If you aren't sure why this command failed, re-run with the [96m--verbose[0m flag to see more information.
+
+You can also ]8;;https://github.com/shorebirdtech/shorebird/issues/new/choose\file an issue]8;;\ if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1770187119286_shorebird.log
+
+2026-02-04T09:40:29.299665 [Process.run] git symbolic-ref HEAD (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-04T09:40:29.524449 Exited with code 0
+2026-02-04T09:40:29.525451 
+stdout:
+refs/heads/stable
+
+2026-02-04T09:40:29.571016 [Process.run] git rev-parse --verify HEAD (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-04T09:40:29.798070 Exited with code 0
+2026-02-04T09:40:29.799066 
+stdout:
+976bff8ccbe5e4e0609050aa7b76841d89e08c00
+
+2026-02-04T09:40:29.841304 [Process.run] git remote prune origin (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-04T09:40:31.580743 Exited with code 0
+2026-02-04T09:40:31.580743 [Process.run] git fetch --tags (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-04T09:40:33.021482 Exited with code 0
+2026-02-04T09:40:33.022482 [Process.run] git rev-parse --verify @{upstream} (in C:\Users\PC\.shorebird\bin\cache)
+2026-02-04T09:40:33.196766 Exited with code 0
+2026-02-04T09:40:33.197770 
+stdout:
+976bff8ccbe5e4e0609050aa7b76841d89e08c00
+
