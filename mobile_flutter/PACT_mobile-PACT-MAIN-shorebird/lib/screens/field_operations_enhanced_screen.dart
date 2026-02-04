@@ -149,6 +149,12 @@ class _MMPScreenState extends State<MMPScreen> {
 
           // Query actual state and locality names from database
           await _loadLocationNames();
+        } else {
+          // Profile fetch returned null (e.g. flaky connection, lost internet).
+          // Try cache so user can continue in offline mode instead of Access Denied.
+          debugPrint('[_initializeMMP] Profile null, falling back to cache');
+          await _initializeFromCache(user.id);
+          return;
         }
 
         // Load data based on role
