@@ -77,7 +77,7 @@ dependencies:
   wakelock_plus: ^1.2.8
   proximity_sensor: ^1.0.6
   vibration: ^2.0.1
-  record: ^5.1.2
+  record: ^6.0.0
   html: ^0.15.5
   timezone: ^0.10.0
 
