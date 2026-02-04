@@ -1,0 +1,69 @@
+PS C:\Users\PC\PACT_mobile> shorebird release android --artifact apk
+✓ Fetching apps (0.5s)
+Building Android app bundle with Flutter 3.38.9 (c89520b6e7)
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 39552 bytes (97.6% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+C:\Users\PC\AppData\Local\Pub\Cache\hosted\pub.dev\flutter_webrtc-0.12.12+hotfix.1\android\src\main\java\com\cloudwebrtc\webrtc\SurfaceTextureRenderer.java:125: warning: [removal] onSurfaceDestroyed() in Callback has been deprecated and marked for removal
+              public void onSurfaceDestroyed() {
+                          ^
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+4 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+Copied AAB to: C:\Users\PC\PACT_mobile\build\app\outputs\bundle\release/app-release.aab
+Running Gradle task 'bundleRelease'...                            470.0s        
+√ Built build\app\outputs\bundle\release\app-release.aab (78.7MB)
+Building APK
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 39552 bytes (97.6% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Copied APK to: C:\Users\PC\PACT_mobile\build\app\outputs\flutter-apk/app-release.apk
+Running Gradle task 'assembleRelease'...                          607.4s        
+√ Built build\app\outputs\flutter-apk\app-release.apk (114.0MB)
+✓ Release version: 1.0.6+9 (14.1s)
+✓ Fetching releases (0.5s)
+
+🚀 Ready to create a new release!
+
+📱 App: pact_mobile (79d24dae-3d77-4f40-9828-3f6246291417)
+📦 Release Version: 1.0.6+9
+🕹️  Platform: android
+🐦 Flutter Version: 3.38.9 (c89520b6e7)
+
+✓ Fetching releases (0.3s)
+✓ Creating release (2.1s)
+✓ Updating release status (0.3s)
+✗ Cannot find release build artifacts.
+
+Please run `shorebird cache clean` and try again. If the issue persists, please 
+file a bug report at https://github.com/shorebirdtech/shorebird/issues/new.     
+
+Looked in:
+  - build/app/intermediates/stripped_native_libs/stripReleaseDebugSymbols/release/out/lib
+  - build/app/intermediates/stripped_native_libs/strip{flavor}ReleaseDebugSymbols/{flavor}Release/out/lib
+  - build/app/intermediates/stripped_native_libs/release/out/lib
+  - build/app/intermediates/stripped_native_libs/{flavor}Release/out/lib (7ms)  
+
+If you aren't sure why this command failed, re-run with the --verbose flag to see more information.
+
+You can also file an issue if you think this is a bug. Please include the following log file in your report:
+C:\Users\PC\AppData\Roaming\shorebird\logs\1770188194774_shorebird.log
+
+PS C:\Users\PC\PACT_mobile> 
