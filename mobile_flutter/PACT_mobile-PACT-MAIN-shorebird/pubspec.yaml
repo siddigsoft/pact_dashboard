@@ -119,3 +119,6 @@ flutter:
     - shorebird.yaml
     - lib/l10n/
   generate: true
+
+dependency_overrides:
+  flutter_webrtc: 1.2.1
