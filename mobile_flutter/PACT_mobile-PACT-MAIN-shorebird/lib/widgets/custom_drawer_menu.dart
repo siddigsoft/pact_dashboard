@@ -889,8 +889,8 @@ class _CustomDrawerMenuState extends ConsumerState<CustomDrawerMenu> {
                   Text(
                     _appVersion.isNotEmpty
                         ? (_patchNumber != null
-                            ? 'v$_appVersion ($_buildNumber.$_patchNumber)'
-                            : 'v$_appVersion ($_buildNumber)')
+                            ? 'PACT Mobile v$_appVersion+$_buildNumber (Patch $_patchNumber)'
+                            : 'PACT Mobile v$_appVersion+$_buildNumber')
                         : 'PACT Mobile',
                     style: const TextStyle(
                       color: Color(0xFF1565C0),
