@@ -32,6 +32,7 @@ import 'services/data_migration_service.dart';
 import 'services/notification_service.dart';
 import 'services/bilingual_notification_service.dart';
 import 'services/update_service.dart';
+import 'services/permission_handler_service.dart';
 import 'services/map_tile_cache_service.dart'
     if (dart.library.html) 'services/map_tile_cache_service_web.dart';
 import 'services/offline/hive_adapters.dart';
@@ -45,16 +46,18 @@ import 'utils/web_config.dart'
 // Global navigator key to use for navigation from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-Future<void> _requestLocationPermission() async {
+Future<void> _requestAllPermissionsOnStartup() async {
   if (!kIsWeb) {
-    var status = await Permission.location.request();
-    if (status.isGranted) {
-      debugPrint('Location permission granted');
-    } else {
-      debugPrint('Location permission denied');
-    }
+    debugPrint('[Permissions] Requesting all permissions on startup...');
+    final permissionService = PermissionHandlerService();
+    final statuses = await permissionService.requestAllPermissions();
+    
+    // Log summary of permission results
+    final granted = statuses.entries.where((e) => e.value.isGranted).length;
+    final denied = statuses.entries.where((e) => e.value.isDenied).length;
+    debugPrint('[Permissions] Startup request complete: $granted granted, $denied denied');
   } else {
-    debugPrint('Running on web - location permissions not requested');
+    debugPrint('Running on web - permissions not requested');
   }
 }
 
@@ -111,8 +114,8 @@ void main() async {
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  // Request location permission
-  await _requestLocationPermission();
+  // Request all permissions on startup (location, camera, microphone, storage, notifications, etc.)
+  await _requestAllPermissionsOnStartup();
 
   // Initialize Supabase
   await Supabase.initialize(
