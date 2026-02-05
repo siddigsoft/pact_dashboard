@@ -16,6 +16,14 @@ import {
 } from '@/types/down-payment';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
+interface RevertToPendingData {
+  requestId: string;
+  revertedBy: string;
+  revertedByName?: string;
+  reason?: string;
+  targetStatus: 'pending_supervisor' | 'pending_admin';
+}
+
 interface DownPaymentContextType {
   requests: DownPaymentRequest[];
   loading: boolean;
@@ -29,6 +37,7 @@ interface DownPaymentContextType {
   cancelRequest: (requestId: string) => Promise<boolean>;
   bulkApprove: (data: BulkApprovalRequest) => Promise<{ success: number; failed: number }>;
   addAuditEntry: (requestId: string, entry: Omit<ApprovalAuditEntry, 'id' | 'timestamp'>) => Promise<boolean>;
+  revertToPending: (data: RevertToPendingData) => Promise<boolean>;
 }
 
 const DownPaymentContext = createContext<DownPaymentContextType | undefined>(undefined);
@@ -858,6 +867,100 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     return { success, failed };
   };
 
+  const revertToPending = async (data: RevertToPendingData): Promise<boolean> => {
+    try {
+      const request = requests.find(r => r.id === data.requestId);
+      if (!request) {
+        toast({
+          title: 'Error',
+          description: 'Request not found',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      // Build update data based on target status
+      let updateData: Record<string, any> = {
+        status: data.targetStatus,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (data.targetStatus === 'pending_supervisor') {
+        // Revert to initial state - clear all approval data
+        updateData = {
+          ...updateData,
+          supervisor_status: 'pending',
+          supervisor_approved_by: null,
+          supervisor_approved_at: null,
+          supervisor_notes: null,
+          supervisor_rejection_reason: null,
+          supervisor_approved_amount: null,
+          admin_status: 'pending',
+          admin_processed_by: null,
+          admin_processed_at: null,
+          admin_notes: null,
+          admin_rejection_reason: null,
+          admin_approved_amount: null,
+          approved_amount: null,
+        };
+      } else if (data.targetStatus === 'pending_admin') {
+        // Revert to pending admin - keep supervisor approval, clear admin data
+        updateData = {
+          ...updateData,
+          admin_status: 'pending',
+          admin_processed_by: null,
+          admin_processed_at: null,
+          admin_notes: null,
+          admin_rejection_reason: null,
+          admin_approved_amount: null,
+        };
+      }
+
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update(updateData)
+        .eq('id', data.requestId);
+
+      if (error) throw error;
+
+      // Add audit entry
+      const newEntry: ApprovalAuditEntry = {
+        id: crypto.randomUUID(),
+        action: 'restored',
+        performedBy: data.revertedBy,
+        performedByName: data.revertedByName,
+        performedByRole: 'admin',
+        timestamp: new Date().toISOString(),
+        previousValue: request.status,
+        newValue: data.targetStatus,
+        notes: data.reason || `Reverted to ${data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor' : 'Pending Admin'}`,
+      };
+
+      const updatedAuditLog = [...(request.auditLog || []), newEntry];
+
+      await supabase
+        .from('down_payment_requests')
+        .update({ audit_log: updatedAuditLog })
+        .eq('id', data.requestId);
+
+      toast({
+        title: 'Status Reverted',
+        description: `Request has been reverted to ${data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor Approval' : 'Pending Admin Approval'}`,
+      });
+
+      await refreshRequests();
+      return true;
+    } catch (error: any) {
+      console.error('Failed to revert request:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to revert request status',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const value: DownPaymentContextType = {
     requests,
     loading,
@@ -871,6 +974,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     cancelRequest,
     bulkApprove,
     addAuditEntry,
+    revertToPending,
   };
 
   return <DownPaymentContext.Provider value={value}>{children}</DownPaymentContext.Provider>;
