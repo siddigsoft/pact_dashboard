@@ -21,7 +21,7 @@ interface RevertToPendingData {
   revertedBy: string;
   revertedByName?: string;
   reason?: string;
-  targetStatus: 'pending_supervisor' | 'pending_admin';
+  targetStatus: 'pending_supervisor' | 'pending_admin' | 'approved';
 }
 
 interface DownPaymentContextType {
@@ -913,6 +913,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           admin_notes: null,
           admin_rejection_reason: null,
           admin_approved_amount: null,
+        };
+      } else if (data.targetStatus === 'approved') {
+        // Revert to approved - keep all approval data, just change status
+        // Used for fully_paid items to revert to approved (for reprocessing)
+        updateData = {
+          ...updateData,
+          total_paid_amount: 0,
+          // Keep approved_amount and remaining_amount
         };
       }
 

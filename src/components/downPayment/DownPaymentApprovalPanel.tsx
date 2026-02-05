@@ -94,7 +94,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [approvalType, setApprovalType] = useState<ApprovalType>('full');
   const [customPercentage, setCustomPercentage] = useState(100);
   const [customAmount, setCustomAmount] = useState(0);
-  const [revertTarget, setRevertTarget] = useState<'pending_supervisor' | 'pending_admin'>('pending_supervisor');
+  const [revertTarget, setRevertTarget] = useState<'pending_supervisor' | 'pending_admin' | 'approved'>('pending_supervisor');
 
   const [filters, setFilters] = useState<DownPaymentFilter>({});
 
@@ -522,7 +522,40 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   <XCircle className="h-4 w-4 mr-1" />
                   Reject
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openActionDialog(request, 'revert')}
+                  data-testid={`button-revert-${request.id}`}
+                >
+                  <Undo2 className="h-4 w-4 mr-1" />
+                  Revert
+                </Button>
               </>
+            )}
+
+            {userRole === 'admin' && (request.status === 'rejected' || request.status === 'cancelled') && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openActionDialog(request, 'revert')}
+                data-testid={`button-revert-${request.id}`}
+              >
+                <Undo2 className="h-4 w-4 mr-1" />
+                Restore to Pending
+              </Button>
+            )}
+
+            {userRole === 'admin' && request.status === 'fully_paid' && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openActionDialog(request, 'revert')}
+                data-testid={`button-revert-${request.id}`}
+              >
+                <Undo2 className="h-4 w-4 mr-1" />
+                Revert Status
+              </Button>
             )}
 
             {userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
@@ -1287,7 +1320,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <Label>Revert To</Label>
                 <Select
                   value={revertTarget}
-                  onValueChange={(value) => setRevertTarget(value as 'pending_supervisor' | 'pending_admin')}
+                  onValueChange={(value) => setRevertTarget(value as 'pending_supervisor' | 'pending_admin' | 'approved')}
                 >
                   <SelectTrigger data-testid="select-revert-target">
                     <SelectValue />
@@ -1295,6 +1328,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   <SelectContent>
                     <SelectItem value="pending_supervisor">Pending Supervisor Approval</SelectItem>
                     <SelectItem value="pending_admin">Pending Admin Approval</SelectItem>
+                    {(selectedRequest.status === 'fully_paid' || selectedRequest.status === 'partially_paid') && (
+                      <SelectItem value="approved">Approved (Ready for Payment)</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1312,9 +1348,11 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  This will reset the approval status. {revertTarget === 'pending_supervisor' 
-                    ? 'All approval data will be cleared.' 
-                    : 'Admin approval data will be cleared but supervisor approval will be preserved.'}
+                  {revertTarget === 'pending_supervisor' 
+                    ? 'All approval data will be cleared and the request will need to go through the full approval process again.' 
+                    : revertTarget === 'pending_admin'
+                    ? 'Admin approval data will be cleared but supervisor approval will be preserved.'
+                    : 'Payment data will be reset and the request will return to approved status for reprocessing.'}
                 </AlertDescription>
               </Alert>
             </div>
