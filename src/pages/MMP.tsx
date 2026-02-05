@@ -1836,6 +1836,7 @@ const MMP = () => {
   const [enumeratorSmartAssigned, setEnumeratorSmartAssigned] = useState<any[]>([]);
   const [enumeratorMySites, setEnumeratorMySites] = useState<any[]>([]);
   const [unsyncedCompletedVisits, setUnsyncedCompletedVisits] = useState<any[]>([]);
+  const [viewerEnumeratorFee, setViewerEnumeratorFee] = useState<number>(0);
 
   // Helper function to normalize role checking (handles both lowercase and proper case)
   const hasRole = (rolesToCheck: string[]) => {
@@ -1865,6 +1866,21 @@ const MMP = () => {
   // Supervisors should only see operations within their assigned hub
   const hubAccessInfo = useMemo(() => getHubAccessInfo(currentUser), [currentUser]);
   const applyHubFilter = shouldApplyHubFilter(currentUser);
+
+  // Load viewer's enumerator fee once on mount (used for calculating total cost display)
+  useEffect(() => {
+    const loadViewerFee = async () => {
+      if (!currentUser?.id) return;
+      try {
+        const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
+        setViewerEnumeratorFee(feeResult.fee);
+        console.log('[MMP] Loaded viewer enumerator fee:', feeResult.fee, 'Level:', feeResult.level);
+      } catch (error) {
+        console.warn('[MMP] Could not load viewer enumerator fee:', error);
+      }
+    };
+    loadViewerFee();
+  }, [currentUser?.id]);
 
   // Direct database load of dispatched sites for data collectors/coordinators
   // This ensures sites are visible even if MMP context hasn't loaded site entries yet
@@ -2603,6 +2619,7 @@ const MMP = () => {
 
     // Filter available sites: status = "Dispatched", accepted_by = null, in collector's STATE
     // Users can see all dispatched sites within their assigned state (not restricted to locality)
+    // Also calculate total cost (enumerator fee + transport fee) for display
     const availableSites = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
       if (status !== 'dispatched') return false;
@@ -2619,6 +2636,15 @@ const MMP = () => {
         return matches;
       }
       return false; // No state assigned = no sites
+    }).map(entry => {
+      // Calculate total cost using viewer's enumerator fee
+      const transportFee = Number(entry.transport_fee) || 0;
+      const totalCost = viewerEnumeratorFee + transportFee;
+      return {
+        ...entry,
+        enumerator_fee: entry.enumerator_fee || viewerEnumeratorFee,
+        cost: totalCost
+      };
     }).sort((a, b) => {
       // Sort by created_at descending
       const aDate = a.created_at || a.createdAt || '';
@@ -2627,11 +2653,21 @@ const MMP = () => {
     }).slice(0, 1000); // Limit to 1000
 
     // Filter smart assigned: status = "Assigned", accepted_by = currentUser.id, not cost-acknowledged
+    // Also calculate total cost for display
     const smartAssigned = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
       if (status !== 'assigned') return false;
       if (entry.accepted_by !== currentUser.id) return false;
       return !entry.cost_acknowledged; // Exclude cost-acknowledged sites
+    }).map(entry => {
+      // Calculate total cost using viewer's enumerator fee
+      const transportFee = Number(entry.transport_fee) || 0;
+      const totalCost = viewerEnumeratorFee + transportFee;
+      return {
+        ...entry,
+        enumerator_fee: entry.enumerator_fee || viewerEnumeratorFee,
+        cost: totalCost
+      };
     }).sort((a, b) => {
       const aDate = a.created_at || a.createdAt || '';
       const bDate = b.created_at || b.createdAt || '';
@@ -2685,7 +2721,7 @@ const MMP = () => {
       groupedByStateLocality,
       loading: loading
     };
-  }, [allSiteEntries, canClaimSites, currentUser?.id, currentUser?.stateId, currentUser?.localityId, formatSiteEntry, loading]);
+  }, [allSiteEntries, canClaimSites, currentUser?.id, currentUser?.stateId, currentUser?.localityId, formatSiteEntry, loading, viewerEnumeratorFee]);
 
   // Load unsynced completed visits from offline DB
   useEffect(() => {
@@ -2818,6 +2854,7 @@ const MMP = () => {
 
   
   // Load dispatched site entries (uses verifiedSiteEntries for consistency)
+  // Also calculate total cost with viewer's enumerator fee
   useEffect(() => {
     if (verifiedSubTab !== 'dispatched') {
       setDispatchedSiteEntries([]);
@@ -2825,25 +2862,50 @@ const MMP = () => {
       return;
     }
 
+    const loadDispatchedWithFees = async () => {
+      setLoadingDispatched(true);
+      
+      // Get viewer's enumerator fee first
+      let viewerEnumeratorFee = 0;
+      if (currentUser?.id) {
+        try {
+          const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
+          viewerEnumeratorFee = feeResult.fee;
+        } catch (error) {
+          console.warn('[Dispatched] Could not calculate viewer enumerator fee:', error);
+        }
+      }
+
+      const formattedEntries = verifiedSiteEntries
+        .map(formatSiteEntry)
+        .filter(entry => {
+          const status = String(entry.status || '').toLowerCase();
+          const acceptedBy = (entry as any).accepted_by;
+          return status === 'dispatched' && !acceptedBy;
+        })
+        .map(entry => {
+          // Add enumerator fee and calculate total cost for display
+          const transportFee = Number(entry.transport_fee) || 0;
+          const totalCost = viewerEnumeratorFee + transportFee;
+          return {
+            ...entry,
+            enumerator_fee: entry.enumerator_fee || viewerEnumeratorFee,
+            cost: totalCost
+          };
+        })
+        .sort((a, b) => {
+          const aDate = (a as any).dispatched_at || (a as any).dispatchedAt || (a as any).created_at || (a as any).createdAt || '';
+          const bDate = (b as any).dispatched_at || (b as any).dispatchedAt || (b as any).created_at || (b as any).createdAt || '';
+          return bDate.localeCompare(aDate);
+        });
+
+      setDispatchedSiteEntries(formattedEntries);
+      setDispatchedCount(formattedEntries.length);
+      setLoadingDispatched(false);
+    };
     
-    setLoadingDispatched(false);
-
-    const formattedEntries = verifiedSiteEntries
-      .map(formatSiteEntry)
-      .filter(entry => {
-        const status = String(entry.status || '').toLowerCase();
-        const acceptedBy = (entry as any).accepted_by;
-        return status === 'dispatched' && !acceptedBy;
-      })
-      .sort((a, b) => {
-        const aDate = (a as any).dispatched_at || (a as any).dispatchedAt || (a as any).created_at || (a as any).createdAt || '';
-        const bDate = (b as any).dispatched_at || (b as any).dispatchedAt || (b as any).created_at || (b as any).createdAt || '';
-        return bDate.localeCompare(aDate);
-      });
-
-    setDispatchedSiteEntries(formattedEntries);
-    setDispatchedCount(formattedEntries.length);
-  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
+    loadDispatchedWithFees();
+  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry, currentUser?.id]);
 
   // Load accepted site entries only when the tab is active
   // Uses verifiedSiteEntries (only from verified MMPs) for consistency
