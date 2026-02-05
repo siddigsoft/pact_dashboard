@@ -1405,6 +1405,21 @@ class _ChatScreenState extends State<ChatScreen> {
     final content = message.content ?? '';
     final textColor = isCurrentUser ? Colors.white : const Color(0xFF263238);
 
+    // Check contentType first for proper message type detection
+    if (message.contentType == 'audio') {
+      // Audio messages are stored as JSON with url, duration, fileName
+      try {
+        final audioData = jsonDecode(content);
+        final url = audioData['url'] as String? ?? '';
+        if (url.isNotEmpty) {
+          return _buildVoiceMessagePlayer(url, isCurrentUser);
+        }
+      } catch (e) {
+        debugPrint('Error parsing audio message: $e');
+        // Fall through to legacy format check
+      }
+    }
+
     if (content.startsWith('[Image]')) {
       final url = content.replaceFirst('[Image] ', '');
       return GestureDetector(
@@ -1444,6 +1459,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
     } else if (content.startsWith('[Voice Message]')) {
+      // Legacy format support
       final url = content.replaceFirst('[Voice Message] ', '');
       return _buildVoiceMessagePlayer(url, isCurrentUser);
     } else if (content.startsWith('[Document]')) {
