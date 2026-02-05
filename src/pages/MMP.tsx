@@ -3836,11 +3836,14 @@ const MMP = () => {
                         size="lg"
                         onClick={async () => {
                           try {
-                            // Get all verified site entries
+                            // Get all verified/approved site entries (excluding already costed ones)
+                            // The UI shows sites with: verified, cp_verified, permits_verified, locality_permit_verified, 
+                            // or approved (without 'costed' in status)
                             const { data: verifiedEntries, error: fetchError } = await supabase
                               .from('mmp_site_entries')
                               .select('*')
-                              .or('status.ilike.verified,status.ilike.Verified')
+                              .or('status.ilike.verified,status.ilike.cp_verified,status.ilike.permits_verified,status.ilike.locality_permit_verified,status.ilike.approved')
+                              .not('status', 'ilike', '%costed%')
                               .limit(10000);
 
                             if (fetchError) throw fetchError;
@@ -3848,7 +3851,7 @@ const MMP = () => {
                             if (!verifiedEntries || verifiedEntries.length === 0) {
                               toast({
                                 title: 'No Sites to Process',
-                                description: 'There are no verified sites to approve and cost.',
+                                description: 'There are no verified or approved sites to process.',
                                 variant: 'default'
                               });
                               return;
