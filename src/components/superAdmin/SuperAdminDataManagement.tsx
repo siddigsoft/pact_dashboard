@@ -869,10 +869,16 @@ export function SuperAdminDataManagement() {
   const getFilterOptions = () => {
     switch (activeTab) {
       case 'site-visits':
+        // Flow: New → Approved → Dispatched → Accepted → Ongoing → Completed (+ Rejected)
         return [
           { value: 'all', label: 'All Statuses' },
+          { value: 'new', label: 'New Sites' },
+          { value: 'approved', label: 'Approved' },
+          { value: 'dispatched', label: 'Dispatched' },
+          { value: 'accepted', label: 'Accepted' },
+          { value: 'ongoing', label: 'Ongoing' },
           { value: 'completed', label: 'Completed' },
-          { value: 'verified', label: 'Verified' },
+          { value: 'rejected', label: 'Rejected' },
         ];
       case 'wallets':
         return [
@@ -888,11 +894,20 @@ export function SuperAdminDataManagement() {
           { value: 'withdrawal', label: 'Withdrawals' },
         ];
       case 'claimed-sites':
+        // Flow: Accepted → Ongoing → Completed (sites that have been claimed)
         return [
           { value: 'all', label: 'All Statuses' },
-          { value: 'assigned', label: 'Assigned' },
-          { value: 'dispatched', label: 'Dispatched' },
+          { value: 'accepted', label: 'Accepted' },
+          { value: 'ongoing', label: 'Ongoing' },
           { value: 'completed', label: 'Completed' },
+          { value: 'rejected', label: 'Rejected' },
+        ];
+      case 'dispatched-sites':
+        // Flow: Dispatched → Assigned (sites ready for claiming)
+        return [
+          { value: 'all', label: 'All Statuses' },
+          { value: 'dispatched', label: 'Dispatched' },
+          { value: 'assigned', label: 'Assigned' },
         ];
       case 'mmps':
         return [
