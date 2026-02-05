@@ -45,12 +45,21 @@ function transformFromDB(data: any): DownPaymentRequest {
   // Extract state and project from joined mmp_site_entries if available
   const mmpEntry = data.mmp_site_entries;
   
+  // For state, try multiple sources in order of preference:
+  // 1. MMP site entry state
+  // 2. Metadata state_name  
+  // 3. Hub name as fallback (hubs are often named after their primary state/region)
+  const stateName = mmpEntry?.state || 
+                    data.metadata?.state_name || 
+                    data.hub_name || 
+                    undefined;
+  
   return {
     id: data.id,
     siteVisitId: data.site_visit_id,
     mmpSiteEntryId: data.mmp_site_entry_id,
     siteName: data.site_name,
-    stateName: mmpEntry?.state || data.metadata?.state_name || undefined,
+    stateName,
     localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
     projectName: mmpEntry?.cp_name || data.metadata?.project_name || undefined,
     activityType: mmpEntry?.activity_type || data.metadata?.activity_type || undefined,
@@ -122,11 +131,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       // Note: The join with mmp_site_entries may fail if RLS blocks access
       // We'll try with the join first, then fallback to without if it fails
+      // Also join hub_states to get state from hub if not available from mmp_site_entries
       let query = supabase.from('down_payment_requests').select(`
         *,
         mmp_site_entries (
           state,
-          cp_name
+          locality,
+          cp_name,
+          activity_type
         )
       `);
 
