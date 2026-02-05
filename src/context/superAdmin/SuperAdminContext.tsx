@@ -905,6 +905,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
       const formerAssigneeId = siteEntry.accepted_by;
       const siteName = siteEntry.site_name || siteEntry.site_code || 'Unknown Site';
+      const currentStatus = (siteEntry.status || '').toLowerCase().trim();
 
       if (!formerAssigneeId) {
         toast({
@@ -914,24 +915,45 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         return false;
       }
 
-      // 2. Update the site entry to release it back to "approved" status (ready for costing and dispatch)
-      // Also reset cost-related fields since costs are only calculated after claiming
-      const { error: updateError } = await supabase
-        .from('mmp_site_entries')
-        .update({
+      // 2. Determine reclaim behavior based on current status:
+      // - If site was "dispatched" (not yet claimed) → Keep as "dispatched" with same costs
+      // - If site was "claimed/ongoing/completed" → Reset to "approved" (clean slate)
+      const wasOnlyDispatched = currentStatus === 'dispatched' || currentStatus === 'assigned';
+      
+      let updateData: any;
+      
+      if (wasOnlyDispatched) {
+        // Site was just dispatched, not claimed - keep it dispatched with same costs
+        updateData = {
           accepted_by: null,
           accepted_at: null,
-          status: 'approved', // Set to approved so it goes through costing workflow again
+          status: 'dispatched', // Stay dispatched, ready for claiming
+          // Keep transport_fee - costs remain the same
+          cost_acknowledged: null,
+          cost_acknowledged_at: null,
+          updated_at: new Date().toISOString(),
+        };
+      } else {
+        // Site was claimed/ongoing/completed - full reset to approved (clean slate)
+        updateData = {
+          accepted_by: null,
+          accepted_at: null,
+          status: 'approved', // Reset to approved for full workflow
           dispatched_at: null,
           dispatched_by: null,
-          // Reset cost fields - costs are recalculated after claiming
+          // Reset ALL cost fields - needs costing again
           cost: null,
           enumerator_fee: null,
           transport_fee: null,
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
-        })
+        };
+      }
+
+      const { error: updateError } = await supabase
+        .from('mmp_site_entries')
+        .update(updateData)
         .eq('id', siteEntryId);
 
       if (updateError) {
