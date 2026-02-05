@@ -339,6 +339,18 @@ const MMPSiteEntriesTable = ({
                             <span className="text-muted-foreground">Total Cost:</span>
                             <p className="font-medium text-green-600">
                               {(() => {
+                                // Only show cost after site has been claimed/accepted
+                                // Check if site has been claimed: acceptedBy is set OR status indicates claimed
+                                const status = (row.status || '').toLowerCase();
+                                const acceptedBy = row.acceptedBy || (site as any).accepted_by;
+                                const claimedStatuses = ['accepted', 'ongoing', 'inprogress', 'in_progress', 'completed', 'approved and costed'];
+                                const isClaimed = acceptedBy || claimedStatuses.some(s => status.includes(s));
+                                
+                                // Don't show cost for unclaimed sites
+                                if (!isClaimed) {
+                                  return 'Pending Claim';
+                                }
+                                
                                 const calculatedFee = calculatedFees[site.id];
                                 const transportFee = Number(row.transportFee || 0);
                                 
