@@ -592,6 +592,14 @@ export function SuperAdminDataManagement() {
           status: 'approved',
           dispatched_by: null,
           dispatched_at: null,
+          // Reset cost fields - costs are only calculated after claiming
+          cost: null,
+          enumerator_fee: null,
+          transport_fee: null,
+          cost_acknowledged: null,
+          cost_acknowledged_at: null,
+          accepted_by: null,
+          accepted_at: null,
         })
         .eq('id', selectedDispatchedSite.id);
 

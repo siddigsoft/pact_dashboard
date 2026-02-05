@@ -915,12 +915,19 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       }
 
       // 2. Update the site entry to release it back to dispatched status
+      // Also reset cost-related fields since costs are only calculated after claiming
       const { error: updateError } = await supabase
         .from('mmp_site_entries')
         .update({
           accepted_by: null,
           accepted_at: null,
           status: 'dispatched',
+          // Reset cost fields - costs are recalculated after claiming
+          cost: null,
+          enumerator_fee: null,
+          transport_fee: null,
+          cost_acknowledged: null,
+          cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', siteEntryId);
