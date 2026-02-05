@@ -643,10 +643,34 @@ const MMP = () => {
   }, [currentUser?.id, toast, refreshMMPFiles]);
 
   // Handle cost acknowledgment for Smart Assigned sites
-  const handleCostAcknowledgment = useCallback((site: any) => {
-    setSelectedSiteForAcknowledgment(site);
+  // Calculate enumerator fee based on user's classification when opening dialog
+  const handleCostAcknowledgment = useCallback(async (site: any) => {
+    // Calculate enumerator fee for this user if not already set
+    let siteWithFees = { ...site };
+    
+    if (!site.enumerator_fee && currentUser?.id) {
+      try {
+        const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
+        siteWithFees.enumerator_fee = feeResult.fee;
+        
+        // Calculate total cost
+        const transportFee = Number(site.transport_fee) || 0;
+        siteWithFees.cost = feeResult.fee + transportFee;
+        
+        console.log('[CostAcknowledgment] Calculated fees for user:', {
+          enumeratorFee: feeResult.fee,
+          transportFee,
+          totalCost: siteWithFees.cost,
+          classificationLevel: feeResult.classificationLevel
+        });
+      } catch (error) {
+        console.error('[CostAcknowledgment] Failed to calculate enumerator fee:', error);
+      }
+    }
+    
+    setSelectedSiteForAcknowledgment(siteWithFees);
     setCostAcknowledgmentOpen(true);
-  }, []);
+  }, [currentUser?.id]);
 
   // GPS location functions
   const getCurrentLocation = (): Promise<{latitude: number, longitude: number}> => {
