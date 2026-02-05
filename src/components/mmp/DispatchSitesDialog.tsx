@@ -640,10 +640,25 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     }
 
     setLoading(true);
+    
+    // Global timeout - dispatch must complete within 60 seconds
+    const dispatchTimeout = setTimeout(() => {
+      console.error("❌ DISPATCH TIMEOUT - Operation took too long");
+      toast({
+        title: "Dispatch Timeout",
+        description: "The dispatch operation took too long. Please try again.",
+        variant: "destructive",
+      });
+      setLoading(false);
+    }, 60000);
+    
     try {
       // 🔐 CRITICAL: Ensure valid session before database operations to prevent RLS failures
+      console.log("📍 Checking session validity...");
       const sessionResult = await ensureValidSession();
+      console.log("📍 Session check complete:", sessionResult.success ? "valid" : "invalid");
       if (!sessionResult.success) {
+        clearTimeout(dispatchTimeout);
         toast({
           title: "Session Expired",
           description: sessionResult.error || "Please refresh the page and log in again.",
@@ -663,6 +678,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
       // For individual dispatch, we need a specific collector
       if (dispatchType === "individual" && targetCollectors.length === 0) {
+        clearTimeout(dispatchTimeout);
         toast({
           title: "No collector selected",
           description: "Please select a data collector to assign the sites to.",
@@ -1281,6 +1297,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         variant: "destructive",
       });
     } finally {
+      clearTimeout(dispatchTimeout);
       setLoading(false);
     }
   };
