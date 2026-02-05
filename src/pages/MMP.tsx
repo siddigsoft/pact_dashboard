@@ -3060,6 +3060,7 @@ const MMP = () => {
     const categorizeRow = (row: SiteVisitRow): keyof typeof result | null => {
       const status = row.status?.toLowerCase() || '';
       const acceptedBy = (row as any).accepted_by;
+      const assignedTo = (row as any).assigned_to || (row as any).smart_assigned_to;
       
       // Check categories in order of specificity
       if (status.includes('approved') && status.includes('costed')) {
@@ -3077,7 +3078,9 @@ const MMP = () => {
       if (status === 'accepted') {
         return 'accepted';
       }
-      if (status === 'assigned') {
+      // Smart Assigned: only if status is 'assigned' AND there's an assigned_to field
+      // This ensures only sites actually smart-assigned show here, not manually set status
+      if (status === 'assigned' && assignedTo) {
         return 'smartAssigned';
       }
       if (status === 'dispatched' && !acceptedBy) {
