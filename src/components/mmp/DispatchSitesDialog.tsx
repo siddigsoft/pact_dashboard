@@ -881,38 +881,54 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           }
 
           // Update mmp_site_entries with transport costs only (enumerator_fee remains null)
-          const { error: costError } = await supabase
-            .from("mmp_site_entries")
-            .update({
-              transport_fee: transportBudget,
-              // NOTE: enumerator_fee is NOT set here - it will be calculated at claim time
-              // based on the collector's classification (Level A, B, or C)
-              additional_data: {
-                ...(siteEntry.additional_data || {}),
-                ...(registryLinkage
-                  ? { registry_linkage: registryLinkage }
-                  : {}),
-                ...(registryGps ? { registry_gps: registryGps } : {}),
-                dispatch_costs: {
-                  transportation_cost: costs.transportation,
-                  accommodation_cost: costs.accommodation,
-                  meal_per_diem: costs.mealAllowance,
-                  other_logistics: costs.otherCosts,
-                  transport_budget_total: transportBudget,
-                  enumerator_fee_status: "pending_claim",
-                  cost_status: "transport_only",
-                  calculated_by: assignedBy,
-                  calculated_at: new Date().toISOString(),
-                  calculation_notes:
-                    costs.calculationNotes ||
-                    `Transport budget set at dispatch. Enumerator fee will be calculated at claim time based on collector classification.`,
+          // Add timeout to prevent hanging on slow database
+          console.log(`📍 Saving transport fee for ${siteEntry.site_name || siteEntry.id}...`);
+          
+          let costError: any = null;
+          try {
+            const costUpdatePromise = supabase
+              .from("mmp_site_entries")
+              .update({
+                transport_fee: transportBudget,
+                additional_data: {
+                  ...(siteEntry.additional_data || {}),
+                  ...(registryLinkage
+                    ? { registry_linkage: registryLinkage }
+                    : {}),
+                  ...(registryGps ? { registry_gps: registryGps } : {}),
+                  dispatch_costs: {
+                    transportation_cost: costs.transportation,
+                    accommodation_cost: costs.accommodation,
+                    meal_per_diem: costs.mealAllowance,
+                    other_logistics: costs.otherCosts,
+                    transport_budget_total: transportBudget,
+                    enumerator_fee_status: "pending_claim",
+                    cost_status: "transport_only",
+                    calculated_by: assignedBy,
+                    calculated_at: new Date().toISOString(),
+                    calculation_notes:
+                      costs.calculationNotes ||
+                      `Transport budget set at dispatch. Enumerator fee will be calculated at claim time based on collector classification.`,
+                  },
                 },
-              },
-            })
-            .eq("id", siteEntry.id);
+              })
+              .eq("id", siteEntry.id);
+            
+            const timeoutPromise = new Promise<{ error: any }>((_, reject) => 
+              setTimeout(() => reject(new Error('Cost update timeout after 15s')), 15000)
+            );
+            
+            const result = await Promise.race([costUpdatePromise, timeoutPromise]);
+            costError = result.error;
+            console.log(`✅ Transport fee saved for ${siteEntry.site_name || siteEntry.id}`);
+          } catch (err: any) {
+            console.error(`❌ Cost update failed/timed out for ${siteEntry.id}:`, err.message);
+            costError = err;
+          }
 
           if (costError) {
             console.error("Failed to save cost record:", costError);
+            clearTimeout(dispatchTimeout);
             toast({
               title: "Cost Save Failed",
               description: `Failed to save costs for ${costs.siteName}. Please try again.`,
