@@ -766,10 +766,15 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         }
       }
       
-      // Check coverage gaps for each unique locality (batched, no redundant calls)
-      for (const [_, locInfo] of uniqueLocalitiesForGapCheck) {
+      // Check coverage gaps for each unique locality (batched, with timeout to prevent blocking)
+      // Run coverage checks in parallel with a 5-second timeout to prevent hanging
+      console.log("📍 Running coverage gap checks (non-blocking)...");
+      const coverageCheckPromises = Array.from(uniqueLocalitiesForGapCheck.entries()).map(async ([_, locInfo]) => {
         try {
-          const gaps = await CoverageGapNotificationService.checkAndNotifyDispatchCoverage(
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Coverage check timeout')), 5000)
+          );
+          const checkPromise = CoverageGapNotificationService.checkAndNotifyDispatchCoverage(
             locInfo.state,
             locInfo.locality,
             locInfo.coords,
@@ -778,14 +783,17 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               dispatchedBy: assignedBy
             }
           );
-          
-          if (gaps.some(g => g.severity === 'critical')) {
-            console.log(`⚠️ Coverage gap detected in ${locInfo.locality}, ${locInfo.state} - admins notified`);
+          const gaps = await Promise.race([checkPromise, timeoutPromise]) as any[];
+          if (gaps?.some((g: any) => g.severity === 'critical')) {
+            console.log(`⚠️ Coverage gap detected in ${locInfo.locality}, ${locInfo.state}`);
           }
         } catch (gapError) {
-          console.error(`Failed to check coverage for ${locInfo.locality}:`, gapError);
+          console.warn(`Coverage check skipped for ${locInfo.locality}:`, gapError);
         }
-      }
+      });
+      
+      // Don't wait for coverage checks - run them in background
+      Promise.all(coverageCheckPromises).catch(err => console.warn('Coverage checks failed:', err));
 
       // Step 1: Store TRANSPORT costs only in mmp_site_entries
       // IMPORTANT: Enumerator fee is NOT set at dispatch - it's calculated at claim time
