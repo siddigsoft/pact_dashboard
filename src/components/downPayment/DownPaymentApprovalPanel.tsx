@@ -55,6 +55,7 @@ import {
   Building,
   Globe,
   Activity,
+  Undo2,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { format } from 'date-fns';
@@ -78,10 +79,10 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
 
 export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
   const { currentUser } = useUser();
-  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove } = useDownPayment();
+  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending } = useDownPayment();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
-  const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | null>(null);
+  const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
   const [notes, setNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -93,6 +94,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [approvalType, setApprovalType] = useState<ApprovalType>('full');
   const [customPercentage, setCustomPercentage] = useState(100);
   const [customAmount, setCustomAmount] = useState(0);
+  const [revertTarget, setRevertTarget] = useState<'pending_supervisor' | 'pending_admin'>('pending_supervisor');
 
   const [filters, setFilters] = useState<DownPaymentFilter>({});
 
@@ -241,6 +243,24 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     closeDialog();
   };
 
+  const handleRevert = async () => {
+    if (!selectedRequest || !currentUser) return;
+
+    setProcessing(true);
+    const success = await revertToPending({
+      requestId: selectedRequest.id,
+      revertedBy: currentUser.id,
+      revertedByName: currentUser.fullName || currentUser.email,
+      reason: notes || undefined,
+      targetStatus: revertTarget,
+    });
+
+    setProcessing(false);
+    if (success) {
+      closeDialog();
+    }
+  };
+
   const closeDialog = () => {
     setSelectedRequest(null);
     setAction(null);
@@ -250,9 +270,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     setApprovalType('full');
     setCustomPercentage(100);
     setCustomAmount(0);
+    setRevertTarget('pending_supervisor');
   };
 
-  const openActionDialog = (request: DownPaymentRequest, actionType: 'approve' | 'reject' | 'pay' | 'view_audit') => {
+  const openActionDialog = (request: DownPaymentRequest, actionType: 'approve' | 'reject' | 'pay' | 'view_audit' | 'revert') => {
     setSelectedRequest(request);
     setAction(actionType);
     if (actionType === 'pay') {
@@ -505,15 +526,26 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
             )}
 
             {userRole === 'admin' && (request.status === 'approved' || request.status === 'partially_paid') && (
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => openActionDialog(request, 'pay')}
-                data-testid={`button-process-payment-${request.id}`}
-              >
-                <DollarSign className="h-4 w-4 mr-1" />
-                Process Payment
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => openActionDialog(request, 'pay')}
+                  data-testid={`button-process-payment-${request.id}`}
+                >
+                  <DollarSign className="h-4 w-4 mr-1" />
+                  Process Payment
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openActionDialog(request, 'revert')}
+                  data-testid={`button-revert-${request.id}`}
+                >
+                  <Undo2 className="h-4 w-4 mr-1" />
+                  Revert to Pending
+                </Button>
+              </>
             )}
 
             {request.auditLog && request.auditLog.length > 0 && (
@@ -1222,6 +1254,84 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog} data-testid="button-close-audit">
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={action === 'revert'} onOpenChange={() => closeDialog()}>
+        <DialogContent className="max-w-md" data-testid="dialog-revert">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5" />
+              Revert to Pending
+            </DialogTitle>
+            <DialogDescription>
+              Revert this request back to a pending approval status
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRequest && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-md">
+                <p className="font-medium">{selectedRequest.siteName}</p>
+                <p className="text-sm text-muted-foreground">
+                  Current Status: <Badge variant="outline">{selectedRequest.status.replace(/_/g, ' ')}</Badge>
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Amount: {(selectedRequest.approvedAmount || selectedRequest.requestedAmount).toLocaleString()} SDG
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Revert To</Label>
+                <Select
+                  value={revertTarget}
+                  onValueChange={(value) => setRevertTarget(value as 'pending_supervisor' | 'pending_admin')}
+                >
+                  <SelectTrigger data-testid="select-revert-target">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending_supervisor">Pending Supervisor Approval</SelectItem>
+                    <SelectItem value="pending_admin">Pending Admin Approval</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Reason (Optional)</Label>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Why is this being reverted?"
+                  data-testid="input-revert-reason"
+                />
+              </div>
+
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  This will reset the approval status. {revertTarget === 'pending_supervisor' 
+                    ? 'All approval data will be cleared.' 
+                    : 'Admin approval data will be cleared but supervisor approval will be preserved.'}
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-revert">
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={handleRevert}
+              disabled={processing}
+              data-testid="button-confirm-revert"
+            >
+              <Undo2 className="h-4 w-4 mr-1" />
+              {processing ? 'Reverting...' : 'Confirm Revert'}
             </Button>
           </DialogFooter>
         </DialogContent>
