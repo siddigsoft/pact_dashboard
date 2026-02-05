@@ -52,8 +52,16 @@ const CostSubmission = () => {
   const isCountryDirector = roles?.includes('CountryDirector' as AppRole) || 
                             currentUser?.role === 'CountryDirector';
   
-  // Country Directors, FOM, Coordinators, and Admins can submit operational costs
-  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin;
+  // Check if user is Data Collector/Enumerator (can submit reimbursement requests)
+  const isDataCollector = roles?.includes('DataCollector' as AppRole) || 
+                          roles?.includes('Enumerator' as AppRole) ||
+                          currentUser?.role === 'DataCollector' ||
+                          currentUser?.role === 'datacollector' ||
+                          currentUser?.role === 'Enumerator' ||
+                          currentUser?.role === 'enumerator';
+  
+  // All field staff can submit operational costs (advances and reimbursements)
+  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isDataCollector;
   
   // Admins and supervisors can see team submissions and approval status
   const canViewTeamSubmissions = isAdmin || isSupervisor || isCountryDirector;
