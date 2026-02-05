@@ -650,12 +650,25 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         variant: "destructive",
       });
       setLoading(false);
-    }, 60000);
+    }, 120000); // 2 minutes - gives enough time for all operations
     
     try {
       // 🔐 CRITICAL: Ensure valid session before database operations to prevent RLS failures
       console.log("📍 Checking session validity...");
-      const sessionResult = await ensureValidSession();
+      
+      // Wrap session check in timeout to prevent hanging
+      let sessionResult: { success: boolean; user?: { id: string; email?: string }; error?: string };
+      try {
+        const sessionPromise = ensureValidSession();
+        const sessionTimeoutPromise = new Promise<{ success: boolean; error: string }>((resolve) => 
+          setTimeout(() => resolve({ success: false, error: 'Session check timed out' }), 5000)
+        );
+        sessionResult = await Promise.race([sessionPromise, sessionTimeoutPromise]);
+      } catch (sessionErr: any) {
+        console.error("❌ Session check failed:", sessionErr);
+        sessionResult = { success: false, error: sessionErr.message || 'Session check failed' };
+      }
+      
       console.log("📍 Session check complete:", sessionResult.success ? "valid" : "invalid");
       if (!sessionResult.success) {
         clearTimeout(dispatchTimeout);
@@ -915,7 +928,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               .eq("id", siteEntry.id);
             
             const timeoutPromise = new Promise<{ error: any }>((_, reject) => 
-              setTimeout(() => reject(new Error('Cost update timeout after 15s')), 15000)
+              setTimeout(() => reject(new Error('Cost update timeout after 10s')), 10000)
             );
             
             const result = await Promise.race([costUpdatePromise, timeoutPromise]);
@@ -1234,7 +1247,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             .eq("id", entryId);
           
           const timeoutPromise = new Promise<{ error: any }>((_, reject) => 
-            setTimeout(() => reject(new Error('Dispatch update timeout after 15s')), 15000)
+            setTimeout(() => reject(new Error('Dispatch update timeout after 10s')), 10000)
           );
           
           const result = await Promise.race([updatePromise, timeoutPromise]);
