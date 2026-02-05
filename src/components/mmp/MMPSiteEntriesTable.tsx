@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2 } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
 import { PostponementDialog } from './PostponementDialog';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
@@ -32,6 +32,8 @@ interface MMPSiteEntriesTableProps {
   onDateChange?: (siteEntryId: string, postponement: PostponementHistoryEntry) => Promise<void>;
   onDirectDateChange?: (siteEntryId: string, newDate: string, newDateTo?: string, reason?: string) => Promise<void>;
   showDateChangeButton?: boolean;
+  onApproveForCosting?: (site: any) => Promise<void>;
+  showApproveButton?: boolean;
 }
 
 const MMPSiteEntriesTable = ({ 
@@ -52,7 +54,9 @@ const MMPSiteEntriesTable = ({
   onSiteClaimed,
   onDateChange,
   onDirectDateChange,
-  showDateChangeButton = true
+  showDateChangeButton = true,
+  onApproveForCosting,
+  showApproveButton = false
 }: MMPSiteEntriesTableProps) => {
   const { currentUser } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,6 +68,7 @@ const MMPSiteEntriesTable = ({
   const [calculatedFees, setCalculatedFees] = useState<Record<string, number>>({});
   const [postponementOpen, setPostponementOpen] = useState(false);
   const [postponementSite, setPostponementSite] = useState<any | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -458,6 +463,30 @@ const MMPSiteEntriesTable = ({
                           >
                             <CalendarDays className="h-4 w-4" />
                             Change Date
+                          </Button>
+                        )}
+                        {showApproveButton && onApproveForCosting && (
+                          <Button 
+                            variant="default" 
+                            size="sm" 
+                            disabled={approvingId === site.id}
+                            onClick={async () => {
+                              setApprovingId(site.id);
+                              try {
+                                await onApproveForCosting(site);
+                              } finally {
+                                setApprovingId(null);
+                              }
+                            }}
+                            className="w-full min-h-[44px] flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700"
+                            data-testid={`button-approve-${site.id}`}
+                          >
+                            {approvingId === site.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4" />
+                            )}
+                            {approvingId === site.id ? 'Approving...' : 'Approve'}
                           </Button>
                         )}
                         <Button 

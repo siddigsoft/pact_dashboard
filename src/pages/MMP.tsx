@@ -211,9 +211,11 @@ const SitesDisplayTable = React.memo(function SitesDisplayTable({ siteRows, mmpI
 // Component to display verified sites using MMPSiteEntriesTable
 interface VerifiedSitesDisplayProps {
   verifiedSites: SiteVisitRow[];
+  onApproveForCosting?: (site: any) => Promise<void>;
+  showApproveButton?: boolean;
 }
 
-const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites }: VerifiedSitesDisplayProps) {
+const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verifiedSites, onApproveForCosting, showApproveButton = false }: VerifiedSitesDisplayProps) {
   const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
 
   // Derive site entries from context using the passed verifiedSites (already filtered by caller)
@@ -313,6 +315,8 @@ const VerifiedSitesDisplay = React.memo(function VerifiedSitesDisplay({ verified
       <MMPSiteEntriesTable 
         siteEntries={verifiedSiteEntries} 
         editable={true}
+        showApproveButton={showApproveButton}
+        onApproveForCosting={onApproveForCosting}
         onUpdateSites={async (sites) => {
           // Update mmp_site_entries in database
           try {
@@ -3928,7 +3932,59 @@ const MMP = () => {
                       </Button>
                     </div>
                   )}
-                  <VerifiedSitesDisplay verifiedSites={verifiedCategorySiteRows} />
+                  <VerifiedSitesDisplay 
+                    verifiedSites={verifiedCategorySiteRows} 
+                    showApproveButton={isAdmin || isICT || isFOM}
+                    onApproveForCosting={async (site) => {
+                      try {
+                        const currentCost = site.cost;
+                        const enumFee = site.enumerator_fee ?? site.enumeratorFee;
+                        const transFee = site.transport_fee ?? site.transportFee;
+                        const bothFeesPresent = (enumFee !== undefined && enumFee !== null) && (transFee !== undefined && transFee !== null);
+                        const finalCost = bothFeesPresent ? Number(enumFee) + Number(transFee) : currentCost;
+
+                        const additional_data = {
+                          ...(site.additional_data || site.additionalData || {}),
+                          ...(enumFee !== undefined ? { enumerator_fee: enumFee } : {}),
+                          ...(transFee !== undefined ? { transport_fee: transFee } : {}),
+                          ...(finalCost !== undefined ? { cost: finalCost } : {}),
+                          approved_and_costed_at: new Date().toISOString(),
+                          approved_and_costed_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+                        };
+
+                        const payload: any = { 
+                          status: 'costed', 
+                          additional_data 
+                        };
+                        if (finalCost !== undefined) payload.cost = finalCost;
+                        if (enumFee !== undefined) payload.enumerator_fee = enumFee;
+                        if (transFee !== undefined) payload.transport_fee = transFee;
+
+                        const { error } = await supabase
+                          .from('mmp_site_entries')
+                          .update(payload)
+                          .eq('id', site.id);
+
+                        if (error) throw error;
+
+                        toast({
+                          title: 'Site Approved',
+                          description: `Successfully approved "${site.siteName || site.site_name}" for costing.`,
+                          variant: 'default'
+                        });
+
+                        // Refresh data
+                        await refreshMMPFiles();
+                      } catch (error: any) {
+                        console.error('Error approving site:', error);
+                        toast({
+                          title: 'Approval Failed',
+                          description: error.message || 'Failed to approve site. Please try again.',
+                          variant: 'destructive'
+                        });
+                      }
+                    }}
+                  />
                 </>
               )}
               {(isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'approvedCosted' && (
