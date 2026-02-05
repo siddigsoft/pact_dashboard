@@ -940,15 +940,9 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           }
 
           if (costError) {
-            console.error("Failed to save cost record:", costError);
-            clearTimeout(dispatchTimeout);
-            toast({
-              title: "Cost Save Failed",
-              description: `Failed to save costs for ${costs.siteName}. Please try again.`,
-              variant: "destructive",
-            });
-            setLoading(false);
-            return;
+            // For re-dispatched sites, cost update failure is non-critical - continue dispatch
+            // The transport costs may already be set from previous dispatch
+            console.warn(`⚠️ Cost update failed for ${costs.siteName}, continuing dispatch:`, costError);
           }
         }
       }
