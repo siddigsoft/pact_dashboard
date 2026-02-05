@@ -52,6 +52,8 @@ function AdvanceRequestsReportContent() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [paidFilter, setPaidFilter] = useState<string>('all');
+  const [reconciledFilter, setReconciledFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 200;
@@ -114,9 +116,21 @@ function AdvanceRequestsReportContent() {
         const range = dateRanges[dateFilter as keyof typeof dateRanges];
         if (range && !isWithinInterval(reqDate, range)) return false;
       }
+      if (paidFilter !== 'all') {
+        const isPaid = (req.totalPaidAmount || 0) > 0;
+        if (paidFilter === 'paid' && !isPaid) return false;
+        if (paidFilter === 'not_paid' && isPaid) return false;
+      }
+      if (reconciledFilter !== 'all') {
+        const isReconciled = (req as any).isReconciled === true || 
+          (req.metadata as any)?.isReconciled === true || 
+          req.status === 'fully_paid';
+        if (reconciledFilter === 'reconciled' && !isReconciled) return false;
+        if (reconciledFilter === 'not_reconciled' && isReconciled) return false;
+      }
       return true;
     });
-  }, [requests, debouncedSearchTerm, statusFilter, hubFilter, dateFilter, dateRanges, getProfileName]);
+  }, [requests, debouncedSearchTerm, statusFilter, hubFilter, dateFilter, dateRanges, getProfileName, paidFilter, reconciledFilter]);
 
   const paginatedRequests = useMemo(() => {
     const startIndex = (currentPage - 1) * PAGE_SIZE;
@@ -805,6 +819,26 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="thisMonth">This Month</SelectItem>
             <SelectItem value="lastMonth">Last Month</SelectItem>
             <SelectItem value="last3Months">Last 3 Months</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={paidFilter} onValueChange={setPaidFilter}>
+          <SelectTrigger className="w-[150px]" data-testid="select-paid-filter">
+            <SelectValue placeholder="Payment Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Payments</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="not_paid">Not Paid</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={reconciledFilter} onValueChange={setReconciledFilter}>
+          <SelectTrigger className="w-[150px]" data-testid="select-reconciled-filter">
+            <SelectValue placeholder="Reconciliation" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="reconciled">Reconciled</SelectItem>
+            <SelectItem value="not_reconciled">Not Reconciled</SelectItem>
           </SelectContent>
         </Select>
       </div>
