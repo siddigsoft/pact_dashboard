@@ -586,20 +586,25 @@ export function SuperAdminDataManagement() {
 
     setProcessing(true);
     try {
-      // Return to "costed" status (the stage before dispatch)
+      // Return to "verified" status (the stage that appears in New Sites tab)
+      // This clears ALL dispatch/cost-related fields so the site starts fresh in the workflow
       const { error } = await supabase
         .from('mmp_site_entries')
         .update({
-          status: 'costed',
+          status: 'verified',
+          // Clear dispatch fields
           dispatched_by: null,
           dispatched_at: null,
-          // Reset cost fields - costs are only calculated after claiming
+          // Clear cost fields - must go through costing approval again
           cost: null,
           enumerator_fee: null,
           transport_fee: null,
+          // Clear acceptance/claim fields
           accepted_by: null,
           accepted_at: null,
-          // Clear additional dispatch data
+          claimed_by: null,
+          claimed_at: null,
+          // Clear all additional data from dispatch/acceptance process
           additional_data: null,
         })
         .eq('id', selectedDispatchedSite.id);
@@ -607,7 +612,7 @@ export function SuperAdminDataManagement() {
       if (error) throw error;
 
       await supabase.from('super_admin_audit_logs').insert({
-        action_type: 'return_to_costed',
+        action_type: 'return_to_new_sites',
         entity_type: 'mmp_site_entry',
         entity_id: selectedDispatchedSite.id,
         performed_by: currentUser.id,
@@ -618,7 +623,7 @@ export function SuperAdminDataManagement() {
           site_name: selectedDispatchedSite.site_name,
           site_code: selectedDispatchedSite.site_code,
           previous_status: 'dispatched',
-          new_status: 'costed',
+          new_status: 'verified',
         },
       });
 
@@ -1718,7 +1723,7 @@ export function SuperAdminDataManagement() {
                               data-testid={`button-return-to-approved-${site.id}`}
                             >
                               <Undo2 className="h-3.5 w-3.5" />
-                              Return to Approved
+                              Return to New Sites
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -1919,16 +1924,16 @@ export function SuperAdminDataManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Return to Approved Dialog */}
+      {/* Return to New Sites Dialog */}
       <Dialog open={showReturnToApprovedDialog} onOpenChange={setShowReturnToApprovedDialog}>
         <DialogContent className="max-w-md" data-testid="dialog-return-to-approved">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Undo2 className="h-5 w-5 text-orange-600" />
-              Return Site to Approved
+              Return Site to New Sites
             </DialogTitle>
             <DialogDescription>
-              Move this dispatched site back to approved status so it can be re-dispatched.
+              Reset this dispatched site back to verified status. It will appear in the New Sites tab and go through the full workflow again.
             </DialogDescription>
           </DialogHeader>
 
@@ -1954,7 +1959,7 @@ export function SuperAdminDataManagement() {
                 id="return-reason"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Explain why this site is being returned to approved status..."
+                placeholder="Explain why this site is being returned to New Sites..."
                 rows={3}
                 data-testid="textarea-return-reason"
               />
@@ -1963,8 +1968,9 @@ export function SuperAdminDataManagement() {
             <div className="bg-muted/50 p-3 rounded-lg">
               <p className="text-sm font-medium mb-2">This action will:</p>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Change status from dispatched to approved</li>
-                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Clear dispatch information</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Change status to "verified" (New Sites tab)</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Clear all dispatch and cost information</li>
+                <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Clear acceptance/claim data</li>
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Log action for audit trail</li>
               </ul>
             </div>
@@ -1981,7 +1987,7 @@ export function SuperAdminDataManagement() {
               data-testid="button-confirm-return-to-approved"
             >
               {processing ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Undo2 className="h-4 w-4 mr-2" />}
-              {processing ? 'Returning...' : 'Return to Approved'}
+              {processing ? 'Returning...' : 'Return to New Sites'}
             </Button>
           </DialogFooter>
         </DialogContent>
