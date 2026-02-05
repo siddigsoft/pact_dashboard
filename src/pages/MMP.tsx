@@ -2775,10 +2775,12 @@ const MMP = () => {
       .map(formatSiteEntry)
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
-        return status.includes('approved') && status.includes('costed');
-
-      }
-      )
+        // Include sites that are:
+        // - "approved and costed"
+        // - "costed" (after approval or reset)
+        // - Any status containing "costed"
+        return status === 'costed' || (status.includes('approved') && status.includes('costed'));
+      })
       setApprovedCostedSiteEntries(formattedEntries);
       setApprovedCostedCount(formattedEntries.length);
   }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
