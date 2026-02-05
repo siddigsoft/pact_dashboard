@@ -1,0 +1,47 @@
+PS C:\Users\PC\PACT_mobile> flutter build apk --release                               
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 40464 bytes (97.5% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release 
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.  
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release 
+warning: [options] target value 8 is obsolete and will be removed in a future release 
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.  
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release 
+warning: [options] target value 8 is obsolete and will be removed in a future release 
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.  
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release 
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.  
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release 
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.  
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release 
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release 
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.  
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+Copied APK to: C:\Users\PC\PACT_mobile\build\app\outputs\flutter-apk/app-release.apk
+Running Gradle task 'assembleRelease'...                         1314.2s
+√ Built build\app\outputs\flutter-apk\app-release.apk (107.0MB)
+PS C:\Users\PC\PACT_mobile> 
+PS C:\Users\PC\PACT_mobile> 
