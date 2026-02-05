@@ -1128,13 +1128,15 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           `📍 Entry ${entryId}: status="${currentEntry?.status}", site="${currentEntry?.site_name}"`,
         );
 
-        // Only dispatch sites that are in dispatchable status (costed, approved and costed, or verified statuses)
+        // Only dispatch sites that are in dispatchable status (costed, dispatched for re-dispatch, or verified statuses)
         const currentStatus = currentEntry?.status?.toLowerCase().trim() || "";
         
         // Check if status is dispatchable - use flexible matching
+        // Include "dispatched" to allow re-dispatching reclaimed sites
         const isDispatchable = 
           currentStatus === "costed" ||
           currentStatus.includes("costed") ||
+          currentStatus === "dispatched" || // Allow re-dispatch of reclaimed sites
           currentStatus === "verified" ||
           currentStatus === "cp_verified" ||
           currentStatus === "permits_verified" ||
