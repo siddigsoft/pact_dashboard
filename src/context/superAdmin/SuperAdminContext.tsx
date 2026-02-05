@@ -914,14 +914,16 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         return false;
       }
 
-      // 2. Update the site entry to release it back to dispatched status
+      // 2. Update the site entry to release it back to "approved" status (ready for costing and dispatch)
       // Also reset cost-related fields since costs are only calculated after claiming
       const { error: updateError } = await supabase
         .from('mmp_site_entries')
         .update({
           accepted_by: null,
           accepted_at: null,
-          status: 'dispatched',
+          status: 'approved', // Set to approved so it goes through costing workflow again
+          dispatched_at: null,
+          dispatched_by: null,
           // Reset cost fields - costs are recalculated after claiming
           cost: null,
           enumerator_fee: null,
