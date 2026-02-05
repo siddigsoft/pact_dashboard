@@ -684,9 +684,20 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       const assignedBy = sessionResult.user?.id;
 
       // Step 0: Fetch Sites Registry to get GPS coordinates FIRST (needed for coverage gap check)
+      // Use timeout to prevent hanging - skip if takes too long
       console.log("📍 Fetching Sites Registry for GPS coordinates...");
-      const registrySites = await fetchAllRegistrySites();
-      console.log(`📍 Found ${registrySites.length} sites in registry`);
+      let registrySites: any[] = [];
+      try {
+        const registryPromise = fetchAllRegistrySites();
+        const timeoutPromise = new Promise<any[]>((_, reject) => 
+          setTimeout(() => reject(new Error('Registry fetch timeout')), 10000)
+        );
+        registrySites = await Promise.race([registryPromise, timeoutPromise]);
+        console.log(`📍 Found ${registrySites.length} sites in registry`);
+      } catch (registryError) {
+        console.warn("⚠️ Registry fetch failed or timed out, continuing without GPS enrichment:", registryError);
+        registrySites = [];
+      }
 
       // Step 0.5: Check coverage gaps and notify admins (with GPS from registry)
       console.log("📍 Checking coverage gaps for selected sites...");
