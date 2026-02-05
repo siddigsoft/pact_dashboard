@@ -54,7 +54,7 @@ function AdvanceRequestsReportContent() {
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 200;
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
