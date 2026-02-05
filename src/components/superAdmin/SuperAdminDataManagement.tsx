@@ -393,7 +393,7 @@ export function SuperAdminDataManagement() {
       const { data, error } = await supabase
         .from('mmp_site_entries')
         .select('id, site_name, site_code, state, locality, status, dispatched_by, dispatched_at, main_activity, activity_at_site, hub_office')
-        .eq('status', 'dispatched')
+        .ilike('status', 'dispatched')
         .is('accepted_by', null)
         .order('dispatched_at', { ascending: false })
         .limit(500);
@@ -586,27 +586,28 @@ export function SuperAdminDataManagement() {
 
     setProcessing(true);
     try {
+      // Return to "costed" status (the stage before dispatch)
       const { error } = await supabase
         .from('mmp_site_entries')
         .update({
-          status: 'approved',
+          status: 'costed',
           dispatched_by: null,
           dispatched_at: null,
           // Reset cost fields - costs are only calculated after claiming
           cost: null,
           enumerator_fee: null,
           transport_fee: null,
-          cost_acknowledged: null,
-          cost_acknowledged_at: null,
           accepted_by: null,
           accepted_at: null,
+          // Clear additional dispatch data
+          additional_data: null,
         })
         .eq('id', selectedDispatchedSite.id);
 
       if (error) throw error;
 
       await supabase.from('super_admin_audit_logs').insert({
-        action_type: 'return_to_approved',
+        action_type: 'return_to_costed',
         entity_type: 'mmp_site_entry',
         entity_id: selectedDispatchedSite.id,
         performed_by: currentUser.id,
@@ -617,7 +618,7 @@ export function SuperAdminDataManagement() {
           site_name: selectedDispatchedSite.site_name,
           site_code: selectedDispatchedSite.site_code,
           previous_status: 'dispatched',
-          new_status: 'approved',
+          new_status: 'costed',
         },
       });
 
