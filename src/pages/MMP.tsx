@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { 
   Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3, MapPin, AlertTriangle, Activity,
-  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck
+  ClipboardList, Send, ShieldCheck, LayoutDashboard, FilePlus, CheckSquare, Truck, Wand2, Handshake, PlayCircle, CheckCircle2, XCircle, Clock, UserCheck, FileCheck, Filter, X
 } from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
@@ -450,6 +450,13 @@ const MMP = () => {
   const [smartAssignedSiteEntries, setSmartAssignedSiteEntries] = useState<any[]>([]);
   const [loadingSmartAssigned, setLoadingSmartAssigned] = useState(false);
   const [smartAssignedCount, setSmartAssignedCount] = useState(0);
+  
+  // Global site entry filters (applies to all tabs)
+  const [siteStatusFilter, setSiteStatusFilter] = useState<string>('all');
+  const [siteHubFilter, setSiteHubFilter] = useState<string>('all');
+  const [siteStateFilter, setSiteStateFilter] = useState<string>('all');
+  const [siteLocalityFilter, setSiteLocalityFilter] = useState<string>('all');
+  
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual' | 'open'>('open');
 
@@ -2562,6 +2569,105 @@ const MMP = () => {
     };
   }, [dispatchedSiteEntries]);
 
+  // Global site entry filter options (for all tabs)
+  const globalSiteFilterOptions = useMemo(() => {
+    const statuses = new Set<string>();
+    const hubs = new Set<string>();
+    const states = new Set<string>();
+    const localitiesByState: Record<string, Set<string>> = {};
+    const statesByHub: Record<string, Set<string>> = {};
+    
+    // Collect options from all site entries
+    verifiedSiteEntries.forEach(entry => {
+      const status = entry.status || '';
+      const hub = entry.hub || entry.hubName || '';
+      const state = entry.state || entry.stateName || '';
+      const locality = entry.locality || entry.localityName || '';
+      
+      if (status) statuses.add(status);
+      if (hub) {
+        hubs.add(hub);
+        if (!statesByHub[hub]) {
+          statesByHub[hub] = new Set();
+        }
+        if (state) {
+          statesByHub[hub].add(state);
+        }
+      }
+      if (state) {
+        states.add(state);
+        if (!localitiesByState[state]) {
+          localitiesByState[state] = new Set();
+        }
+        if (locality) {
+          localitiesByState[state].add(locality);
+        }
+      }
+    });
+    
+    return {
+      statuses: Array.from(statuses).sort(),
+      hubs: Array.from(hubs).sort(),
+      states: Array.from(states).sort(),
+      localitiesByState: Object.fromEntries(
+        Object.entries(localitiesByState).map(([state, locs]) => [state, Array.from(locs).sort()])
+      ),
+      statesByHub: Object.fromEntries(
+        Object.entries(statesByHub).map(([hub, sts]) => [hub, Array.from(sts).sort()])
+      )
+    };
+  }, [verifiedSiteEntries]);
+
+  // Apply global filters to get filtered states and localities
+  const filteredStatesForDropdown = useMemo(() => {
+    if (siteHubFilter === 'all') {
+      return globalSiteFilterOptions.states;
+    }
+    return globalSiteFilterOptions.statesByHub[siteHubFilter] || [];
+  }, [siteHubFilter, globalSiteFilterOptions]);
+
+  const filteredLocalitiesForDropdown = useMemo(() => {
+    if (siteStateFilter === 'all') {
+      return [];
+    }
+    return globalSiteFilterOptions.localitiesByState[siteStateFilter] || [];
+  }, [siteStateFilter, globalSiteFilterOptions]);
+
+  // Apply global filters to site entries helper function
+  const applyGlobalFilters = useCallback((entries: any[]) => {
+    let filtered = entries;
+    
+    if (siteStatusFilter !== 'all') {
+      filtered = filtered.filter(entry => {
+        const status = entry.status || '';
+        return status.toLowerCase() === siteStatusFilter.toLowerCase();
+      });
+    }
+    
+    if (siteHubFilter !== 'all') {
+      filtered = filtered.filter(entry => {
+        const hub = entry.hub || entry.hubName || '';
+        return hub === siteHubFilter;
+      });
+    }
+    
+    if (siteStateFilter !== 'all') {
+      filtered = filtered.filter(entry => {
+        const state = entry.state || entry.stateName || '';
+        return state === siteStateFilter;
+      });
+    }
+    
+    if (siteLocalityFilter !== 'all') {
+      filtered = filtered.filter(entry => {
+        const locality = entry.locality || entry.localityName || '';
+        return locality === siteLocalityFilter;
+      });
+    }
+    
+    return filtered;
+  }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter]);
+
   // Filtered dispatched entries based on state/locality selection
   const filteredDispatchedEntries = useMemo(() => {
     let filtered = dispatchedSiteEntries;
@@ -2582,6 +2688,11 @@ const MMP = () => {
     
     return filtered;
   }, [dispatchedSiteEntries, dispatchedStateFilter, dispatchedLocalityFilter]);
+
+  // Check if global filters are active
+  const hasActiveGlobalFilters = useMemo(() => {
+    return siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all';
+  }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter]);
 
   // Note: verifiedTabSiteEntryCounts is now derived from precomputedSubcategorySites
   // which is calculated after buildSiteRowsFromMMPs is defined (around line 2736)
@@ -3318,12 +3429,55 @@ const MMP = () => {
     return [];
   }, [verifiedSubTab, precomputedSubcategorySites, verifiedSubcategories, siteVisitRows]);
 
+  // Apply global filters to verified site rows
+  const filteredVerifiedCategorySiteRows = useMemo(() => {
+    if (!hasActiveGlobalFilters) {
+      return verifiedCategorySiteRows;
+    }
+    
+    return verifiedCategorySiteRows.filter(entry => {
+      // Status filter
+      if (siteStatusFilter !== 'all') {
+        const status = entry.status || '';
+        if (status.toLowerCase() !== siteStatusFilter.toLowerCase()) {
+          return false;
+        }
+      }
+      
+      // Hub filter
+      if (siteHubFilter !== 'all') {
+        const hub = entry.hub || entry.hubName || '';
+        if (hub !== siteHubFilter) {
+          return false;
+        }
+      }
+      
+      // State filter
+      if (siteStateFilter !== 'all') {
+        const state = entry.state || entry.stateName || '';
+        if (state !== siteStateFilter) {
+          return false;
+        }
+      }
+      
+      // Locality filter
+      if (siteLocalityFilter !== 'all') {
+        const locality = entry.locality || entry.localityName || '';
+        if (locality !== siteLocalityFilter) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  }, [verifiedCategorySiteRows, hasActiveGlobalFilters, siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter]);
+
   // Group verified site rows by MMP for display
   const verifiedVisibleMMPs = useMemo(() => {
     // For "newSites" subcategory, show all MMPs that have verified sites
     if (verifiedSubTab === 'newSites') {
-      // Use the verifiedCategorySiteRows which already has the filtered verified sites
-      const verifiedSites = verifiedCategorySiteRows;
+      // Use the filteredVerifiedCategorySiteRows which has global filters applied
+      const verifiedSites = filteredVerifiedCategorySiteRows;
       
       // Get unique MMP IDs from verified sites
       const mmpIdsWithVerifiedSites = new Set(verifiedSites.map(s => s.mmpId));
@@ -3336,16 +3490,16 @@ const MMP = () => {
     return (isAdmin || isICT || isFOM || isSupervisor || isCoordinator)
       ? (verifiedSubcategories[verifiedSubTab] || [])
       : (categorizedMMPs.verified || []);
-  }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, verifiedCategorySiteRows]);
+  }, [isAdmin, isICT, isFOM, isSupervisor, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, filteredVerifiedCategorySiteRows]);
 
   const verifiedGroupedRows = useMemo(() => {
-    // Group the precomputed site rows by MMP
-    // verifiedCategorySiteRows already has the correct data for each subcategory
+    // Group the precomputed site rows by MMP (using filtered data)
+    // filteredVerifiedCategorySiteRows has global filters applied
     return verifiedVisibleMMPs.map(m => ({
       mmp: m,
-      rows: verifiedCategorySiteRows.filter(row => row.mmpId === m.id),
+      rows: filteredVerifiedCategorySiteRows.filter(row => row.mmpId === m.id),
     }));
-  }, [verifiedVisibleMMPs, verifiedCategorySiteRows]);
+  }, [verifiedVisibleMMPs, filteredVerifiedCategorySiteRows]);
 
   // Forwarded site rows per subcategory (FOM/Supervisor only for site data)
   const forwardedCategorySiteRows = useMemo(() => {
@@ -3915,6 +4069,115 @@ const MMP = () => {
                   </div>
                 </div>
               )}
+              
+              {/* Global Site Entry Filters */}
+              {(isAdmin || isICT || isFOM || isCoordinator || isSupervisor) && (
+                <Card className="mb-4">
+                  <CardContent className="py-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-muted-foreground">Filters:</span>
+                      </div>
+                      
+                      {/* Status Filter */}
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs text-muted-foreground">Status:</label>
+                        <Select value={siteStatusFilter} onValueChange={setSiteStatusFilter}>
+                          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-status-filter">
+                            <SelectValue placeholder="All Statuses" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Statuses</SelectItem>
+                            {globalSiteFilterOptions.statuses.map(status => (
+                              <SelectItem key={status} value={status}>{status}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {/* Hub Filter */}
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs text-muted-foreground">Hub:</label>
+                        <Select value={siteHubFilter} onValueChange={(val) => {
+                          setSiteHubFilter(val);
+                          setSiteStateFilter('all');
+                          setSiteLocalityFilter('all');
+                        }}>
+                          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-hub-filter">
+                            <SelectValue placeholder="All Hubs" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Hubs</SelectItem>
+                            {globalSiteFilterOptions.hubs.map(hub => (
+                              <SelectItem key={hub} value={hub}>{hub}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {/* State Filter */}
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs text-muted-foreground">State:</label>
+                        <Select value={siteStateFilter} onValueChange={(val) => {
+                          setSiteStateFilter(val);
+                          setSiteLocalityFilter('all');
+                        }}>
+                          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-state-filter">
+                            <SelectValue placeholder="All States" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All States</SelectItem>
+                            {filteredStatesForDropdown.map(state => (
+                              <SelectItem key={state} value={state}>{state}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {/* Locality Filter */}
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs text-muted-foreground">Locality:</label>
+                        <Select 
+                          value={siteLocalityFilter} 
+                          onValueChange={setSiteLocalityFilter}
+                          disabled={siteStateFilter === 'all'}
+                        >
+                          <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-locality-filter">
+                            <SelectValue placeholder={siteStateFilter === 'all' ? 'Select State First' : 'All Localities'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Localities</SelectItem>
+                            {filteredLocalitiesForDropdown.map(locality => (
+                              <SelectItem key={locality} value={locality}>{locality}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {/* Clear Filters Button */}
+                      {(siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSiteStatusFilter('all');
+                            setSiteHubFilter('all');
+                            setSiteStateFilter('all');
+                            setSiteLocalityFilter('all');
+                          }}
+                          className="h-8 text-xs"
+                          data-testid="button-clear-filters"
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              
               {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && verifiedSubTab !== 'newSites' && (
                 loading ? (
                   <Card>
@@ -3931,7 +4194,7 @@ const MMP = () => {
               )}
               {(isAdminOrSuperUser || isAdmin || isICT || isFOM || isSupervisor || isCoordinator) && verifiedSubTab === 'newSites' && (
                 <>
-                  {(isAdminOrSuperUser || isAdmin || isICT) && verifiedCategorySiteRows.length > 0 && (
+                  {(isAdminOrSuperUser || isAdmin || isICT) && filteredVerifiedCategorySiteRows.length > 0 && (
                     <div className="mb-4">
                       <Button
                         variant="default"
@@ -4023,12 +4286,12 @@ const MMP = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white mb-4"
                       >
-                        Approve for Costing ({verifiedCategorySiteRows.length} sites)
+                        Approve for Costing ({filteredVerifiedCategorySiteRows.length} sites)
                       </Button>
                     </div>
                   )}
                   <VerifiedSitesDisplay 
-                    verifiedSites={verifiedCategorySiteRows} 
+                    verifiedSites={filteredVerifiedCategorySiteRows} 
                     showApproveButton={isAdmin || isICT || isFOM}
                     onApproveForCosting={async (site) => {
                       try {
