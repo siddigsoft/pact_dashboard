@@ -35,7 +35,8 @@ import {
   FileText,
   MapPin,
   FolderKanban,
-  Truck
+  Truck,
+  Banknote
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -149,8 +150,10 @@ function AdvanceRequestsReportContent() {
     const pendingCount = filteredRequests.filter(r => ['pending_supervisor', 'pending_admin'].includes(r.status)).length;
     const approvedCount = filteredRequests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status)).length;
     const rejectedCount = filteredRequests.filter(r => r.status === 'rejected').length;
+    const paidCount = filteredRequests.filter(r => (r.totalPaidAmount || 0) > 0).length;
+    const remainingBalance = totalApproved - totalPaid;
     
-    return { totalRequested, totalApproved, totalPending, totalRejected, totalPaid, pendingCount, approvedCount, rejectedCount, totalCount: filteredRequests.length };
+    return { totalRequested, totalApproved, totalPending, totalRejected, totalPaid, pendingCount, approvedCount, rejectedCount, paidCount, remainingBalance, totalCount: filteredRequests.length };
   }, [filteredRequests]);
 
   const byTeamMember = useMemo(() => {
@@ -899,6 +902,53 @@ function AdvanceRequestsReportContent() {
               </div>
               <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
                 <XCircle className="h-5 w-5 text-red-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Paid</p>
+                <p className="text-2xl font-bold text-blue-600">{loading ? <Skeleton className="h-8 w-24" /> : `SDG ${stats.totalPaid.toLocaleString()}`}</p>
+                <p className="text-xs text-muted-foreground">{stats.paidCount} payments made</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <Banknote className="h-5 w-5 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-purple-200 bg-purple-50/50 dark:bg-purple-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Remaining Balance</p>
+                <p className="text-2xl font-bold text-purple-600">{loading ? <Skeleton className="h-8 w-24" /> : `SDG ${stats.remainingBalance.toLocaleString()}`}</p>
+                <p className="text-xs text-muted-foreground">Outstanding amount</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Payment Rate</p>
+                <p className="text-2xl font-bold text-emerald-600">{loading ? <Skeleton className="h-8 w-24" /> : `${stats.totalApproved > 0 ? Math.round((stats.totalPaid / stats.totalApproved) * 100) : 0}%`}</p>
+                <p className="text-xs text-muted-foreground">Of approved amount paid</p>
+              </div>
+              <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                <PieChart className="h-5 w-5 text-emerald-600" />
               </div>
             </div>
           </CardContent>
