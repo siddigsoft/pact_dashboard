@@ -915,33 +915,69 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         return false;
       }
 
-      // 2. Determine reclaim behavior based on current status:
-      // - If site was "dispatched" (not yet claimed) → Keep as "dispatched" with same costs
-      // - If site was "claimed/ongoing/completed" → Reset to "approved" (clean slate)
-      const wasOnlyDispatched = currentStatus === 'dispatched' || currentStatus === 'assigned';
+      // 2. Determine reclaim behavior - go back to PREVIOUS status in the workflow:
+      // Flow: New → Approved → Dispatched → Accepted → Ongoing → Completed
+      // - Dispatched → goes back to Approved (clear dispatch info, keep as new approved site)
+      // - Accepted → goes back to Dispatched (clear claim info, keep costs)
+      // - Ongoing → goes back to Accepted (keep claim info, revert progress)
+      // - Completed → goes back to Ongoing (revert completion)
       
       let updateData: any;
+      let previousStatus: string;
       
-      if (wasOnlyDispatched) {
-        // Site was just dispatched, not claimed - keep it dispatched with same costs
+      if (currentStatus === 'dispatched' || currentStatus === 'assigned') {
+        // Dispatched → Approved (clean slate, needs costing again)
+        previousStatus = 'approved';
         updateData = {
           accepted_by: null,
           accepted_at: null,
-          status: 'dispatched', // Stay dispatched, ready for claiming
+          status: 'approved',
+          dispatched_at: null,
+          dispatched_by: null,
+          cost: null,
+          enumerator_fee: null,
+          transport_fee: null,
+          cost_acknowledged: null,
+          cost_acknowledged_at: null,
+          updated_at: new Date().toISOString(),
+        };
+      } else if (currentStatus === 'accepted' || currentStatus === 'claimed') {
+        // Accepted → Dispatched (clear claim info, keep costs)
+        previousStatus = 'dispatched';
+        updateData = {
+          accepted_by: null,
+          accepted_at: null,
+          status: 'dispatched',
           // Keep transport_fee - costs remain the same
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
         };
+      } else if (currentStatus === 'ongoing' || currentStatus === 'in_progress') {
+        // Ongoing → Accepted (revert progress, keep claim)
+        previousStatus = 'accepted';
+        updateData = {
+          status: 'accepted',
+          // Keep accepted_by, accepted_at, and costs
+          updated_at: new Date().toISOString(),
+        };
+      } else if (currentStatus === 'completed') {
+        // Completed → Ongoing (revert completion)
+        previousStatus = 'ongoing';
+        updateData = {
+          status: 'ongoing',
+          // Keep everything else
+          updated_at: new Date().toISOString(),
+        };
       } else {
-        // Site was claimed/ongoing/completed - full reset to approved (clean slate)
+        // Default: go back to approved (clean slate)
+        previousStatus = 'approved';
         updateData = {
           accepted_by: null,
           accepted_at: null,
-          status: 'approved', // Reset to approved for full workflow
+          status: 'approved',
           dispatched_at: null,
           dispatched_by: null,
-          // Reset ALL cost fields - needs costing again
           cost: null,
           enumerator_fee: null,
           transport_fee: null,
@@ -950,6 +986,8 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           updated_at: new Date().toISOString(),
         };
       }
+      
+      console.log(`📍 Reclaiming site from "${currentStatus}" → "${previousStatus}"`);
 
       const { error: updateError } = await supabase
         .from('mmp_site_entries')
