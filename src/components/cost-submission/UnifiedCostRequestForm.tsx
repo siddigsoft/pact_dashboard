@@ -156,9 +156,10 @@ export default function UnifiedCostRequestForm({
 
     try {
       const { error } = await supabase
-        .from('operational_cost_submissions')
+        .from('operational_cost_submissions' as any)
         .insert({
-          user_id: currentUser.id,
+          submitted_by: currentUser.id,
+          submitter_role: currentUser.role || 'user',
           expense_category: values.expenseCategory,
           amount_cents: Math.round(values.amount * 100),
           currency: values.currency,
