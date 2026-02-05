@@ -1157,10 +1157,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         additionalData.dispatched_from_status = currentEntry?.status; // Track previous status
 
         // Set different status based on dispatch type
-        // - "Dispatched" for state/locality bulk dispatch (available sites - can be claimed by any collector in the area)
-        // - "Assigned" for individual dispatch (smart assigned - directly assigned to specific collector)
+        // - "Dispatched" for all bulk dispatches (open/state/locality) - available for anyone to claim
+        // - "Assigned" ONLY for individual dispatch with a specific collector selected
+        // Default to "Dispatched" to ensure sites are always dispatchable
         const newStatus =
-          dispatchType === "individual" ? "Assigned" : "Dispatched";
+          (dispatchType === "individual" && selectedCollector) ? "Assigned" : "Dispatched";
+        
+        console.log(`📍 Setting status to "${newStatus}" (dispatchType=${dispatchType}, hasCollector=${!!selectedCollector})`);
 
         const updateData: any = {
           status: newStatus,
