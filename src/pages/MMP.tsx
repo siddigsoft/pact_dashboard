@@ -5255,64 +5255,36 @@ const MMP = () => {
                 </div>
               </div>
 
-              {/* Section 2: Site Cost Details */}
+              {/* Section 2: Total Visit Cost */}
               <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
                 <div className="flex items-center gap-2 pb-3 border-b">
                   <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
                     2
                   </div>
-                  <h3 className="text-base font-semibold text-gray-900">Site Cost Details</h3>
+                  <h3 className="text-base font-semibold text-gray-900">Total Visit Cost</h3>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-white p-4 rounded-lg border">
-                    <p className="text-xs font-medium text-gray-600 mb-2">Data Collector Fee</p>
-                    {selectedSiteForAcknowledgment.enumerator_fee !== undefined && selectedSiteForAcknowledgment.enumerator_fee !== null ? (
-                      <p className="text-2xl font-semibold text-gray-900">
-                        {Number(selectedSiteForAcknowledgment.enumerator_fee).toLocaleString()} SDG
+                <div className="bg-blue-600 p-6 rounded-lg border border-blue-700 text-center">
+                  <p className="text-sm font-medium text-blue-100 mb-3">Total Amount for This Visit</p>
+                  {(() => {
+                    const enumeratorFee = Number(selectedSiteForAcknowledgment.enumerator_fee) || 0;
+                    const transportFee = Number(selectedSiteForAcknowledgment.transport_fee) || 0;
+                    const totalCost = selectedSiteForAcknowledgment.cost || (enumeratorFee + transportFee);
+                    return totalCost > 0 ? (
+                      <p className="text-4xl font-bold text-white">
+                        {Number(totalCost).toLocaleString()} SDG
                       </p>
                     ) : (
-                      <div>
-                        <p className="text-lg font-semibold text-amber-600">Pending</p>
-                        <p className="text-xs text-gray-500 mt-1">Calculated when claimed</p>
-                      </div>
-                    )}
-                    <p className="text-xs text-gray-600 mt-2">Payment for completing the site visit</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg border">
-                    <p className="text-xs font-medium text-gray-600 mb-2">Transport Fee</p>
-                    {selectedSiteForAcknowledgment.transport_fee !== undefined && selectedSiteForAcknowledgment.transport_fee !== null ? (
-                      <p className="text-2xl font-semibold text-gray-900">
-                        {Number(selectedSiteForAcknowledgment.transport_fee).toLocaleString()} SDG
-                      </p>
-                    ) : (
-                      <>
-                        <p className="text-2xl font-semibold text-gray-900">0 SDG</p>
-                        <p className="text-xs text-gray-500 mt-1">(Set at dispatch)</p>
-                      </>
-                    )}
-                    <p className="text-xs text-gray-600 mt-2">Transportation reimbursement</p>
-                  </div>
-                  <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
-                    <p className="text-xs font-medium text-blue-100 mb-2">Total Cost</p>
-                    {selectedSiteForAcknowledgment.enumerator_fee !== undefined && selectedSiteForAcknowledgment.enumerator_fee !== null && selectedSiteForAcknowledgment.transport_fee !== undefined && selectedSiteForAcknowledgment.transport_fee !== null ? (
-                      <p className="text-2xl font-bold text-white">
-                        {(Number(selectedSiteForAcknowledgment.enumerator_fee) + Number(selectedSiteForAcknowledgment.transport_fee)).toLocaleString()} SDG
-                      </p>
-                    ) : selectedSiteForAcknowledgment.cost ? (
-                      <p className="text-2xl font-bold text-white">
-                        {Number(selectedSiteForAcknowledgment.cost).toLocaleString()} SDG
-                      </p>
-                    ) : (
-                      <p className="text-lg font-bold text-blue-100">Pending</p>
-                    )}
-                    <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
-                  </div>
+                      <p className="text-2xl font-bold text-blue-100">Pending</p>
+                    );
+                  })()}
+                  <p className="text-sm text-blue-100 mt-4">
+                    This is the total amount for your visit (transportation and your fees)
+                  </p>
                 </div>
                 <div className="bg-white p-4 rounded-lg border">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">Payment Information</p>
                   <p className="text-sm text-gray-700 leading-relaxed">
-                    Upon successful completion of the site visit, the total cost amount will be credited to your wallet. 
-                    Payment is processed automatically after you submit your visit report with photos and required documentation.
+                    Upon successful completion of the site visit, this amount will be credited to your wallet. 
+                    Payment is processed automatically after you submit your visit report.
                   </p>
                 </div>
               </div>
