@@ -2615,8 +2615,15 @@ const MMP = () => {
     }).slice(0, 1000);
 
     // Filter my sites: accepted_by = currentUser.id
+    // EXCLUDE sites with status "assigned" that haven't been cost-acknowledged (those belong in Smart Assigned tab)
     const mySites = formattedEntries.filter(entry => {
-      return entry.accepted_by === currentUser.id;
+      if (entry.accepted_by !== currentUser.id) return false;
+      
+      const status = String(entry.status || '').toLowerCase();
+      // If status is "assigned" and not cost-acknowledged, it belongs in Smart Assigned, not My Sites
+      if (status === 'assigned' && !entry.cost_acknowledged) return false;
+      
+      return true;
     }).sort((a, b) => {
       const aDate = a.created_at || a.createdAt || '';
       const bDate = b.created_at || b.createdAt || '';
