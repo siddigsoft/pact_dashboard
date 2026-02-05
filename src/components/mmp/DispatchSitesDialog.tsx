@@ -1061,40 +1061,64 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
       const finalNotifications = Array.from(uniqueNotifications.values());
       if (finalNotifications.length > 0) {
-        await Promise.all(
-          finalNotifications.map(async (notif) => {
-            try {
-              await NotificationTriggerService.send({
-                userId: notif.userId,
-                title: notif.title,
-                message: notif.message,
-                type: notif.type,
-                category: "assignments",
-                priority: "normal",
-                link: `/mmp?entry=${notif.siteEntryId}`,
-                relatedEntityId: notif.siteEntryId,
-                relatedEntityType: "siteVisit",
-              });
-            } catch (err) {
-              console.error(
-                "Failed to send dispatch notification via NotificationTriggerService:",
-                err,
-              );
-            }
-          }),
-        );
+        // Add timeout to notifications to prevent hanging - don't block dispatch for notifications
+        try {
+          const notificationPromise = Promise.all(
+            finalNotifications.map(async (notif) => {
+              try {
+                await NotificationTriggerService.send({
+                  userId: notif.userId,
+                  title: notif.title,
+                  message: notif.message,
+                  type: notif.type,
+                  category: "assignments",
+                  priority: "normal",
+                  link: `/mmp?entry=${notif.siteEntryId}`,
+                  relatedEntityId: notif.siteEntryId,
+                  relatedEntityType: "siteVisit",
+                });
+              } catch (err) {
+                console.error(
+                  "Failed to send dispatch notification via NotificationTriggerService:",
+                  err,
+                );
+              }
+            }),
+          );
+          
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Notification timeout')), 10000)
+          );
+          
+          await Promise.race([notificationPromise, timeoutPromise]);
+        } catch (notifError) {
+          console.warn("⚠️ Notifications timed out or failed, continuing with dispatch:", notifError);
+        }
       }
 
       // Step 3: Mark site entries as dispatched
       console.log("📍 Step 3: Marking site entries as dispatched...");
       const dispatchedAt = new Date().toISOString();
-      const currentUserProfile = sessionResult.user?.id
-        ? await supabase
+      
+      // Fetch profile with timeout to prevent hanging
+      let currentUserProfile: any = null;
+      if (sessionResult.user?.id) {
+        try {
+          const profilePromise = supabase
             .from("profiles")
             .select("full_name, username, email")
             .eq("id", sessionResult.user.id)
-            .single()
-        : null;
+            .single();
+          
+          const timeoutPromise = new Promise<any>((_, reject) => 
+            setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+          );
+          
+          currentUserProfile = await Promise.race([profilePromise, timeoutPromise]);
+        } catch (err) {
+          console.warn("⚠️ Profile fetch timed out, using fallback name");
+        }
+      }
 
       const dispatchedBy =
         currentUserProfile?.data?.full_name ||
@@ -1111,14 +1135,30 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
       // Update each entry individually to set status and new columns
       for (const entryId of Array.from(selectedSites)) {
-        // Get current entry to check status and preserve additional_data
-        const { data: currentEntry, error: fetchError } = await supabase
-          .from("mmp_site_entries")
-          .select("status, additional_data, site_name")
-          .eq("id", entryId)
-          .single();
+        // Get current entry to check status and preserve additional_data (with timeout)
+        let currentEntry: any = null;
+        let fetchError: any = null;
+        
+        try {
+          const fetchPromise = supabase
+            .from("mmp_site_entries")
+            .select("status, additional_data, site_name")
+            .eq("id", entryId)
+            .single();
+          
+          const timeoutPromise = new Promise<any>((_, reject) => 
+            setTimeout(() => reject(new Error('Entry fetch timeout')), 10000)
+          );
+          
+          const result = await Promise.race([fetchPromise, timeoutPromise]);
+          currentEntry = result.data;
+          fetchError = result.error;
+        } catch (err: any) {
+          console.error(`❌ Entry fetch timed out for ${entryId}:`, err.message);
+          fetchError = err;
+        }
 
-        if (fetchError) {
+        if (fetchError || !currentEntry) {
           console.error(`❌ Error fetching entry ${entryId}:`, fetchError);
           errorCount++;
           continue;
@@ -1185,10 +1225,24 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         }
         // For bulk dispatch (state/locality), accepted_by remains null until collector claims it
 
-        const { error: entryUpdateError } = await supabase
-          .from("mmp_site_entries")
-          .update(updateData)
-          .eq("id", entryId);
+        // Add timeout to dispatch update to prevent hanging
+        let entryUpdateError: any = null;
+        try {
+          const updatePromise = supabase
+            .from("mmp_site_entries")
+            .update(updateData)
+            .eq("id", entryId);
+          
+          const timeoutPromise = new Promise<{ error: any }>((_, reject) => 
+            setTimeout(() => reject(new Error('Dispatch update timeout after 15s')), 15000)
+          );
+          
+          const result = await Promise.race([updatePromise, timeoutPromise]);
+          entryUpdateError = result.error;
+        } catch (err: any) {
+          console.error(`❌ Dispatch update timed out for ${entryId}:`, err.message);
+          entryUpdateError = err;
+        }
 
         if (entryUpdateError) {
           console.error(
