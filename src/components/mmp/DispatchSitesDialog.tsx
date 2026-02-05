@@ -742,7 +742,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               locality: siteLocality,
             },
             registrySites,
-            { userId: assignedBy || "system", sourceWorkflow: "coverage_check" }
+            { userId: assignedBy || "system", sourceWorkflow: "dispatch" }
           );
           
           if (registryMatch.gpsCoordinates?.latitude && registryMatch.gpsCoordinates?.longitude) {
@@ -1077,11 +1077,19 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           `📍 Entry ${entryId}: status="${currentEntry?.status}", site="${currentEntry?.site_name}"`,
         );
 
-        // Only dispatch sites that are in "Approved and Costed" status
+        // Only dispatch sites that are in dispatchable status (costed, approved and costed, or verified statuses)
         const currentStatus = currentEntry?.status?.toLowerCase() || "";
-        if (currentStatus !== "approved and costed") {
+        const dispatchableStatuses = [
+          "costed",
+          "approved and costed", 
+          "verified",
+          "cp_verified",
+          "permits_verified",
+          "locality_permit_verified"
+        ];
+        if (!dispatchableStatuses.includes(currentStatus)) {
           console.warn(
-            `⚠️ Skipping entry ${entryId} with status "${currentEntry?.status}" - only "Approved and Costed" sites can be dispatched`,
+            `⚠️ Skipping entry ${entryId} with status "${currentEntry?.status}" - only costed/verified sites can be dispatched`,
           );
           skippedCount++;
           continue;
