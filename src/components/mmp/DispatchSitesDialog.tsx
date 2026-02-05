@@ -1086,22 +1086,27 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         );
 
         // Only dispatch sites that are in dispatchable status (costed, approved and costed, or verified statuses)
-        const currentStatus = currentEntry?.status?.toLowerCase() || "";
-        const dispatchableStatuses = [
-          "costed",
-          "approved and costed", 
-          "verified",
-          "cp_verified",
-          "permits_verified",
-          "locality_permit_verified"
-        ];
-        if (!dispatchableStatuses.includes(currentStatus)) {
+        const currentStatus = currentEntry?.status?.toLowerCase().trim() || "";
+        
+        // Check if status is dispatchable - use flexible matching
+        const isDispatchable = 
+          currentStatus === "costed" ||
+          currentStatus.includes("costed") ||
+          currentStatus === "verified" ||
+          currentStatus === "cp_verified" ||
+          currentStatus === "permits_verified" ||
+          currentStatus === "locality_permit_verified" ||
+          currentStatus.includes("approved");
+          
+        if (!isDispatchable) {
           console.warn(
             `⚠️ Skipping entry ${entryId} with status "${currentEntry?.status}" - only costed/verified sites can be dispatched`,
           );
           skippedCount++;
           continue;
         }
+        
+        console.log(`✅ Entry ${entryId} status "${currentStatus}" is dispatchable`);
 
         const additionalData = currentEntry?.additional_data || {};
         additionalData.dispatched_at = dispatchedAt;
