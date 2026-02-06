@@ -935,47 +935,53 @@ const CostSubmission = () => {
                             </div>
                           </div>
                           {canTier1Approve(oc) && (
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => openApprovalDialog(oc, 'approve', 1)}
-                                data-testid={`button-tier1-approve-${oc.id}`}
-                              >
-                                <ThumbsUp className="h-4 w-4 mr-1" />
-                                Approve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => openApprovalDialog(oc, 'reject', 1)}
-                                data-testid={`button-tier1-reject-${oc.id}`}
-                              >
-                                <ThumbsDown className="h-4 w-4 mr-1" />
-                                Reject
-                              </Button>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Tier 1 Review</span>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => openApprovalDialog(oc, 'approve', 1)}
+                                  data-testid={`button-tier1-approve-${oc.id}`}
+                                >
+                                  <ThumbsUp className="h-4 w-4 mr-1" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => openApprovalDialog(oc, 'reject', 1)}
+                                  data-testid={`button-tier1-reject-${oc.id}`}
+                                >
+                                  <ThumbsDown className="h-4 w-4 mr-1" />
+                                  Reject
+                                </Button>
+                              </div>
                             </div>
                           )}
                           {canTier2Approve(oc) && (
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => openApprovalDialog(oc, 'approve', 2)}
-                                data-testid={`button-tier2-approve-${oc.id}`}
-                              >
-                                <ThumbsUp className="h-4 w-4 mr-1" />
-                                Final Approve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => openApprovalDialog(oc, 'reject', 2)}
-                                data-testid={`button-tier2-reject-${oc.id}`}
-                              >
-                                <ThumbsDown className="h-4 w-4 mr-1" />
-                                Reject
-                              </Button>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Tier 2 Final</span>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => openApprovalDialog(oc, 'approve', 2)}
+                                  data-testid={`button-tier2-approve-${oc.id}`}
+                                >
+                                  <ThumbsUp className="h-4 w-4 mr-1" />
+                                  Final Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => openApprovalDialog(oc, 'reject', 2)}
+                                  data-testid={`button-tier2-reject-${oc.id}`}
+                                >
+                                  <ThumbsDown className="h-4 w-4 mr-1" />
+                                  Reject
+                                </Button>
+                              </div>
                             </div>
                           )}
                         </div>
