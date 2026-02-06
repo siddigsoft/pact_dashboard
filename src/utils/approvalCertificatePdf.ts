@@ -39,294 +39,339 @@ interface ApprovalCertificateData {
     status: string;
     approvedAt: string;
     notes: string | null;
+    signatureImageData?: string | null;
   };
 }
 
-const COLORS = {
-  primary: [41, 98, 255] as [number, number, number],
+const C = {
+  primary: [26, 54, 93] as [number, number, number],
+  accent: [41, 98, 255] as [number, number, number],
   dark: [30, 30, 40] as [number, number, number],
-  medium: [80, 80, 100] as [number, number, number],
-  light: [140, 140, 160] as [number, number, number],
+  body: [55, 55, 70] as [number, number, number],
+  label: [120, 120, 140] as [number, number, number],
   border: [200, 205, 215] as [number, number, number],
-  bgLight: [245, 247, 250] as [number, number, number],
-  success: [22, 163, 74] as [number, number, number],
+  bgLight: [247, 248, 252] as [number, number, number],
+  success: [22, 130, 65] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
+  headerBg: [26, 54, 93] as [number, number, number],
 };
 
-function formatCurrency(amountCents: number, currency: string = 'SDG'): string {
-  const amount = amountCents / 100;
-  return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtCurrency(cents: number, cur: string = 'SDG'): string {
+  return `${cur} ${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatCategory(cat: string): string {
+function fmtCategory(cat: string): string {
   return cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function fmtDate(d: string | null | undefined, withTime = false): string {
+  if (!d) return 'N/A';
+  try {
+    return format(new Date(d), withTime ? 'MMM d, yyyy  HH:mm' : 'MMM d, yyyy');
+  } catch {
+    return d;
+  }
 }
 
 function parseSignatureFromNotes(notes: string | null): { method: string; hash: string; id: string; signedAt: string } | null {
   if (!notes) return null;
   const match = notes.match(/\[Signed:\s*(\S+)\s*\|\s*Hash:\s*(\S+?)\.\.\.\s*\|\s*ID:\s*(\S+)\s*\|\s*(.+?)\]/);
   if (!match) return null;
-  return {
-    method: match[1],
-    hash: match[2],
-    id: match[3],
-    signedAt: match[4],
-  };
+  return { method: match[1], hash: match[2], id: match[3], signedAt: match[4] };
 }
 
-function getApprovalNotesWithoutSignature(notes: string | null): string {
+function getCleanNotes(notes: string | null): string {
   if (!notes) return '';
   return notes.replace(/\n?\[Signed:.*?\]/, '').trim();
 }
 
-export function generateApprovalCertificatePdf(data: ApprovalCertificateData) {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.width;
-  const margin = 18;
-  const contentWidth = pageWidth - margin * 2;
-  let y = margin;
+async function loadLogoAsDataUrl(): Promise<string | null> {
+  try {
+    const resp = await fetch('/pact-logo.png');
+    const blob = await resp.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function generateApprovalCertificatePdf(data: ApprovalCertificateData) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pw = doc.internal.pageSize.width;
+  const ph = doc.internal.pageSize.height;
+  const ml = 20;
+  const mr = 20;
+  const cw = pw - ml - mr;
+  const col2X = ml + cw / 2 + 4;
+  let y = 0;
 
   const refNumber = `PACT-OC-${data.submission.id.substring(0, 8).toUpperCase()}`;
 
-  doc.setFillColor(...COLORS.primary);
-  doc.rect(0, 0, pageWidth, 48, 'F');
+  const logoDataUrl = await loadLogoAsDataUrl();
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', ml, 12, 22, 22);
+    } catch { /* logo failed, continue without */ }
+  }
 
-  doc.setFontSize(9);
-  doc.setTextColor(...COLORS.white);
-  doc.setFont('helvetica', 'normal');
-  doc.text('PACT Command Center', margin, 14);
-  doc.text('Field Operations Command Center', margin, 20);
-
-  doc.setFontSize(16);
+  doc.setFontSize(14);
+  doc.setTextColor(...C.primary);
   doc.setFont('helvetica', 'bold');
-  doc.text('OPERATIONAL COST APPROVAL CERTIFICATE', margin, 34);
-
+  doc.text('PACT', ml + 26, 20);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Ref: ${refNumber}`, pageWidth - margin - 50, 14);
-  doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}`, pageWidth - margin - 62, 20);
+  doc.setTextColor(...C.body);
+  doc.text('Command Center', ml + 26, 25);
+  doc.text('Field Operations', ml + 26, 29);
 
-  y = 56;
+  doc.setFontSize(7);
+  doc.setTextColor(...C.label);
+  doc.text(`Ref: ${refNumber}`, pw - mr, 16, { align: 'right' });
+  doc.text(`Date: ${format(new Date(), 'MMM d, yyyy')}`, pw - mr, 21, { align: 'right' });
+  doc.text(`Time: ${format(new Date(), 'HH:mm:ss')}`, pw - mr, 26, { align: 'right' });
 
-  doc.setFillColor(...COLORS.bgLight);
-  doc.roundedRect(margin, y, contentWidth, 28, 2, 2, 'F');
-  doc.setDrawColor(...COLORS.border);
-  doc.roundedRect(margin, y, contentWidth, 28, 2, 2, 'S');
+  y = 38;
+  doc.setDrawColor(...C.primary);
+  doc.setLineWidth(0.8);
+  doc.line(ml, y, pw - mr, y);
+  doc.setLineWidth(0.2);
+  doc.setDrawColor(...C.border);
+  doc.line(ml, y + 1, pw - mr, y + 1);
 
-  doc.setFontSize(9);
-  doc.setTextColor(...COLORS.light);
-  doc.setFont('helvetica', 'normal');
-  doc.text('STATUS', margin + 6, y + 8);
-  doc.text('AMOUNT', margin + 50, y + 8);
-  doc.text('CATEGORY', margin + 110, y + 8);
-
-  doc.setFontSize(12);
-  doc.setTextColor(...COLORS.success);
+  y = 46;
+  doc.setFontSize(13);
+  doc.setTextColor(...C.primary);
   doc.setFont('helvetica', 'bold');
-  doc.text('APPROVED', margin + 6, y + 20);
+  doc.text('OPERATIONAL COST APPROVAL CONFIRMATION', pw / 2, y, { align: 'center' });
 
-  doc.setTextColor(...COLORS.dark);
-  doc.text(formatCurrency(data.submission.amount_cents, data.submission.currency), margin + 50, y + 20);
-
-  doc.setFontSize(10);
-  doc.setTextColor(...COLORS.medium);
-  doc.setFont('helvetica', 'normal');
-  doc.text(formatCategory(data.submission.expense_category), margin + 110, y + 20);
-
-  y += 38;
-
-  doc.setFontSize(11);
-  doc.setTextColor(...COLORS.dark);
-  doc.setFont('helvetica', 'bold');
-  doc.text('REQUEST DETAILS', margin, y);
-  y += 2;
-  doc.setDrawColor(...COLORS.primary);
-  doc.setLineWidth(0.5);
-  doc.line(margin, y, margin + 40, y);
-  y += 8;
-
-  const addField = (label: string, value: string, xOffset: number = 0) => {
-    doc.setFontSize(8);
-    doc.setTextColor(...COLORS.light);
-    doc.setFont('helvetica', 'normal');
-    doc.text(label, margin + xOffset, y);
-    y += 5;
-    doc.setFontSize(9);
-    doc.setTextColor(...COLORS.dark);
-    doc.setFont('helvetica', 'normal');
-    doc.text(value || '-', margin + xOffset, y);
-    y += 7;
-  };
-
-  const col2 = contentWidth / 2 + margin;
-  const savedY = y;
-
-  addField('Submitted By', `${data.submitter.name} (${data.submitter.role || 'N/A'})`);
-  addField('Email', data.submitter.email);
-  addField('Submission Date', data.submission.submitted_at ? format(new Date(data.submission.submitted_at), 'MMM d, yyyy HH:mm') : format(new Date(data.submission.created_at), 'MMM d, yyyy HH:mm'));
-
-  if (data.submission.description) {
-    addField('Description', data.submission.description.substring(0, 80) + (data.submission.description.length > 80 ? '...' : ''));
-  }
-
-  const leftEndY = y;
-  y = savedY;
-
-  const addFieldRight = (label: string, value: string) => {
-    doc.setFontSize(8);
-    doc.setTextColor(...COLORS.light);
-    doc.setFont('helvetica', 'normal');
-    doc.text(label, col2, y);
-    y += 5;
-    doc.setFontSize(9);
-    doc.setTextColor(...COLORS.dark);
-    doc.setFont('helvetica', 'normal');
-    doc.text(value || '-', col2, y);
-    y += 7;
-  };
-
-  addFieldRight('Reference Number', refNumber);
-  addFieldRight('Vendor', data.submission.vendor || 'Not specified');
-  addFieldRight('Expense Date', data.submission.expense_date ? format(new Date(data.submission.expense_date), 'MMM d, yyyy') : 'Not specified');
-  if (data.project) {
-    addFieldRight('Project', data.project.name);
-  }
-  if (data.hub) {
-    addFieldRight('Hub', data.hub.name);
-  }
-
-  y = Math.max(leftEndY, y) + 4;
-
-  const docsCount = Array.isArray(data.submission.supporting_documents) ? data.submission.supporting_documents.length : 0;
-  if (docsCount > 0) {
-    doc.setFontSize(8);
-    doc.setTextColor(...COLORS.light);
-    doc.text(`Supporting Documents: ${docsCount} file(s) attached`, margin, y);
-    y += 8;
-  }
-
-  doc.setDrawColor(...COLORS.border);
-  doc.line(margin, y, pageWidth - margin, y);
   y += 10;
 
-  const drawSignatureBlock = (
+  doc.setFillColor(...C.bgLight);
+  doc.roundedRect(ml, y, cw, 22, 1.5, 1.5, 'F');
+  doc.setDrawColor(...C.border);
+  doc.roundedRect(ml, y, cw, 22, 1.5, 1.5, 'S');
+
+  const statusX = ml + 8;
+  const amountX = ml + 55;
+  const catX = ml + 120;
+
+  doc.setFontSize(7);
+  doc.setTextColor(...C.label);
+  doc.setFont('helvetica', 'normal');
+  doc.text('STATUS', statusX, y + 7);
+  doc.text('AMOUNT', amountX, y + 7);
+  doc.text('CATEGORY', catX, y + 7);
+
+  doc.setFontSize(11);
+  doc.setTextColor(...C.success);
+  doc.setFont('helvetica', 'bold');
+  doc.text('APPROVED', statusX, y + 16);
+
+  doc.setFontSize(11);
+  doc.setTextColor(...C.dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtCurrency(data.submission.amount_cents, data.submission.currency), amountX, y + 16);
+
+  doc.setFontSize(9);
+  doc.setTextColor(...C.body);
+  doc.setFont('helvetica', 'normal');
+  doc.text(fmtCategory(data.submission.expense_category), catX, y + 16);
+
+  y += 30;
+
+  const sectionTitle = (title: string) => {
+    doc.setFontSize(9);
+    doc.setTextColor(...C.primary);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, ml, y);
+    y += 1;
+    doc.setDrawColor(...C.accent);
+    doc.setLineWidth(0.4);
+    doc.line(ml, y, ml + doc.getTextWidth(title) + 2, y);
+    doc.setLineWidth(0.2);
+    y += 5;
+  };
+
+  const fieldRow = (label: string, value: string, x: number) => {
+    doc.setFontSize(7);
+    doc.setTextColor(...C.label);
+    doc.setFont('helvetica', 'normal');
+    doc.text(label, x, y);
+    doc.setFontSize(8.5);
+    doc.setTextColor(...C.dark);
+    doc.setFont('helvetica', 'normal');
+    const maxW = (x === ml) ? (cw / 2 - 8) : (cw / 2 - 4);
+    const lines = doc.splitTextToSize(value || '-', maxW);
+    doc.text(lines[0], x, y + 4);
+  };
+
+  sectionTitle('REQUEST DETAILS');
+
+  const savedY = y;
+  fieldRow('Submitted By', data.submitter.name, ml);
+  y += 11;
+  fieldRow('Role', data.submitter.role || 'N/A', ml);
+  y += 11;
+  fieldRow('Submission Date', fmtDate(data.submission.submitted_at || data.submission.created_at, true), ml);
+  y += 11;
+  if (data.submission.description) {
+    fieldRow('Description', data.submission.description.substring(0, 90) + (data.submission.description.length > 90 ? '...' : ''), ml);
+    y += 11;
+  }
+  const leftEndY = y;
+
+  y = savedY;
+  fieldRow('Expense Date', fmtDate(data.submission.expense_date), col2X);
+  y += 11;
+  fieldRow('Vendor', data.submission.vendor || 'Not specified', col2X);
+  y += 11;
+  fieldRow('Reference', refNumber, col2X);
+  y += 11;
+  if (data.project) {
+    fieldRow('Project', data.project.name, col2X);
+    y += 11;
+  }
+  if (data.hub) {
+    fieldRow('Hub', data.hub.name, col2X);
+    y += 11;
+  }
+
+  y = Math.max(leftEndY, y) + 2;
+
+  doc.setDrawColor(...C.border);
+  doc.line(ml, y, pw - mr, y);
+  y += 6;
+
+  sectionTitle('APPROVAL TIMELINE');
+
+  const footerReserve = 30;
+  const ensureFit = (needed: number) => {
+    if (y + needed > ph - footerReserve) {
+      doc.addPage();
+      y = 20;
+    }
+  };
+
+  const drawApprovalRow = (
     tierLabel: string,
     tierData: ApprovalCertificateData['tier1'],
-    tierNumber: number
+    tierNum: number,
+    sigImage?: string | null
   ) => {
-    const blockHeight = 52;
-    const blockWidth = contentWidth;
+    const rowH = sigImage ? 32 : 24;
+    ensureFit(rowH + 6);
 
-    if (y + blockHeight > doc.internal.pageSize.height - 30) {
-      doc.addPage();
-      y = margin;
-    }
+    doc.setFillColor(...C.bgLight);
+    doc.roundedRect(ml, y, cw, rowH, 1.5, 1.5, 'F');
+    doc.setDrawColor(...C.border);
+    doc.roundedRect(ml, y, cw, rowH, 1.5, 1.5, 'S');
 
-    doc.setFillColor(...COLORS.bgLight);
-    doc.roundedRect(margin, y, blockWidth, blockHeight, 2, 2, 'F');
-    doc.setDrawColor(...COLORS.border);
-    doc.roundedRect(margin, y, blockWidth, blockHeight, 2, 2, 'S');
-
-    doc.setDrawColor(...(tierNumber === 2 ? COLORS.primary : COLORS.success));
-    doc.setLineWidth(2);
-    doc.line(margin, y, margin, y + blockHeight);
+    doc.setDrawColor(...(tierNum === 2 ? C.accent : C.success));
+    doc.setLineWidth(1.5);
+    doc.line(ml, y, ml, y + rowH);
     doc.setLineWidth(0.2);
 
-    const innerX = margin + 8;
-    let innerY = y + 10;
-
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...(tierNumber === 2 ? COLORS.primary : COLORS.success));
-    doc.text(tierLabel.toUpperCase(), innerX, innerY);
+    const ix = ml + 6;
+    let iy = y + 6;
 
     doc.setFontSize(8);
-    doc.setTextColor(...COLORS.success);
     doc.setFont('helvetica', 'bold');
-    doc.text(tierData.status === 'approved' ? 'APPROVED' : tierData.status.toUpperCase(), innerX + 80, innerY);
+    doc.setTextColor(...(tierNum === 2 ? C.accent : C.success));
+    doc.text(tierLabel, ix, iy);
 
-    innerY += 10;
-
-    doc.setFontSize(9);
-    doc.setTextColor(...COLORS.dark);
+    doc.setTextColor(...C.success);
     doc.setFont('helvetica', 'bold');
-    doc.text('Approver:', innerX, innerY);
+    doc.setFontSize(7.5);
+    const statusText = tierData.status === 'approved' ? 'APPROVED' : tierData.status.toUpperCase();
+    doc.text(statusText, pw - mr - 8, iy, { align: 'right' });
+
+    iy += 7;
+    doc.setFontSize(8);
+    doc.setTextColor(...C.dark);
     doc.setFont('helvetica', 'normal');
-    doc.text(tierData.approverName, innerX + 30, innerY);
+    doc.text(`Approved by: ${tierData.approverName}`, ix, iy);
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Date:', innerX + 100, innerY);
-    doc.setFont('helvetica', 'normal');
-    const approvedDateStr = tierData.approvedAt
-      ? (() => { try { return format(new Date(tierData.approvedAt), 'MMM d, yyyy HH:mm'); } catch { return tierData.approvedAt; } })()
-      : 'N/A';
-    doc.text(approvedDateStr, innerX + 116, innerY);
+    const dateStr = fmtDate(tierData.approvedAt, true);
+    doc.setTextColor(...C.body);
+    doc.text(`Date: ${dateStr}`, ix + 90, iy);
 
-    innerY += 8;
-
-    const cleanNotes = getApprovalNotesWithoutSignature(tierData.notes);
+    const cleanNotes = getCleanNotes(tierData.notes);
     if (cleanNotes) {
-      doc.setFontSize(8);
-      doc.setTextColor(...COLORS.medium);
+      iy += 5.5;
+      doc.setFontSize(7);
+      doc.setTextColor(...C.label);
       doc.setFont('helvetica', 'italic');
-      const notesText = cleanNotes.length > 100 ? cleanNotes.substring(0, 100) + '...' : cleanNotes;
-      doc.text(`Notes: "${notesText}"`, innerX, innerY);
-      innerY += 7;
+      const notesTrunc = cleanNotes.length > 80 ? cleanNotes.substring(0, 80) + '...' : cleanNotes;
+      doc.text(`Notes: "${notesTrunc}"`, ix, iy);
     }
 
-    if (tierNumber === 2) {
+    if (tierNum === 2) {
       const sig = parseSignatureFromNotes(tierData.notes);
       if (sig) {
-        innerY += 1;
-        doc.setFontSize(7);
-        doc.setTextColor(...COLORS.primary);
+        iy += 5;
+        doc.setFontSize(6.5);
+        doc.setTextColor(...C.accent);
         doc.setFont('helvetica', 'bold');
-        doc.text('DIGITAL SIGNATURE', innerX, innerY);
+        doc.text('DIGITAL SIGNATURE', ix, iy);
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...COLORS.medium);
-        doc.text(`Method: ${sig.method}  |  Hash: ${sig.hash}...  |  Sig ID: ${sig.id}`, innerX + 40, innerY);
+        doc.setTextColor(...C.label);
+        doc.text(`Method: ${sig.method}  |  Hash: ${sig.hash}...  |  ID: ${sig.id}`, ix + 30, iy);
+      }
+
+      if (sigImage) {
+        try {
+          doc.addImage(sigImage, 'PNG', pw - mr - 45, y + 4, 40, rowH - 8);
+        } catch { /* signature image failed */ }
       }
     }
 
-    y += blockHeight + 8;
+    y += rowH + 4;
   };
 
-  doc.setFontSize(11);
-  doc.setTextColor(...COLORS.dark);
-  doc.setFont('helvetica', 'bold');
-  doc.text('APPROVAL SIGNATURES', margin, y);
+  drawApprovalRow('TIER 1  -  Supervisor / FOM Review', data.tier1, 1);
+  drawApprovalRow('TIER 2  -  Admin / Super Admin Final Approval', data.tier2, 2, data.tier2.signatureImageData);
+
+  ensureFit(22);
   y += 2;
-  doc.setDrawColor(...COLORS.primary);
-  doc.setLineWidth(0.5);
-  doc.line(margin, y, margin + 45, y);
-  y += 8;
-
-  drawSignatureBlock('Tier 1 - Supervisor / FOM Review', data.tier1, 1);
-  drawSignatureBlock('Tier 2 - Admin / Super Admin Final Approval', data.tier2, 2);
-
-  if (y + 30 > doc.internal.pageSize.height - 20) {
-    doc.addPage();
-    y = margin;
-  }
-
-  doc.setDrawColor(...COLORS.border);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 8;
+  doc.setDrawColor(...C.border);
+  doc.line(ml, y, pw - mr, y);
+  y += 5;
 
   doc.setFontSize(7);
-  doc.setTextColor(...COLORS.light);
+  doc.setTextColor(...C.label);
   doc.setFont('helvetica', 'normal');
-  doc.text('This document certifies that the above operational cost submission has been reviewed and approved through', margin, y);
-  y += 4;
-  doc.text('the PACT two-tier approval workflow. Both Tier 1 (Supervisor/FOM) and Tier 2 (Admin/Super Admin) approvals', margin, y);
-  y += 4;
-  doc.text('have been obtained. The digital signature provides cryptographic proof of the final approver\'s identity.', margin, y);
-  y += 8;
+  doc.text(
+    'This document confirms that the above operational cost submission has been reviewed and approved through the PACT',
+    ml, y
+  );
+  y += 3.5;
+  doc.text(
+    'two-tier approval workflow. Both Tier 1 (Supervisor/FOM) and Tier 2 (Admin/Super Admin) approvals have been obtained.',
+    ml, y
+  );
+  y += 3.5;
+  doc.text(
+    'The digital signature provides cryptographic proof of the final approver\'s identity and approval timestamp.',
+    ml, y
+  );
 
-  doc.setFontSize(7);
-  doc.setTextColor(...COLORS.light);
-  doc.text(`Document Reference: ${refNumber}`, margin, y);
-  doc.text(`PACT Command Center - Field Operations`, pageWidth - margin - 55, y);
+  const footerY = ph - 12;
+  doc.setDrawColor(...C.primary);
+  doc.setLineWidth(0.4);
+  doc.line(ml, footerY - 3, pw - mr, footerY - 3);
+  doc.setLineWidth(0.2);
 
-  doc.save(`Approval-Certificate-${refNumber}.pdf`);
+  doc.setFontSize(6.5);
+  doc.setTextColor(...C.label);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Document Reference: ${refNumber}`, ml, footerY);
+  doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy HH:mm:ss')}`, pw / 2, footerY, { align: 'center' });
+  doc.text('PACT Command Center', pw - mr, footerY, { align: 'right' });
+
+  doc.save(`Approval-Confirmation-${refNumber}.pdf`);
 }
