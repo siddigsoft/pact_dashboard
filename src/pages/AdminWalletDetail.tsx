@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Wallet, WalletTransaction } from '@/types/wallet';
-import { MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle, Pencil, Check, X, Loader2 } from 'lucide-react';
 
 const currencyFmt = (amount: number, currency: string) => 
   new Intl.NumberFormat(undefined, { 
@@ -35,6 +35,10 @@ const AdminWalletDetail = () => {
   const [loading, setLoading] = useState(true);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingSiteVisits, setLoadingSiteVisits] = useState(true);
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [editTxAmount, setEditTxAmount] = useState('');
+  const [savingTx, setSavingTx] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   const loadWalletData = async () => {
     if (!userId) return;
@@ -253,6 +257,105 @@ const AdminWalletDetail = () => {
 
     return { earned, withdrawn };
   }, [transactions]);
+
+  const startEditTx = (txn: WalletTransaction) => {
+    setEditingTxId(txn.id);
+    setEditTxAmount(String(txn.amount));
+  };
+
+  const cancelEditTx = () => {
+    setEditingTxId(null);
+    setEditTxAmount('');
+  };
+
+  const saveEditTx = async (txnId: string) => {
+    const newAmount = parseFloat(editTxAmount);
+    if (isNaN(newAmount) || newAmount === 0) {
+      toast({ title: 'Invalid Amount', description: 'Please enter a valid non-zero amount', variant: 'destructive' });
+      return;
+    }
+
+    setSavingTx(true);
+    try {
+      const updateData: Record<string, any> = { amount: newAmount };
+      
+      const { error } = await supabase
+        .from('wallet_transactions')
+        .update(updateData)
+        .eq('id', txnId);
+
+      if (error) throw error;
+
+      toast({ title: 'Transaction Updated', description: `Amount updated to ${newAmount.toLocaleString()} ${currency}` });
+      setEditingTxId(null);
+      setEditTxAmount('');
+      await loadWalletData();
+    } catch (error: any) {
+      toast({ title: 'Update Failed', description: error?.message || 'Could not update transaction', variant: 'destructive' });
+    } finally {
+      setSavingTx(false);
+    }
+  };
+
+  const recalculateWalletTotals = async () => {
+    if (!wallet) return;
+    setRecalculating(true);
+    try {
+      const { data: allTxs, error: txError } = await supabase
+        .from('wallet_transactions')
+        .select('amount, type, currency')
+        .eq('user_id', userId);
+
+      if (txError) throw txError;
+
+      let newTotalEarned = 0;
+      let newTotalWithdrawn = 0;
+      const balancesByCurrency: Record<string, number> = {};
+
+      for (const tx of (allTxs || [])) {
+        const amt = Number(tx.amount || 0);
+        const txCurrency = tx.currency || currency;
+        if (!balancesByCurrency[txCurrency]) balancesByCurrency[txCurrency] = 0;
+        
+        if (['earning', 'site_visit_fee', 'adjustment', 'bonus'].includes(tx.type)) {
+          newTotalEarned += amt;
+          balancesByCurrency[txCurrency] += amt;
+        } else if (['withdrawal', 'penalty', 'debit'].includes(tx.type)) {
+          newTotalWithdrawn += Math.abs(amt);
+          balancesByCurrency[txCurrency] -= Math.abs(amt);
+        }
+      }
+
+      const newBalances = { ...wallet.balances };
+      for (const [cur, bal] of Object.entries(balancesByCurrency)) {
+        newBalances[cur] = bal;
+      }
+
+      const { error: updateError } = await supabase
+        .from('wallets')
+        .update({
+          total_earned: newTotalEarned,
+          total_withdrawn: newTotalWithdrawn,
+          balances: newBalances,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', wallet.id);
+
+      if (updateError) throw updateError;
+
+      const primaryCurrency = Object.keys(balancesByCurrency)[0] || currency;
+      const primaryBalance = balancesByCurrency[primaryCurrency] || 0;
+      toast({ 
+        title: 'Wallet Recalculated', 
+        description: `Total Earned: ${newTotalEarned.toLocaleString()} ${primaryCurrency}, Balance: ${primaryBalance.toLocaleString()} ${primaryCurrency}` 
+      });
+      await loadWalletData();
+    } catch (error: any) {
+      toast({ title: 'Recalculation Failed', description: error?.message || 'Could not recalculate wallet', variant: 'destructive' });
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
   const handleAdjustBalance = async () => {
     if (!wallet || !adjAmount) return;
@@ -784,7 +887,24 @@ const AdminWalletDetail = () => {
         <TabsContent value="transactions">
           <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl">
             <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-cyan-300 text-base md:text-lg">Transaction History ({transactions.length})</CardTitle>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-cyan-300 text-base md:text-lg">Transaction History ({transactions.length})</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={recalculateWalletTotals}
+                  disabled={recalculating || transactions.length === 0}
+                  className="border-cyan-500/30 text-cyan-300"
+                  data-testid="button-recalculate-wallet"
+                >
+                  {recalculating ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <DollarSign className="h-4 w-4 mr-2" />
+                  )}
+                  Recalculate Totals
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0 md:p-6">
               <div className="rounded-md border border-cyan-500/30 overflow-x-auto smooth-scroll">
@@ -795,12 +915,13 @@ const AdminWalletDetail = () => {
                       <TableHead className="text-cyan-300">Type</TableHead>
                       <TableHead className="text-cyan-300">Description</TableHead>
                       <TableHead className="text-cyan-300 text-right">Amount</TableHead>
+                      <TableHead className="text-cyan-300 text-center w-[80px]">Edit</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {transactions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-cyan-300/50 h-24">
+                        <TableCell colSpan={5} className="text-center text-cyan-300/50 h-24">
                           No transactions yet
                         </TableCell>
                       </TableRow>
@@ -815,9 +936,59 @@ const AdminWalletDetail = () => {
                           </TableCell>
                           <TableCell className="text-cyan-200">{txn.description || '-'}</TableCell>
                           <TableCell className="text-right">
-                            <span className={txn.amount >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
-                              {txn.amount >= 0 ? '+' : ''}{currencyFmt(txn.amount, txn.currency)}
-                            </span>
+                            {editingTxId === txn.id ? (
+                              <Input
+                                type="number"
+                                value={editTxAmount}
+                                onChange={e => setEditTxAmount(e.target.value)}
+                                className="w-32 ml-auto text-right bg-slate-800 border-cyan-500/50 text-cyan-100"
+                                data-testid={`input-tx-amount-${txn.id}`}
+                                autoFocus
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') saveEditTx(txn.id);
+                                  if (e.key === 'Escape') cancelEditTx();
+                                }}
+                              />
+                            ) : (
+                              <span className={txn.amount >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
+                                {txn.amount >= 0 ? '+' : ''}{currencyFmt(txn.amount, txn.currency)}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {editingTxId === txn.id ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => saveEditTx(txn.id)}
+                                  disabled={savingTx}
+                                  className="text-green-400"
+                                  data-testid={`button-save-tx-${txn.id}`}
+                                >
+                                  {savingTx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={cancelEditTx}
+                                  className="text-red-400"
+                                  data-testid={`button-cancel-tx-${txn.id}`}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => startEditTx(txn)}
+                                className="text-cyan-400"
+                                data-testid={`button-edit-tx-${txn.id}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))
