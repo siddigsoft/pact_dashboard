@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -42,7 +42,9 @@ interface OperationalCostSubmission {
   reference_number: string | null;
   hub_id: string | null;
   project_id: string | null;
+  mmp_file_id: string | null;
   submitted_by: string;
+  submitted_at: string | null;
   submitter_role: string | null;
   supporting_documents: any;
   status: string;
@@ -1028,7 +1030,7 @@ const CostSubmission = () => {
           setApprovalNotes('');
         }
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="dialog-approval-title">
               {approvalDialog.action === 'approve' 
@@ -1037,38 +1039,170 @@ const CostSubmission = () => {
             </DialogTitle>
             <DialogDescription>
               {approvalDialog.action === 'approve'
-                ? `You are about to approve this submission${approvalDialog.tier === 2 ? ' (final approval - clears for payment)' : ' (moves to Tier 2 review)'}.`
+                ? `You are about to approve this submission${approvalDialog.tier === 2 ? ' (final approval - clears for payment)' : ' (moves to Tier 2 Admin review)'}.`
                 : 'You are about to reject this submission. Please provide a reason.'}
             </DialogDescription>
           </DialogHeader>
-          {approvalDialog.submission && (
-            <div className="space-y-3 py-2">
-              <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/50">
-                <div>
-                  <p className="font-medium text-sm">{approvalDialog.submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {users.find(u => u.id === approvalDialog.submission?.submitted_by)?.name || 'Unknown'} - {approvalDialog.submission.expense_category}
+          {approvalDialog.submission && (() => {
+            const sub = approvalDialog.submission;
+            const submitter = users.find(u => u.id === sub.submitted_by);
+            const tier1Approver = sub.tier1_approved_by ? users.find(u => u.id === sub.tier1_approved_by) : null;
+            const linkedProject = allProjects.find(p => p.id === sub.project_id);
+            const budgetRemaining = linkedProject ? (linkedProject as any).budgetRemaining : null;
+            const amountValue = sub.amount_cents / 100;
+            const isOverBudget = budgetRemaining !== null && budgetRemaining !== undefined && amountValue > budgetRemaining;
+            const docCount = Array.isArray(sub.supporting_documents) ? sub.supporting_documents.length : 0;
+
+            return (
+              <div className="space-y-4 py-1">
+                <div className="p-3 rounded-lg bg-muted/50 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm">{sub.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}</p>
+                      {sub.description && sub.description.split('\n').length > 1 && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{sub.description.split('\n').slice(1).join(' ').trim()}</p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-bold text-lg">{sub.currency} {amountValue.toLocaleString()}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Users className="h-3 w-3 shrink-0" />
+                      <span className="truncate"><span className="font-medium text-foreground">{submitter?.name || 'Unknown'}</span> ({sub.submitter_role || 'N/A'})</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <FolderOpen className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{sub.expense_category?.replace(/_/g, ' ')}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Calendar className="h-3 w-3 shrink-0" />
+                      <span>{sub.expense_date ? format(new Date(sub.expense_date), 'MMM d, yyyy') : 'N/A'}</span>
+                    </div>
+                    {sub.vendor && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Building2 className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{sub.vendor}</span>
+                      </div>
+                    )}
+                    {sub.reference_number && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Hash className="h-3 w-3 shrink-0" />
+                        <span className="truncate">Ref: {sub.reference_number}</span>
+                      </div>
+                    )}
+                    {linkedProject && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{linkedProject.name}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Paperclip className="h-3 w-3 shrink-0" />
+                      <span>{docCount} document{docCount !== 1 ? 's' : ''} attached</span>
+                    </div>
+                  </div>
+                </div>
+
+                {linkedProject && budgetRemaining !== null && budgetRemaining !== undefined && (
+                  <div className={`p-3 rounded-lg border text-sm ${isOverBudget ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className={`h-4 w-4 ${isOverBudget ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
+                        <span className="font-medium">Budget Status</span>
+                      </div>
+                      <Badge className={`text-xs border-0 ${isOverBudget ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' : 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'}`}>
+                        {isOverBudget ? 'Exceeds Budget' : 'Within Budget'}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      <span>Project remaining: <strong>{sub.currency} {budgetRemaining.toLocaleString()}</strong></span>
+                      {isOverBudget && (
+                        <span className="ml-2 text-red-600 dark:text-red-400">(Over by {sub.currency} {(amountValue - budgetRemaining).toLocaleString()})</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Request Timeline</p>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex items-start gap-2">
+                      <div className="mt-0.5 h-4 w-4 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0">
+                        <FileText className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1">
+                        <span className="font-medium">Submitted</span>
+                        <span className="text-muted-foreground ml-1">by {submitter?.name || 'Unknown'}</span>
+                        <p className="text-muted-foreground">{sub.submitted_at ? format(new Date(sub.submitted_at), 'MMM d, yyyy h:mm a') : sub.created_at ? format(new Date(sub.created_at), 'MMM d, yyyy h:mm a') : 'N/A'}</p>
+                      </div>
+                    </div>
+
+                    {sub.tier1_approved_at && (
+                      <div className="flex items-start gap-2">
+                        <div className={`mt-0.5 h-4 w-4 rounded-full flex items-center justify-center shrink-0 ${sub.tier1_status === 'approved' ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                          {sub.tier1_status === 'approved' 
+                            ? <CheckCircle className="h-2.5 w-2.5 text-green-600 dark:text-green-400" /> 
+                            : <XCircle className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />}
+                        </div>
+                        <div className="flex-1">
+                          <span className="font-medium">Tier 1 {sub.tier1_status === 'approved' ? 'Approved' : 'Rejected'}</span>
+                          <span className="text-muted-foreground ml-1">by {tier1Approver?.name || 'Unknown'}</span>
+                          <p className="text-muted-foreground">{format(new Date(sub.tier1_approved_at), 'MMM d, yyyy h:mm a')}</p>
+                          {sub.tier1_notes && <p className="text-muted-foreground italic mt-0.5">"{sub.tier1_notes}"</p>}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-start gap-2">
+                      <div className="mt-0.5 h-4 w-4 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center shrink-0">
+                        <Clock className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div className="flex-1">
+                        <span className="font-medium text-amber-700 dark:text-amber-300">
+                          {approvalDialog.action === 'approve' ? 'Pending Your Approval' : 'Pending Your Decision'}
+                        </span>
+                        <span className="text-muted-foreground ml-1">(Tier {approvalDialog.tier})</span>
+                        <p className="text-muted-foreground">{format(new Date(), 'MMM d, yyyy h:mm a')}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <ArrowRight className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">Next Step After This Action</span>
+                  </div>
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    {approvalDialog.action === 'approve'
+                      ? approvalDialog.tier === 1
+                        ? 'This submission will move to Tier 2 (Admin/Super Admin) for final approval before payment can be processed.'
+                        : 'This submission will be marked as fully approved and cleared for payment processing by the finance team.'
+                      : approvalDialog.tier === 1
+                        ? 'This submission will be rejected and sent back to the submitter. They will see your rejection reason and can resubmit if needed.'
+                        : 'This submission will be rejected at the final stage. The submitter and Tier 1 approver will be notified of the rejection.'}
                   </p>
                 </div>
-                <div className="font-bold">
-                  {approvalDialog.submission.currency} {(approvalDialog.submission.amount_cents / 100).toLocaleString()}
+
+                <div className="space-y-2">
+                  <Label htmlFor="approval-notes">
+                    {approvalDialog.action === 'approve' ? 'Notes (optional)' : 'Reason for rejection *'}
+                  </Label>
+                  <Textarea
+                    id="approval-notes"
+                    placeholder={approvalDialog.action === 'approve' ? 'Add any notes...' : 'Explain why this is being rejected...'}
+                    value={approvalNotes}
+                    onChange={(e) => setApprovalNotes(e.target.value)}
+                    rows={3}
+                    data-testid="input-approval-notes"
+                  />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="approval-notes">
-                  {approvalDialog.action === 'approve' ? 'Notes (optional)' : 'Reason for rejection *'}
-                </Label>
-                <Textarea
-                  id="approval-notes"
-                  placeholder={approvalDialog.action === 'approve' ? 'Add any notes...' : 'Explain why this is being rejected...'}
-                  value={approvalNotes}
-                  onChange={(e) => setApprovalNotes(e.target.value)}
-                  rows={3}
-                  data-testid="input-approval-notes"
-                />
-              </div>
-            </div>
-          )}
+            );
+          })()}
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
