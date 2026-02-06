@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +54,7 @@ interface SupervisedRequest extends WithdrawalRequest {
 }
 
 export default function WithdrawalApproval() {
+  const navigate = useNavigate();
   const { 
     supervisedWithdrawalRequests, 
     refreshSupervisedWithdrawalRequests,
@@ -525,17 +527,54 @@ export default function WithdrawalApproval() {
             Process supervisor-approved withdrawal requests for final payment
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleRefresh} 
-          disabled={refreshing}
-          className="self-start sm:self-auto"
-          data-testid="button-refresh-requests"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/finance-approval')}
+            data-testid="button-goto-finance-approval"
+          >
+            <Wallet className="w-4 h-4 mr-2" />
+            Finance Approval
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/admin/wallets')}
+            data-testid="button-goto-admin-wallets"
+          >
+            <Wallet className="w-4 h-4 mr-2" />
+            Admin Wallets
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/financial-operations')}
+            data-testid="button-goto-financial-ops"
+          >
+            <TrendingUp className="w-4 h-4 mr-2" />
+            Financial Ops
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/budget')}
+            data-testid="button-goto-budget"
+          >
+            <Shield className="w-4 h-4 mr-2" />
+            Budget
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh} 
+            disabled={refreshing}
+            data-testid="button-refresh-requests"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <Alert>

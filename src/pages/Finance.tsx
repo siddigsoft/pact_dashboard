@@ -122,7 +122,7 @@ const Finance: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -132,13 +132,62 @@ const Finance: React.FC = () => {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-        <Button
-          onClick={() => navigate('/financial-operations')}
-          data-testid="button-financial-operations"
-        >
-          <TrendingUp className="h-4 w-4 mr-2" />
-          Financial Operations
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/budget')}
+            data-testid="button-goto-budget"
+          >
+            <BadgePercent className="h-4 w-4 mr-2" />
+            Budget
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/cost-submission')}
+            data-testid="button-goto-cost-submissions"
+          >
+            <ReceiptText className="h-4 w-4 mr-2" />
+            Cost Submissions
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/wallet')}
+            data-testid="button-goto-wallet"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Wallet
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/admin/wallets')}
+            data-testid="button-goto-admin-wallets"
+          >
+            <DollarSign className="h-4 w-4 mr-2" />
+            Admin Wallets
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/down-payment-approval')}
+            data-testid="button-goto-down-payment"
+          >
+            <ArrowUpDown className="h-4 w-4 mr-2" />
+            Down-Payments
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/financial-operations')}
+            data-testid="button-financial-operations"
+          >
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Financial Operations
+          </Button>
+        </div>
       </div>
 
       <div className="bg-blue-50 p-6 rounded-lg shadow-sm border animate-fade-in">

@@ -225,7 +225,45 @@ const AdminWallets: React.FC = () => {
             </p>
           </div>
         </div>
-        <DataFreshnessBadge />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/finance-approval')}
+            data-testid="button-goto-finance-approval"
+          >
+            <DollarSign className="h-4 w-4 mr-2" />
+            Finance Approval
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/wallet-reports')}
+            data-testid="button-goto-wallet-reports"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Wallet Reports
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/financial-operations')}
+            data-testid="button-goto-financial-ops"
+          >
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Financial Ops
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/budget')}
+            data-testid="button-goto-budget"
+          >
+            <Activity className="h-4 w-4 mr-2" />
+            Budget
+          </Button>
+          <DataFreshnessBadge />
+        </div>
       </div>
 
       {/* Stats Cards */}
