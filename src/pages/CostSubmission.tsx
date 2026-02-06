@@ -8,7 +8,9 @@ import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, Dollar
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
@@ -137,6 +139,11 @@ const CostSubmission = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
   const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
   const [actionProcessing, setActionProcessing] = useState(false);
+  const [viewAdvanceDetails, setViewAdvanceDetails] = useState<OperationalCostSubmission | null>(null);
+  const [activeReconciliation, setActiveReconciliation] = useState<OperationalCostSubmission | null>(null);
+  const [reconcileNotes, setReconcileNotes] = useState('');
+  const [reconcileActualAmount, setReconcileActualAmount] = useState('');
+  const [reconcileProcessing, setReconcileProcessing] = useState(false);
 
   const fetchOperationalCosts = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -886,7 +893,14 @@ const CostSubmission = () => {
       </Card>
 
       {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(v) => {
+        if (v !== 'reconciliation') {
+          setActiveReconciliation(null);
+          setReconcileActualAmount('');
+          setReconcileNotes('');
+        }
+        setActiveTab(v as any);
+      }} className="space-y-6">
         <div className="relative">
           <TabsList className="w-full h-auto p-1.5 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 dark:from-slate-800 dark:via-slate-900 dark:to-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-wrap gap-2 justify-start">
             {/* Submit Request */}
@@ -1007,38 +1021,236 @@ const CostSubmission = () => {
                 <CardTitle>Advance Reconciliation</CardTitle>
               </div>
               <CardDescription>
-                Reconcile advance payments by submitting receipts and accounting for all funds received. 
-                Return unused amounts or request additional funds if you overspent.
+                Reconcile advance payments by submitting receipts and accounting for all funds received.
+                <span dir="rtl" className="block text-xs mt-0.5">تسوية المدفوعات المسبقة عن طريق تقديم الإيصالات وحساب جميع الأموال المستلمة.</span>
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Alert className="border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30">
-                <Info className="h-4 w-4 text-purple-600" />
-                <AlertTitle className="text-purple-800 dark:text-purple-200">How Reconciliation Works</AlertTitle>
-                <AlertDescription className="text-purple-700 dark:text-purple-300 text-sm mt-2">
-                  <ol className="list-decimal list-inside space-y-1">
-                    <li>Go to <strong>"Outstanding"</strong> tab to see advances pending reconciliation</li>
-                    <li>Click <strong>"Reconcile"</strong> on an advance to start the process</li>
-                    <li>Upload receipts and document how funds were spent</li>
-                    <li>If you spent less, indicate the amount to return</li>
-                    <li>If you overspent, submit a reimbursement request for the difference</li>
-                  </ol>
-                </AlertDescription>
-              </Alert>
-              
-              <div className="text-center py-8 text-muted-foreground">
-                <RefreshCw className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                <h3 className="text-lg font-semibold mb-2">No Active Reconciliation</h3>
-                <p className="mb-4">Select an outstanding advance to begin reconciliation.</p>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setActiveTab("outstanding")}
-                  data-testid="button-go-outstanding"
-                >
-                  <CircleDollarSign className="h-4 w-4 mr-2" />
-                  View Outstanding Advances
-                </Button>
-              </div>
+              {activeReconciliation ? (() => {
+                const submitter = users.find(u => u.id === activeReconciliation.submitted_by);
+                const project = activeReconciliation.project_id ? allProjects.find(p => p.id === activeReconciliation.project_id) : null;
+                const tier1Approver = activeReconciliation.tier1_approved_by ? users.find(u => u.id === activeReconciliation.tier1_approved_by) : null;
+                const tier2Approver = activeReconciliation.tier2_approved_by ? users.find(u => u.id === activeReconciliation.tier2_approved_by) : null;
+                const advanceAmount = activeReconciliation.amount_cents / 100;
+                const actualSpent = parseFloat(reconcileActualAmount) || 0;
+                const difference = advanceAmount - actualSpent;
+
+                return (
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+                          Active Reconciliation / تسوية نشطة
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {activeReconciliation.reference_number}
+                        </span>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setActiveReconciliation(null)} data-testid="button-cancel-reconciliation">
+                        <XCircle className="h-4 w-4 mr-1" /> Cancel
+                      </Button>
+                    </div>
+
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                      <div className="flex items-start justify-between flex-wrap gap-3">
+                        <div>
+                          <h4 className="font-semibold text-base">
+                            {activeReconciliation.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                          </h4>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {submitter?.name || submitter?.email || 'Unknown'} &middot; {project?.name || 'General'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-amber-600">
+                            {activeReconciliation.currency} {advanceAmount.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Advance Amount / المبلغ المسبق</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {activeReconciliation.expense_date ? format(new Date(activeReconciliation.expense_date), 'MMM d, yyyy') : 'N/A'}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FolderOpen className="h-3 w-3" />
+                          {activeReconciliation.expense_category}
+                        </span>
+                        {activeReconciliation.vendor && (
+                          <span className="flex items-center gap-1">
+                            <Building2 className="h-3 w-3" />
+                            {activeReconciliation.vendor}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-4 text-xs flex-wrap">
+                        <div className="flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3 text-green-500" />
+                          <span>T1: {tier1Approver?.name || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3 text-blue-500" />
+                          <span>T2: {tier2Approver?.name || 'N/A'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <h4 className="font-semibold flex items-center gap-2">
+                        <Receipt className="h-4 w-4" />
+                        Reconciliation Details / تفاصيل التسوية
+                      </h4>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="actual-amount">Actual Amount Spent / المبلغ الفعلي المنفق</Label>
+                          <div className="relative">
+                            <Input
+                              id="actual-amount"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={reconcileActualAmount}
+                              onChange={(e) => setReconcileActualAmount(e.target.value)}
+                              data-testid="input-actual-amount"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                              {activeReconciliation.currency}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border p-3 space-y-2">
+                          <p className="text-sm font-medium">Balance Summary / ملخص الرصيد</p>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Advance / السلفة:</span>
+                            <span>{activeReconciliation.currency} {advanceAmount.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Spent / المنفق:</span>
+                            <span>{activeReconciliation.currency} {actualSpent.toLocaleString()}</span>
+                          </div>
+                          <Separator />
+                          <div className="flex justify-between text-sm font-semibold">
+                            <span>{difference >= 0 ? 'To Return / للإرجاع:' : 'Overspent / تجاوز:'}</span>
+                            <span className={difference >= 0 ? 'text-green-600' : 'text-red-600'}>
+                              {activeReconciliation.currency} {Math.abs(difference).toLocaleString()}
+                            </span>
+                          </div>
+                          {difference >= 0 && actualSpent > 0 && (
+                            <p className="text-xs text-green-600">Return the unused amount to finance. / أعد المبلغ غير المستخدم للمالية.</p>
+                          )}
+                          {difference < 0 && (
+                            <p className="text-xs text-red-600">Submit a reimbursement request for the overspent amount. / قدم طلب تعويض عن المبلغ الزائد.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="reconcile-notes">Notes & Receipt Description / ملاحظات ووصف الإيصال</Label>
+                        <Textarea
+                          id="reconcile-notes"
+                          placeholder="Describe how the funds were used, list receipts collected..."
+                          value={reconcileNotes}
+                          onChange={(e) => setReconcileNotes(e.target.value)}
+                          rows={3}
+                          data-testid="input-reconcile-notes"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setActiveReconciliation(null)}
+                        data-testid="button-reconcile-cancel"
+                      >
+                        Cancel / إلغاء
+                      </Button>
+                      <Button
+                        disabled={!reconcileActualAmount || parseFloat(reconcileActualAmount) < 0 || !reconcileNotes.trim() || reconcileProcessing}
+                        onClick={async () => {
+                          if (!activeReconciliation) return;
+                          setReconcileProcessing(true);
+                          try {
+                            const actual = parseFloat(reconcileActualAmount) * 100;
+                            const diff = activeReconciliation.amount_cents - actual;
+                            const reconciliationData = {
+                              actual_spent_cents: actual,
+                              balance_cents: diff,
+                              balance_status: diff === 0 ? 'settled' : diff > 0 ? 'refund_due' : 'overspent',
+                              reconciliation_notes: reconcileNotes.trim(),
+                              reconciled_at: new Date().toISOString(),
+                              reconciled_by: currentUser?.id,
+                            };
+                            const descUpdate = `${activeReconciliation.description || ''}\n[RECONCILED] Actual: ${activeReconciliation.currency} ${(actual/100).toLocaleString()} | Balance: ${activeReconciliation.currency} ${(diff/100).toLocaleString()} | ${reconcileNotes.trim()}`;
+                            const { error } = await supabase
+                              .from('operational_cost_submissions')
+                              .update({
+                                status: 'reconciled',
+                                description: descUpdate,
+                                updated_at: new Date().toISOString(),
+                              })
+                              .eq('id', activeReconciliation.id);
+
+                            if (error) {
+                              toast({ title: "Reconciliation Failed / فشلت التسوية", description: error.message, variant: "destructive" });
+                            } else {
+                              toast({ title: "Reconciled / تمت التسوية", description: `Advance reconciled successfully. Balance: ${activeReconciliation.currency} ${Math.abs(diff/100).toLocaleString()} ${diff > 0 ? '(to return)' : diff < 0 ? '(overspent)' : '(settled)'}` });
+                              setActiveReconciliation(null);
+                              setReconcileActualAmount('');
+                              setReconcileNotes('');
+                              fetchOperationalCosts();
+                            }
+                          } catch {
+                            toast({ title: "Error / خطأ", description: "Failed to reconcile. Please try again.", variant: "destructive" });
+                          } finally {
+                            setReconcileProcessing(false);
+                          }
+                        }}
+                        data-testid="button-submit-reconciliation"
+                      >
+                        {reconcileProcessing ? 'Processing... / جارٍ المعالجة...' : 'Submit Reconciliation / تقديم التسوية'}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div className="space-y-4">
+                  <Alert className="border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30">
+                    <Info className="h-4 w-4 text-purple-600" />
+                    <AlertTitle className="text-purple-800 dark:text-purple-200">How Reconciliation Works / كيف تعمل التسوية</AlertTitle>
+                    <AlertDescription className="text-purple-700 dark:text-purple-300 text-sm mt-2">
+                      <ol className="list-decimal list-inside space-y-1">
+                        <li>Go to <strong>"Outstanding"</strong> tab to see advances pending reconciliation</li>
+                        <li>Click <strong>"Reconcile"</strong> on an advance to start the process</li>
+                        <li>Enter the actual amount spent and describe how funds were used</li>
+                        <li>If you spent less, return the unused amount to finance</li>
+                        <li>If you overspent, submit a reimbursement request for the difference</li>
+                      </ol>
+                    </AlertDescription>
+                  </Alert>
+                  
+                  <div className="text-center py-8 text-muted-foreground">
+                    <RefreshCw className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <h3 className="text-lg font-semibold mb-2">No Active Reconciliation / لا توجد تسوية نشطة</h3>
+                    <p className="mb-4">Select an outstanding advance to begin reconciliation.</p>
+                    <p dir="rtl" className="mb-4 text-sm">اختر سلفة مستحقة لبدء التسوية.</p>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setActiveTab("outstanding")}
+                      data-testid="button-go-outstanding"
+                    >
+                      <CircleDollarSign className="h-4 w-4 mr-2" />
+                      View Outstanding Advances
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1103,17 +1315,19 @@ const CostSubmission = () => {
                   });
                 })()}
                 onReconcile={(request) => {
-                  toast({
-                    title: 'Reconciliation Started',
-                    description: `Starting reconciliation for advance of ${request.currency} ${((request.requestedAmountCents || 0) / 100).toLocaleString()}`,
-                  });
-                  setActiveTab("reconciliation");
+                  const oc = operationalCosts.find(o => o.id === request.id);
+                  if (oc) {
+                    setActiveReconciliation(oc);
+                    setReconcileActualAmount('');
+                    setReconcileNotes('');
+                    setActiveTab("reconciliation");
+                  }
                 }}
                 onViewDetails={(request) => {
-                  toast({
-                    title: 'Advance Details',
-                    description: `Viewing details for request: ${request.title}`,
-                  });
+                  const oc = operationalCosts.find(o => o.id === request.id);
+                  if (oc) {
+                    setViewAdvanceDetails(oc);
+                  }
                 }}
               />
             </CardContent>
@@ -1819,6 +2033,140 @@ const CostSubmission = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!viewAdvanceDetails} onOpenChange={(open) => !open && setViewAdvanceDetails(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Advance Details
+              <span dir="rtl" className="text-sm font-normal text-muted-foreground">/ تفاصيل السلفة</span>
+            </DialogTitle>
+          </DialogHeader>
+          {viewAdvanceDetails && (() => {
+            const oc = viewAdvanceDetails;
+            const submitter = users.find(u => u.id === oc.submitted_by);
+            const project = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
+            const tier1Approver = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
+            const tier2Approver = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
+            const cleanDesc = oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
+
+            return (
+              <div className="space-y-4" data-testid="view-advance-details">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <h3 className="font-semibold text-base">{cleanDesc}</h3>
+                    <p className="text-sm text-muted-foreground">{oc.reference_number}</p>
+                  </div>
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200">
+                    Approved / معتمد
+                  </Badge>
+                </div>
+
+                <Separator />
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" /> Amount / المبلغ</p>
+                    <p className="font-bold text-lg">{oc.currency} {(oc.amount_cents / 100).toLocaleString()}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Category / الفئة</p>
+                    <p className="font-medium">{oc.expense_category}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Submitted By / مقدم من</p>
+                    <p className="font-medium">{submitter?.name || submitter?.email || 'Unknown'}</p>
+                    <p className="text-xs text-muted-foreground">{oc.submitter_role}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" /> Project / المشروع</p>
+                    <p className="font-medium">{project?.name || 'General'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Expense Date / تاريخ المصروف</p>
+                    <p className="font-medium">{oc.expense_date ? format(new Date(oc.expense_date), 'MMM d, yyyy') : 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Hash className="h-3 w-3" /> Reference / المرجع</p>
+                    <p className="font-medium text-sm">{oc.reference_number || 'N/A'}</p>
+                  </div>
+                  {oc.vendor && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" /> Vendor / المورد</p>
+                      <p className="font-medium">{oc.vendor}</p>
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Submitted / تاريخ التقديم</p>
+                    <p className="font-medium">{oc.submitted_at ? format(new Date(oc.submitted_at), 'MMM d, yyyy HH:mm') : oc.created_at ? format(new Date(oc.created_at), 'MMM d, yyyy HH:mm') : 'N/A'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Disbursed / تاريخ الصرف</p>
+                    <p className="font-medium">{oc.tier2_approved_at ? format(new Date(oc.tier2_approved_at), 'MMM d, yyyy HH:mm') : 'N/A'}</p>
+                  </div>
+                </div>
+
+                {oc.description && oc.description.split('\n').length > 1 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Description / الوصف</p>
+                      <p className="text-sm whitespace-pre-line">{oc.description}</p>
+                    </div>
+                  </>
+                )}
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Approval Timeline / مسار الموافقة
+                  </h4>
+
+                  <div className="rounded-lg border-l-2 border-green-500 pl-3 py-2 bg-green-50/50 dark:bg-green-950/20">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span className="font-medium text-sm">Tier 1 - Supervisor / FOM / المرحلة 1 - المشرف</span>
+                    </div>
+                    <p className="text-sm">Approved by / اعتمد بواسطة: {tier1Approver?.name || 'N/A'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {oc.tier1_approved_at ? format(new Date(oc.tier1_approved_at), 'MMM d, yyyy HH:mm') : 'N/A'}
+                    </p>
+                    {oc.tier1_notes && (
+                      <p className="text-xs mt-1 italic text-muted-foreground">
+                        "{oc.tier1_notes.replace(/\s*\[SIG:.*?\]\s*/g, '').trim()}"
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border-l-2 border-blue-500 pl-3 py-2 bg-blue-50/50 dark:bg-blue-950/20">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle className="h-4 w-4 text-blue-500" />
+                      <span className="font-medium text-sm">Tier 2 - Admin / Super Admin / المرحلة 2 - المسؤول</span>
+                    </div>
+                    <p className="text-sm">Approved by / اعتمد بواسطة: {tier2Approver?.name || 'N/A'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {oc.tier2_approved_at ? format(new Date(oc.tier2_approved_at), 'MMM d, yyyy HH:mm') : 'N/A'}
+                    </p>
+                    {oc.tier2_notes && (
+                      <p className="text-xs mt-1 italic text-muted-foreground">
+                        "{oc.tier2_notes.replace(/\s*\[SIG:.*?\]\s*/g, '').replace(/\s*Method:.*$/g, '').trim()}"
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewAdvanceDetails(null)} data-testid="button-close-details">
+              Close / إغلاق
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {signatureModal.submission && (
         <SignatureConfirmationModal
