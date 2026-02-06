@@ -81,25 +81,84 @@ interface Hub {
   name: string;
 }
 
+interface EditSubmissionData {
+  id: string;
+  expense_category: string;
+  amount_cents: number;
+  currency: string;
+  description: string | null;
+  expense_date: string | null;
+  vendor: string | null;
+  reference_number: string | null;
+  hub_id: string | null;
+  project_id: string | null;
+  supporting_documents: any;
+  status: string;
+}
+
 interface UnifiedCostRequestFormProps {
   projects?: Project[];
   hubs?: Hub[];
   onSuccess?: () => void;
+  editData?: EditSubmissionData | null;
+  onCancelEdit?: () => void;
 }
 
 export default function UnifiedCostRequestForm({ 
   projects = [], 
   hubs = [],
-  onSuccess 
+  onSuccess,
+  editData,
+  onCancelEdit,
 }: UnifiedCostRequestFormProps) {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [supportingDocuments, setSupportingDocuments] = useState<SupportingDocument[]>([]);
+  const [supportingDocuments, setSupportingDocuments] = useState<SupportingDocument[]>(
+    editData?.supporting_documents && Array.isArray(editData.supporting_documents) 
+      ? editData.supporting_documents 
+      : []
+  );
+
+  const parseEditDescription = (desc: string | null) => {
+    if (!desc) return { fundingType: 'advance' as const, title: '', description: '', justification: '' };
+    const fundingMatch = desc.match(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/);
+    const fundingType = fundingMatch?.[1]?.toLowerCase() === 'reimbursement' ? 'reimbursement' as const : 'advance' as const;
+    const withoutFunding = desc.replace(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/, '');
+    const parts = withoutFunding.split('\n\n');
+    const title = parts[0] || '';
+    const justificationIdx = withoutFunding.indexOf('\n\nJustification: ');
+    let description = '';
+    let justification = '';
+    if (justificationIdx >= 0) {
+      description = withoutFunding.substring(title.length + 2, justificationIdx);
+      justification = withoutFunding.substring(justificationIdx + '\n\nJustification: '.length);
+    } else {
+      description = parts.slice(1).join('\n\n');
+    }
+    return { fundingType, title, description, justification };
+  };
+
+  const editDefaults = editData ? parseEditDescription(editData.description) : null;
+  const isEditMode = !!editData;
+  const isResubmit = editData?.status === 'rejected' || editData?.status === 'resubmit';
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+    defaultValues: editData ? {
+      fundingType: editDefaults!.fundingType,
+      expenseCategory: editData.expense_category || '',
+      projectId: editData.project_id || '',
+      hubId: editData.hub_id || currentUser?.hubId || '',
+      amount: editData.amount_cents / 100,
+      currency: editData.currency || 'SDG',
+      title: editDefaults!.title,
+      description: editDefaults!.description,
+      justification: editDefaults!.justification,
+      expenseDate: editData.expense_date || new Date().toISOString().split('T')[0],
+      vendor: editData.vendor || '',
+      referenceNumber: editData.reference_number || '',
+    } : {
       fundingType: 'advance',
       expenseCategory: '',
       projectId: '',
@@ -165,9 +224,7 @@ export default function UnifiedCostRequestForm({
       const hubId = values.hubId && values.hubId.trim() !== '' ? values.hubId : (currentUser.hubId || null);
       const projectId = values.projectId && values.projectId.trim() !== '' ? values.projectId : null;
 
-      const insertData = {
-        submitted_by: currentUser.id,
-        submitter_role: currentUser.role || 'user',
+      const submissionData = {
         expense_category: values.expenseCategory,
         amount_cents: Math.round(values.amount * 100),
         currency: values.currency,
@@ -178,35 +235,78 @@ export default function UnifiedCostRequestForm({
         hub_id: hubId,
         project_id: projectId,
         supporting_documents: supportingDocuments.length > 0 ? supportingDocuments : [],
-        status: 'pending',
-        tier1_status: 'pending',
-        tier2_status: 'pending'
       };
 
-      const { data, error } = await supabase
-        .from('operational_cost_submissions')
-        .insert(insertData)
-        .select();
+      if (isEditMode && editData) {
+        const updateData: Record<string, any> = {
+          ...submissionData,
+          updated_at: new Date().toISOString(),
+        };
 
-      if (error) {
-        console.error('Supabase insert error:', error);
-        
-        let userMessage = error.message || 'Database insertion failed';
-        if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
-          userMessage = 'Your role does not have permission to submit operational costs. Please contact your administrator to update the database permissions (RLS policy).';
-        } else if (error.code === '42P01' || error.message?.includes('does not exist')) {
-          userMessage = 'The operational cost submissions table has not been created yet. Please run the migration SQL in Supabase SQL Editor: supabase/migrations/20260130_operational_cost_submissions.sql';
-        } else if (error.code === '23514' || error.message?.includes('check constraint')) {
-          userMessage = `Invalid expense category "${values.expenseCategory}". Please run the RLS fix migration: supabase/migrations/20260206_fix_operational_cost_rls.sql`;
+        if (isResubmit) {
+          updateData.status = 'pending';
+          updateData.tier1_status = 'pending';
+          updateData.tier1_approved_by = null;
+          updateData.tier1_approved_at = null;
+          updateData.tier1_notes = null;
+          updateData.tier2_status = 'pending';
+          updateData.tier2_approved_by = null;
+          updateData.tier2_approved_at = null;
+          updateData.tier2_notes = null;
+          updateData.rejection_reason = null;
         }
-        
-        throw new Error(userMessage);
-      }
 
-      toast({
-        title: values.fundingType === 'advance' ? "Advance Request Submitted" : "Reimbursement Submitted",
-        description: `Your request for ${values.currency} ${values.amount.toLocaleString()} has been submitted successfully.`,
-      });
+        const { error } = await supabase
+          .from('operational_cost_submissions')
+          .update(updateData)
+          .eq('id', editData.id);
+
+        if (error) {
+          console.error('Supabase update error:', error);
+          throw new Error(error.message || 'Failed to update submission');
+        }
+
+        toast({
+          title: isResubmit ? "Resubmitted Successfully" : "Updated Successfully",
+          description: isResubmit
+            ? `Your request has been updated and resubmitted for approval.`
+            : `Your request has been updated.`,
+        });
+      } else {
+        const insertData = {
+          ...submissionData,
+          submitted_by: currentUser.id,
+          submitter_role: currentUser.role || 'user',
+          status: 'pending',
+          tier1_status: 'pending',
+          tier2_status: 'pending'
+        };
+
+        const { error } = await supabase
+          .from('operational_cost_submissions')
+          .insert(insertData)
+          .select();
+
+        if (error) {
+          console.error('Supabase insert error:', error);
+          
+          let userMessage = error.message || 'Database insertion failed';
+          if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
+            userMessage = 'Your role does not have permission to submit operational costs. Please contact your administrator to update the database permissions (RLS policy).';
+          } else if (error.code === '42P01' || error.message?.includes('does not exist')) {
+            userMessage = 'The operational cost submissions table has not been created yet. Please run the migration SQL in Supabase SQL Editor: supabase/migrations/20260130_operational_cost_submissions.sql';
+          } else if (error.code === '23514' || error.message?.includes('check constraint')) {
+            userMessage = `Invalid expense category "${values.expenseCategory}". Please run the RLS fix migration: supabase/migrations/20260206_fix_operational_cost_rls.sql`;
+          }
+          
+          throw new Error(userMessage);
+        }
+
+        toast({
+          title: values.fundingType === 'advance' ? "Advance Request Submitted" : "Reimbursement Submitted",
+          description: `Your request for ${values.currency} ${values.amount.toLocaleString()} has been submitted successfully.`,
+        });
+      }
 
       form.reset();
       setSupportingDocuments([]);
@@ -237,8 +337,12 @@ export default function UnifiedCostRequestForm({
                   <Wallet className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
                 <div>
-                  <h2 className="text-lg sm:text-xl font-bold">Field Cost Request</h2>
-                  <p className="text-blue-100 text-xs sm:text-sm">Request funds for field operations</p>
+                  <h2 className="text-lg sm:text-xl font-bold">
+                    {isResubmit ? 'Edit & Resubmit Request' : isEditMode ? 'Edit Cost Request' : 'Field Cost Request'}
+                  </h2>
+                  <p className="text-blue-100 text-xs sm:text-sm">
+                    {isResubmit ? 'Update and resubmit your rejected request' : isEditMode ? 'Modify your pending request' : 'Request funds for field operations'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -596,25 +700,37 @@ export default function UnifiedCostRequestForm({
               </div>
             )}
             
-            <Button 
-              type="submit" 
-              disabled={isSubmitting || formProgress < 100}
-              className="gap-2"
-              data-testid="button-submit-request"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Submit Request
-                  <ArrowRight className="h-4 w-4" />
-                </>
+            <div className="flex items-center gap-3 flex-wrap">
+              {isEditMode && onCancelEdit && (
+                <Button 
+                  type="button" 
+                  variant="outline"
+                  onClick={onCancelEdit}
+                  data-testid="button-cancel-edit"
+                >
+                  Cancel
+                </Button>
               )}
-            </Button>
+              <Button 
+                type="submit" 
+                disabled={isSubmitting || formProgress < 100}
+                className="gap-2"
+                data-testid="button-submit-request"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {isEditMode ? 'Saving...' : 'Submitting...'}
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    {isResubmit ? 'Resubmit Request' : isEditMode ? 'Save Changes' : 'Submit Request'}
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </div>
           </CardFooter>
         </Card>
       </form>
