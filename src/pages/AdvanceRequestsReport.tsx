@@ -414,13 +414,26 @@ function AdvanceRequestsReportContent() {
 
   // Export By Team Member
   const exportTeamToExcel = () => {
-    const summaryData = byTeamMember.map(m => ({
+    const summaryData: Record<string, string | number>[] = byTeamMember.map(m => ({
       'Team Member': m.name,
       'Total Requests': m.requests,
       'Total Requested (SDG)': m.totalRequested,
       'Total Approved (SDG)': m.totalApproved,
       'Pending Requests': m.pending,
     }));
+    const teamTotalsExcel = byTeamMember.reduce((acc, m) => ({
+      requests: acc.requests + m.requests,
+      totalRequested: acc.totalRequested + m.totalRequested,
+      totalApproved: acc.totalApproved + m.totalApproved,
+      pending: acc.pending + m.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
+    summaryData.push({
+      'Team Member': 'SUBTOTAL',
+      'Total Requests': teamTotalsExcel.requests,
+      'Total Requested (SDG)': teamTotalsExcel.totalRequested,
+      'Total Approved (SDG)': teamTotalsExcel.totalApproved,
+      'Pending Requests': teamTotalsExcel.pending,
+    });
     const detailData = filteredRequests.map(req => ({
       'Team Member': getProfileName(req.requestedBy),
       'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
@@ -440,13 +453,21 @@ function AdvanceRequestsReportContent() {
   const exportTeamToPDF = () => {
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Team Member');
+    const teamTotals = byTeamMember.reduce((acc, m) => ({
+      requests: acc.requests + m.requests,
+      totalRequested: acc.totalRequested + m.totalRequested,
+      totalApproved: acc.totalApproved + m.totalApproved,
+      pending: acc.pending + m.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
     autoTable(doc, {
       startY: yPos,
       head: [['Team Member', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
       body: byTeamMember.map(m => [m.name, m.requests, m.totalRequested.toLocaleString(), m.totalApproved.toLocaleString(), m.pending]),
+      foot: [['SUBTOTAL', teamTotals.requests.toString(), teamTotals.totalRequested.toLocaleString(), teamTotals.totalApproved.toLocaleString(), teamTotals.pending.toString()]],
       theme: 'striped',
       headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
       bodyStyles: { fontSize: 8 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(12);
@@ -474,13 +495,26 @@ function AdvanceRequestsReportContent() {
 
   // Export By Hub
   const exportHubToExcel = () => {
-    const summaryData = byHub.map(h => ({
+    const summaryData: Record<string, string | number>[] = byHub.map(h => ({
       'Hub': h.name,
       'Total Requests': h.requests,
       'Total Requested (SDG)': h.totalRequested,
       'Total Approved (SDG)': h.totalApproved,
       'Pending Requests': h.pending,
     }));
+    const hubTotalsExcel = byHub.reduce((acc, h) => ({
+      requests: acc.requests + h.requests,
+      totalRequested: acc.totalRequested + h.totalRequested,
+      totalApproved: acc.totalApproved + h.totalApproved,
+      pending: acc.pending + h.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
+    summaryData.push({
+      'Hub': 'SUBTOTAL',
+      'Total Requests': hubTotalsExcel.requests,
+      'Total Requested (SDG)': hubTotalsExcel.totalRequested,
+      'Total Approved (SDG)': hubTotalsExcel.totalApproved,
+      'Pending Requests': hubTotalsExcel.pending,
+    });
     const detailData = filteredRequests.map(req => ({
       'Hub': req.hubName || 'N/A',
       'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
@@ -500,13 +534,21 @@ function AdvanceRequestsReportContent() {
   const exportHubToPDF = () => {
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Hub');
+    const hubTotals = byHub.reduce((acc, h) => ({
+      requests: acc.requests + h.requests,
+      totalRequested: acc.totalRequested + h.totalRequested,
+      totalApproved: acc.totalApproved + h.totalApproved,
+      pending: acc.pending + h.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
     autoTable(doc, {
       startY: yPos,
       head: [['Hub', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
       body: byHub.map(h => [h.name, h.requests, h.totalRequested.toLocaleString(), h.totalApproved.toLocaleString(), h.pending]),
+      foot: [['SUBTOTAL', hubTotals.requests.toString(), hubTotals.totalRequested.toLocaleString(), hubTotals.totalApproved.toLocaleString(), hubTotals.pending.toString()]],
       theme: 'striped',
       headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
       bodyStyles: { fontSize: 8 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(12);
@@ -534,12 +576,23 @@ function AdvanceRequestsReportContent() {
 
   // Export By Status
   const exportStatusToExcel = () => {
-    const summaryData = byStatus.map(s => ({
+    const summaryData: Record<string, string | number>[] = byStatus.map(s => ({
       'Status': s.name,
       'Total Requests': s.requests,
       'Total Requested (SDG)': s.totalRequested,
       'Total Approved (SDG)': s.totalApproved,
     }));
+    const statusTotalsExcel = byStatus.reduce((acc, s) => ({
+      requests: acc.requests + s.requests,
+      totalRequested: acc.totalRequested + s.totalRequested,
+      totalApproved: acc.totalApproved + s.totalApproved,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0 });
+    summaryData.push({
+      'Status': 'SUBTOTAL',
+      'Total Requests': statusTotalsExcel.requests,
+      'Total Requested (SDG)': statusTotalsExcel.totalRequested,
+      'Total Approved (SDG)': statusTotalsExcel.totalApproved,
+    });
     const detailData = filteredRequests.map(req => ({
       'Status': req.status.replace(/_/g, ' ').toUpperCase(),
       'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
@@ -559,13 +612,20 @@ function AdvanceRequestsReportContent() {
   const exportStatusToPDF = () => {
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Status');
+    const statusTotals = byStatus.reduce((acc, s) => ({
+      requests: acc.requests + s.requests,
+      totalRequested: acc.totalRequested + s.totalRequested,
+      totalApproved: acc.totalApproved + s.totalApproved,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0 });
     autoTable(doc, {
       startY: yPos,
       head: [['Status', 'Requests', 'Requested (SDG)', 'Approved (SDG)']],
       body: byStatus.map(s => [s.name, s.requests, s.totalRequested.toLocaleString(), s.totalApproved.toLocaleString()]),
+      foot: [['SUBTOTAL', statusTotals.requests.toString(), statusTotals.totalRequested.toLocaleString(), statusTotals.totalApproved.toLocaleString()]],
       theme: 'striped',
       headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
       bodyStyles: { fontSize: 8 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(12);
@@ -592,13 +652,26 @@ function AdvanceRequestsReportContent() {
 
   // Export By State
   const exportStateToExcel = () => {
-    const summaryData = byState.map(s => ({
+    const summaryData: Record<string, string | number>[] = byState.map(s => ({
       'State': s.name,
       'Total Requests': s.requests,
       'Total Requested (SDG)': s.totalRequested,
       'Total Approved (SDG)': s.totalApproved,
       'Pending': s.pending,
     }));
+    const stateTotalsExcel = byState.reduce((acc, s) => ({
+      requests: acc.requests + s.requests,
+      totalRequested: acc.totalRequested + s.totalRequested,
+      totalApproved: acc.totalApproved + s.totalApproved,
+      pending: acc.pending + s.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
+    summaryData.push({
+      'State': 'SUBTOTAL',
+      'Total Requests': stateTotalsExcel.requests,
+      'Total Requested (SDG)': stateTotalsExcel.totalRequested,
+      'Total Approved (SDG)': stateTotalsExcel.totalApproved,
+      'Pending': stateTotalsExcel.pending,
+    });
     const detailData = filteredRequests.map(req => ({
       'State': req.stateName || 'Unknown',
       'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
@@ -619,13 +692,21 @@ function AdvanceRequestsReportContent() {
   const exportStateToPDF = () => {
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by State');
+    const stateTotals = byState.reduce((acc, s) => ({
+      requests: acc.requests + s.requests,
+      totalRequested: acc.totalRequested + s.totalRequested,
+      totalApproved: acc.totalApproved + s.totalApproved,
+      pending: acc.pending + s.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
     autoTable(doc, {
       startY: yPos,
       head: [['State', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
       body: byState.map(s => [s.name, s.requests, s.totalRequested.toLocaleString(), s.totalApproved.toLocaleString(), s.pending]),
+      foot: [['SUBTOTAL', stateTotals.requests.toString(), stateTotals.totalRequested.toLocaleString(), stateTotals.totalApproved.toLocaleString(), stateTotals.pending.toString()]],
       theme: 'striped',
       headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
       bodyStyles: { fontSize: 8 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(12);
@@ -654,13 +735,26 @@ function AdvanceRequestsReportContent() {
 
   // Export By Project
   const exportProjectToExcel = () => {
-    const summaryData = byProject.map(p => ({
+    const summaryData: Record<string, string | number>[] = byProject.map(p => ({
       'Project': p.name,
       'Total Requests': p.requests,
       'Total Requested (SDG)': p.totalRequested,
       'Total Approved (SDG)': p.totalApproved,
       'Pending': p.pending,
     }));
+    const projectTotalsExcel = byProject.reduce((acc, p) => ({
+      requests: acc.requests + p.requests,
+      totalRequested: acc.totalRequested + p.totalRequested,
+      totalApproved: acc.totalApproved + p.totalApproved,
+      pending: acc.pending + p.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
+    summaryData.push({
+      'Project': 'SUBTOTAL',
+      'Total Requests': projectTotalsExcel.requests,
+      'Total Requested (SDG)': projectTotalsExcel.totalRequested,
+      'Total Approved (SDG)': projectTotalsExcel.totalApproved,
+      'Pending': projectTotalsExcel.pending,
+    });
     const detailData = filteredRequests.map(req => ({
       'Project': req.projectName || 'Unknown',
       'Request Date': format(parseISO(req.requestedAt), 'yyyy-MM-dd'),
@@ -681,13 +775,21 @@ function AdvanceRequestsReportContent() {
   const exportProjectToPDF = () => {
     const doc = new jsPDF();
     let yPos = addPdfHeader(doc, 'Advance Requests by Project');
+    const projectTotals = byProject.reduce((acc, p) => ({
+      requests: acc.requests + p.requests,
+      totalRequested: acc.totalRequested + p.totalRequested,
+      totalApproved: acc.totalApproved + p.totalApproved,
+      pending: acc.pending + p.pending,
+    }), { requests: 0, totalRequested: 0, totalApproved: 0, pending: 0 });
     autoTable(doc, {
       startY: yPos,
       head: [['Project', 'Requests', 'Requested (SDG)', 'Approved (SDG)', 'Pending']],
       body: byProject.map(p => [p.name, p.requests, p.totalRequested.toLocaleString(), p.totalApproved.toLocaleString(), p.pending]),
+      foot: [['SUBTOTAL', projectTotals.requests.toString(), projectTotals.totalRequested.toLocaleString(), projectTotals.totalApproved.toLocaleString(), projectTotals.pending.toString()]],
       theme: 'striped',
       headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
       bodyStyles: { fontSize: 8 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(12);
@@ -1118,6 +1220,15 @@ function AdvanceRequestsReportContent() {
                         </TableRow>
                       ))}
                     </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="font-bold">Subtotal</TableCell>
+                        <TableCell className="text-right font-bold">{byTeamMember.reduce((sum, m) => sum + m.requests, 0)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{byTeamMember.reduce((sum, m) => sum + m.totalRequested, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-green-600">{byTeamMember.reduce((sum, m) => sum + m.totalApproved, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-bold">{byTeamMember.reduce((sum, m) => sum + m.pending, 0)}</TableCell>
+                      </TableRow>
+                    </tfoot>
                   </Table>
                 </div>
               )}
@@ -1222,6 +1333,15 @@ function AdvanceRequestsReportContent() {
                         </TableRow>
                       ))}
                     </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="font-bold">Subtotal</TableCell>
+                        <TableCell className="text-right font-bold">{byHub.reduce((sum, h) => sum + h.requests, 0)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{byHub.reduce((sum, h) => sum + h.totalRequested, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-green-600">{byHub.reduce((sum, h) => sum + h.totalApproved, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-bold">{byHub.reduce((sum, h) => sum + h.pending, 0)}</TableCell>
+                      </TableRow>
+                    </tfoot>
                   </Table>
                 </div>
               )}
@@ -1322,6 +1442,14 @@ function AdvanceRequestsReportContent() {
                         </TableRow>
                       ))}
                     </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="font-bold">Subtotal</TableCell>
+                        <TableCell className="text-right font-bold">{byStatus.reduce((sum, s) => sum + s.requests, 0)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{byStatus.reduce((sum, s) => sum + s.totalRequested, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-green-600">{byStatus.reduce((sum, s) => sum + s.totalApproved, 0).toLocaleString()}</TableCell>
+                      </TableRow>
+                    </tfoot>
                   </Table>
                 </div>
               )}
@@ -1426,6 +1554,15 @@ function AdvanceRequestsReportContent() {
                         </TableRow>
                       ))}
                     </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="font-bold">Subtotal</TableCell>
+                        <TableCell className="text-right font-bold">{byState.reduce((sum, s) => sum + s.requests, 0)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{byState.reduce((sum, s) => sum + s.totalRequested, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-green-600">{byState.reduce((sum, s) => sum + s.totalApproved, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-bold">{byState.reduce((sum, s) => sum + s.pending, 0)}</TableCell>
+                      </TableRow>
+                    </tfoot>
                   </Table>
                 </div>
               )}
@@ -1532,6 +1669,15 @@ function AdvanceRequestsReportContent() {
                         </TableRow>
                       ))}
                     </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="font-bold">Subtotal</TableCell>
+                        <TableCell className="text-right font-bold">{byProject.reduce((sum, p) => sum + p.requests, 0)}</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{byProject.reduce((sum, p) => sum + p.totalRequested, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-mono font-bold text-green-600">{byProject.reduce((sum, p) => sum + p.totalApproved, 0).toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-bold">{byProject.reduce((sum, p) => sum + p.pending, 0)}</TableCell>
+                      </TableRow>
+                    </tfoot>
                   </Table>
                 </div>
               )}
