@@ -916,8 +916,8 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       }
 
       // 2. Determine reclaim behavior - go back to PREVIOUS status in the workflow:
-      // Flow: New → Approved → Costed → Dispatched → Accepted → Ongoing → Completed
-      // - Dispatched → goes back to Costed (clear dispatch info, keep costs for re-dispatch)
+      // Flow: New → Approved → Dispatched → Accepted → Ongoing → Completed
+      // - Dispatched → goes back to Approved (clear dispatch info, keep as new approved site)
       // - Accepted → goes back to Dispatched (clear claim info, keep costs)
       // - Ongoing → goes back to Accepted (keep claim info, revert progress)
       // - Completed → goes back to Ongoing (revert completion)
@@ -926,13 +926,16 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       let previousStatus: string;
       
       if (currentStatus === 'dispatched' || currentStatus === 'assigned') {
-        previousStatus = 'costed';
+        previousStatus = 'approved';
         updateData = {
           accepted_by: null,
           accepted_at: null,
-          status: 'costed',
+          status: 'approved',
           dispatched_at: null,
           dispatched_by: null,
+          cost: null,
+          enumerator_fee: null,
+          transport_fee: null,
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
