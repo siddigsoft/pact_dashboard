@@ -313,7 +313,7 @@ const CostSubmission = () => {
           updates.status = 'under_review';
         } else {
           updates.status = 'rejected';
-          updates.rejection_reason = notes || 'Rejected at Tier 1';
+          updates.rejection_reason = notes || 'Rejected at Tier 1 / تم الرفض في المرحلة الأولى';
         }
       } else {
         updates.tier2_status = action === 'approve' ? 'approved' : 'rejected';
@@ -327,7 +327,7 @@ const CostSubmission = () => {
           }
         } else {
           updates.status = 'rejected';
-          updates.rejection_reason = notes || 'Rejected at Tier 2';
+          updates.rejection_reason = notes || 'Rejected at Tier 2 / تم الرفض في المرحلة الثانية';
         }
       }
 
@@ -347,17 +347,18 @@ const CostSubmission = () => {
       if (error) {
         console.error('Approval error:', error);
         toast({
-          title: "Action Failed",
-          description: error.message || "Could not process the approval action. Please try again.",
+          title: "Action Failed / فشل الإجراء",
+          description: error.message || "Could not process the approval action. Please try again. / تعذرت معالجة إجراء الموافقة. يرجى المحاولة مرة أخرى.",
           variant: "destructive",
           duration: 8000,
         });
       } else {
+        const tierAr = tier === 1 ? 'الأولى' : 'الثانية';
         toast({
-          title: action === 'approve' ? "Approved & Signed" : "Rejected",
+          title: action === 'approve' ? "Approved & Signed / تمت الموافقة والتوقيع" : "Rejected / تم الرفض",
           description: tier === 2 && action === 'approve' && signatureData
-            ? `Final approval completed with digital signature (${signatureData.method}).`
-            : `Tier ${tier} ${action === 'approve' ? 'approval' : 'rejection'} completed successfully.`,
+            ? `Final approval completed with digital signature (${signatureData.method}). / تمت الموافقة النهائية بالتوقيع الرقمي.`
+            : `Tier ${tier} ${action === 'approve' ? 'approval' : 'rejection'} completed successfully. / المرحلة ${tierAr} ${action === 'approve' ? 'تمت الموافقة' : 'تم الرفض'} بنجاح.`,
           duration: 5000,
         });
         fetchOperationalCosts();
@@ -365,8 +366,8 @@ const CostSubmission = () => {
     } catch (err) {
       console.error('Approval error:', err);
       toast({
-        title: "Action Failed",
-        description: "An unexpected error occurred. Please try again.",
+        title: "Action Failed / فشل الإجراء",
+        description: "An unexpected error occurred. Please try again. / حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.",
         variant: "destructive",
       });
     } finally {
@@ -431,8 +432,8 @@ const CostSubmission = () => {
     });
 
     toast({
-      title: 'Certificate Downloaded',
-      description: 'The approval certificate PDF has been saved to your device.',
+      title: 'Certificate Downloaded / تم تحميل الشهادة',
+      description: 'The approval certificate PDF has been saved to your device. / تم حفظ شهادة الموافقة بصيغة PDF على جهازك.',
     });
   };
 
@@ -481,13 +482,13 @@ const CostSubmission = () => {
         .eq('tier2_status', 'pending');
 
       if (error) {
-        toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+        toast({ title: "Delete Failed / فشل الحذف", description: error.message, variant: "destructive" });
       } else {
-        toast({ title: "Deleted", description: "The submission has been deleted." });
+        toast({ title: "Deleted / تم الحذف", description: "The submission has been deleted. / تم حذف الطلب." });
         fetchOperationalCosts();
       }
     } catch (err) {
-      toast({ title: "Error", description: "Failed to delete submission.", variant: "destructive" });
+      toast({ title: "Error / خطأ", description: "Failed to delete submission. / فشل في حذف الطلب.", variant: "destructive" });
     } finally {
       setActionProcessing(false);
       setDeleteConfirm(null);
@@ -516,13 +517,13 @@ const CostSubmission = () => {
         .eq('id', recallConfirm.id);
 
       if (error) {
-        toast({ title: "Recall Failed", description: error.message, variant: "destructive" });
+        toast({ title: "Recall Failed / فشل الاسترجاع", description: error.message, variant: "destructive" });
       } else {
-        toast({ title: "Recalled", description: "The submission has been recalled to pending status. All approvals have been reset." });
+        toast({ title: "Recalled / تم الاسترجاع", description: "The submission has been recalled to pending status. All approvals have been reset. / تم استرجاع الطلب إلى حالة المعلق. تمت إعادة ضبط جميع الموافقات." });
         fetchOperationalCosts();
       }
     } catch (err) {
-      toast({ title: "Error", description: "Failed to recall submission.", variant: "destructive" });
+      toast({ title: "Error / خطأ", description: "Failed to recall submission. / فشل في استرجاع الطلب.", variant: "destructive" });
     } finally {
       setActionProcessing(false);
       setRecallConfirm(null);
@@ -772,7 +773,7 @@ const CostSubmission = () => {
                     <CheckCircle className="h-4 w-4 text-green-600" />
                     <span className="font-medium text-sm">Can Review & Approve</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Hub Supervisor (Tier 1), Admin / Super Admin (Tier 2)</p>
+                  <p className="text-xs text-muted-foreground">Hub Supervisor (Tier 1), Admin / Super Admin (Tier 2) / مشرف المركز (المرحلة ١)، المسؤول (المرحلة ٢)</p>
                 </div>
                 <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border">
                   <div className="flex items-center gap-2 mb-1">
@@ -805,6 +806,9 @@ const CostSubmission = () => {
                   <p className="text-xs text-muted-foreground">
                     Hub Supervisor or FOM reviews the submission, verifies details and documents. They can approve, reject, or request changes.
                   </p>
+                  <p dir="rtl" className="text-xs text-muted-foreground mt-1 border-t pt-1">
+                    المرحلة الأولى: مراجعة المشرف - يقوم مشرف المركز أو مدير العمليات الميدانية بمراجعة الطلب والتحقق من التفاصيل والمستندات.
+                  </p>
                 </div>
                 
                 <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
@@ -814,6 +818,9 @@ const CostSubmission = () => {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Admin or Super Admin performs final approval and authorizes payment. Both tiers must approve before payment proceeds.
+                  </p>
+                  <p dir="rtl" className="text-xs text-muted-foreground mt-1 border-t pt-1">
+                    المرحلة الثانية: موافقة المسؤول - يقوم المسؤول أو المسؤول الأعلى بالموافقة النهائية وتفويض الدفع. يجب موافقة المرحلتين قبل الدفع.
                   </p>
                 </div>
                 
@@ -1108,11 +1115,11 @@ const CostSubmission = () => {
                     };
                     const derivedStatus = getOperationalDerivedStatus(oc);
                     const statusLabels: Record<string, string> = {
-                      pending: 'Pending (Tier 1)',
-                      under_review: 'Under Review (Tier 2)',
-                      approved: 'Approved',
-                      rejected: 'Rejected',
-                      paid: 'Paid',
+                      pending: 'Pending (Tier 1) / معلق (المرحلة ١)',
+                      under_review: 'Under Review (Tier 2) / قيد المراجعة (المرحلة ٢)',
+                      approved: 'Approved / تمت الموافقة',
+                      rejected: 'Rejected / مرفوض',
+                      paid: 'Paid / تم الدفع',
                     };
                     const submitterName = users.find(u => u.id === oc.submitted_by)?.name || 'Unknown';
                     const title = oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
@@ -1145,17 +1152,17 @@ const CostSubmission = () => {
                           </div>
                           {oc.tier1_notes && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              <span className="font-medium">Tier 1 Notes:</span> {oc.tier1_notes}
+                              <span className="font-medium">Tier 1 Notes / ملاحظات المرحلة ١:</span> {oc.tier1_notes}
                             </p>
                           )}
                           {oc.tier2_notes && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              <span className="font-medium">Tier 2 Notes:</span> {oc.tier2_notes}
+                              <span className="font-medium">Tier 2 Notes / ملاحظات المرحلة ٢:</span> {oc.tier2_notes}
                             </p>
                           )}
                           {oc.rejection_reason && (
                             <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                              <span className="font-medium">Rejection Reason:</span> {oc.rejection_reason}
+                              <span className="font-medium">Rejection Reason / سبب الرفض:</span> {oc.rejection_reason}
                             </p>
                           )}
                         </div>
@@ -1163,13 +1170,13 @@ const CostSubmission = () => {
                           <div className="text-right">
                             <div className="font-bold text-lg">{oc.currency} {(oc.amount_cents / 100).toLocaleString()}</div>
                             <div className="text-xs text-muted-foreground">
-                              {oc.tier1_status === 'approved' ? 'Tier 1 Approved' : ''}
-                              {oc.tier2_status === 'approved' ? ' / Tier 2 Approved' : ''}
+                              {oc.tier1_status === 'approved' ? 'Tier 1 Approved / المرحلة ١ ✓' : ''}
+                              {oc.tier2_status === 'approved' ? ' | Tier 2 Approved / المرحلة ٢ ✓' : ''}
                             </div>
                           </div>
                           {canTier1Approve(oc) && (
                             <div className="flex flex-col items-end gap-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Tier 1 Review</span>
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Tier 1 Review / مراجعة المرحلة ١</span>
                               <div className="flex gap-2">
                                 <Button
                                   size="sm"
@@ -1178,7 +1185,7 @@ const CostSubmission = () => {
                                   data-testid={`button-tier1-approve-${oc.id}`}
                                 >
                                   <ThumbsUp className="h-4 w-4 mr-1" />
-                                  Approve
+                                  Approve / موافقة
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1187,14 +1194,14 @@ const CostSubmission = () => {
                                   data-testid={`button-tier1-reject-${oc.id}`}
                                 >
                                   <ThumbsDown className="h-4 w-4 mr-1" />
-                                  Reject
+                                  Reject / رفض
                                 </Button>
                               </div>
                             </div>
                           )}
                           {canTier2Approve(oc) && (
                             <div className="flex flex-col items-end gap-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Tier 2 Final</span>
+                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Tier 2 Final / المرحلة ٢ نهائي</span>
                               <div className="flex gap-2">
                                 <Button
                                   size="sm"
@@ -1203,7 +1210,7 @@ const CostSubmission = () => {
                                   data-testid={`button-tier2-approve-${oc.id}`}
                                 >
                                   <ThumbsUp className="h-4 w-4 mr-1" />
-                                  Final Approve
+                                  Final Approve / موافقة نهائية
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1212,7 +1219,7 @@ const CostSubmission = () => {
                                   data-testid={`button-tier2-reject-${oc.id}`}
                                 >
                                   <ThumbsDown className="h-4 w-4 mr-1" />
-                                  Reject
+                                  Reject / رفض
                                 </Button>
                               </div>
                             </div>
@@ -1225,7 +1232,7 @@ const CostSubmission = () => {
                               data-testid={`button-download-certificate-${oc.id}`}
                             >
                               <Download className="h-4 w-4 mr-1" />
-                              Certificate
+                              Certificate / شهادة
                             </Button>
                           )}
                           {canEditSubmission(oc) && (
@@ -1322,11 +1329,23 @@ const CostSubmission = () => {
               {approvalDialog.action === 'approve' 
                 ? `Tier ${approvalDialog.tier} Approval` 
                 : `Tier ${approvalDialog.tier} Rejection`}
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">
+                {approvalDialog.action === 'approve'
+                  ? `الموافقة - المرحلة ${approvalDialog.tier === 1 ? 'الأولى' : 'الثانية'}`
+                  : `الرفض - المرحلة ${approvalDialog.tier === 1 ? 'الأولى' : 'الثانية'}`}
+              </span>
             </DialogTitle>
             <DialogDescription>
               {approvalDialog.action === 'approve'
                 ? `You are about to approve this submission${approvalDialog.tier === 2 ? ' (final approval - clears for payment)' : ' (moves to Tier 2 Admin review)'}.`
                 : 'You are about to reject this submission. Please provide a reason.'}
+              <span dir="rtl" className="block text-xs mt-1">
+                {approvalDialog.action === 'approve'
+                  ? approvalDialog.tier === 2
+                    ? 'أنت على وشك الموافقة على هذا الطلب (الموافقة النهائية - تمهيد للدفع).'
+                    : 'أنت على وشك الموافقة على هذا الطلب (ينتقل إلى المرحلة الثانية لمراجعة المسؤول).'
+                  : 'أنت على وشك رفض هذا الطلب. يرجى تقديم سبب الرفض.'}
+              </span>
             </DialogDescription>
           </DialogHeader>
           {approvalDialog.submission && (() => {
@@ -1397,7 +1416,7 @@ const CostSubmission = () => {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <DollarSign className={`h-4 w-4 ${isOverBudget ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`} />
-                        <span className="font-medium">Budget Status</span>
+                        <span className="font-medium">Budget Status <span dir="rtl" className="text-xs font-normal text-muted-foreground">/ حالة الميزانية</span></span>
                       </div>
                       <Badge className={`text-xs border-0 ${isOverBudget ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300' : 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'}`}>
                         {isOverBudget ? 'Exceeds Budget' : 'Within Budget'}
@@ -1413,14 +1432,14 @@ const CostSubmission = () => {
                 )}
 
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Request Timeline</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Request Timeline <span dir="rtl" className="normal-case">/ الجدول الزمني للطلب</span></p>
                   <div className="space-y-1.5 text-xs">
                     <div className="flex items-start gap-2">
                       <div className="mt-0.5 h-4 w-4 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0">
                         <FileText className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div className="flex-1">
-                        <span className="font-medium">Submitted</span>
+                        <span className="font-medium">Submitted <span dir="rtl" className="text-[10px] font-normal text-muted-foreground">/ تم التقديم</span></span>
                         <span className="text-muted-foreground ml-1">by {submitter?.name || 'Unknown'}</span>
                         <p className="text-muted-foreground">{sub.submitted_at ? format(new Date(sub.submitted_at), 'MMM d, yyyy h:mm a') : sub.created_at ? format(new Date(sub.created_at), 'MMM d, yyyy h:mm a') : 'N/A'}</p>
                       </div>
@@ -1434,7 +1453,7 @@ const CostSubmission = () => {
                             : <XCircle className="h-2.5 w-2.5 text-red-600 dark:text-red-400" />}
                         </div>
                         <div className="flex-1">
-                          <span className="font-medium">Tier 1 {sub.tier1_status === 'approved' ? 'Approved' : 'Rejected'}</span>
+                          <span className="font-medium">Tier 1 {sub.tier1_status === 'approved' ? 'Approved' : 'Rejected'} <span dir="rtl" className="text-[10px] font-normal text-muted-foreground">/ المرحلة الأولى {sub.tier1_status === 'approved' ? 'تمت الموافقة' : 'تم الرفض'}</span></span>
                           <span className="text-muted-foreground ml-1">by {tier1Approver?.name || 'Unknown'}</span>
                           <p className="text-muted-foreground">{format(new Date(sub.tier1_approved_at), 'MMM d, yyyy h:mm a')}</p>
                           {sub.tier1_notes && <p className="text-muted-foreground italic mt-0.5">"{sub.tier1_notes}"</p>}
@@ -1449,8 +1468,11 @@ const CostSubmission = () => {
                       <div className="flex-1">
                         <span className="font-medium text-amber-700 dark:text-amber-300">
                           {approvalDialog.action === 'approve' ? 'Pending Your Approval' : 'Pending Your Decision'}
+                          <span dir="rtl" className="text-[10px] font-normal block">
+                            {approvalDialog.action === 'approve' ? 'في انتظار موافقتك' : 'في انتظار قرارك'}
+                          </span>
                         </span>
-                        <span className="text-muted-foreground ml-1">(Tier {approvalDialog.tier})</span>
+                        <span className="text-muted-foreground ml-1">(Tier {approvalDialog.tier} / المرحلة {approvalDialog.tier === 1 ? 'الأولى' : 'الثانية'})</span>
                         <p className="text-muted-foreground">{format(new Date(), 'MMM d, yyyy h:mm a')}</p>
                       </div>
                     </div>
@@ -1460,7 +1482,7 @@ const CostSubmission = () => {
                 <div className="p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
                   <div className="flex items-center gap-2 mb-1.5">
                     <ArrowRight className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                    <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">Next Step After This Action</span>
+                    <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">Next Step After This Action <span dir="rtl" className="font-normal text-[10px]">/ الخطوة التالية</span></span>
                   </div>
                   <p className="text-xs text-blue-700 dark:text-blue-300">
                     {approvalDialog.action === 'approve'
@@ -1471,15 +1493,27 @@ const CostSubmission = () => {
                         ? 'This submission will be rejected and sent back to the submitter. They will see your rejection reason and can resubmit if needed.'
                         : 'This submission will be rejected at the final stage. The submitter and Tier 1 approver will be notified of the rejection.'}
                   </p>
+                  <p dir="rtl" className="text-xs text-blue-700 dark:text-blue-300 mt-1.5 border-t border-blue-200 dark:border-blue-800 pt-1.5">
+                    {approvalDialog.action === 'approve'
+                      ? approvalDialog.tier === 1
+                        ? 'سينتقل هذا الطلب إلى المرحلة الثانية (المسؤول / المسؤول الأعلى) للموافقة النهائية قبل معالجة الدفع.'
+                        : 'سيتم اعتماد هذا الطلب بشكل نهائي وتمهيده للدفع. سيتطلب توقيعك الرقمي لإتمام العملية.'
+                      : approvalDialog.tier === 1
+                        ? 'سيتم رفض هذا الطلب وإعادته إلى مقدم الطلب. سيرى سبب الرفض ويمكنه إعادة التقديم.'
+                        : 'سيتم رفض هذا الطلب في المرحلة النهائية. سيتم إخطار مقدم الطلب والمراجع في المرحلة الأولى.'}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="approval-notes">
                     {approvalDialog.action === 'approve' ? 'Approval Notes *' : 'Reason for rejection *'}
+                    <span dir="rtl" className="text-xs font-normal text-muted-foreground mr-2">
+                      {approvalDialog.action === 'approve' ? '/ ملاحظات الموافقة *' : '/ سبب الرفض *'}
+                    </span>
                   </Label>
                   <Textarea
                     id="approval-notes"
-                    placeholder={approvalDialog.action === 'approve' ? 'Provide your approval justification...' : 'Explain why this is being rejected...'}
+                    placeholder={approvalDialog.action === 'approve' ? 'Provide your approval justification... / اكتب مبرر الموافقة...' : 'Explain why this is being rejected... / اشرح سبب الرفض...'}
                     value={approvalNotes}
                     onChange={(e) => setApprovalNotes(e.target.value)}
                     rows={3}
@@ -1487,7 +1521,7 @@ const CostSubmission = () => {
                   />
                   {!approvalNotes.trim() && (
                     <p className="text-xs text-amber-600 dark:text-amber-400">
-                      {approvalDialog.action === 'approve' ? 'Approval notes are required to proceed.' : 'A rejection reason is required.'}
+                      {approvalDialog.action === 'approve' ? 'Approval notes are required to proceed. / ملاحظات الموافقة مطلوبة للمتابعة.' : 'A rejection reason is required. / سبب الرفض مطلوب.'}
                     </p>
                   )}
                 </div>
@@ -1501,7 +1535,7 @@ const CostSubmission = () => {
               disabled={approvalProcessing}
               data-testid="button-approval-cancel"
             >
-              Cancel
+              Cancel / إلغاء
             </Button>
             <Button
               variant={approvalDialog.action === 'approve' ? 'default' : 'destructive'}
@@ -1509,9 +1543,9 @@ const CostSubmission = () => {
               disabled={approvalProcessing || !approvalNotes.trim()}
               data-testid="button-approval-confirm"
             >
-              {approvalProcessing ? 'Processing...' : approvalDialog.action === 'approve' 
-                ? (approvalDialog.tier === 2 ? 'Sign & Approve' : 'Confirm Approval') 
-                : 'Confirm Rejection'}
+              {approvalProcessing ? 'Processing... / جارٍ المعالجة...' : approvalDialog.action === 'approve' 
+                ? (approvalDialog.tier === 2 ? 'Sign & Approve / توقيع وموافقة' : 'Confirm Approval / تأكيد الموافقة') 
+                : 'Confirm Rejection / تأكيد الرفض'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1520,9 +1554,13 @@ const CostSubmission = () => {
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle data-testid="dialog-delete-title">Delete Submission</AlertDialogTitle>
+            <AlertDialogTitle data-testid="dialog-delete-title">
+              Delete Submission
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">حذف الطلب</span>
+            </AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete this cost submission? This action cannot be undone.
+              <span dir="rtl" className="block text-xs mt-1">هل أنت متأكد من حذف هذا الطلب؟ لا يمكن التراجع عن هذا الإجراء.</span>
               {deleteConfirm && (
                 <span className="block mt-2 font-medium">
                   {deleteConfirm.currency} {(deleteConfirm.amount_cents / 100).toLocaleString()} - {deleteConfirm.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
@@ -1531,14 +1569,14 @@ const CostSubmission = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={actionProcessing} data-testid="button-delete-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-delete-cancel">Cancel / إلغاء</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteSubmission}
               disabled={actionProcessing}
               className="bg-destructive text-destructive-foreground"
               data-testid="button-delete-confirm"
             >
-              {actionProcessing ? 'Deleting...' : 'Delete'}
+              {actionProcessing ? 'Deleting... / جارٍ الحذف...' : 'Delete / حذف'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1547,9 +1585,13 @@ const CostSubmission = () => {
       <AlertDialog open={!!recallConfirm} onOpenChange={(open) => !open && setRecallConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle data-testid="dialog-recall-title">Recall Submission</AlertDialogTitle>
+            <AlertDialogTitle data-testid="dialog-recall-title">
+              Recall Submission
+              <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">استرجاع الطلب</span>
+            </AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to recall this submission back to pending? This will remove all existing approvals and reset the entire approval process.
+              <span dir="rtl" className="block text-xs mt-1">هل أنت متأكد من استرجاع هذا الطلب إلى حالة المعلق؟ سيتم إزالة جميع الموافقات وإعادة ضبط عملية الموافقة بالكامل.</span>
               {recallConfirm && (
                 <span className="block mt-2 font-medium">
                   {recallConfirm.currency} {(recallConfirm.amount_cents / 100).toLocaleString()} - {recallConfirm.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
@@ -1558,13 +1600,13 @@ const CostSubmission = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={actionProcessing} data-testid="button-recall-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-recall-cancel">Cancel / إلغاء</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRecallSubmission}
               disabled={actionProcessing}
               data-testid="button-recall-confirm"
             >
-              {actionProcessing ? 'Recalling...' : 'Recall to Pending'}
+              {actionProcessing ? 'Recalling... / جارٍ الاسترجاع...' : 'Recall to Pending / استرجاع إلى معلق'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1587,7 +1629,7 @@ const CostSubmission = () => {
           transaction={{
             id: signatureModal.submission.id,
             type: 'cost_submission',
-            title: `Tier 2 Final Approval - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
+            title: `Tier 2 Final Approval / الموافقة النهائية المرحلة ٢ - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
             description: signatureModal.submission.description || undefined,
             amount: signatureModal.submission.amount_cents / 100,
             currency: signatureModal.submission.currency || 'SDG',
