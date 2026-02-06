@@ -630,7 +630,7 @@ const CostSubmission = () => {
             <div dir="rtl" className="p-4 rounded-lg bg-white dark:bg-slate-800 border text-right">
               <h4 className="font-semibold text-sm mb-2 text-blue-800 dark:text-blue-200">دليل تقديم التكاليف التشغيلية</h4>
               <p className="text-xs text-muted-foreground mb-2">
-                هذه الصفحة مخصصة لتقديم <strong>التكاليف التشغيلية الميدانية</strong> مثل التصاريح، التدريب، الاتصالات، المعدات، والاجتماعات. هذه الصفحة <strong>ليست</strong> لتكاليف النقل الخاصة بزيارات المواقع.
+                هذه الصفحة مخصصة لتقديم <strong>التكاليف التشغيلية الميدانية</strong> مثل التصاريح، التدريب، الاتصالات، المعدات، والاجتماعات. هذه الصفحة <strong>ليست</strong> لتكاليف النقل الخاصة بزيارات المواقع أو رسوم العدادين.
               </p>
               <p className="text-xs text-muted-foreground mb-1"><strong>من يمكنه الاستخدام:</strong> مدير العمليات الميدانية، المنسق، المدير القطري، المشرف، المسؤول</p>
               <p className="text-xs text-muted-foreground mb-1"><strong>عملية الموافقة:</strong> المرحلة الأولى (المشرف) ← المرحلة الثانية (المسؤول) ← الدفع</p>
