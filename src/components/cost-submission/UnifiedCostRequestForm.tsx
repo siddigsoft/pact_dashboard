@@ -30,7 +30,6 @@ import {
   Package,
   Printer,
   Coffee,
-  FolderOpen,
   MoreHorizontal,
   CheckCircle2,
   ArrowRight
@@ -45,11 +44,10 @@ const EXPENSE_CATEGORIES = {
   incentives: { label: "Incentives & Allowances", icon: Gift, color: "from-pink-500 to-pink-600" },
   communications: { label: "Internet & Comms", icon: Wifi, color: "from-blue-500 to-blue-600" },
   training: { label: "Training", icon: GraduationCap, color: "from-emerald-500 to-emerald-600" },
-  transport: { label: "Transportation", icon: Car, color: "from-orange-500 to-orange-600" },
+  general_transport: { label: "Transportation", icon: Car, color: "from-orange-500 to-orange-600" },
   equipment: { label: "Equipment & Supplies", icon: Package, color: "from-cyan-500 to-cyan-600" },
   printing: { label: "Printing & Stationery", icon: Printer, color: "from-slate-500 to-slate-600" },
   meetings: { label: "Meetings", icon: Coffee, color: "from-amber-500 to-amber-600" },
-  office_admin: { label: "Office Admin", icon: FolderOpen, color: "from-indigo-500 to-indigo-600" },
   other: { label: "Other", icon: MoreHorizontal, color: "from-gray-500 to-gray-600" }
 } as const;
 
@@ -192,7 +190,17 @@ export default function UnifiedCostRequestForm({
 
       if (error) {
         console.error('Supabase insert error:', error);
-        throw new Error(error.message || 'Database insertion failed');
+        
+        let userMessage = error.message || 'Database insertion failed';
+        if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
+          userMessage = 'Your role does not have permission to submit operational costs. Please contact your administrator to update the database permissions (RLS policy).';
+        } else if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          userMessage = 'The operational cost submissions table has not been created yet. Please run the migration SQL in Supabase SQL Editor: supabase/migrations/20260130_operational_cost_submissions.sql';
+        } else if (error.code === '23514' || error.message?.includes('check constraint')) {
+          userMessage = `Invalid expense category "${values.expenseCategory}". Please run the RLS fix migration: supabase/migrations/20260206_fix_operational_cost_rls.sql`;
+        }
+        
+        throw new Error(userMessage);
       }
 
       toast({
@@ -208,7 +216,8 @@ export default function UnifiedCostRequestForm({
       toast({
         title: "Submission Failed",
         description: error.message || "Failed to submit request. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
+        duration: 10000
       });
     } finally {
       setIsSubmitting(false);
