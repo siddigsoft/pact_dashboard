@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { SignatureConfirmationModal } from "@/components/signatures/SignatureConfirmationModal";
 import type { SignatureMethod } from "@/types/signature";
+import { generateApprovalCertificatePdf } from "@/utils/approvalCertificatePdf";
 
 interface OperationalCostSubmission {
   id: string;
@@ -379,6 +380,54 @@ const CostSubmission = () => {
     const { submission, notes } = signatureModal;
     if (!submission) return;
     processApproval('approve', 2, submission, notes, signatureData);
+  };
+
+  const handleDownloadCertificate = (oc: OperationalCostSubmission) => {
+    const submitter = users.find(u => u.id === oc.submitted_by);
+    const tier1Approver = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
+    const tier2Approver = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
+    const project = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
+
+    generateApprovalCertificatePdf({
+      submission: {
+        id: oc.id,
+        expense_category: oc.expense_category,
+        amount_cents: oc.amount_cents,
+        currency: oc.currency,
+        description: oc.description,
+        expense_date: oc.expense_date,
+        vendor: oc.vendor,
+        reference_number: oc.reference_number,
+        submitted_at: oc.submitted_at,
+        created_at: oc.created_at,
+        supporting_documents: oc.supporting_documents,
+      },
+      submitter: {
+        name: submitter?.name || submitter?.email || 'Unknown',
+        email: submitter?.email || '',
+        role: oc.submitter_role,
+      },
+      project: project ? { name: project.name } : null,
+      tier1: {
+        approverName: tier1Approver?.name || tier1Approver?.email || 'Unknown',
+        approverEmail: tier1Approver?.email,
+        status: oc.tier1_status || 'approved',
+        approvedAt: oc.tier1_approved_at || '',
+        notes: oc.tier1_notes,
+      },
+      tier2: {
+        approverName: tier2Approver?.name || tier2Approver?.email || 'Unknown',
+        approverEmail: tier2Approver?.email,
+        status: oc.tier2_status || 'approved',
+        approvedAt: oc.tier2_approved_at || '',
+        notes: oc.tier2_notes,
+      },
+    });
+
+    toast({
+      title: 'Certificate Downloaded',
+      description: 'The approval certificate PDF has been saved to your device.',
+    });
   };
 
   const submissionStats = {
@@ -1035,6 +1084,17 @@ const CostSubmission = () => {
                                 </Button>
                               </div>
                             </div>
+                          )}
+                          {oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownloadCertificate(oc)}
+                              data-testid={`button-download-certificate-${oc.id}`}
+                            >
+                              <Download className="h-4 w-4 mr-1" />
+                              Certificate
+                            </Button>
                           )}
                         </div>
                       </div>
