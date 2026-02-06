@@ -106,7 +106,7 @@ CREATE POLICY "Admins can view all operational cost submissions"
     EXISTS (
       SELECT 1 FROM profiles p
       WHERE p.id = auth.uid()
-      AND p.role IN ('admin', 'SuperAdmin', 'CountryDirector')
+      AND p.role IN ('admin', 'Admin', 'SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin', 'CountryDirector', 'countryDirector', 'Country Director')
     )
   );
 
@@ -120,10 +120,11 @@ CREATE POLICY "Authorized roles can create operational cost submissions"
       SELECT 1 FROM profiles p
       WHERE p.id = auth.uid()
       AND p.role IN (
-        'Field Operation Manager (FOM)', 
+        'Field Operation Manager (FOM)', 'fom', 'fieldOpManager',
         'Coordinator', 'coordinator',
-        'CountryDirector',
-        'admin', 'SuperAdmin',
+        'CountryDirector', 'countryDirector', 'Country Director',
+        'admin', 'Admin',
+        'SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin',
         'hubSupervisor', 'supervisor'
       )
     )
@@ -172,7 +173,7 @@ CREATE POLICY "Admins can update tier2 for all submissions"
     AND EXISTS (
       SELECT 1 FROM profiles p
       WHERE p.id = auth.uid()
-      AND p.role IN ('admin', 'SuperAdmin')
+      AND p.role IN ('admin', 'Admin', 'SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin')
     )
   );
 
@@ -186,7 +187,7 @@ CREATE POLICY "Finance can process payments"
     AND EXISTS (
       SELECT 1 FROM profiles p
       WHERE p.id = auth.uid()
-      AND p.role IN ('admin', 'SuperAdmin', 'FinancialAdmin')
+      AND p.role IN ('admin', 'Admin', 'SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin', 'FinancialAdmin')
     )
   );
 
