@@ -379,13 +379,34 @@ const CostSubmission = () => {
         fetchOperationalCosts();
       } else {
         const tierAr = tier === 1 ? 'الأولى' : 'الثانية';
-        toast({
-          title: action === 'approve' ? "Approved & Signed / تمت الموافقة والتوقيع" : "Rejected / تم الرفض",
-          description: tier === 2 && action === 'approve' && signatureData
-            ? `Final approval completed with digital signature (${signatureData.method}). / تمت الموافقة النهائية بالتوقيع الرقمي.`
-            : `Tier ${tier} ${action === 'approve' ? 'approval' : 'rejection'} completed successfully. / المرحلة ${tierAr} ${action === 'approve' ? 'تمت الموافقة' : 'تم الرفض'} بنجاح.`,
-          duration: 5000,
-        });
+        const submitterName = users.find(u => u.id === submission.submitted_by)?.name || 'the submitter';
+        const refNum = submission.reference_number || submission.id.substring(0, 8).toUpperCase();
+        const amountStr = `${submission.currency} ${(submission.amount_cents / 100).toLocaleString()}`;
+
+        if (action === 'reject') {
+          toast({
+            title: `Rejected (Tier ${tier}) / تم الرفض (المرحلة ${tierAr})`,
+            description: tier === 1
+              ? `Submission "${refNum}" (${amountStr}) by ${submitterName} has been rejected and returned to the submitter. Reason: "${notes}". They can edit and resubmit. / تم رفض الطلب "${refNum}" (${amountStr}) من ${submitterName} وإعادته إلى مقدم الطلب. السبب: "${notes}". يمكنه التعديل وإعادة التقديم.`
+              : `Submission "${refNum}" (${amountStr}) by ${submitterName} has been rejected at final review. Reason: "${notes}". The submitter and Tier 1 approver have been notified. / تم رفض الطلب "${refNum}" (${amountStr}) من ${submitterName} في المراجعة النهائية. السبب: "${notes}". تم إخطار مقدم الطلب والمراجع في المرحلة الأولى.`,
+            variant: "destructive",
+            duration: 10000,
+          });
+        } else if (tier === 2 && signatureData) {
+          toast({
+            title: "Approved & Signed / تمت الموافقة والتوقيع",
+            description: `Final approval completed for "${refNum}" (${amountStr}) by ${submitterName} with digital signature (${signatureData.method}). Cleared for payment. / تمت الموافقة النهائية على "${refNum}" (${amountStr}) من ${submitterName} بالتوقيع الرقمي. تمت الموافقة للدفع.`,
+            duration: 8000,
+          });
+        } else {
+          toast({
+            title: `Approved (Tier ${tier}) / تمت الموافقة (المرحلة ${tierAr})`,
+            description: tier === 1
+              ? `Submission "${refNum}" (${amountStr}) by ${submitterName} approved. Moves to Tier 2 (Admin) for final review. / تمت الموافقة على طلب "${refNum}" (${amountStr}) من ${submitterName}. ينتقل إلى المرحلة الثانية للمراجعة النهائية.`
+              : `Submission "${refNum}" (${amountStr}) by ${submitterName} fully approved and cleared for payment. / تمت الموافقة الكاملة على طلب "${refNum}" (${amountStr}) من ${submitterName} وتمت الموافقة للدفع.`,
+            duration: 8000,
+          });
+        }
         fetchOperationalCosts();
       }
     } catch (err) {
@@ -1594,9 +1615,31 @@ const CostSubmission = () => {
                                 </div>
                               )}
                               {oc.rejection_reason && (
-                                <div className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400" data-testid={`text-rejection-${oc.id}`}>
-                                  <XCircle className="h-3 w-3 shrink-0 mt-px" />
-                                  <span>{oc.rejection_reason}</span>
+                                <div className="p-2 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" data-testid={`text-rejection-${oc.id}`}>
+                                  <div className="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
+                                    <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                    <div className="space-y-1">
+                                      <p className="font-semibold">
+                                        Rejection Reason / سبب الرفض
+                                      </p>
+                                      <p>"{oc.rejection_reason}"</p>
+                                      {oc.tier1_status === 'rejected' && tier1Approver && (
+                                        <p className="text-red-500 dark:text-red-400">
+                                          Rejected by / رفض بواسطة: {tier1Approver.name || tier1Approver.email}
+                                          {oc.tier1_approved_at && ` — ${format(new Date(oc.tier1_approved_at), 'MMM d, yyyy h:mm a')}`}
+                                        </p>
+                                      )}
+                                      {oc.tier2_status === 'rejected' && tier2Approver && (
+                                        <p className="text-red-500 dark:text-red-400">
+                                          Rejected by / رفض بواسطة: {tier2Approver.name || tier2Approver.email}
+                                          {oc.tier2_approved_at && ` — ${format(new Date(oc.tier2_approved_at), 'MMM d, yyyy h:mm a')}`}
+                                        </p>
+                                      )}
+                                      <p className="text-red-500/80 dark:text-red-400/80 italic">
+                                        You can edit and resubmit this request. / يمكنك تعديل الطلب وإعادة تقديمه.
+                                      </p>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                             </div>
