@@ -777,14 +777,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return 50;
       }
 
-      // Note: Despite the column name "siteVisitBaseFeeCents", fees are stored directly in SDG
-      // This is a legacy naming convention - the values are already in SDG
       const baseFeeSDG = feeStructure.siteVisitBaseFeeCents;
+      const structureMultiplier = feeStructure.complexityMultiplier || 1.0;
+      const effectiveMultiplier = complexityMultiplier !== 1.0 ? complexityMultiplier : structureMultiplier;
+      const totalSDG = Math.round(baseFeeSDG * effectiveMultiplier * 100) / 100;
       
-      // Apply complexity multiplier and round to 2 decimal places
-      const totalSDG = Math.round(baseFeeSDG * complexityMultiplier * 100) / 100;
-      
-      console.log(`📊 Classification fee calculated: ${baseFeeSDG} × ${complexityMultiplier} = ${totalSDG} SDG`);
+      console.log(`📊 Classification fee calculated: ${baseFeeSDG} × ${effectiveMultiplier} (structure: ${structureMultiplier}) = ${totalSDG} SDG for Level ${classification.classificationLevel}`);
       return totalSDG;
     } catch (error: any) {
       console.error('Failed to calculate classification fee:', error);

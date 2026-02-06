@@ -92,7 +92,10 @@ interface PendingVisitUpdate {
   collectorLevel: string;
   currentFee: number;
   newFee: number;
+  newCost: number;
+  transportFee: number;
   status: string;
+  source: 'mmp_site_entries' | 'site_visits';
 }
 
 const ClassificationFeeManagement = () => {
@@ -190,37 +193,35 @@ const ClassificationFeeManagement = () => {
     loadData();
   }, [loadData]);
 
-  // Load dispatched/claimed visits that need fee updates
   const loadPendingVisitUpdates = useCallback(async () => {
     setLoadingVisits(true);
     try {
-      // Get visits that are dispatched or claimed (not completed/cancelled)
-      const { data: visits, error: visitsError } = await supabase
-        .from('site_visits')
+      const { data: entries, error: entriesError } = await supabase
+        .from('mmp_site_entries')
         .select(`
           id,
           site_name,
-          assigned_to,
+          accepted_by,
           enumerator_fee,
+          transport_fee,
+          cost,
           status
         `)
-        .in('status', ['dispatched', 'claimed', 'in_progress', 'pending']);
+        .not('accepted_by', 'is', null);
 
-      if (visitsError) throw visitsError;
+      if (entriesError) throw entriesError;
 
-      if (!visits || visits.length === 0) {
+      if (!entries || entries.length === 0) {
         setPendingVisitUpdates([]);
         toast({
-          title: 'No Visits Found',
-          description: 'No dispatched or claimed visits to update',
+          title: 'No Entries Found',
+          description: 'No site entries with assigned collectors found',
         });
         return;
       }
 
-      // Get collector IDs
-      const collectorIds = [...new Set(visits.map(v => v.assigned_to).filter(Boolean))];
+      const collectorIds = [...new Set(entries.map(e => e.accepted_by).filter(Boolean))];
       
-      // Get profiles and classifications
       const [profilesResult, classificationsResult] = await Promise.all([
         supabase
           .from('profiles')
@@ -228,39 +229,48 @@ const ClassificationFeeManagement = () => {
           .in('id', collectorIds),
         supabase
           .from('user_classifications')
-          .select('user_id, classification_level')
+          .select('user_id, classification_level, role_scope')
           .in('user_id', collectorIds)
-          .eq('role_scope', 'dataCollector')
           .eq('is_active', true)
       ]);
 
       if (profilesResult.error) throw profilesResult.error;
       if (classificationsResult.error) throw classificationsResult.error;
 
-      // Create lookup maps
       const profileMap = new Map((profilesResult.data || []).map(p => [p.id, p.full_name]));
-      const classificationMap = new Map((classificationsResult.data || []).map(c => [c.user_id, c.classification_level]));
-      const feeMap = new Map(feeStructures.map(f => [f.classification_level, f.site_visit_base_fee_cents]));
+      const classificationMap = new Map((classificationsResult.data || []).map(c => [c.user_id, { level: c.classification_level, roleScope: c.role_scope }]));
+      
+      const feeCalcMap = new Map(
+        allFeeStructures.map(f => [
+          `${f.classification_level}_${f.role_scope}`, 
+          Math.round(f.site_visit_base_fee_cents * (f.complexity_multiplier || 1.0))
+        ])
+      );
 
-      // Calculate updates
       const updates: PendingVisitUpdate[] = [];
-      for (const visit of visits) {
-        if (!visit.assigned_to) continue;
+      for (const entry of entries) {
+        if (!entry.accepted_by) continue;
         
-        const level = classificationMap.get(visit.assigned_to) || 'C';
-        const newFee = feeMap.get(level) || 0;
-        const currentFee = visit.enumerator_fee || 0;
+        const classInfo = classificationMap.get(entry.accepted_by);
+        const level = classInfo?.level || 'C';
+        const roleScope = classInfo?.roleScope || 'dataCollector';
+        const newFee = feeCalcMap.get(`${level}_${roleScope}`) || 0;
+        const currentFee = Number(entry.enumerator_fee) || 0;
+        const transportFee = Number(entry.transport_fee) || 0;
+        const newCost = newFee + transportFee;
 
-        // Only include if fee would change
         if (currentFee !== newFee) {
           updates.push({
-            visitId: visit.id,
-            siteName: visit.site_name || 'Unknown Site',
-            collectorName: profileMap.get(visit.assigned_to) || 'Unknown',
+            visitId: entry.id,
+            siteName: entry.site_name || 'Unknown Site',
+            collectorName: profileMap.get(entry.accepted_by) || 'Unknown',
             collectorLevel: level,
             currentFee: currentFee,
             newFee: newFee,
-            status: visit.status
+            newCost: newCost,
+            transportFee: transportFee,
+            status: entry.status || 'unknown',
+            source: 'mmp_site_entries'
           });
         }
       }
@@ -271,12 +281,12 @@ const ClassificationFeeManagement = () => {
       if (updates.length === 0) {
         toast({
           title: 'All Fees Current',
-          description: 'All dispatched visits already have correct fees',
+          description: 'All site entries already have correct fees based on classification',
         });
       } else {
         toast({
-          title: `${updates.length} Visits Found`,
-          description: `Found ${updates.length} visits with outdated fees`,
+          title: `${updates.length} Entries Found`,
+          description: `Found ${updates.length} entries with fees that differ from current classification rates`,
         });
       }
     } catch (error: any) {
@@ -289,9 +299,8 @@ const ClassificationFeeManagement = () => {
     } finally {
       setLoadingVisits(false);
     }
-  }, [feeStructures, toast]);
+  }, [allFeeStructures, toast]);
 
-  // Apply fee updates to all pending visits
   const applyVisitFeeUpdates = async () => {
     if (pendingVisitUpdates.length === 0) return;
 
@@ -302,15 +311,16 @@ const ClassificationFeeManagement = () => {
     try {
       for (const update of pendingVisitUpdates) {
         const { error } = await supabase
-          .from('site_visits')
+          .from('mmp_site_entries')
           .update({ 
             enumerator_fee: update.newFee,
+            cost: update.newCost,
             updated_at: new Date().toISOString()
           })
           .eq('id', update.visitId);
 
         if (error) {
-          console.error(`Failed to update visit ${update.visitId}:`, error);
+          console.error(`Failed to update entry ${update.visitId}:`, error);
           failCount++;
         } else {
           successCount++;
@@ -320,13 +330,13 @@ const ClassificationFeeManagement = () => {
       if (failCount > 0) {
         toast({
           title: 'Partial Update',
-          description: `Updated ${successCount} visits, ${failCount} failed`,
+          description: `Updated ${successCount} entries, ${failCount} failed`,
           variant: 'destructive'
         });
       } else {
         toast({
           title: 'Fees Updated',
-          description: `Successfully updated ${successCount} visit fees`,
+          description: `Successfully updated ${successCount} site entry fees based on classification levels`,
         });
         setPendingVisitUpdates([]);
         setShowVisitUpdates(false);
@@ -335,7 +345,7 @@ const ClassificationFeeManagement = () => {
       console.error('Error applying visit updates:', error);
       toast({
         title: 'Error',
-        description: error?.message || 'Failed to update visits',
+        description: error?.message || 'Failed to update entries',
         variant: 'destructive'
       });
     } finally {
@@ -739,8 +749,8 @@ const ClassificationFeeManagement = () => {
         <CardContent>
           {!showVisitUpdates && (
             <p className="text-sm text-muted-foreground">
-              Click "Check Visits" to find dispatched or claimed visits that have outdated fees 
-              based on the current fee structure.
+              Click "Check Visits" to find site entries where the enumerator fee doesn't match 
+              the current classification-based rate. This checks all entries in mmp_site_entries.
             </p>
           )}
           
@@ -758,7 +768,7 @@ const ClassificationFeeManagement = () => {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Found <strong>{pendingVisitUpdates.length}</strong> visits with outdated fees.
+                  Found <strong>{pendingVisitUpdates.length}</strong> site entries with fees that don't match current classification rates.
                 </AlertDescription>
               </Alert>
 
@@ -771,6 +781,7 @@ const ClassificationFeeManagement = () => {
                       <th className="text-left p-2 font-medium">Level</th>
                       <th className="text-right p-2 font-medium">Current Fee</th>
                       <th className="text-right p-2 font-medium">New Fee</th>
+                      <th className="text-right p-2 font-medium">Total Cost</th>
                       <th className="text-left p-2 font-medium">Status</th>
                     </tr>
                   </thead>
@@ -789,6 +800,9 @@ const ClassificationFeeManagement = () => {
                         </td>
                         <td className="p-2 text-right font-medium text-green-600 dark:text-green-400">
                           {update.newFee.toLocaleString()} SDG
+                        </td>
+                        <td className="p-2 text-right text-muted-foreground">
+                          {update.newCost.toLocaleString()} SDG
                         </td>
                         <td className="p-2">
                           <Badge variant="outline">{update.status}</Badge>
@@ -824,7 +838,7 @@ const ClassificationFeeManagement = () => {
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  Update {pendingVisitUpdates.length} Visits
+                  Update {pendingVisitUpdates.length} Entries
                 </Button>
               </div>
             </div>

@@ -161,10 +161,11 @@ export async function calculateEnumeratorFeeForUser(userId: string): Promise<{
       };
     }
 
-    // Fees are stored directly in SDG (despite column name)
     const baseFee = Number(feeStructure.site_visit_base_fee_cents) || 0;
     const multiplier = Number(feeStructure.complexity_multiplier) || 1.0;
-    const fee = Math.round(baseFee * multiplier * 100) / 100; // Round to 2 decimals
+    const fee = Math.round(baseFee * multiplier * 100) / 100;
+
+    console.log(`📊 Enumerator fee for Level ${userClassification.classification_level}: ${baseFee} × ${multiplier} = ${fee} SDG`);
 
     return {
       fee,
