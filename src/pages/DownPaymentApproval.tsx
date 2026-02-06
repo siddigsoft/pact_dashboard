@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { DownPaymentApprovalPanel } from '@/components/downPayment/DownPaymentApprovalPanel';
@@ -6,9 +7,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { DollarSign, Shield, AlertTriangle, Info, Users, UserCheck } from 'lucide-react';
+import { DollarSign, Shield, AlertTriangle, Info, Users, UserCheck, TrendingUp, Receipt, Wallet } from 'lucide-react';
 
 export default function DownPaymentApproval() {
+  const navigate = useNavigate();
   const { currentUser } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   
@@ -86,6 +88,45 @@ export default function DownPaymentApproval() {
               {isSupervisor ? 'Tier 1: Supervisor Review' : 'Tier 2: Admin Processing'}
             </Badge>
           )}
+        </div>
+        
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/financial-operations')}
+            data-testid="button-goto-financial-ops"
+          >
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Financial Ops
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/budget')}
+            data-testid="button-goto-budget"
+          >
+            <DollarSign className="h-4 w-4 mr-2" />
+            Budget
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/cost-submission')}
+            data-testid="button-goto-cost-submissions"
+          >
+            <Receipt className="h-4 w-4 mr-2" />
+            Cost Submissions
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/wallet')}
+            data-testid="button-goto-wallet"
+          >
+            <Wallet className="h-4 w-4 mr-2" />
+            Wallet
+          </Button>
         </div>
 
         <Alert className={selectedTier === 'tier1' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : ''}>

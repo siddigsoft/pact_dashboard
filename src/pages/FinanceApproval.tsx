@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +53,7 @@ import { NotificationTriggerService } from '@/services/NotificationTriggerServic
 import { FinanceApprovalSignature, SignatureRequirementAlert } from '@/components/finance/FinanceSignatureIntegration';
 
 export default function FinanceApproval() {
+  const navigate = useNavigate();
   const { adminListWithdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
   const { users } = useUser();
   const { toast } = useToast();
@@ -677,17 +679,54 @@ export default function FinanceApproval() {
             Process verified withdrawal requests and release payments
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleRefresh} 
-          disabled={refreshing}
-          className="self-start sm:self-auto"
-          data-testid="button-refresh-requests"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/admin/wallets')}
+            data-testid="button-goto-admin-wallets"
+          >
+            <Wallet className="w-4 h-4 mr-2" />
+            Admin Wallets
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/wallet-reports')}
+            data-testid="button-goto-wallet-reports"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Reports
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/budget')}
+            data-testid="button-goto-budget"
+          >
+            <TrendingUp className="w-4 h-4 mr-2" />
+            Budget
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/financial-operations')}
+            data-testid="button-goto-financial-ops"
+          >
+            <DollarSign className="w-4 h-4 mr-2" />
+            Financial Ops
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh} 
+            disabled={refreshing}
+            data-testid="button-refresh-requests"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

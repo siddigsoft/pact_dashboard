@@ -375,8 +375,48 @@ const WalletPage = () => {
               <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
                 <button
                   type="button"
+                  onClick={() => navigate('/finance')}
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  data-testid="button-goto-finance"
+                >
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  <span className="hidden xs:inline">FINANCE</span>
+                  <span className="xs:hidden">$</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/budget')}
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  data-testid="button-goto-budget"
+                >
+                  <Activity className="w-4 h-4 mr-2" />
+                  <span className="hidden xs:inline">BUDGET</span>
+                  <span className="xs:hidden">B</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/cost-submission')}
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  data-testid="button-goto-cost-submissions"
+                >
+                  <Receipt className="w-4 h-4 mr-2" />
+                  <span className="hidden xs:inline">COSTS</span>
+                  <span className="xs:hidden">C</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/withdrawal-approval')}
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  data-testid="button-goto-withdrawal-approval"
+                >
+                  <ArrowUpRight className="w-4 h-4 mr-2" />
+                  <span className="hidden xs:inline">WITHDRAWALS</span>
+                  <span className="xs:hidden">W</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleRefresh}
-                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
                   data-testid="button-refresh-wallet"
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />

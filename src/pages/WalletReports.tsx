@@ -129,7 +129,31 @@ export default function WalletReports() {
           <p className="text-muted-foreground mt-1">Financial insights and withdrawal trends</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" asChild data-testid="link-admin-wallets">
+              <Link to="/admin/wallets">
+                <Wallet className="h-4 w-4 mr-2" />
+                Admin Wallets
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-finance-approval">
+              <Link to="/finance-approval">
+                <DollarSign className="h-4 w-4 mr-2" />
+                Finance Approval
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-financial-ops">
+              <Link to="/financial-operations">
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Financial Ops
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-budget">
+              <Link to="/budget">
+                <Activity className="h-4 w-4 mr-2" />
+                Budget
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild data-testid="link-site-visits">
               <Link to="/site-visits">
                 <MapPin className="h-4 w-4 mr-2" />
