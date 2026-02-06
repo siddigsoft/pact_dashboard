@@ -163,32 +163,38 @@ const CostSubmission = () => {
     sigCacheRef.current[oc.id] = true;
 
     let sigImage: string | null = null;
+    let signerUserId: string | null = null;
 
     const sigMatch = oc.tier2_notes.match(/ID:\s*(\S+?)(?:\s*\||$)/);
     if (sigMatch?.[1]) {
       try {
         const { data: sigRow } = await supabase
           .from('document_signatures')
-          .select('signature_data')
+          .select('signature_data, signer_id')
           .eq('id', sigMatch[1])
           .single();
         if (sigRow?.signature_data && typeof sigRow.signature_data === 'string' && sigRow.signature_data.startsWith('data:')) {
           sigImage = sigRow.signature_data;
         }
+        if (sigRow?.signer_id) {
+          signerUserId = sigRow.signer_id;
+        }
       } catch { /* continue */ }
     }
 
-    if (!sigImage && oc.tier2_approved_by) {
+    const lookupUserId = signerUserId || oc.tier2_approved_by;
+    if (!sigImage && lookupUserId) {
       try {
-        const { data: savedSig } = await supabase
+        const { data: savedSigs } = await supabase
           .from('handwriting_signatures')
           .select('signature_image')
-          .eq('user_id', oc.tier2_approved_by)
-          .eq('is_default', true)
+          .eq('user_id', lookupUserId)
           .eq('is_active', true)
-          .single();
-        if (savedSig?.signature_image && typeof savedSig.signature_image === 'string' && savedSig.signature_image.startsWith('data:')) {
-          sigImage = savedSig.signature_image;
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+          sigImage = savedSigs[0].signature_image;
         }
       } catch { /* continue */ }
     }
@@ -512,11 +518,26 @@ const CostSubmission = () => {
         try {
           const { data: sigRow } = await supabase
             .from('document_signatures')
-            .select('signature_data')
+            .select('signature_data, signature_method, signer_id')
             .eq('id', sigMatch[1])
             .single();
           if (sigRow?.signature_data && typeof sigRow.signature_data === 'string' && sigRow.signature_data.startsWith('data:')) {
             signatureImageData = sigRow.signature_data;
+          }
+          if (!signatureImageData && sigRow?.signer_id) {
+            try {
+              const { data: savedSigs } = await supabase
+                .from('handwriting_signatures')
+                .select('signature_image')
+                .eq('user_id', sigRow.signer_id)
+                .eq('is_active', true)
+                .order('is_default', { ascending: false })
+                .order('created_at', { ascending: false })
+                .limit(1);
+              if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+                signatureImageData = savedSigs[0].signature_image;
+              }
+            } catch { /* continue */ }
           }
         } catch { /* signature fetch failed, continue without */ }
       }
@@ -524,15 +545,16 @@ const CostSubmission = () => {
 
     if (!signatureImageData && oc.tier2_approved_by) {
       try {
-        const { data: savedSig } = await supabase
+        const { data: savedSigs } = await supabase
           .from('handwriting_signatures')
           .select('signature_image')
           .eq('user_id', oc.tier2_approved_by)
-          .eq('is_default', true)
           .eq('is_active', true)
-          .single();
-        if (savedSig?.signature_image && typeof savedSig.signature_image === 'string' && savedSig.signature_image.startsWith('data:')) {
-          signatureImageData = savedSig.signature_image;
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+          signatureImageData = savedSigs[0].signature_image;
         }
       } catch { /* no saved signature, continue without */ }
     }
