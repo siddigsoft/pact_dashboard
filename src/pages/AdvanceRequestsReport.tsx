@@ -157,7 +157,7 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests]);
 
   const byTeamMember = useMemo(() => {
-    if (activeTab !== 'team') return [];
+    if (activeTab !== 'byTeam') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       if (!grouped[req.requestedBy]) {
@@ -177,7 +177,7 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests, activeTab, getProfileName]);
 
   const byHub = useMemo(() => {
-    if (activeTab !== 'hub') return [];
+    if (activeTab !== 'byHub') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const hubKey = req.hubId || 'unknown';
@@ -208,7 +208,7 @@ function AdvanceRequestsReportContent() {
   };
 
   const byStatus = useMemo(() => {
-    if (activeTab !== 'status') return [];
+    if (activeTab !== 'byStatus') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const statusKey = req.status;
@@ -229,7 +229,7 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests, activeTab]);
 
   const byState = useMemo(() => {
-    if (activeTab !== 'state') return [];
+    if (activeTab !== 'byState') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const stateKey = req.stateName || 'Unknown';
@@ -250,7 +250,7 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests, activeTab]);
 
   const byProject = useMemo(() => {
-    if (activeTab !== 'project') return [];
+    if (activeTab !== 'byProject') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const projectKey = req.projectName || 'Unknown';
