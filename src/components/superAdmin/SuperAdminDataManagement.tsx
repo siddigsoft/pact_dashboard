@@ -221,6 +221,8 @@ export function SuperAdminDataManagement() {
   const [activityFilter, setActivityFilter] = useState('all');
   const [claimedByFilter, setClaimedByFilter] = useState('all');
   const [hubFilter, setHubFilter] = useState('all');
+  const [claimedSiteSearch, setClaimedSiteSearch] = useState('');
+  const [debouncedClaimedSiteSearch, setDebouncedClaimedSiteSearch] = useState('');
 
   // Cache for loaded tabs to avoid reloading
   const loadedTabsRef = useRef<Set<string>>(new Set());
@@ -237,6 +239,11 @@ export function SuperAdminDataManagement() {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedClaimedSiteSearch(claimedSiteSearch), 300);
+    return () => clearTimeout(timer);
+  }, [claimedSiteSearch]);
 
   const [siteVisits, setSiteVisits] = useState<SiteVisitData[]>([]);
   const [wallets, setWallets] = useState<WalletData[]>([]);
@@ -795,12 +802,19 @@ export function SuperAdminDataManagement() {
 
   const filteredClaimedSites = useMemo(() => {
     return claimedSites.filter(site => {
-      const matchesSearch = 
-        site.site_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        site.site_code?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        site.accepted_by_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        site.state?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        site.locality?.toLowerCase().includes(debouncedSearch.toLowerCase());
+      const globalSearch = debouncedSearch.toLowerCase();
+      const localSearch = debouncedClaimedSiteSearch.toLowerCase();
+      
+      const matchesGlobalSearch = !globalSearch ||
+        site.site_name?.toLowerCase().includes(globalSearch) ||
+        site.site_code?.toLowerCase().includes(globalSearch) ||
+        site.accepted_by_name?.toLowerCase().includes(globalSearch) ||
+        site.state?.toLowerCase().includes(globalSearch) ||
+        site.locality?.toLowerCase().includes(globalSearch);
+      
+      const matchesLocalSearch = !localSearch ||
+        site.site_name?.toLowerCase().includes(localSearch) ||
+        site.site_code?.toLowerCase().includes(localSearch);
       
       const matchesStatus = statusFilter === 'all' || site.status === statusFilter;
       const matchesState = stateFilter === 'all' || site.state === stateFilter;
@@ -808,9 +822,9 @@ export function SuperAdminDataManagement() {
       const matchesActivity = activityFilter === 'all' || site.main_activity === activityFilter;
       const matchesClaimedBy = claimedByFilter === 'all' || site.accepted_by_name === claimedByFilter;
       
-      return matchesSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy;
+      return matchesGlobalSearch && matchesLocalSearch && matchesStatus && matchesState && matchesLocality && matchesActivity && matchesClaimedBy;
     });
-  }, [claimedSites, debouncedSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter]);
+  }, [claimedSites, debouncedSearch, debouncedClaimedSiteSearch, statusFilter, stateFilter, localityFilter, activityFilter, claimedByFilter]);
 
   // Get unique values for claimed sites filters
   const claimedSitesFilterOptions = useMemo(() => {
@@ -1408,8 +1422,34 @@ export function SuperAdminDataManagement() {
                 </Badge>
               </div>
               
+              {/* Search by Site Name */}
+              <div className="mt-3 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by site name or code..."
+                  value={claimedSiteSearch}
+                  onChange={(e) => setClaimedSiteSearch(e.target.value)}
+                  className="pl-10"
+                  data-testid="input-claimed-site-search"
+                />
+              </div>
+
               {/* Advanced Filters for Claimed Sites */}
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Enumerator</Label>
+                  <Select value={claimedByFilter} onValueChange={setClaimedByFilter}>
+                    <SelectTrigger data-testid="select-claimed-by-filter">
+                      <SelectValue placeholder="All Enumerators" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Enumerators</SelectItem>
+                      {claimedSitesFilterOptions.claimedByUsers.map(user => (
+                        <SelectItem key={user} value={user}>{user}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Activity</Label>
                   <Select value={activityFilter} onValueChange={setActivityFilter}>
@@ -1467,20 +1507,6 @@ export function SuperAdminDataManagement() {
                       <SelectItem value="dispatched">Dispatched</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
                       <SelectItem value="verified">Verified</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Claimed By</Label>
-                  <Select value={claimedByFilter} onValueChange={setClaimedByFilter}>
-                    <SelectTrigger data-testid="select-claimed-by-filter">
-                      <SelectValue placeholder="All Users" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Users</SelectItem>
-                      {claimedSitesFilterOptions.claimedByUsers.map(user => (
-                        <SelectItem key={user} value={user}>{user}</SelectItem>
-                      ))}
                     </SelectContent>
                   </Select>
                 </div>
