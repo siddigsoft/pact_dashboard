@@ -121,7 +121,8 @@
     FileText,
     Map,
     ScrollText,
-    Mail
+    Mail,
+    Banknote
   };
 
   interface FavoriteItem {
@@ -379,6 +380,9 @@
     }
     if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       financeItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 9, isPinned: isPinned('/exchange-rates') });
+    }
+    if (!isHidden('/retainer-management') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      financeItems.push({ id: 'retainer-management', title: "Retainer Management", url: "/retainer-management", icon: Banknote, priority: 10, isPinned: isPinned('/retainer-management') });
     }
     if (financeItems.length) groups.push({ id: 'finance', label: "Finance", order: 6, items: financeItems });
 

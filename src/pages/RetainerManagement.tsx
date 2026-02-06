@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -49,11 +47,6 @@ import {
   History,
   FileText,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  ArrowUpDown,
-  Filter,
   Banknote,
   BarChart3,
   ClipboardList,
@@ -63,10 +56,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useWallet } from '@/context/wallet/WalletContext';
-import { useClassification } from '@/context/classification/ClassificationContext';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
-import { format, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { format, subMonths } from 'date-fns';
 
 interface RetainerTransaction {
   id: string;
@@ -131,9 +123,8 @@ const RetainerManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, users } = useAppContext();
-  const { hasPermission, hasRole } = useAuthorization();
+  const { hasRole } = useAuthorization();
   const { processMonthlyRetainers } = useWallet();
-  const { getCurrentUserClassifications } = useClassification();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
@@ -145,7 +136,6 @@ const RetainerManagement = () => {
   const [showProcessDialog, setShowProcessDialog] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processResult, setProcessResult] = useState<{ processed: number; failed: number; total: number } | null>(null);
-  const [selectedForProcessing, setSelectedForProcessing] = useState<Set<string>>(new Set());
   const [historySort, setHistorySort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
 
   const isSuperAdmin = hasRole('super_admin');
@@ -168,6 +158,7 @@ const RetainerManagement = () => {
   };
 
   const fetchData = useCallback(async () => {
+    if (!canManage) return;
     setLoading(true);
     try {
       const [txResult, classResult] = await Promise.all([
@@ -188,15 +179,13 @@ const RetainerManagement = () => {
       }
       if (classResult.data) {
         setEligibleUsers(classResult.data as EligibleUser[]);
-        const allIds = new Set((classResult.data as EligibleUser[]).map(u => u.user_id));
-        setSelectedForProcessing(allIds);
       }
     } catch (error) {
       console.error('Failed to fetch retainer data:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canManage]);
 
   useEffect(() => {
     fetchData();
@@ -628,7 +617,7 @@ const RetainerManagement = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {months12.slice(0, 6).map(month => {
+                      {months12.map(month => {
                         const monthTx = transactions.filter(t => t.metadata?.period === month);
                         const total = monthTx.reduce((sum, t) => sum + t.amount, 0);
                         const percentage = kpis.monthlyBudget > 0 ? (total / kpis.monthlyBudget) * 100 : 0;
@@ -870,7 +859,7 @@ const RetainerManagement = () => {
                             <TableRow>
                               <TableHead className="sticky left-0 bg-background z-10 min-w-[200px]">User</TableHead>
                               <TableHead className="text-center min-w-[80px]">Level</TableHead>
-                              {months12.slice(0, 6).map(m => {
+                              {months12.map(m => {
                                 const [y, mo] = m.split('-');
                                 return (
                                   <TableHead key={m} className="text-center min-w-[80px]">
@@ -892,7 +881,7 @@ const RetainerManagement = () => {
                                 <TableCell className="text-center">
                                   <Badge className={`text-xs border-0 ${getLevelBadgeClass(entry.level)}`}>{entry.level}</Badge>
                                 </TableCell>
-                                {months12.slice(0, 6).map(m => {
+                                {months12.map(m => {
                                   const status = entry.months[m];
                                   return (
                                     <TableCell key={m} className="text-center">
