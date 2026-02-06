@@ -1189,16 +1189,21 @@ const CostSubmission = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="approval-notes">
-                    {approvalDialog.action === 'approve' ? 'Notes (optional)' : 'Reason for rejection *'}
+                    {approvalDialog.action === 'approve' ? 'Approval Notes *' : 'Reason for rejection *'}
                   </Label>
                   <Textarea
                     id="approval-notes"
-                    placeholder={approvalDialog.action === 'approve' ? 'Add any notes...' : 'Explain why this is being rejected...'}
+                    placeholder={approvalDialog.action === 'approve' ? 'Provide your approval justification...' : 'Explain why this is being rejected...'}
                     value={approvalNotes}
                     onChange={(e) => setApprovalNotes(e.target.value)}
                     rows={3}
                     data-testid="input-approval-notes"
                   />
+                  {!approvalNotes.trim() && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      {approvalDialog.action === 'approve' ? 'Approval notes are required to proceed.' : 'A rejection reason is required.'}
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -1215,7 +1220,7 @@ const CostSubmission = () => {
             <Button
               variant={approvalDialog.action === 'approve' ? 'default' : 'destructive'}
               onClick={handleApprovalAction}
-              disabled={approvalProcessing || (approvalDialog.action === 'reject' && !approvalNotes.trim())}
+              disabled={approvalProcessing || !approvalNotes.trim()}
               data-testid="button-approval-confirm"
             >
               {approvalProcessing ? 'Processing...' : approvalDialog.action === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
