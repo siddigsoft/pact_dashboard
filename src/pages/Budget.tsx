@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { useUserProjects } from '@/hooks/useUserProjects';
+import { useProjectContext } from '@/context/project/ProjectContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -28,6 +31,7 @@ import {
   RefreshCw,
   PieChart,
   BarChart3,
+  FileText,
   Zap,
   Wallet
 } from 'lucide-react';
@@ -70,6 +74,40 @@ const BudgetPage = () => {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const navigate = useNavigate();
+  const { projects } = useProjectContext();
+
+  const [actualSpendByProject, setActualSpendByProject] = useState<Record<string, { approved: number; paid: number; count: number }>>({});
+
+  useEffect(() => {
+    const fetchActualSpend = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('operational_cost_submissions')
+          .select('project_id, amount_cents, tier1_status, tier2_status, paid_at, reconciled_at, reconciled_amount_cents');
+        if (error) throw error;
+        const grouped: Record<string, { approved: number; paid: number; count: number }> = {};
+        (data || []).forEach((row: any) => {
+          if (!row.project_id) return;
+          if (!grouped[row.project_id]) grouped[row.project_id] = { approved: 0, paid: 0, count: 0 };
+          const isApproved = row.tier1_status === 'approved' || row.tier2_status === 'approved' || row.paid_at || row.reconciled_at;
+          const isPaid = row.paid_at || row.reconciled_at;
+          const effectiveAmount = row.reconciled_at && row.reconciled_amount_cents != null
+            ? row.reconciled_amount_cents
+            : row.amount_cents;
+          if (isApproved) {
+            grouped[row.project_id].approved += effectiveAmount;
+            grouped[row.project_id].count++;
+          }
+          if (isPaid) grouped[row.project_id].paid += effectiveAmount;
+        });
+        setActualSpendByProject(grouped);
+      } catch (err) {
+        console.error('Failed to fetch actual spend:', err);
+      }
+    };
+    fetchActualSpend();
+  }, []);
 
   const canManageBudgets = hasGranularPermission('finances', 'update') || 
                            currentUser?.role === 'admin' || 
@@ -263,6 +301,26 @@ const BudgetPage = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/financial-operations')}
+            data-testid="button-goto-financial-ops"
+            className="border-blue-500/30 text-blue-300"
+          >
+            <DollarSign className="w-4 h-4 mr-1" />
+            Financial Ops
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/cost-submission')}
+            data-testid="button-goto-cost-submissions"
+            className="border-green-500/30 text-green-300"
+          >
+            <FileText className="w-4 h-4 mr-1" />
+            Cost Submissions
+          </Button>
         </div>
       </div>
 
@@ -475,6 +533,80 @@ const BudgetPage = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Actual Spend vs Budget - from Operational Cost Submissions */}
+          {projectBudgets.length > 0 && (
+            <Card className="bg-gradient-to-br from-slate-900/80 to-emerald-900/80 border-emerald-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+              <CardHeader>
+                <CardTitle className="text-xl font-bold text-emerald-300 flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Actual Spend vs Budget (Cost Submissions)
+                </CardTitle>
+                <p className="text-sm text-emerald-400/70">Approved operational cost submissions compared to budget allocations</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {projectBudgets.map(budget => {
+                  const pid = budget.projectId;
+                  const proj = projects.find(p => p.id === pid);
+                  const actual = actualSpendByProject[pid];
+                  const totalBudget = budget.totalBudgetCents;
+                  const actualApproved = actual?.approved || 0;
+                  const actualPaid = actual?.paid || 0;
+                  const utilPct = totalBudget > 0 ? Math.min(100, (actualApproved / totalBudget) * 100) : 0;
+                  const variance = totalBudget - actualApproved;
+
+                  return (
+                    <div key={budget.id} className="p-4 rounded-lg bg-gradient-to-r from-slate-800/50 to-emerald-800/30 border border-emerald-500/20 space-y-2" data-testid={`actual-vs-budget-${pid}`}>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="font-medium text-emerald-200">{proj?.name || 'Unknown Project'}</span>
+                        <div className="flex items-center gap-2">
+                          {utilPct > 90 && (
+                            <Badge className="bg-red-500/70 text-white border-0 text-xs">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              High Utilization
+                            </Badge>
+                          )}
+                          {actual?.count ? (
+                            <Badge className="bg-emerald-500/30 text-emerald-300 border-emerald-500/30 text-xs">
+                              {actual.count} approved submissions
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-emerald-400/50 border-emerald-500/20 text-xs">
+                              No submissions yet
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <Progress
+                        value={utilPct}
+                        className={`h-2 bg-slate-700/50 ${utilPct > 90 ? '[&>div]:bg-gradient-to-r [&>div]:from-red-500 [&>div]:to-rose-500' : utilPct > 70 ? '[&>div]:bg-gradient-to-r [&>div]:from-amber-500 [&>div]:to-orange-500' : '[&>div]:bg-gradient-to-r [&>div]:from-emerald-500 [&>div]:to-green-500'}`}
+                      />
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                        <div>
+                          <span className="text-emerald-400/60 block">Budget</span>
+                          <span className="text-emerald-200 font-mono">{formatCurrency(totalBudget)}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-400/60 block">Actual (Approved)</span>
+                          <span className="text-emerald-200 font-mono">{formatCurrency(actualApproved)}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-400/60 block">Paid Out</span>
+                          <span className="text-green-300 font-mono">{formatCurrency(actualPaid)}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-400/60 block">Variance</span>
+                          <span className={`font-mono ${variance >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                            {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Project Budgets Tab */}
