@@ -913,9 +913,9 @@ const CostSubmission = () => {
               <CircleDollarSign className="h-4 w-4" />
               <span className="hidden sm:inline">Outstanding</span>
               <span className="sm:hidden">Due</span>
-              {submissionStats.pending > 0 && activeTab !== "outstanding" && (
+              {submissionStats.approved > 0 && activeTab !== "outstanding" && (
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 border-0">
-                  {submissionStats.pending}
+                  {submissionStats.approved}
                 </Badge>
               )}
             </TabsTrigger>
@@ -1056,7 +1056,51 @@ const CostSubmission = () => {
             </CardHeader>
             <CardContent>
               <OutstandingAdvances 
-                requests={[]}
+                requests={(() => {
+                  const approvedOps = operationalCosts.filter(oc => {
+                    const ds = getOperationalDerivedStatus(oc);
+                    return ds === 'approved';
+                  });
+                  return approvedOps.map(oc => {
+                    const submitter = users.find(u => u.id === oc.submitted_by);
+                    const project = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
+                    return {
+                      id: oc.id,
+                      requestType: 'advance' as const,
+                      projectId: oc.project_id || '',
+                      projectName: project?.name || 'General',
+                      budgetLineCategory: (oc.expense_category || 'other') as any,
+                      submittedBy: oc.submitted_by,
+                      submitterName: submitter?.name || submitter?.email || 'Unknown',
+                      submitterRole: oc.submitter_role || undefined,
+                      submittedAt: oc.submitted_at || oc.created_at,
+                      requestedAmountCents: oc.amount_cents,
+                      currency: oc.currency || 'SDG',
+                      title: oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled',
+                      description: oc.description || '',
+                      justification: '',
+                      justificationDocuments: [],
+                      status: 'disbursed' as const,
+                      tier1Status: 'approved' as const,
+                      tier1ReviewedBy: oc.tier1_approved_by || undefined,
+                      tier1ReviewedAt: oc.tier1_approved_at || undefined,
+                      tier1Notes: oc.tier1_notes || undefined,
+                      tier2Status: 'approved' as const,
+                      tier2ReviewedBy: oc.tier2_approved_by || undefined,
+                      tier2ReviewedAt: oc.tier2_approved_at || undefined,
+                      tier2Notes: oc.tier2_notes || undefined,
+                      approvedAmountCents: oc.amount_cents,
+                      disbursedAmountCents: oc.amount_cents,
+                      disbursedAt: oc.tier2_approved_at || oc.created_at,
+                      balanceStatus: 'open' as const,
+                      balanceCents: oc.amount_cents,
+                      reconciliationDocuments: [],
+                      hubId: oc.hub_id || undefined,
+                      createdAt: oc.created_at,
+                      updatedAt: oc.updated_at,
+                    };
+                  });
+                })()}
                 onReconcile={(request) => {
                   toast({
                     title: 'Reconciliation Started',
