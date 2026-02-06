@@ -123,7 +123,7 @@ const RetainerManagement = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, users } = useAppContext();
-  const { hasRole } = useAuthorization();
+  const { hasAnyRole } = useAuthorization();
   const { processMonthlyRetainers } = useWallet();
 
   const [activeTab, setActiveTab] = useState('overview');
@@ -138,9 +138,9 @@ const RetainerManagement = () => {
   const [processResult, setProcessResult] = useState<{ processed: number; failed: number; total: number } | null>(null);
   const [historySort, setHistorySort] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
 
-  const isSuperAdmin = hasRole('super_admin');
-  const isAdmin = hasRole('admin');
-  const isFinancialAdmin = hasRole('finance_admin');
+  const isSuperAdmin = hasAnyRole(['super_admin', 'SuperAdmin', 'Super Admin']);
+  const isAdmin = hasAnyRole(['admin', 'Admin']);
+  const isFinancialAdmin = hasAnyRole(['finance_admin', 'Finance Admin']);
   const canManage = isSuperAdmin || isAdmin || isFinancialAdmin;
 
   const getCurrentPeriod = () => {
