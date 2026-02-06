@@ -809,6 +809,72 @@ const documentationSections: Section[] = [
           "Supervisors can approve withdrawals for team members in their hub",
           "Geographic management for efficient oversight"
         ]
+      },
+      {
+        title: "16.5 Operational Cost Submission System",
+        content: [
+          "A separate system for submitting operational field costs that are NOT related to site visit transportation.",
+          "This covers expenses like permits, training, communications, equipment, printing, meetings, incentives, and other operational needs.",
+          "Navigate to Finance > Operational Costs to access this feature."
+        ]
+      },
+      {
+        title: "16.6 Operational Cost Categories",
+        content: [
+          "Permits: Locality access permits, government licenses, access permissions",
+          "Incentives: Team bonuses, field allowances, performance rewards",
+          "Communications: Phone credit, SIM cards, internet data packages, airtime",
+          "Training: Workshops, training materials, venue hire, facilitator fees",
+          "General Transportation: Office travel, hub visits (NOT site visit transport)",
+          "Equipment & Supplies: Field equipment, stationery, tools",
+          "Printing & Materials: Forms, reports, training materials, manuals",
+          "Meetings & Events: Venue rental, refreshments, event logistics",
+          "Other: Any operational cost not covered by the above categories"
+        ]
+      },
+      {
+        title: "16.7 Who Can Submit Operational Costs",
+        content: [
+          "FOM (Field Operations Manager): Hub-level operational expenses",
+          "Coordinator: State-level coordination costs",
+          "Country Director: National-level operational costs",
+          "Admin / Super Admin: Any operational cost",
+          "Supervisor: Team supervision related expenses",
+          "Note: Data Collectors / Enumerators cannot submit operational costs - their expenses go through site visit cost submission"
+        ]
+      },
+      {
+        title: "16.8 Operational Cost Approval Workflow",
+        content: [
+          "Step 1 - Submit: Choose Advance (get funds first) or Reimbursement (already paid), select category, enter amount, attach receipts/documents",
+          "Step 2 - Tier 1 Review: Hub Supervisor or FOM reviews submission, verifies details and supporting documents, can approve, reject, or request changes",
+          "Step 3 - Tier 2 Approval: Admin or Super Admin performs final review and authorization, both tiers must approve before payment proceeds",
+          "Step 4 - Reconciliation (Advances only): After spending, submit actual receipts to reconcile, return unused funds or request more if overspent",
+          "Statuses: pending (submitted), tier1_approved, tier1_rejected, tier2_approved, tier2_rejected, reconciled, closed"
+        ]
+      },
+      {
+        title: "16.9 Submitting an Operational Cost Request",
+        content: [
+          "Navigate to Finance > Operational Costs",
+          "Click 'New Submission'",
+          "Choose request type: Advance Payment or Reimbursement",
+          "Select expense category from the dropdown",
+          "Enter amount in SDG (Sudanese Pounds)",
+          "Add description explaining the expense",
+          "Optionally enter vendor name and reference number",
+          "Attach supporting documents (receipts, invoices, quotes)",
+          "Click 'Submit' to send for approval"
+        ]
+      },
+      {
+        title: "16.10 Reviewing Operational Cost Submissions",
+        content: [
+          "Tier 1 Reviewers (Supervisor/FOM): See pending submissions in their hub, verify expense details and supporting documents, approve to move to Tier 2 or reject with reason",
+          "Tier 2 Reviewers (Admin/Super Admin): See all Tier 1 approved submissions, perform final authorization, approve for payment or reject",
+          "Both tiers can add review notes",
+          "Rejection requires a written reason that is shared with the submitter"
+        ]
       }
     ]
   },
@@ -1250,7 +1316,10 @@ const quickReferenceData = {
     { action: 'Collect data', roles: 'Data Collector' },
     { action: 'Manage budgets', roles: 'Financial Admin, Admin' },
     { action: 'Configure fees', roles: 'Admin' },
-    { action: 'Manage wallets', roles: 'Admin, Super Admin' }
+    { action: 'Manage wallets', roles: 'Admin, Super Admin' },
+    { action: 'Submit operational costs', roles: 'FOM, Coordinator, Country Director, Admin, Supervisor' },
+    { action: 'Approve operational costs (Tier 1)', roles: 'Supervisor, FOM' },
+    { action: 'Approve operational costs (Tier 2)', roles: 'Admin, Super Admin' }
   ],
   statusColors: [
     { color: 'Green', meaning: 'Complete / Online / Success' },
@@ -2058,3 +2127,442 @@ export const generateWorkflowsDOCX = async () => {
   const filename = `PACT_Workflows_Reference_${format(new Date(), 'yyyy-MM-dd')}.docx`;
   saveAs(blob, filename);
 };
+
+const arabicDocumentationSections: Section[] = [
+  {
+    title: "1. المقدمة",
+    content: [
+      "مركز قيادة PACT هو مركز عمليات ميدانية مركزي مصمم لإدارة شاملة للعمليات الميدانية الإنسانية والتنموية. تعمل المنصة كمركز قيادة موحد يمكّن المنظمات من التخطيط والتنسيق والتنفيذ ومراقبة جميع الأنشطة الميدانية من واجهة واحدة متكاملة."
+    ],
+    subsections: [
+      {
+        title: "1.1 حول مركز قيادة PACT",
+        content: [
+          "خطط المراقبة الشهرية (MMPs) - التخطيط الاستراتيجي واستهداف المواقع للأنشطة الميدانية",
+          "إدارة زيارات المواقع - تنسيق شامل مع تتبع GPS وتوثيق بالصور",
+          "مركز تنسيق الفريق - مشاركة الموقع في الوقت الحقيقي، مكالمات صوتية/فيديو، ومراسلة فورية",
+          "نظام الرقابة المالية - الميزانيات، المحافظ الرقمية، تقديم التكاليف، الموافقات متعددة المستويات",
+          "الأمان القائم على الأدوار - 12 دوراً متخصصاً للمستخدمين مع تحكم دقيق في الصلاحيات",
+          "تصميم متوافق مع الهاتف - تطبيق Android أصلي مع إمكانية العمل بدون اتصال كامل",
+          "إشعارات البريد الإلكتروني - عبر IONOS SMTP مع أزرار إجراء منبثقة"
+        ]
+      }
+    ]
+  },
+  {
+    title: "2. أدوار المستخدمين",
+    content: [
+      "يدعم النظام 12 دوراً متخصصاً للمستخدمين، لكل منها صلاحيات محددة."
+    ],
+    subsections: [
+      {
+        title: "2.1 الأدوار المتاحة",
+        content: [
+          "المسؤول الأعلى (Super Admin): وصول كامل للنظام وإدارة المستخدمين والإعدادات",
+          "المسؤول (Admin): إدارة المشاريع والمستخدمين والموافقات",
+          "مدير العمليات الميدانية (FOM): إدارة العمليات الميدانية والإرسال والتنسيق",
+          "المنسق (Coordinator): تنسيق الأنشطة على مستوى الولاية",
+          "المشرف (Supervisor): الإشراف على فرق الجمع الميداني",
+          "جامع البيانات (Data Collector): تنفيذ زيارات المواقع وجمع البيانات",
+          "المسؤول المالي (Finance Admin): إدارة الميزانيات والموافقات المالية",
+          "فريق البيانات (Data Team): التحليلات والتقارير مع صلاحية القراءة",
+          "المدير القطري (Country Director): إشراف شامل للقراءة فقط",
+          "تكنولوجيا المعلومات (ICT): تكوين النظام والدعم الفني"
+        ]
+      }
+    ]
+  },
+  {
+    title: "3. خطط المراقبة الشهرية (MMPs)",
+    content: [
+      "خطط المراقبة الشهرية هي خطط منظمة تحدد المواقع المراد مراقبتها والجدول الزمني والأفراد والميزانية."
+    ],
+    subsections: [
+      {
+        title: "3.1 مراحل سير عمل MMP",
+        content: [
+          "مسودة: الرفع الأولي - تحرير، حذف",
+          "مقدم: بانتظار المراجعة",
+          "قيد المراجعة: جاري المراجعة - موافقة، رفض، طلب تعديلات",
+          "معتمد: جاهز للإرسال - إرسال إلى مدير العمليات الميدانية",
+          "محال إلى FOM: لدى العمليات الميدانية - تعيين المنسقين",
+          "مرسل: المواقع معينة - متابعة التقدم",
+          "مكتمل: جميع الزيارات تمت - أرشفة",
+          "مؤرشف: سجل تاريخي - عرض فقط"
+        ]
+      },
+      {
+        title: "3.2 رفع ملف MMP بصيغة CSV",
+        content: [
+          "الأعمدة المطلوبة: site_code، site_name، state، locality، planned_date",
+          "الأعمدة الاختيارية: classification، special_requirements",
+          "تنسيق التاريخ: YYYY-MM-DD",
+          "تنسيق الملف: CSV بترميز UTF-8"
+        ]
+      }
+    ]
+  },
+  {
+    title: "4. زيارات المواقع",
+    content: [
+      "زيارات المواقع هي الوحدة التشغيلية الأساسية في نظام PACT."
+    ],
+    subsections: [
+      {
+        title: "4.1 مسار حالة الزيارة",
+        content: [
+          "مرسل: متاح للمطالبة",
+          "مطالب به: الجامع طالب بالموقع",
+          "مقبول: الطلب وُوفق عليه، جاهز للبدء",
+          "معين: تعيين مباشر من العمليات",
+          "قيد التنفيذ: الزيارة جارية",
+          "مكتمل: جمع البيانات انتهى",
+          "تم التحقق: المشرف تحقق من البيانات",
+          "ملغى: الزيارة ألغيت"
+        ]
+      },
+      {
+        title: "4.2 نظام المطالبة بالمواقع",
+        content: [
+          "يعمل مثل أوبر/ليفت - المواقع متاحة ويمكن للجامعين المطالبة بها",
+          "أنماط الإرسال: مفتوح (للجميع)، بالولاية، بالمحلية، فردي",
+          "يستخدم معاملات قاعدة بيانات ذرية (PostgreSQL RPC)",
+          "جامع واحد فقط يمكنه المطالبة بكل موقع",
+          "الرسوم تُحسب وتُثبت عند وقت المطالبة"
+        ]
+      }
+    ]
+  },
+  {
+    title: "5. النظام المالي",
+    content: [
+      "يتضمن النظام المالي إدارة المحافظ والميزانيات والمدفوعات والتكاليف."
+    ],
+    subsections: [
+      {
+        title: "5.1 نظام المحفظة",
+        content: [
+          "كل مستخدم ميداني لديه محفظة رقمية",
+          "استلام مدفوعات زيارات المواقع",
+          "تتبع تاريخ الأرباح",
+          "إدارة عمليات السحب",
+          "الرصيد الحالي: الأموال المتاحة بالجنيه السوداني"
+        ]
+      },
+      {
+        title: "5.2 أنواع المعاملات",
+        content: [
+          "دفعة مقدمة: سلفة لمصاريف الميدان",
+          "رسوم زيارة الموقع: دفع لزيارات المواقع المكتملة",
+          "تكلفة النقل: استرداد مصاريف السفر",
+          "تعديل: تصحيحات يدوية للرصيد",
+          "سحب: صرف من المحفظة"
+        ]
+      },
+      {
+        title: "5.3 سير عمل الموافقة على المرحلتين",
+        content: [
+          "المرحلة الأولى: مراجعة المشرف - المراجعة الأولية",
+          "المرحلة الثانية: موافقة المالية/المسؤول - التفويض النهائي",
+          "يجب موافقة كلا المرحلتين قبل معالجة الدفع"
+        ]
+      }
+    ]
+  },
+  {
+    title: "6. تقديم التكاليف التشغيلية",
+    content: [
+      "نظام منفصل لتقديم التكاليف التشغيلية الميدانية التي لا تتعلق بنقل زيارات المواقع."
+    ],
+    subsections: [
+      {
+        title: "6.1 ما هي التكاليف التشغيلية؟",
+        content: [
+          "التصاريح: تصاريح الوصول المحلية، التراخيص الحكومية",
+          "الحوافز: مكافآت الفريق، البدلات الميدانية",
+          "الاتصالات: رصيد الهاتف، بطاقات SIM، باقات الإنترنت",
+          "التدريب: ورش العمل، المواد التدريبية، استئجار القاعات",
+          "النقل العام: سفر المكتب، زيارات المحاور (ليس نقل زيارة الموقع)",
+          "المعدات واللوازم: معدات ميدانية، قرطاسية، أدوات",
+          "الطباعة والمواد: نماذج، تقارير، أدلة",
+          "الاجتماعات والفعاليات: استئجار القاعة، المرطبات",
+          "أخرى: أي تكلفة تشغيلية غير مشمولة أعلاه"
+        ]
+      },
+      {
+        title: "6.2 من يمكنه تقديم التكاليف التشغيلية؟",
+        content: [
+          "مدير العمليات الميدانية (FOM): مصاريف تشغيلية على مستوى المحور",
+          "المنسق: تكاليف التنسيق على مستوى الولاية",
+          "المدير القطري: تكاليف تشغيلية على المستوى الوطني",
+          "المسؤول / المسؤول الأعلى: أي تكلفة تشغيلية",
+          "المشرف: مصاريف متعلقة بإشراف الفريق",
+          "ملاحظة: جامعو البيانات لا يمكنهم تقديم تكاليف تشغيلية"
+        ]
+      },
+      {
+        title: "6.3 خطوات تقديم طلب التكلفة",
+        content: [
+          "انتقل إلى المالية > التكاليف التشغيلية",
+          "اضغط على 'طلب جديد'",
+          "اختر نوع الطلب: سلفة أو استرداد",
+          "حدد فئة المصاريف من القائمة",
+          "أدخل المبلغ بالجنيه السوداني",
+          "أضف وصفاً يوضح المصروف",
+          "أرفق المستندات الداعمة (إيصالات، فواتير)",
+          "اضغط 'إرسال' للتقديم للموافقة"
+        ]
+      },
+      {
+        title: "6.4 سير عمل الموافقة",
+        content: [
+          "الخطوة 1 - التقديم: اختر سلفة أو استرداد، حدد الفئة، أدخل المبلغ، أرفق الوثائق",
+          "الخطوة 2 - مراجعة المرحلة الأولى: المشرف/مدير العمليات يراجع ويتحقق",
+          "الخطوة 3 - موافقة المرحلة الثانية: المسؤول يقوم بالمراجعة النهائية والتفويض",
+          "الخطوة 4 - التسوية (للسلف فقط): بعد الإنفاق، قدم الإيصالات الفعلية",
+          "الحالات: معلق، موافق المرحلة 1، مرفوض المرحلة 1، موافق المرحلة 2، مرفوض المرحلة 2، تمت التسوية، مغلق"
+        ]
+      }
+    ]
+  },
+  {
+    title: "7. إدارة الفريق الميداني",
+    content: [
+      "أدوات شاملة لإدارة عمليات الفريق الميداني والتتبع."
+    ],
+    subsections: [
+      {
+        title: "7.1 تتبع الموقع",
+        content: [
+          "خريطة الفريق: عرض جميع أعضاء الفريق على الخريطة",
+          "تاريخ الموقع: تتبع أنماط الحركة",
+          "تنبيهات القرب: إشعار عند اقتراب الجامعين من المواقع",
+          "مشاركة الموقع: أعضاء الفريق يشاركون موقعهم أثناء الزيارات"
+        ]
+      },
+      {
+        title: "7.2 التصنيف والرسوم",
+        content: [
+          "المستوى أ (كبير): خبرة 2+ سنة، أعلى معدل رسوم، مواقع معقدة",
+          "المستوى ب (عادي): خبرة 1-2 سنة، معدل رسوم متوسط، مواقع عادية",
+          "المستوى ج (مبتدئ): خبرة أقل من سنة، معدل رسوم ابتدائي، مواقع تدريبية"
+        ]
+      }
+    ]
+  },
+  {
+    title: "8. التقارير والتحليلات",
+    content: [
+      "أدوات شاملة لإعداد التقارير وتحليل البيانات."
+    ],
+    subsections: [
+      {
+        title: "8.1 التقارير المتاحة",
+        content: [
+          "ملخص زيارات المواقع: معدلات الإنجاز حسب الفترة",
+          "الملخص المالي: المصاريف والمدفوعات",
+          "أداء الفريق: مقاييس الجامعين",
+          "استخدام الميزانية: تحليل الإنفاق",
+          "تقدم MMP: التخطيط مقابل التنفيذ"
+        ]
+      },
+      {
+        title: "8.2 صيغ التصدير",
+        content: [
+          "PDF: للطباعة والتوزيع",
+          "Excel: لتحليل البيانات",
+          "CSV: لتكامل الأنظمة"
+        ]
+      }
+    ]
+  },
+  {
+    title: "9. تطبيق الهاتف المحمول",
+    content: [
+      "يوفر تطبيق PACT للهاتف المحمول إمكانية كاملة للعمليات الميدانية مع دعم العمل بدون اتصال."
+    ],
+    subsections: [
+      {
+        title: "9.1 الميزات الرئيسية",
+        content: [
+          "جمع البيانات بدون اتصال أولاً مع IndexedDB",
+          "تتبع GPS مع دعم السياج الجغرافي",
+          "إشعارات فورية للتعيينات",
+          "تكامل الكاميرا للصور",
+          "مزامنة في الخلفية عند الاتصال بالإنترنت"
+        ]
+      },
+      {
+        title: "9.2 التثبيت",
+        content: [
+          "تنزيل APK من المصدر المعتمد",
+          "تمكين 'التثبيت من مصادر غير معروفة'",
+          "فتح ملف APK للتثبيت",
+          "منح الأذونات المطلوبة",
+          "تسجيل الدخول ببيانات الاعتماد الخاصة بك"
+        ]
+      }
+    ]
+  },
+  {
+    title: "10. استكشاف الأخطاء وإصلاحها",
+    content: [
+      "المشاكل الشائعة وحلولها."
+    ],
+    subsections: [
+      {
+        title: "10.1 مشاكل تسجيل الدخول",
+        content: [
+          "تحقق من صحة بيانات الاعتماد",
+          "امسح ذاكرة التخزين المؤقت وملفات تعريف الارتباط",
+          "جرب وضع التصفح المتخفي",
+          "تحقق من اتصال الإنترنت",
+          "اتصل بالمسؤول إذا كان الحساب مقفلاً"
+        ]
+      },
+      {
+        title: "10.2 مشاكل GPS",
+        content: [
+          "قم بتمكين وضع الدقة العالية في إعدادات الجهاز",
+          "امنح أذونات الموقع للتطبيق",
+          "تأكد من وجود رؤية واضحة للسماء",
+          "أعد تشغيل التطبيق إذا لم يتم تحديث الموقع"
+        ]
+      },
+      {
+        title: "10.3 مشاكل المزامنة",
+        content: [
+          "تحقق من استقرار اتصال الإنترنت",
+          "اسحب لأسفل لتحديث البيانات يدوياً",
+          "أغلق التطبيق بالقوة وأعد فتحه",
+          "تحقق من وجود تحديثات للتطبيق"
+        ]
+      }
+    ]
+  }
+];
+
+export const generateArabicUserManualDOCX = async () => {
+  const children: any[] = [];
+
+  children.push(
+    new Paragraph({
+      text: "منصة PACT للعمليات الميدانية",
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+      bidirectional: true,
+      spacing: { after: 200 }
+    }),
+    new Paragraph({
+      text: "دليل المستخدم الشامل",
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+      bidirectional: true,
+      spacing: { after: 200 }
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({ text: `Generated: ${format(new Date(), 'PPpp')}`, size: 20 })
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 }
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({ text: "الإصدار 2.1", size: 20 })
+      ],
+      alignment: AlignmentType.CENTER,
+      bidirectional: true,
+      spacing: { after: 400 }
+    }),
+    new Paragraph({
+      text: "جدول المحتويات",
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.RIGHT,
+      bidirectional: true,
+      spacing: { after: 200 }
+    })
+  );
+
+  arabicDocumentationSections.forEach((section) => {
+    children.push(
+      new Paragraph({
+        text: section.title,
+        alignment: AlignmentType.RIGHT,
+        bidirectional: true,
+        spacing: { after: 100 }
+      })
+    );
+  });
+
+  children.push(
+    new Paragraph({
+      text: "",
+      pageBreakBefore: true
+    })
+  );
+
+  arabicDocumentationSections.forEach((section) => {
+    children.push(
+      new Paragraph({
+        text: section.title,
+        heading: HeadingLevel.HEADING_1,
+        alignment: AlignmentType.RIGHT,
+        bidirectional: true,
+        spacing: { before: 400, after: 200 }
+      })
+    );
+
+    section.content.forEach((line) => {
+      children.push(
+        new Paragraph({
+          text: line,
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { after: 100 }
+        })
+      );
+    });
+
+    if (section.subsections) {
+      section.subsections.forEach((sub) => {
+        children.push(
+          new Paragraph({
+            text: sub.title,
+            heading: HeadingLevel.HEADING_2,
+            alignment: AlignmentType.RIGHT,
+            bidirectional: true,
+            spacing: { before: 200, after: 100 }
+          })
+        );
+
+        sub.content.forEach((line) => {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: `• ${line}` })
+              ],
+              alignment: AlignmentType.RIGHT,
+              bidirectional: true,
+              spacing: { after: 50 },
+              indent: { right: convertInchesToTwip(0.25) }
+            })
+          );
+        });
+      });
+    }
+  });
+
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: children
+    }]
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const filename = `PACT_User_Manual_Arabic_${format(new Date(), 'yyyy-MM-dd')}.docx`;
+  saveAs(blob, filename);
+};
+
+export const getArabicDocumentationSections = () => arabicDocumentationSections;
