@@ -238,13 +238,15 @@ const CostSubmission = () => {
 
   const canTier1Approve = (oc: OperationalCostSubmission): boolean => {
     if (oc.tier1_status !== 'pending') return false;
+    if (isSuperAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    return isSupervisor || isFOM || isAdmin || isSuperAdmin;
+    return isSupervisor || isFOM || isAdmin;
   };
 
   const canTier2Approve = (oc: OperationalCostSubmission): boolean => {
     if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
-    return isAdmin || isSuperAdmin;
+    if (isSuperAdmin) return true;
+    return isAdmin;
   };
 
   const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2) => {
