@@ -11,10 +11,10 @@ CREATE TABLE IF NOT EXISTS operational_cost_submissions (
     'general_transport', 'equipment', 'printing', 'meetings', 'other'
   )),
   
-  -- Optional linkage
-  hub_id UUID REFERENCES hubs(id) ON DELETE SET NULL,
-  project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
-  mmp_file_id UUID REFERENCES mmp_files(id) ON DELETE SET NULL,
+  -- Optional linkage (hubs, projects, mmp_files use TEXT ids)
+  hub_id TEXT REFERENCES hubs(id) ON DELETE SET NULL,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  mmp_file_id TEXT REFERENCES mmp_files(id) ON DELETE SET NULL,
   
   -- Submitter information
   submitted_by UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
