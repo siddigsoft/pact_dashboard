@@ -2046,15 +2046,15 @@ const CostSubmission = () => {
                                       )}
                                     </span>
                                     {signatureImages[oc.id] && (
-                                      <div className="mt-1" data-testid={`card-signature-${oc.id}`}>
-                                        <div className="inline-block rounded border bg-white dark:bg-slate-100 p-1">
+                                      <span className="inline-flex items-center ml-1" data-testid={`card-signature-${oc.id}`}>
+                                        <span className="inline-block rounded border bg-white dark:bg-slate-100 px-1 py-px">
                                           <img 
                                             src={signatureImages[oc.id]!} 
                                             alt="Signature" 
-                                            className="h-8 max-w-[100px] object-contain" 
+                                            className="h-4 max-w-[50px] object-contain" 
                                           />
-                                        </div>
-                                      </div>
+                                        </span>
+                                      </span>
                                     )}
                                   </div>
                                 </div>
@@ -2692,16 +2692,16 @@ const CostSubmission = () => {
                       </p>
                     )}
                     {signatureImages[oc.id] && (
-                      <div className="mt-2" data-testid={`signature-display-${oc.id}`}>
-                        <p className="text-[10px] text-muted-foreground mb-1">Digital Signature / التوقيع الرقمي:</p>
-                        <div className="inline-block rounded border bg-white dark:bg-slate-100 p-1.5">
+                      <div className="mt-2 flex items-center gap-2" data-testid={`signature-display-${oc.id}`}>
+                        <p className="text-[10px] text-muted-foreground shrink-0">Digital Signature:</p>
+                        <div className="inline-block rounded border bg-white dark:bg-slate-100 px-2 py-0.5">
                           <img 
                             src={signatureImages[oc.id]!} 
                             alt="Approver signature" 
-                            className="h-14 max-w-[180px] object-contain" 
+                            className="h-6 max-w-[80px] object-contain" 
                           />
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 italic">
+                        <p className="text-[10px] text-muted-foreground italic">
                           {tier2Approver?.name || 'Approver'}
                         </p>
                       </div>
