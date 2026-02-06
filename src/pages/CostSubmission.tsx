@@ -651,15 +651,29 @@ const CostSubmission = () => {
     if (!currentUser?.id) return;
     setActionProcessing(true);
     try {
-      const { error } = await supabase
+      const now = new Date().toISOString();
+      const updatePayload: Record<string, unknown> = {
+        status: 'paid',
+        paid_at: now,
+        updated_at: now,
+      };
+      try {
+        updatePayload.paid_by = currentUser.id;
+      } catch { /* field may not exist in schema cache */ }
+
+      let { error } = await supabase
         .from('operational_cost_submissions')
-        .update({
-          status: 'paid',
-          paid_at: new Date().toISOString(),
-          paid_by: currentUser.id,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', oc.id);
+      
+      if (error?.message?.includes('paid_by')) {
+        const { paid_by, ...safePayload } = updatePayload as any;
+        const fallback = await supabase
+          .from('operational_cost_submissions')
+          .update({ ...safePayload, description: `${oc.description || ''}\n[Paid by: ${currentUser.id}]` })
+          .eq('id', oc.id);
+        error = fallback.error;
+      }
       
       if (error) {
         toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
