@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -72,6 +72,12 @@ interface OperationalCostSubmission {
   tier2_approved_at: string | null;
   tier2_notes: string | null;
   rejection_reason: string | null;
+  paid_at: string | null;
+  paid_by: string | null;
+  reconciled_at: string | null;
+  reconciled_by: string | null;
+  reconciled_amount_cents: number | null;
+  reconciliation_notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -120,10 +126,13 @@ const CostSubmission = () => {
   const isSuperAdmin = isAdminOrSuperUser || 
     currentUser?.role === 'SuperAdmin' || currentUser?.role === 'superAdmin' || 
     currentUser?.role === 'super_admin' || currentUser?.role === 'Super Admin';
+  
+  const isFinanceAdmin = roles?.includes('finance_admin' as AppRole) || 
+    currentUser?.role === 'finance_admin' || currentUser?.role === 'Finance Admin';
 
   // Default to Submit Request tab for all users
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid" | "reconciled">("all");
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
   const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);
@@ -324,6 +333,7 @@ const CostSubmission = () => {
   }, [operationalCosts, isAdminOrSuperUser, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
 
   const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {
+    if (oc.status === 'reconciled') return 'reconciled';
     if (oc.status === 'paid') return 'paid';
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.status === 'rejected') return 'rejected';
     if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
@@ -625,9 +635,45 @@ const CostSubmission = () => {
 
   const canRecallSubmission = (oc: OperationalCostSubmission): boolean => {
     const derivedStatus = getOperationalDerivedStatus(oc);
-    if (derivedStatus === 'paid') return false;
+    if (derivedStatus === 'paid' || derivedStatus === 'reconciled') return false;
     if (derivedStatus !== 'under_review' && derivedStatus !== 'approved') return false;
     return isSuperAdmin || isAdmin;
+  };
+
+  const canMarkAsPaid = (oc: OperationalCostSubmission): boolean => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus !== 'approved') return false;
+    return isSuperAdmin || isAdmin || isFinanceAdmin;
+  };
+
+  const handleMarkAsPaid = async (oc: OperationalCostSubmission) => {
+    if (!currentUser?.id) return;
+    setActionProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update({
+          status: 'paid',
+          paid_at: new Date().toISOString(),
+          paid_by: currentUser.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', oc.id);
+      
+      if (error) {
+        toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
+      } else {
+        toast({ 
+          title: "Marked as Paid / تم التحديد كمدفوع", 
+          description: "The payment has been recorded. The advance is now outstanding and awaiting reconciliation. / تم تسجيل الدفع. السلفة الآن معلقة وتنتظر التسوية." 
+        });
+        fetchOperationalCosts();
+      }
+    } catch {
+      toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
+    } finally {
+      setActionProcessing(false);
+    }
   };
 
   const handleEditSubmission = (oc: OperationalCostSubmission) => {
@@ -701,7 +747,8 @@ const CostSubmission = () => {
     underReview: submissions.filter(s => s.status === 'under_review').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'under_review').length,
     approved: submissions.filter(s => s.status === 'approved').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length,
     rejected: submissions.filter(s => s.status === 'rejected').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'rejected').length,
-    paid: submissions.filter(s => s.status === 'paid').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid').length
+    paid: submissions.filter(s => s.status === 'paid').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid').length,
+    reconciled: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'reconciled').length
   };
 
   // Filter projects for budget request form based on user access
@@ -1388,6 +1435,10 @@ const CostSubmission = () => {
                                 status: 'reconciled',
                                 description: descUpdate,
                                 supporting_documents: allDocs,
+                                reconciled_at: new Date().toISOString(),
+                                reconciled_by: currentUser?.id,
+                                reconciled_amount_cents: actual,
+                                reconciliation_notes: reconcileNotes.trim(),
                                 updated_at: new Date().toISOString(),
                               })
                               .eq('id', activeReconciliation.id);
@@ -1611,6 +1662,7 @@ const CostSubmission = () => {
               { key: 'approved', label: 'Approved', labelAr: 'موافق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length, color: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' },
               { key: 'rejected', label: 'Rejected', labelAr: 'مرفوض', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'rejected').length, color: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
               { key: 'paid', label: 'Paid', labelAr: 'مدفوع', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid').length, color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' },
+              { key: 'reconciled', label: 'Reconciled', labelAr: 'مسوّى', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'reconciled').length, color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
             ] as const).map(f => (
               <Button
                 key={f.key}
@@ -1730,6 +1782,7 @@ const CostSubmission = () => {
                       approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
                       rejected: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
                       paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+                      reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
                     };
                     const derivedStatus = getOperationalDerivedStatus(oc);
                     const statusLabels: Record<string, string> = {
@@ -1738,6 +1791,7 @@ const CostSubmission = () => {
                       approved: 'Approved / تمت الموافقة',
                       rejected: 'Rejected / مرفوض',
                       paid: 'Paid / تم الدفع',
+                      reconciled: 'Reconciled / مسوّى',
                     };
                     const submitterName = users.find(u => u.id === oc.submitted_by)?.name || 'Unknown';
                     const title = oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
@@ -1846,6 +1900,42 @@ const CostSubmission = () => {
                                       />
                                     ) : null}
                                     <span>Signed</span>
+                                  </div>
+                                </>
+                              )}
+                              {(derivedStatus === 'approved' || derivedStatus === 'paid' || derivedStatus === 'reconciled') && (
+                                <>
+                                  <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  <div
+                                    data-testid={`status-paid-${oc.id}`}
+                                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
+                                      derivedStatus === 'paid' || derivedStatus === 'reconciled'
+                                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400'
+                                        : 'bg-muted text-muted-foreground'
+                                    }`}
+                                  >
+                                    {derivedStatus === 'paid' || derivedStatus === 'reconciled' ? (
+                                      <CheckCircle className="h-3 w-3" />
+                                    ) : (
+                                      <Clock className="h-3 w-3" />
+                                    )}
+                                    <span>Paid</span>
+                                  </div>
+                                  <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  <div
+                                    data-testid={`status-reconciled-${oc.id}`}
+                                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
+                                      derivedStatus === 'reconciled'
+                                        ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400'
+                                        : 'bg-muted text-muted-foreground'
+                                    }`}
+                                  >
+                                    {derivedStatus === 'reconciled' ? (
+                                      <CheckCircle className="h-3 w-3" />
+                                    ) : (
+                                      <Clock className="h-3 w-3" />
+                                    )}
+                                    <span>Reconciled</span>
                                   </div>
                                 </>
                               )}
@@ -1974,6 +2064,33 @@ const CostSubmission = () => {
                               >
                                 <Download className="h-3.5 w-3.5 mr-1" />
                                 PDF
+                              </Button>
+                            )}
+                            {canMarkAsPaid(oc) && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="bg-purple-600 hover:bg-purple-700"
+                                onClick={() => handleMarkAsPaid(oc)}
+                                disabled={actionProcessing}
+                                data-testid={`button-mark-paid-${oc.id}`}
+                              >
+                                <Wallet className="h-3.5 w-3.5 mr-1" />
+                                Mark Paid
+                              </Button>
+                            )}
+                            {derivedStatus === 'paid' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setActiveReconciliation(oc);
+                                  setActiveTab("reconciliation");
+                                }}
+                                data-testid={`button-reconcile-${oc.id}`}
+                              >
+                                <Receipt className="h-3.5 w-3.5 mr-1" />
+                                Reconcile
                               </Button>
                             )}
                             <div className="flex-1" />
@@ -2391,8 +2508,14 @@ const CostSubmission = () => {
                     <h3 className="font-semibold text-base">{cleanDesc}</h3>
                     <p className="text-sm text-muted-foreground">{oc.reference_number}</p>
                   </div>
-                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200">
-                    Approved / معتمد
+                  <Badge className={
+                    oc.status === 'reconciled' 
+                      ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200'
+                      : oc.status === 'paid' 
+                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200'
+                        : 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                  }>
+                    {oc.status === 'reconciled' ? 'Reconciled / مسوّى' : oc.status === 'paid' ? 'Paid / مدفوع' : 'Approved / معتمد'}
                   </Badge>
                 </div>
 
@@ -2507,6 +2630,56 @@ const CostSubmission = () => {
                       <p className="text-xs text-muted-foreground mt-1 italic">Loading signature... / جارٍ تحميل التوقيع...</p>
                     )}
                   </div>
+
+                  {oc.paid_at && (
+                    <div className="rounded-lg border-l-2 border-purple-500 pl-3 py-2 bg-purple-50/50 dark:bg-purple-950/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Wallet className="h-4 w-4 text-purple-500" />
+                        <span className="font-medium text-sm">Payment Disbursed / تم الصرف</span>
+                      </div>
+                      <p className="text-sm">
+                        Paid by / صرف بواسطة: {users.find(u => u.id === oc.paid_by)?.name || 'Finance'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(oc.paid_at), 'MMM d, yyyy HH:mm')}
+                      </p>
+                    </div>
+                  )}
+
+                  {oc.reconciled_at && (
+                    <div className="rounded-lg border-l-2 border-teal-500 pl-3 py-2 bg-teal-50/50 dark:bg-teal-950/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <ClipboardCheck className="h-4 w-4 text-teal-500" />
+                        <span className="font-medium text-sm">Reconciled / تمت التسوية</span>
+                      </div>
+                      <p className="text-sm">
+                        Reconciled by / سوّى بواسطة: {users.find(u => u.id === oc.reconciled_by)?.name || 'N/A'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(oc.reconciled_at), 'MMM d, yyyy HH:mm')}
+                      </p>
+                      {oc.reconciled_amount_cents != null && (
+                        <p className="text-sm mt-1">
+                          Actual spent / المصروف الفعلي: {oc.currency} {(oc.reconciled_amount_cents / 100).toLocaleString()}
+                          {' '}
+                          <span className={`text-xs ${
+                            oc.amount_cents - oc.reconciled_amount_cents > 0 
+                              ? 'text-green-600' 
+                              : oc.amount_cents - oc.reconciled_amount_cents < 0 
+                                ? 'text-red-600' 
+                                : 'text-muted-foreground'
+                          }`}>
+                            ({oc.amount_cents - oc.reconciled_amount_cents > 0 ? 'Under' : oc.amount_cents - oc.reconciled_amount_cents < 0 ? 'Over' : 'Exact'}: {oc.currency} {Math.abs((oc.amount_cents - oc.reconciled_amount_cents) / 100).toLocaleString()})
+                          </span>
+                        </p>
+                      )}
+                      {oc.reconciliation_notes && (
+                        <p className="text-xs mt-1 italic text-muted-foreground">
+                          "{oc.reconciliation_notes}"
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
