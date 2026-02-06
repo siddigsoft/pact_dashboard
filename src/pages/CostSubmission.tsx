@@ -1773,7 +1773,10 @@ const CostSubmission = () => {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={actionProcessing} data-testid="button-delete-cancel">Cancel / إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteSubmission}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteSubmission();
+              }}
               disabled={actionProcessing}
               className="bg-destructive text-destructive-foreground"
               data-testid="button-delete-confirm"
@@ -1804,7 +1807,10 @@ const CostSubmission = () => {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={actionProcessing} data-testid="button-recall-cancel">Cancel / إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleRecallSubmission}
+              onClick={(e) => {
+                e.preventDefault();
+                handleRecallSubmission();
+              }}
               disabled={actionProcessing}
               data-testid="button-recall-confirm"
             >
