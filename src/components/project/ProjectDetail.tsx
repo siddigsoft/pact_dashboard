@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import ActivityTimeline from './ActivityTimeline';
 import TeamMemberCard from './TeamMemberCard';
+import ProjectCostTab from './ProjectCostTab';
 
 interface ProjectDetailProps {
   project: Project;
@@ -397,10 +398,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
       
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-4 w-full md:w-[480px]">
+        <TabsList className="grid grid-cols-5 w-full md:w-[600px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="costs" data-testid="tab-costs">Costs</TabsTrigger>
           <TabsTrigger value="budget">Budget</TabsTrigger>
         </TabsList>
         
@@ -662,6 +664,21 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </Button>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="costs" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Costs & Expenses</h2>
+          </div>
+          <ProjectCostTab
+            projectId={project.id}
+            projectName={project.name}
+            budgetTotalCents={(() => {
+              const bs = getBudgetSummary(projectBudget);
+              return bs?.total ? bs.total * 100 : null;
+            })()}
+            currency={getBudgetSummary(projectBudget)?.currency || 'SDG'}
+          />
         </TabsContent>
 
         <TabsContent value="budget" className="space-y-4 mt-4">

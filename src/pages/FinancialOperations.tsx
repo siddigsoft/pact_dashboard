@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   DollarSign,
   Award,
@@ -16,7 +17,10 @@ import {
   ExternalLink,
   Wallet,
   FileText,
-  BarChart3
+  BarChart3,
+  FolderKanban,
+  AlertTriangle,
+  Receipt
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -25,11 +29,16 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useCostSubmissions, usePendingCostApprovals } from '@/context/costApproval/CostSubmissionContext';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { useWallet } from '@/context/wallet/WalletContext';
+import { useBudget } from '@/context/budget/BudgetContext';
+import { useProjectContext } from '@/context/project/ProjectContext';
+import { useUser } from '@/context/user/UserContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { WorkflowRail } from '@/components/financial/WorkflowRail';
 import { GradientStatCard, GRADIENT_PRESETS } from '@/components/dashboard/GradientStatCard';
 import { PageLoader } from '@/components/ui/loading-badge';
+import { supabase } from '@/integrations/supabase/client';
+import { format, parseISO, isValid } from 'date-fns';
 
 const formatCurrency = (amount: number, currency: string = 'SDG') => {
   return new Intl.NumberFormat('en-US', {
@@ -38,6 +47,33 @@ const formatCurrency = (amount: number, currency: string = 'SDG') => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount).replace('$', currency === 'SDG' ? 'SDG ' : '$');
+};
+
+interface OpCostRow {
+  id: string;
+  project_id: string | null;
+  expense_category: string;
+  amount_cents: number;
+  currency: string;
+  description: string | null;
+  submitted_by: string;
+  submitted_at: string | null;
+  status: string;
+  tier1_status: string | null;
+  tier2_status: string | null;
+  paid_at: string | null;
+  reconciled_at: string | null;
+  reconciled_amount_cents: number | null;
+  created_at: string;
+}
+
+const getOpDerivedStatus = (oc: OpCostRow): string => {
+  if (oc.reconciled_at) return 'reconciled';
+  if (oc.paid_at) return 'paid';
+  if (oc.tier2_status === 'approved') return 'approved';
+  if (oc.tier2_status === 'rejected' || oc.tier1_status === 'rejected') return 'rejected';
+  if (oc.tier1_status === 'approved') return 'under_review';
+  return 'pending';
 };
 
 const FinancialOperations = () => {
@@ -52,6 +88,91 @@ const FinancialOperations = () => {
   const { approvals: pendingApprovals, isLoading: approvalsLoading } = usePendingCostApprovals();
   const { userClassifications, feeStructures, loading: classificationsLoading } = useClassification();
   const { loading: walletLoading } = useWallet();
+  const { projectBudgets } = useBudget();
+  const { projects } = useProjectContext();
+  const { users } = useUser();
+
+  const [opCosts, setOpCosts] = useState<OpCostRow[]>([]);
+  const [opCostsLoading, setOpCostsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchOpCosts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('operational_cost_submissions')
+          .select('id, project_id, expense_category, amount_cents, currency, description, submitted_by, submitted_at, status, tier1_status, tier2_status, paid_at, reconciled_at, reconciled_amount_cents, created_at')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        setOpCosts((data as OpCostRow[]) || []);
+      } catch (err) {
+        console.error('Failed to fetch operational costs:', err);
+      } finally {
+        setOpCostsLoading(false);
+      }
+    };
+    fetchOpCosts();
+  }, []);
+
+  const projectCostBreakdown = useMemo(() => {
+    const grouped: Record<string, { projectId: string; projectName: string; totalSubmitted: number; totalApproved: number; totalPaid: number; count: number; pendingCount: number }> = {};
+    opCosts.forEach(oc => {
+      const pid = oc.project_id || '__general__';
+      if (!grouped[pid]) {
+        const proj = projects.find(p => p.id === pid);
+        grouped[pid] = { projectId: pid, projectName: proj?.name || (pid === '__general__' ? 'General / Unlinked' : 'Unknown Project'), totalSubmitted: 0, totalApproved: 0, totalPaid: 0, count: 0, pendingCount: 0 };
+      }
+      const status = getOpDerivedStatus(oc);
+      grouped[pid].count++;
+      grouped[pid].totalSubmitted += oc.amount_cents;
+      if (['approved', 'paid', 'reconciled'].includes(status)) grouped[pid].totalApproved += oc.amount_cents;
+      if (['paid', 'reconciled'].includes(status)) grouped[pid].totalPaid += oc.amount_cents;
+      if (['pending', 'under_review'].includes(status)) grouped[pid].pendingCount++;
+    });
+    return Object.values(grouped).sort((a, b) => b.totalSubmitted - a.totalSubmitted);
+  }, [opCosts, projects]);
+
+  const budgetVsActual = useMemo(() => {
+    return projectBudgets.map(budget => {
+      const pid = (budget as any).projectId || (budget as any).project_id;
+      const proj = projects.find(p => p.id === pid);
+      const costData = projectCostBreakdown.find(pc => pc.projectId === pid);
+      const totalBudgetCents = (budget as any).totalBudgetCents || (budget as any).total_budget_cents || 0;
+      const actualSpend = costData?.totalApproved || 0;
+      const utilization = totalBudgetCents > 0 ? (actualSpend / totalBudgetCents) * 100 : 0;
+      return {
+        projectId: pid,
+        projectName: proj?.name || 'Unknown',
+        budgetCents: totalBudgetCents,
+        actualSpendCents: actualSpend,
+        paidCents: costData?.totalPaid || 0,
+        varianceCents: totalBudgetCents - actualSpend,
+        utilization: Math.min(utilization, 100),
+        submissionCount: costData?.count || 0,
+        pendingCount: costData?.pendingCount || 0,
+      };
+    }).sort((a, b) => b.utilization - a.utilization);
+  }, [projectBudgets, projectCostBreakdown, projects]);
+
+  const recentPaidCosts = useMemo(() => {
+    return opCosts
+      .filter(oc => oc.paid_at || oc.reconciled_at)
+      .sort((a, b) => {
+        const dateA = a.paid_at || a.reconciled_at || a.created_at;
+        const dateB = b.paid_at || b.reconciled_at || b.created_at;
+        return dateB.localeCompare(dateA);
+      })
+      .slice(0, 20);
+  }, [opCosts]);
+
+  const getUserName = (userId: string) => {
+    const u = users.find(u => u.id === userId);
+    return u?.name || u?.email || userId.slice(0, 8);
+  };
+
+  const safeFormatDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    try { const d = parseISO(dateStr); return isValid(d) ? format(d, 'dd MMM yyyy') : '-'; } catch { return '-'; }
+  };
 
   // Authorization check
   const canAccess = canManageFinances();
@@ -149,6 +270,15 @@ const FinancialOperations = () => {
                 >
                   <FileText className="h-4 w-4 mr-2" />
                   Finance Details
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/budget')}
+                  data-testid="button-view-budget"
+                  className="bg-white/10 backdrop-blur-sm border-white/30 text-white hover:bg-white/20"
+                >
+                  <Wallet className="h-4 w-4 mr-2" />
+                  Budget Dashboard
                 </Button>
                 <Button
                   onClick={() => navigate('/cost-submission')}
@@ -374,6 +504,48 @@ const FinancialOperations = () => {
                 </Card>
               </div>
 
+          {/* Project Cost Breakdown */}
+          {projectCostBreakdown.length > 0 && (
+            <Card className="bg-gradient-to-br from-slate-900/90 to-cyan-900/90 backdrop-blur-xl border-cyan-500/30 shadow-xl shadow-cyan-500/20">
+              <CardHeader className="border-b border-white/10 pb-4">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <div className="p-2 bg-cyan-500/20 rounded-lg">
+                    <FolderKanban className="h-5 w-5 text-cyan-400" />
+                  </div>
+                  Spending by Project
+                </CardTitle>
+                <CardDescription className="text-white/70">Top projects by operational cost submissions</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-3">
+                {projectCostBreakdown.slice(0, 5).map(pc => {
+                  const maxAmount = projectCostBreakdown[0]?.totalSubmitted || 1;
+                  return (
+                    <div key={pc.projectId} className="flex items-center gap-3" data-testid={`project-cost-${pc.projectId}`}>
+                      <Button
+                        variant="link"
+                        className="text-white/90 p-0 h-auto text-sm font-medium min-w-[140px] text-left justify-start truncate"
+                        onClick={() => pc.projectId !== '__general__' && navigate(`/projects/${pc.projectId}`)}
+                        data-testid={`link-overview-project-${pc.projectId}`}
+                      >
+                        {pc.projectName}
+                      </Button>
+                      <div className="flex-1">
+                        <Progress value={(pc.totalSubmitted / maxAmount) * 100} className="h-2 bg-white/10 [&>*]:bg-gradient-to-r [&>*]:from-cyan-500 [&>*]:to-blue-500" />
+                      </div>
+                      <span className="text-white font-mono text-sm min-w-[100px] text-right">{formatCurrency(pc.totalSubmitted / 100)}</span>
+                      {pc.pendingCount > 0 && (
+                        <Badge className="bg-orange-500/70 text-white border-0 text-xs">{pc.pendingCount} pending</Badge>
+                      )}
+                    </div>
+                  );
+                })}
+                {projectCostBreakdown.length > 5 && (
+                  <p className="text-white/50 text-xs text-center pt-2">+ {projectCostBreakdown.length - 5} more projects</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Quick Actions */}
           <Card>
             <CardHeader>
@@ -381,7 +553,7 @@ const FinancialOperations = () => {
               <CardDescription>Navigate to detailed views</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Button
                   variant="outline"
                   className="justify-start h-auto py-4"
@@ -423,6 +595,21 @@ const FinancialOperations = () => {
                     <div className="text-left flex-1">
                       <div className="font-semibold">View Payments</div>
                       <div className="text-xs text-muted-foreground">{paidCount} transactions</div>
+                    </div>
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="justify-start h-auto py-4"
+                  onClick={() => navigate('/budget')}
+                  data-testid="button-view-budgets"
+                >
+                  <div className="flex items-center gap-3 w-full">
+                    <TrendingUp className="h-5 w-5 text-green-600" />
+                    <div className="text-left flex-1">
+                      <div className="font-semibold">Budget Overview</div>
+                      <div className="text-xs text-muted-foreground">{projectBudgets?.length || 0} budgets</div>
                     </div>
                     <ArrowRight className="h-4 w-4" />
                   </div>
@@ -478,32 +665,205 @@ const FinancialOperations = () => {
 
         {/* Budget Tab */}
         <TabsContent value="budget" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Budget vs Actual Tracking</CardTitle>
-              <CardDescription>Project and MMP budget analysis</CardDescription>
+          <Card className="bg-gradient-to-br from-slate-900/90 to-pink-900/90 backdrop-blur-xl border-pink-500/30 shadow-xl">
+            <CardHeader className="border-b border-white/10 pb-4">
+              <CardTitle className="text-white flex items-center gap-2">
+                <div className="p-2 bg-pink-500/20 rounded-lg">
+                  <BarChart3 className="h-5 w-5 text-pink-400" />
+                </div>
+                Budget vs Actual Spend
+              </CardTitle>
+              <CardDescription className="text-white/70">Compare project budgets against actual operational cost submissions</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Budget tracking dashboard coming soon</p>
-              </div>
+            <CardContent className="pt-6">
+              {budgetVsActual.length === 0 ? (
+                <div className="text-center py-8">
+                  <BarChart3 className="h-12 w-12 mx-auto mb-4 text-white/30" />
+                  <p className="text-white/60">No project budgets found. Create budgets on the Budget page to see comparisons.</p>
+                  <Button variant="outline" className="mt-4 bg-white/10 border-white/30 text-white" onClick={() => navigate('/budget')} data-testid="button-goto-budget">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Go to Budget Page
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {budgetVsActual.map(item => (
+                    <div key={item.projectId} className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-3" data-testid={`budget-vs-actual-${item.projectId}`}>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <Button
+                          variant="link"
+                          className="text-white font-semibold p-0 h-auto hover:text-pink-300"
+                          onClick={() => item.projectId !== '__general__' && navigate(`/projects/${item.projectId}`)}
+                          data-testid={`link-project-${item.projectId}`}
+                        >
+                          <FolderKanban className="h-4 w-4 mr-1.5" />
+                          {item.projectName}
+                        </Button>
+                        <div className="flex items-center gap-2">
+                          {item.utilization > 90 && (
+                            <Badge className="bg-red-500/80 text-white border-0">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Over 90%
+                            </Badge>
+                          )}
+                          <Badge className="bg-white/10 text-white border-white/20">
+                            {item.submissionCount} submissions
+                          </Badge>
+                        </div>
+                      </div>
+                      <Progress
+                        value={item.utilization}
+                        className={`h-3 ${item.utilization > 90 ? '[&>*]:bg-gradient-to-r [&>*]:from-red-500 [&>*]:to-rose-600' : item.utilization > 70 ? '[&>*]:bg-gradient-to-r [&>*]:from-amber-500 [&>*]:to-orange-600' : '[&>*]:bg-gradient-to-r [&>*]:from-green-500 [&>*]:to-emerald-600'} bg-white/10`}
+                      />
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <span className="text-white/60 block text-xs">Budget</span>
+                          <span className="text-white font-mono font-medium">{formatCurrency(item.budgetCents / 100)}</span>
+                        </div>
+                        <div>
+                          <span className="text-white/60 block text-xs">Actual Spend</span>
+                          <span className="text-green-400 font-mono font-medium">{formatCurrency(item.actualSpendCents / 100)}</span>
+                        </div>
+                        <div>
+                          <span className="text-white/60 block text-xs">Variance</span>
+                          <span className={`font-mono font-medium ${item.varianceCents >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {item.varianceCents >= 0 ? '+' : ''}{formatCurrency(item.varianceCents / 100)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-white/60 block text-xs">Utilization</span>
+                          <span className="text-white font-mono font-medium">{item.utilization.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Payments Tab */}
         <TabsContent value="payments" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Tracker</CardTitle>
-              <CardDescription>Wallet transactions and payout requests</CardDescription>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="bg-gradient-to-br from-green-600/90 to-emerald-700/90 border-green-500/30">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <DollarSign className="h-4 w-4 text-white/80" />
+                  <span className="text-xs text-white/70">Total Paid</span>
+                </div>
+                <p className="text-xl font-bold text-white">
+                  {formatCurrency(opCosts.filter(oc => oc.paid_at || oc.reconciled_at).reduce((s, oc) => s + oc.amount_cents, 0) / 100)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-blue-600/90 to-cyan-700/90 border-blue-500/30">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="h-4 w-4 text-white/80" />
+                  <span className="text-xs text-white/70">Awaiting Payment</span>
+                </div>
+                <p className="text-xl font-bold text-white">
+                  {formatCurrency(opCosts.filter(oc => getOpDerivedStatus(oc) === 'approved').reduce((s, oc) => s + oc.amount_cents, 0) / 100)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-purple-600/90 to-pink-700/90 border-purple-500/30">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Receipt className="h-4 w-4 text-white/80" />
+                  <span className="text-xs text-white/70">Reconciled</span>
+                </div>
+                <p className="text-xl font-bold text-white">
+                  {formatCurrency(opCosts.filter(oc => oc.reconciled_at).reduce((s, oc) => s + (oc.reconciled_amount_cents || oc.amount_cents), 0) / 100)}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="bg-gradient-to-br from-slate-900/90 to-green-900/90 backdrop-blur-xl border-green-500/30 shadow-xl">
+            <CardHeader className="border-b border-white/10 pb-4">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <div className="p-2 bg-green-500/20 rounded-lg">
+                    <Wallet className="h-5 w-5 text-green-400" />
+                  </div>
+                  Recent Payments
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="bg-white/10 border-white/30 text-white" onClick={() => navigate('/cost-submission')} data-testid="button-view-all-submissions">
+                    <ExternalLink className="h-4 w-4 mr-1.5" />
+                    All Submissions
+                  </Button>
+                  <Button variant="outline" size="sm" className="bg-white/10 border-white/30 text-white" onClick={() => navigate('/finance')} data-testid="button-view-finance-detail">
+                    <ExternalLink className="h-4 w-4 mr-1.5" />
+                    Finance Details
+                  </Button>
+                </div>
+              </div>
+              <CardDescription className="text-white/70">Most recent paid and reconciled cost submissions</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button onClick={() => navigate('/finance')}>
-                <ExternalLink className="h-4 w-4 mr-2" />
-                View Payment Details
-              </Button>
+            <CardContent className="p-0">
+              {recentPaidCosts.length === 0 ? (
+                <div className="text-center py-12 text-white/50">
+                  <Wallet className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                  <p>No payments recorded yet</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-white/10">
+                        <TableHead className="text-white/70">Date</TableHead>
+                        <TableHead className="text-white/70">Project</TableHead>
+                        <TableHead className="text-white/70">Category</TableHead>
+                        <TableHead className="text-white/70">Paid To</TableHead>
+                        <TableHead className="text-white/70 text-right">Amount</TableHead>
+                        <TableHead className="text-white/70">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recentPaidCosts.map(oc => {
+                        const proj = oc.project_id ? projects.find(p => p.id === oc.project_id) : null;
+                        const isReconciled = !!oc.reconciled_at;
+                        return (
+                          <TableRow key={oc.id} className="border-white/10" data-testid={`row-payment-${oc.id}`}>
+                            <TableCell className="text-white/90 text-sm whitespace-nowrap">
+                              {safeFormatDate(oc.paid_at || oc.reconciled_at)}
+                            </TableCell>
+                            <TableCell>
+                              {proj ? (
+                                <Button
+                                  variant="link"
+                                  className="text-blue-300 p-0 h-auto text-sm"
+                                  onClick={() => navigate(`/projects/${proj.id}`)}
+                                  data-testid={`link-payment-project-${oc.id}`}
+                                >
+                                  {proj.name}
+                                </Button>
+                              ) : (
+                                <span className="text-white/50 text-sm">General</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-white/80 text-sm capitalize">
+                              {(oc.expense_category || '').replace(/_/g, ' ')}
+                            </TableCell>
+                            <TableCell className="text-white/80 text-sm">{getUserName(oc.submitted_by)}</TableCell>
+                            <TableCell className="text-right text-white font-mono text-sm font-medium">
+                              {formatCurrency(oc.amount_cents / 100)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={isReconciled ? 'bg-purple-500/80 text-white border-0' : 'bg-green-500/80 text-white border-0'}>
+                                {isReconciled ? 'Reconciled' : 'Paid'}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

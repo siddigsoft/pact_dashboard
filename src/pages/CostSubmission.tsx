@@ -2343,7 +2343,13 @@ const CostSubmission = () => {
                     {linkedProject && (
                       <div className="flex items-center gap-1.5 text-muted-foreground">
                         <MapPin className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{linkedProject.name}</span>
+                        <button
+                          onClick={() => navigate(`/projects/${linkedProject.id}`)}
+                          className="truncate text-blue-600 dark:text-blue-400 hover:underline"
+                          data-testid={`link-approval-project-${linkedProject.id}`}
+                        >
+                          {linkedProject.name}
+                        </button>
                       </div>
                     )}
                     <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -2613,7 +2619,17 @@ const CostSubmission = () => {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" /> Project / المشروع</p>
-                    <p className="font-medium">{project?.name || 'General'}</p>
+                    {project ? (
+                      <button
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                        className="font-medium text-blue-600 dark:text-blue-400 hover:underline text-left"
+                        data-testid={`link-detail-project-${project.id}`}
+                      >
+                        {project.name}
+                      </button>
+                    ) : (
+                      <p className="font-medium">General</p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> Expense Date / تاريخ المصروف</p>
