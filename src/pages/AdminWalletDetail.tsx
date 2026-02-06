@@ -303,18 +303,68 @@ const AdminWalletDetail = () => {
     if (!wallet) return;
     setRecalculating(true);
     try {
-      const { data: allTxs, error: txError } = await supabase
+      const { data: allTransactions, error: txError } = await supabase
+        .from('wallet_transactions')
+        .select('id, amount, type, currency, site_visit_id, related_site_visit_id')
+        .eq('user_id', userId);
+
+      if (txError) throw txError;
+
+      const earningTxs = (allTransactions || []).filter(tx =>
+        (tx.type === 'earning' || tx.type === 'site_visit_fee') &&
+        (tx.site_visit_id || tx.related_site_visit_id)
+      );
+
+      let txUpdated = 0;
+
+      if (earningTxs.length > 0) {
+        const siteEntryIds = earningTxs
+          .map(tx => tx.site_visit_id || tx.related_site_visit_id)
+          .filter(Boolean) as string[];
+
+        const { data: entries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, enumerator_fee, transport_fee, cost')
+          .in('id', siteEntryIds);
+
+        const entryFeeMap = new Map(
+          (entries || []).map(e => {
+            const cost = Number(e.cost || 0);
+            const enumFee = Number(e.enumerator_fee || 0);
+            const transportFee = Number(e.transport_fee || 0);
+            const totalFee = cost > 0 ? cost : (enumFee + transportFee);
+            return [e.id, totalFee];
+          })
+        );
+
+        for (const tx of earningTxs) {
+          const entryId = tx.site_visit_id || tx.related_site_visit_id;
+          if (!entryId) continue;
+          const correctAmount = entryFeeMap.get(entryId);
+          if (correctAmount === undefined || correctAmount <= 0) continue;
+
+          if (Math.abs(Number(tx.amount) - correctAmount) >= 0.01) {
+            await supabase
+              .from('wallet_transactions')
+              .update({ amount: correctAmount })
+              .eq('id', tx.id);
+            txUpdated++;
+          }
+        }
+      }
+
+      const { data: refreshedTxs, error: refreshError } = await supabase
         .from('wallet_transactions')
         .select('amount, type, currency')
         .eq('user_id', userId);
 
-      if (txError) throw txError;
+      if (refreshError) throw refreshError;
 
       let newTotalEarned = 0;
       let newTotalWithdrawn = 0;
       const balancesByCurrency: Record<string, number> = {};
 
-      for (const tx of (allTxs || [])) {
+      for (const tx of (refreshedTxs || [])) {
         const amt = Number(tx.amount || 0);
         const txCurrency = tx.currency || currency;
         if (!balancesByCurrency[txCurrency]) balancesByCurrency[txCurrency] = 0;
@@ -328,7 +378,7 @@ const AdminWalletDetail = () => {
         }
       }
 
-      const newBalances = { ...wallet.balances };
+      const newBalances: Record<string, number> = {};
       for (const [cur, bal] of Object.entries(balancesByCurrency)) {
         newBalances[cur] = bal;
       }
@@ -349,7 +399,7 @@ const AdminWalletDetail = () => {
       const primaryBalance = balancesByCurrency[primaryCurrency] || 0;
       toast({ 
         title: 'Wallet Recalculated', 
-        description: `Total Earned: ${newTotalEarned.toLocaleString()} ${primaryCurrency}, Balance: ${primaryBalance.toLocaleString()} ${primaryCurrency}` 
+        description: `${txUpdated > 0 ? `${txUpdated} transactions corrected. ` : ''}Earned: ${newTotalEarned.toLocaleString()} ${primaryCurrency}, Balance: ${primaryBalance.toLocaleString()} ${primaryCurrency}` 
       });
       await loadWalletData();
     } catch (error: any) {
@@ -904,7 +954,7 @@ const AdminWalletDetail = () => {
                   ) : (
                     <DollarSign className="h-4 w-4 mr-2" />
                   )}
-                  Recalculate Totals
+                  Sync & Recalculate
                 </Button>
               </div>
             </CardHeader>
