@@ -406,13 +406,30 @@ const CostSubmission = () => {
     processApproval('approve', 2, submission, notes, signatureData);
   };
 
-  const handleDownloadCertificate = (oc: OperationalCostSubmission) => {
+  const handleDownloadCertificate = async (oc: OperationalCostSubmission) => {
     const submitter = users.find(u => u.id === oc.submitted_by);
     const tier1Approver = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
     const tier2Approver = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
     const project = oc.project_id ? allProjects.find(p => p.id === oc.project_id) : null;
 
-    generateApprovalCertificatePdf({
+    let signatureImageData: string | null = null;
+    if (oc.tier2_notes) {
+      const sigMatch = oc.tier2_notes.match(/ID:\s*(\S+?)(?:\s*\||$)/);
+      if (sigMatch?.[1]) {
+        try {
+          const { data: sigRow } = await supabase
+            .from('document_signatures')
+            .select('signature_data')
+            .eq('id', sigMatch[1])
+            .single();
+          if (sigRow?.signature_data && typeof sigRow.signature_data === 'string' && sigRow.signature_data.startsWith('data:')) {
+            signatureImageData = sigRow.signature_data;
+          }
+        } catch { /* signature fetch failed, continue without */ }
+      }
+    }
+
+    await generateApprovalCertificatePdf({
       submission: {
         id: oc.id,
         expense_category: oc.expense_category,
@@ -445,12 +462,13 @@ const CostSubmission = () => {
         status: oc.tier2_status || 'approved',
         approvedAt: oc.tier2_approved_at || '',
         notes: oc.tier2_notes,
+        signatureImageData,
       },
     });
 
     toast({
-      title: 'Certificate Downloaded / تم تحميل الشهادة',
-      description: 'The approval certificate PDF has been saved to your device. / تم حفظ شهادة الموافقة بصيغة PDF على جهازك.',
+      title: 'Confirmation Downloaded / تم تحميل التأكيد',
+      description: 'The approval confirmation PDF has been saved to your device. / تم حفظ تأكيد الموافقة بصيغة PDF على جهازك.',
     });
   };
 
