@@ -157,7 +157,6 @@ function AdvanceRequestsReportContent() {
   }, [filteredRequests]);
 
   const byTeamMember = useMemo(() => {
-    if (activeTab !== 'byTeam') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       if (!grouped[req.requestedBy]) {
@@ -174,10 +173,9 @@ function AdvanceRequestsReportContent() {
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests, activeTab, getProfileName]);
+  }, [filteredRequests, getProfileName]);
 
   const byHub = useMemo(() => {
-    if (activeTab !== 'byHub') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const hubKey = req.hubId || 'unknown';
@@ -195,7 +193,7 @@ function AdvanceRequestsReportContent() {
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests, activeTab]);
+  }, [filteredRequests]);
 
   const statusLabels: Record<string, string> = {
     'pending_supervisor': 'Pending Supervisor',
@@ -208,7 +206,6 @@ function AdvanceRequestsReportContent() {
   };
 
   const byStatus = useMemo(() => {
-    if (activeTab !== 'byStatus') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const statusKey = req.status;
@@ -226,10 +223,9 @@ function AdvanceRequestsReportContent() {
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests, activeTab]);
+  }, [filteredRequests]);
 
   const byState = useMemo(() => {
-    if (activeTab !== 'byState') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const stateKey = req.stateName || 'Unknown';
@@ -247,10 +243,9 @@ function AdvanceRequestsReportContent() {
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests, activeTab]);
+  }, [filteredRequests]);
 
   const byProject = useMemo(() => {
-    if (activeTab !== 'byProject') return [];
     const grouped: Record<string, { id: string, name: string, requests: number, totalRequested: number, totalApproved: number, pending: number, items: typeof filteredRequests }> = {};
     filteredRequests.forEach(req => {
       const projectKey = req.projectName || 'Unknown';
@@ -268,7 +263,7 @@ function AdvanceRequestsReportContent() {
       }
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
-  }, [filteredRequests, activeTab]);
+  }, [filteredRequests]);
 
   const uniqueHubs = useMemo(() => {
     const hubs = new Map<string, string>();
