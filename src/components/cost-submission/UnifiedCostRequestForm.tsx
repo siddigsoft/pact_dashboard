@@ -143,6 +143,15 @@ export default function UnifiedCostRequestForm({
       return;
     }
 
+    if (!currentUser.id) {
+      toast({
+        title: "Error",
+        description: "User session is invalid. Please log out and log back in.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (values.fundingType === 'reimbursement' && supportingDocuments.length === 0) {
       toast({
         title: "Documents Required",
@@ -155,29 +164,40 @@ export default function UnifiedCostRequestForm({
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from('operational_cost_submissions' as any)
-        .insert({
-          submitted_by: currentUser.id,
-          submitter_role: currentUser.role || 'user',
-          expense_category: values.expenseCategory,
-          amount_cents: Math.round(values.amount * 100),
-          currency: values.currency,
-          description: `[${values.fundingType.toUpperCase()}] ${values.title}\n\n${values.description}\n\nJustification: ${values.justification}`,
-          expense_date: values.expenseDate || new Date().toISOString().split('T')[0],
-          vendor: values.vendor || null,
-          reference_number: values.referenceNumber || null,
-          hub_id: values.hubId || currentUser.hubId || null,
-          project_id: values.projectId || null,
-          supporting_documents: supportingDocuments,
-          status: 'pending'
-        });
+      const hubId = values.hubId && values.hubId.trim() !== '' ? values.hubId : (currentUser.hubId || null);
+      const projectId = values.projectId && values.projectId.trim() !== '' ? values.projectId : null;
 
-      if (error) throw error;
+      const insertData = {
+        submitted_by: currentUser.id,
+        submitter_role: currentUser.role || 'user',
+        expense_category: values.expenseCategory,
+        amount_cents: Math.round(values.amount * 100),
+        currency: values.currency,
+        description: `[${values.fundingType.toUpperCase()}] ${values.title}\n\n${values.description}\n\nJustification: ${values.justification}`,
+        expense_date: values.expenseDate || new Date().toISOString().split('T')[0],
+        vendor: values.vendor && values.vendor.trim() !== '' ? values.vendor : null,
+        reference_number: values.referenceNumber && values.referenceNumber.trim() !== '' ? values.referenceNumber : null,
+        hub_id: hubId,
+        project_id: projectId,
+        supporting_documents: supportingDocuments.length > 0 ? supportingDocuments : [],
+        status: 'pending',
+        tier1_status: 'pending',
+        tier2_status: 'pending'
+      };
+
+      const { data, error } = await supabase
+        .from('operational_cost_submissions')
+        .insert(insertData)
+        .select();
+
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw new Error(error.message || 'Database insertion failed');
+      }
 
       toast({
         title: values.fundingType === 'advance' ? "Advance Request Submitted" : "Reimbursement Submitted",
-        description: `Your request for ${values.currency} ${values.amount.toLocaleString()} has been submitted.`,
+        description: `Your request for ${values.currency} ${values.amount.toLocaleString()} has been submitted successfully.`,
       });
 
       form.reset();

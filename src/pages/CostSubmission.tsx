@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvance
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
 import { 
   Info, 
   RefreshCw, 
@@ -25,6 +27,34 @@ import {
   ClipboardCheck,
   HelpCircle
 } from "lucide-react";
+
+interface OperationalCostSubmission {
+  id: string;
+  expense_category: string;
+  amount_cents: number;
+  currency: string;
+  description: string | null;
+  expense_date: string | null;
+  vendor: string | null;
+  reference_number: string | null;
+  hub_id: string | null;
+  project_id: string | null;
+  submitted_by: string;
+  submitter_role: string | null;
+  supporting_documents: any;
+  status: string;
+  tier1_status: string | null;
+  tier1_approved_by: string | null;
+  tier1_approved_at: string | null;
+  tier1_notes: string | null;
+  tier2_status: string | null;
+  tier2_approved_by: string | null;
+  tier2_approved_at: string | null;
+  tier2_notes: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 const CostSubmission = () => {
   const navigate = useNavigate();
@@ -70,6 +100,40 @@ const CostSubmission = () => {
   // Default to Submit Request tab for all users
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
   const [showGuide, setShowGuide] = useState(false);
+  const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
+  const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);
+
+  const fetchOperationalCosts = useCallback(async () => {
+    if (!currentUser?.id) return;
+    setOperationalCostsLoading(true);
+    try {
+      let query = supabase
+        .from('operational_cost_submissions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!canViewTeamSubmissions) {
+        query = query.eq('submitted_by', currentUser.id);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error('Error fetching operational costs:', error);
+        setOperationalCosts([]);
+      } else {
+        setOperationalCosts((data as OperationalCostSubmission[]) || []);
+      }
+    } catch (err) {
+      console.error('Error fetching operational costs:', err);
+      setOperationalCosts([]);
+    } finally {
+      setOperationalCostsLoading(false);
+    }
+  }, [currentUser?.id, canViewTeamSubmissions]);
+
+  useEffect(() => {
+    fetchOperationalCosts();
+  }, [fetchOperationalCosts]);
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
   // - Admins/Supervisors: Fetch all submissions (enabled), skip user-specific query (empty userId)
@@ -132,13 +196,37 @@ const CostSubmission = () => {
     );
   }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser]);
 
+  const filteredOperationalCosts = useMemo(() => {
+    let filtered = operationalCosts;
+    if (!isAdminOrSuperUser) {
+      if (isSupervisor && teamMemberIds.length > 0) {
+        filtered = filtered.filter(o => teamMemberIds.includes(o.submitted_by) || o.submitted_by === currentUser?.id);
+      } else if (!canViewTeamSubmissions) {
+        filtered = filtered.filter(o => o.submitted_by === currentUser?.id);
+      }
+      if (userProjectIds.length > 0) {
+        filtered = filtered.filter(o => !o.project_id || userProjectIds.includes(o.project_id));
+      }
+    }
+    return filtered;
+  }, [operationalCosts, isAdminOrSuperUser, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
+
+  const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {
+    if (oc.status === 'paid') return 'paid';
+    if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.status === 'rejected') return 'rejected';
+    if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
+    if (oc.tier1_status === 'approved' && oc.tier2_status === 'pending') return 'under_review';
+    if (oc.status === 'under_review') return 'under_review';
+    return 'pending';
+  };
+
   const submissionStats = {
-    total: submissions.length,
-    pending: submissions.filter(s => s.status === 'pending').length,
-    underReview: submissions.filter(s => s.status === 'under_review').length,
-    approved: submissions.filter(s => s.status === 'approved').length,
-    rejected: submissions.filter(s => s.status === 'rejected').length,
-    paid: submissions.filter(s => s.status === 'paid').length
+    total: submissions.length + filteredOperationalCosts.length,
+    pending: submissions.filter(s => s.status === 'pending').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'pending').length,
+    underReview: submissions.filter(s => s.status === 'under_review').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'under_review').length,
+    approved: submissions.filter(s => s.status === 'approved').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length,
+    rejected: submissions.filter(s => s.status === 'rejected').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'rejected').length,
+    paid: submissions.filter(s => s.status === 'paid').length + filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid').length
   };
 
   // Filter projects for budget request form based on user access
@@ -464,7 +552,10 @@ const CostSubmission = () => {
           <TabsContent value="submit" className="space-y-4">
             <UnifiedCostRequestForm 
               projects={projectsForForm}
-              onSuccess={() => setActiveTab("history")}
+              onSuccess={() => {
+                fetchOperationalCosts();
+                setActiveTab("history");
+              }}
             />
           </TabsContent>
         )}
@@ -567,15 +658,140 @@ const CostSubmission = () => {
               </CardDescription>
             </CardHeader>
           </Card>
-          {isLoading ? (
+
+          {/* Operational Cost Submissions */}
+          {operationalCostsLoading && filteredOperationalCosts.length === 0 && (
+            <Card>
+              <CardContent className="pt-6">
+                <Skeleton className="h-32 w-full" />
+              </CardContent>
+            </Card>
+          )}
+          {filteredOperationalCosts.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="h-5 w-5 text-blue-600" />
+                    <CardTitle className="text-base">Operational Cost Requests</CardTitle>
+                    <Badge variant="secondary">{filteredOperationalCosts.length}</Badge>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchOperationalCosts}
+                    disabled={operationalCostsLoading}
+                    data-testid="button-refresh-operational"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-1 ${operationalCostsLoading ? 'animate-spin' : ''}`} />
+                    {operationalCostsLoading ? 'Loading...' : 'Refresh'}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {filteredOperationalCosts.map((oc) => {
+                    const categoryLabels: Record<string, string> = {
+                      permits: 'Permits & Licenses',
+                      incentives: 'Incentives & Allowances',
+                      communications: 'Internet & Comms',
+                      training: 'Training',
+                      transport: 'Transportation',
+                      general_transport: 'Transportation',
+                      equipment: 'Equipment & Supplies',
+                      printing: 'Printing & Stationery',
+                      meetings: 'Meetings',
+                      office_admin: 'Office Admin',
+                      other: 'Other'
+                    };
+                    const statusColors: Record<string, string> = {
+                      pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+                      under_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+                      approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+                      rejected: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+                      paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+                    };
+                    const derivedStatus = getOperationalDerivedStatus(oc);
+                    const statusLabels: Record<string, string> = {
+                      pending: 'Pending (Tier 1)',
+                      under_review: 'Under Review (Tier 2)',
+                      approved: 'Approved',
+                      rejected: 'Rejected',
+                      paid: 'Paid',
+                    };
+                    const submitterName = users.find(u => u.id === oc.submitted_by)?.name || 'Unknown';
+                    const title = oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
+
+                    return (
+                      <div
+                        key={oc.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg border bg-background hover-elevate"
+                        data-testid={`operational-cost-${oc.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium truncate">{title}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {categoryLabels[oc.expense_category] || oc.expense_category}
+                            </Badge>
+                            <Badge className={`text-xs border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
+                              {statusLabels[derivedStatus] || derivedStatus}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
+                            {canViewTeamSubmissions && (
+                              <span className="flex items-center gap-1">
+                                <Users className="h-3 w-3" />
+                                {submitterName}
+                              </span>
+                            )}
+                            <span>{oc.created_at ? format(new Date(oc.created_at), 'MMM d, yyyy') : 'N/A'}</span>
+                            {oc.vendor && <span>Vendor: {oc.vendor}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="font-bold text-lg">{oc.currency} {(oc.amount_cents / 100).toLocaleString()}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {oc.tier1_status === 'approved' ? 'Tier 1 Approved' : ''}
+                              {oc.tier2_status === 'approved' ? ' / Tier 2 Approved' : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Site Visit Cost Submissions */}
+          {(isLoading || operationalCostsLoading) ? (
             <Card>
               <CardContent className="pt-6">
                 <Skeleton className="h-96 w-full" />
               </CardContent>
             </Card>
-          ) : (
+          ) : submissions.length > 0 ? (
             <CostSubmissionHistory submissions={submissions} />
-          )}
+          ) : operationalCosts.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <h3 className="text-lg font-semibold mb-2">No Submissions Yet</h3>
+                  <p className="mb-4">You haven't submitted any cost requests. Use the Submit Request tab to get started.</p>
+                  {canSubmitOperationalCosts && (
+                    <Button variant="outline" onClick={() => setActiveTab("submit")} data-testid="button-go-submit">
+                      <Receipt className="h-4 w-4 mr-2" />
+                      Submit a Request
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
         </TabsContent>
       </Tabs>
     </div>
