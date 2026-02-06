@@ -367,7 +367,6 @@ const ClassificationFeeManagement = () => {
     setWalletSyncResults(null);
     
     try {
-      // Step 1: Get all wallets with their profiles
       const { data: wallets, error: walletsError } = await supabase
         .from('wallets')
         .select('id, user_id, balances, total_earned, total_withdrawn, profiles:profiles!wallets_user_id_fkey(full_name, email)');
@@ -379,27 +378,40 @@ const ClassificationFeeManagement = () => {
         return;
       }
 
+      const classResult = await supabase
+        .from('user_classifications')
+        .select('user_id, classification_level, role_scope')
+        .eq('is_active', true);
+      
+      const classMap = new Map(
+        (classResult.data || []).map(c => [c.user_id, { level: c.classification_level, roleScope: c.role_scope }])
+      );
+
+      const feeCalcMap = new Map(
+        allFeeStructures.map(f => [
+          `${f.classification_level}_${f.role_scope}`,
+          Math.round(f.site_visit_base_fee_cents * (f.complexity_multiplier || 1.0))
+        ])
+      );
+
       const details: Array<{ userName: string; oldEarned: number; newEarned: number; oldBalance: number; newBalance: number }> = [];
       let updated = 0, skipped = 0, failed = 0;
 
       for (const wallet of wallets) {
         try {
-          // Step 2: Get all earning transactions for this user
           const { data: transactions, error: txError } = await supabase
             .from('wallet_transactions')
-            .select('id, amount, type, site_visit_id, related_site_visit_id')
+            .select('id, amount, type, currency, site_visit_id, related_site_visit_id')
             .eq('user_id', wallet.user_id);
           
           if (txError) { failed++; continue; }
           if (!transactions || transactions.length === 0) { skipped++; continue; }
 
-          // Step 3: For earning transactions linked to site entries, update amounts
           const earningTxs = transactions.filter(tx => 
             (tx.type === 'earning' || tx.type === 'site_visit_fee') && 
             (tx.site_visit_id || tx.related_site_visit_id)
           );
 
-          // Update earning transaction amounts from MMP entries (if any exist)
           if (earningTxs.length > 0) {
             const siteEntryIds = earningTxs
               .map(tx => tx.site_visit_id || tx.related_site_visit_id)
@@ -407,67 +419,95 @@ const ClassificationFeeManagement = () => {
             
             const { data: entries } = await supabase
               .from('mmp_site_entries')
-              .select('id, enumerator_fee, transport_fee, cost')
+              .select('id, enumerator_fee, transport_fee, cost, accepted_by')
               .in('id', siteEntryIds);
 
-            const entryFeeMap = new Map(
-              (entries || []).map(e => {
-                const cost = Number(e.cost || 0);
-                const enumFee = Number(e.enumerator_fee || 0);
-                const transportFee = Number(e.transport_fee || 0);
-                const totalFee = cost > 0 ? cost : (enumFee + transportFee);
-                return [e.id, totalFee];
-              })
+            const entryMap = new Map(
+              (entries || []).map(e => [e.id, e])
             );
 
-            // Step 4: Update each earning transaction with correct amount
             for (const tx of earningTxs) {
               const entryId = tx.site_visit_id || tx.related_site_visit_id;
               if (!entryId) continue;
               
-              const correctAmount = entryFeeMap.get(entryId);
-              if (correctAmount === undefined || correctAmount <= 0) continue;
+              const entry = entryMap.get(entryId);
+              if (!entry) continue;
+
+              const userId = entry.accepted_by || wallet.user_id;
+              const userClass = classMap.get(userId);
+              const level = userClass?.level || 'C';
+              const roleScope = userClass?.roleScope || 'dataCollector';
+              const classificationFee = feeCalcMap.get(`${level}_${roleScope}`);
+              
+              const transportFee = Number(entry.transport_fee || 0);
+              const correctAmount = classificationFee !== undefined 
+                ? classificationFee + transportFee
+                : (Number(entry.cost || 0) > 0 ? Number(entry.cost) : (Number(entry.enumerator_fee || 0) + transportFee));
+              
+              if (correctAmount <= 0) continue;
               
               const currentAmount = Number(tx.amount || 0);
               if (Math.abs(currentAmount - correctAmount) < 0.01) continue;
               
               await supabase
                 .from('wallet_transactions')
-                .update({ amount: correctAmount, amount_cents: Math.round(correctAmount * 100) })
+                .update({ amount: correctAmount })
                 .eq('id', tx.id);
+
+              if (classificationFee !== undefined) {
+                await supabase
+                  .from('mmp_site_entries')
+                  .update({ 
+                    enumerator_fee: classificationFee,
+                    cost: classificationFee + transportFee,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', entryId);
+              }
             }
           }
 
-          // Step 5: Always recalculate wallet totals from all transactions (re-fetch after updates)
           const { data: allTxs, error: allTxError } = await supabase
             .from('wallet_transactions')
-            .select('amount, type')
+            .select('amount, type, currency')
             .eq('user_id', wallet.user_id);
           
           if (allTxError) { failed++; continue; }
 
           let newTotalEarned = 0;
-          let netBalance = 0;
+          let newTotalWithdrawn = 0;
+          const balancesByCurrency: Record<string, number> = {};
+
           for (const tx of (allTxs || [])) {
             const amt = Number(tx.amount || 0);
-            if (tx.type === 'earning' || tx.type === 'site_visit_fee' || tx.type === 'adjustment' || tx.type === 'bonus') {
+            const txCurrency = tx.currency || 'SDG';
+            if (!balancesByCurrency[txCurrency]) balancesByCurrency[txCurrency] = 0;
+
+            if (['earning', 'site_visit_fee', 'adjustment', 'bonus'].includes(tx.type)) {
               newTotalEarned += amt;
-              netBalance += amt;
-            } else if (tx.type === 'withdrawal' || tx.type === 'penalty' || tx.type === 'debit') {
-              netBalance -= Math.abs(amt);
+              balancesByCurrency[txCurrency] += amt;
+            } else if (['withdrawal', 'penalty', 'debit'].includes(tx.type)) {
+              newTotalWithdrawn += Math.abs(amt);
+              balancesByCurrency[txCurrency] -= Math.abs(amt);
             }
           }
 
           const oldEarned = Number(wallet.total_earned || 0);
-          const oldBalance = Number(wallet.balances?.SDG ?? wallet.balances?.[Object.keys(wallet.balances || {})[0]] ?? 0);
-          const currency = Object.keys(wallet.balances || {})[0] || 'SDG';
+          const existingBalances = wallet.balances || {};
+          const primaryCurrency = Object.keys(existingBalances)[0] || Object.keys(balancesByCurrency)[0] || 'SDG';
+          const oldBalance = Number(existingBalances[primaryCurrency] ?? 0);
 
-          // Step 6: Update wallet with recalculated values
+          const newBalances: Record<string, number> = {};
+          for (const [cur, bal] of Object.entries(balancesByCurrency)) {
+            newBalances[cur] = bal;
+          }
+
           const { error: walletUpdateError } = await supabase
             .from('wallets')
             .update({
               total_earned: newTotalEarned,
-              balances: { ...wallet.balances, [currency]: netBalance },
+              total_withdrawn: newTotalWithdrawn,
+              balances: newBalances,
               updated_at: new Date().toISOString(),
             })
             .eq('id', wallet.id);
@@ -479,14 +519,15 @@ const ClassificationFeeManagement = () => {
 
           const profileData = wallet.profiles as any;
           const userName = profileData?.full_name || profileData?.email || wallet.user_id;
+          const newBalance = balancesByCurrency[primaryCurrency] || 0;
           
-          if (Math.abs(oldEarned - newTotalEarned) > 0.01 || Math.abs(oldBalance - netBalance) > 0.01) {
+          if (Math.abs(oldEarned - newTotalEarned) > 0.01 || Math.abs(oldBalance - newBalance) > 0.01) {
             details.push({
               userName,
               oldEarned,
               newEarned: newTotalEarned,
               oldBalance,
-              newBalance: netBalance,
+              newBalance,
             });
             updated++;
           } else {
