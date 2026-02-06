@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -130,6 +131,11 @@ const CostSubmission = () => {
     tier: 1 | 2;
     notes: string;
   }>({ open: false, submission: null, tier: 2, notes: '' });
+
+  const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
+  const [recallConfirm, setRecallConfirm] = useState<OperationalCostSubmission | null>(null);
+  const [actionProcessing, setActionProcessing] = useState(false);
 
   const fetchOperationalCosts = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -428,6 +434,99 @@ const CostSubmission = () => {
       title: 'Certificate Downloaded',
       description: 'The approval certificate PDF has been saved to your device.',
     });
+  };
+
+  const canEditSubmission = (oc: OperationalCostSubmission): boolean => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus !== 'pending') return false;
+    if (isSuperAdmin || isAdmin) return true;
+    return oc.submitted_by === currentUser?.id;
+  };
+
+  const canDeleteSubmission = (oc: OperationalCostSubmission): boolean => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus !== 'pending') return false;
+    if (isSuperAdmin || isAdmin) return true;
+    return oc.submitted_by === currentUser?.id;
+  };
+
+  const canResubmitSubmission = (oc: OperationalCostSubmission): boolean => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus !== 'rejected') return false;
+    if (isSuperAdmin || isAdmin) return true;
+    return oc.submitted_by === currentUser?.id;
+  };
+
+  const canRecallSubmission = (oc: OperationalCostSubmission): boolean => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus === 'paid') return false;
+    if (derivedStatus !== 'under_review' && derivedStatus !== 'approved') return false;
+    return isSuperAdmin || isAdmin;
+  };
+
+  const handleEditSubmission = (oc: OperationalCostSubmission) => {
+    setEditingSubmission(oc);
+    setActiveTab("submit");
+  };
+
+  const handleDeleteSubmission = async () => {
+    if (!deleteConfirm) return;
+    setActionProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .delete()
+        .eq('id', deleteConfirm.id)
+        .eq('tier1_status', 'pending')
+        .eq('tier2_status', 'pending');
+
+      if (error) {
+        toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Deleted", description: "The submission has been deleted." });
+        fetchOperationalCosts();
+      }
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to delete submission.", variant: "destructive" });
+    } finally {
+      setActionProcessing(false);
+      setDeleteConfirm(null);
+    }
+  };
+
+  const handleRecallSubmission = async () => {
+    if (!recallConfirm) return;
+    setActionProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('operational_cost_submissions')
+        .update({
+          status: 'pending',
+          tier1_status: 'pending',
+          tier1_approved_by: null,
+          tier1_approved_at: null,
+          tier1_notes: null,
+          tier2_status: 'pending',
+          tier2_approved_by: null,
+          tier2_approved_at: null,
+          tier2_notes: null,
+          rejection_reason: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', recallConfirm.id);
+
+      if (error) {
+        toast({ title: "Recall Failed", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Recalled", description: "The submission has been recalled to pending status. All approvals have been reset." });
+        fetchOperationalCosts();
+      }
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to recall submission.", variant: "destructive" });
+    } finally {
+      setActionProcessing(false);
+      setRecallConfirm(null);
+    }
   };
 
   const submissionStats = {
@@ -813,9 +912,42 @@ const CostSubmission = () => {
         {/* Submit Request Tab - Unified form for all field costs */}
         {canSubmitOperationalCosts && (
           <TabsContent value="submit" className="space-y-4">
+            {editingSubmission && (
+              <Alert className="mb-4">
+                <Pencil className="h-4 w-4" />
+                <AlertTitle>
+                  {editingSubmission.status === 'rejected' ? 'Editing Rejected Submission' : 'Editing Pending Submission'}
+                </AlertTitle>
+                <AlertDescription>
+                  {editingSubmission.status === 'rejected'
+                    ? 'Make your changes and resubmit. This will reset the approval process.'
+                    : 'Update your submission details below. The approval status will remain pending.'}
+                </AlertDescription>
+              </Alert>
+            )}
             <UnifiedCostRequestForm 
+              key={editingSubmission?.id || 'new'}
               projects={projectsForForm}
+              editData={editingSubmission ? {
+                id: editingSubmission.id,
+                expense_category: editingSubmission.expense_category,
+                amount_cents: editingSubmission.amount_cents,
+                currency: editingSubmission.currency,
+                description: editingSubmission.description,
+                expense_date: editingSubmission.expense_date,
+                vendor: editingSubmission.vendor,
+                reference_number: editingSubmission.reference_number,
+                hub_id: editingSubmission.hub_id,
+                project_id: editingSubmission.project_id,
+                supporting_documents: editingSubmission.supporting_documents,
+                status: editingSubmission.status,
+              } : null}
+              onCancelEdit={() => {
+                setEditingSubmission(null);
+                setActiveTab("history");
+              }}
               onSuccess={() => {
+                setEditingSubmission(null);
                 fetchOperationalCosts();
                 setActiveTab("history");
               }}
@@ -1096,6 +1228,50 @@ const CostSubmission = () => {
                               Certificate
                             </Button>
                           )}
+                          {canEditSubmission(oc) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditSubmission(oc)}
+                              data-testid={`button-edit-submission-${oc.id}`}
+                            >
+                              <Pencil className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                          )}
+                          {canDeleteSubmission(oc) && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => setDeleteConfirm(oc)}
+                              data-testid={`button-delete-submission-${oc.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete
+                            </Button>
+                          )}
+                          {canResubmitSubmission(oc) && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleEditSubmission(oc)}
+                              data-testid={`button-resubmit-submission-${oc.id}`}
+                            >
+                              <SendHorizonal className="h-4 w-4 mr-1" />
+                              Edit & Resubmit
+                            </Button>
+                          )}
+                          {canRecallSubmission(oc) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setRecallConfirm(oc)}
+                              data-testid={`button-recall-submission-${oc.id}`}
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                              Recall
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );
@@ -1340,6 +1516,59 @@ const CostSubmission = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="dialog-delete-title">Delete Submission</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this cost submission? This action cannot be undone.
+              {deleteConfirm && (
+                <span className="block mt-2 font-medium">
+                  {deleteConfirm.currency} {(deleteConfirm.amount_cents / 100).toLocaleString()} - {deleteConfirm.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-delete-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteSubmission}
+              disabled={actionProcessing}
+              className="bg-destructive text-destructive-foreground"
+              data-testid="button-delete-confirm"
+            >
+              {actionProcessing ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!recallConfirm} onOpenChange={(open) => !open && setRecallConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="dialog-recall-title">Recall Submission</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to recall this submission back to pending? This will remove all existing approvals and reset the entire approval process.
+              {recallConfirm && (
+                <span className="block mt-2 font-medium">
+                  {recallConfirm.currency} {(recallConfirm.amount_cents / 100).toLocaleString()} - {recallConfirm.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionProcessing} data-testid="button-recall-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRecallSubmission}
+              disabled={actionProcessing}
+              data-testid="button-recall-confirm"
+            >
+              {actionProcessing ? 'Recalling...' : 'Recall to Pending'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {signatureModal.submission && (
         <SignatureConfirmationModal
