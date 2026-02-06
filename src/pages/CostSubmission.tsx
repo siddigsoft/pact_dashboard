@@ -437,6 +437,21 @@ const CostSubmission = () => {
       }
     }
 
+    if (!signatureImageData && oc.tier2_approved_by) {
+      try {
+        const { data: savedSig } = await supabase
+          .from('handwriting_signatures')
+          .select('signature_image')
+          .eq('user_id', oc.tier2_approved_by)
+          .eq('is_default', true)
+          .eq('is_active', true)
+          .single();
+        if (savedSig?.signature_image && typeof savedSig.signature_image === 'string' && savedSig.signature_image.startsWith('data:')) {
+          signatureImageData = savedSig.signature_image;
+        }
+      } catch { /* no saved signature, continue without */ }
+    }
+
     await generateApprovalCertificatePdf({
       submission: {
         id: oc.id,
