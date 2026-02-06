@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,16 +28,23 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { 
-  Info, 
-  RefreshCw, 
-  CircleDollarSign,
-  ClipboardCheck,
-  HelpCircle
-} from "lucide-react";
 import { SignatureConfirmationModal } from "@/components/signatures/SignatureConfirmationModal";
 import type { SignatureMethod } from "@/types/signature";
 import { generateApprovalCertificatePdf } from "@/utils/approvalCertificatePdf";
+import {
+  exportSubmissionsToExcel,
+  exportSubmissionsToPDF,
+  exportOutstandingToExcel,
+  exportOutstandingToPDF,
+  exportReconciledToExcel,
+  exportReconciledToPDF,
+} from "@/utils/costSubmissionExport";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface OperationalCostSubmission {
   id: string;
@@ -1056,14 +1063,58 @@ const CostSubmission = () => {
         <TabsContent value="reconciliation" className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <RefreshCw className="h-5 w-5 text-purple-600" />
-                <CardTitle>Advance Reconciliation</CardTitle>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="h-5 w-5 text-purple-600" />
+                    <CardTitle>Advance Reconciliation</CardTitle>
+                  </div>
+                  <CardDescription>
+                    Reconcile advance payments by submitting receipts and accounting for all funds received.
+                    <span dir="rtl" className="block text-xs mt-0.5">تسوية المدفوعات المسبقة عن طريق تقديم الإيصالات وحساب جميع الأموال المستلمة.</span>
+                  </CardDescription>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-export-reconciliation">
+                      <Download className="h-4 w-4 mr-1" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      data-testid="button-export-reconciliation-excel"
+                      onClick={() => {
+                        const reconciledOps = operationalCosts.filter(oc => oc.status === 'reconciled');
+                        if (reconciledOps.length === 0) {
+                          toast({ title: "No Data / لا توجد بيانات", description: "No reconciled submissions to export.", variant: "destructive" });
+                          return;
+                        }
+                        exportReconciledToExcel(reconciledOps, users);
+                        toast({ title: "Excel Exported / تم التصدير", description: `${reconciledOps.length} reconciled submission(s) exported to Excel.` });
+                      }}
+                    >
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Export to Excel / تصدير إلى إكسل
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid="button-export-reconciliation-pdf"
+                      onClick={() => {
+                        const reconciledOps = operationalCosts.filter(oc => oc.status === 'reconciled');
+                        if (reconciledOps.length === 0) {
+                          toast({ title: "No Data / لا توجد بيانات", description: "No reconciled submissions to export.", variant: "destructive" });
+                          return;
+                        }
+                        exportReconciledToPDF(reconciledOps, users);
+                        toast({ title: "PDF Exported / تم التصدير", description: `${reconciledOps.length} reconciled submission(s) exported to PDF.` });
+                      }}
+                    >
+                      <FileDown className="h-4 w-4 mr-2" />
+                      Export to PDF / تصدير إلى PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <CardDescription>
-                Reconcile advance payments by submitting receipts and accounting for all funds received.
-                <span dir="rtl" className="block text-xs mt-0.5">تسوية المدفوعات المسبقة عن طريق تقديم الإيصالات وحساب جميع الأموال المستلمة.</span>
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {activeReconciliation ? (() => {
@@ -1335,13 +1386,57 @@ const CostSubmission = () => {
         <TabsContent value="outstanding" className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <CircleDollarSign className="h-5 w-5 text-amber-600" />
-                <CardTitle>Outstanding Advances</CardTitle>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <CircleDollarSign className="h-5 w-5 text-amber-600" />
+                    <CardTitle>Outstanding Advances</CardTitle>
+                  </div>
+                  <CardDescription>
+                    View all advance payments that are pending reconciliation. Track amounts received vs. spent and due dates for submitting receipts.
+                  </CardDescription>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-export-outstanding">
+                      <Download className="h-4 w-4 mr-1" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      data-testid="button-export-outstanding-excel"
+                      onClick={() => {
+                        const approvedOps = operationalCosts.filter(oc => getOperationalDerivedStatus(oc) === 'approved');
+                        if (approvedOps.length === 0) {
+                          toast({ title: "No Data / لا توجد بيانات", description: "No outstanding advances to export.", variant: "destructive" });
+                          return;
+                        }
+                        exportOutstandingToExcel(approvedOps, users);
+                        toast({ title: "Excel Exported / تم التصدير", description: `${approvedOps.length} outstanding advance(s) exported to Excel.` });
+                      }}
+                    >
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Export to Excel / تصدير إلى إكسل
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid="button-export-outstanding-pdf"
+                      onClick={() => {
+                        const approvedOps = operationalCosts.filter(oc => getOperationalDerivedStatus(oc) === 'approved');
+                        if (approvedOps.length === 0) {
+                          toast({ title: "No Data / لا توجد بيانات", description: "No outstanding advances to export.", variant: "destructive" });
+                          return;
+                        }
+                        exportOutstandingToPDF(approvedOps, users);
+                        toast({ title: "PDF Exported / تم التصدير", description: `${approvedOps.length} outstanding advance(s) exported to PDF.` });
+                      }}
+                    >
+                      <FileDown className="h-4 w-4 mr-2" />
+                      Export to PDF / تصدير إلى PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <CardDescription>
-                View all advance payments that are pending reconciliation. Track amounts received vs. spent and due dates for submitting receipts.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <OutstandingAdvances 
@@ -1468,6 +1563,50 @@ const CostSubmission = () => {
               <RefreshCw className={`h-4 w-4 mr-1 ${operationalCostsLoading ? 'animate-spin' : ''}`} />
               {operationalCostsLoading ? 'Loading...' : 'Refresh'}
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" data-testid="button-export-history">
+                  <Download className="h-4 w-4 mr-1" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  data-testid="button-export-history-excel"
+                  onClick={() => {
+                    const statusFiltered = statusFilter === 'all'
+                      ? filteredOperationalCosts
+                      : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+                    if (statusFiltered.length === 0) {
+                      toast({ title: "No Data / لا توجد بيانات", description: "No submissions to export.", variant: "destructive" });
+                      return;
+                    }
+                    exportSubmissionsToExcel(statusFiltered, users, `Cost Submissions (${statusFilter})`, `cost-submissions-${statusFilter}`);
+                    toast({ title: "Excel Exported / تم التصدير", description: `${statusFiltered.length} submission(s) exported to Excel.` });
+                  }}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export to Excel / تصدير إلى إكسل
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="button-export-history-pdf"
+                  onClick={() => {
+                    const statusFiltered = statusFilter === 'all'
+                      ? filteredOperationalCosts
+                      : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+                    if (statusFiltered.length === 0) {
+                      toast({ title: "No Data / لا توجد بيانات", description: "No submissions to export.", variant: "destructive" });
+                      return;
+                    }
+                    exportSubmissionsToPDF(statusFiltered, users, `Cost Submissions (${statusFilter})`, statusFilter, `cost-submissions-${statusFilter}`);
+                    toast({ title: "PDF Exported / تم التصدير", description: `${statusFiltered.length} submission(s) exported to PDF.` });
+                  }}
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Export to PDF / تصدير إلى PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {/* Operational Cost Submissions */}
