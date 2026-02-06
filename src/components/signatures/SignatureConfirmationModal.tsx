@@ -99,16 +99,16 @@ export function SignatureConfirmationModal({
   const handleSignatureCapture = useCallback((data: string, strokeCount: number) => {
     setSignatureData(data);
     toast({
-      title: 'Signature Captured',
-      description: `Your signature has been captured with ${strokeCount} strokes.`,
+      title: 'Signature Captured / تم التقاط التوقيع',
+      description: `Your signature has been captured with ${strokeCount} strokes. / تم التقاط توقيعك بـ ${strokeCount} خطوط.`,
     });
   }, [toast]);
 
   const handleSendOTP = async () => {
     if (!userEmail && selectedMethod === 'email') {
       toast({
-        title: 'Email Required',
-        description: 'No email address found for OTP verification.',
+        title: 'Email Required / البريد الإلكتروني مطلوب',
+        description: 'No email address found for OTP verification. / لم يتم العثور على عنوان بريد إلكتروني للتحقق.',
         variant: 'destructive',
       });
       return;
@@ -116,8 +116,8 @@ export function SignatureConfirmationModal({
 
     if (!userPhone && selectedMethod === 'phone') {
       toast({
-        title: 'Phone Required',
-        description: 'No phone number found for OTP verification.',
+        title: 'Phone Required / رقم الهاتف مطلوب',
+        description: 'No phone number found for OTP verification. / لم يتم العثور على رقم هاتف للتحقق.',
         variant: 'destructive',
       });
       return;
@@ -138,13 +138,13 @@ export function SignatureConfirmationModal({
       setVerificationRequestId(result.requestId);
       setOtpSent(true);
       toast({
-        title: 'Verification Code Sent',
-        description: `A 6-digit code has been sent to your ${selectedMethod}.`,
+        title: 'Verification Code Sent / تم إرسال رمز التحقق',
+        description: `A 6-digit code has been sent to your ${selectedMethod}. / تم إرسال رمز مكون من 6 أرقام إلى ${selectedMethod === 'email' ? 'بريدك الإلكتروني' : 'هاتفك'}.`,
       });
     } catch (error) {
       toast({
-        title: 'Failed to Send Code',
-        description: error instanceof Error ? error.message : 'Please try again.',
+        title: 'Failed to Send Code / فشل إرسال الرمز',
+        description: error instanceof Error ? error.message : 'Please try again. / يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -155,8 +155,8 @@ export function SignatureConfirmationModal({
   const handleSubmitSignature = async () => {
     if (selectedMethod === 'handwriting' && !signatureData) {
       toast({
-        title: 'Signature Required',
-        description: 'Please draw your signature before confirming.',
+        title: 'Signature Required / التوقيع مطلوب',
+        description: 'Please draw your signature before confirming. / يرجى رسم توقيعك قبل التأكيد.',
         variant: 'destructive',
       });
       return;
@@ -164,8 +164,8 @@ export function SignatureConfirmationModal({
 
     if ((selectedMethod === 'email' || selectedMethod === 'phone') && !otpCode) {
       toast({
-        title: 'Verification Code Required',
-        description: 'Please enter the verification code sent to you.',
+        title: 'Verification Code Required / رمز التحقق مطلوب',
+        description: 'Please enter the verification code sent to you. / يرجى إدخال رمز التحقق المرسل إليك.',
         variant: 'destructive',
       });
       return;
@@ -177,8 +177,8 @@ export function SignatureConfirmationModal({
         const verifyResult = await SignatureService.verifyCode(verificationRequestId, otpCode);
         if (!verifyResult.verified) {
           toast({
-            title: 'Verification Failed',
-            description: verifyResult.error || 'Invalid verification code.',
+            title: 'Verification Failed / فشل التحقق',
+            description: verifyResult.error || 'Invalid verification code. / رمز التحقق غير صالح.',
             variant: 'destructive',
           });
           setIsSubmitting(false);
@@ -222,15 +222,15 @@ export function SignatureConfirmationModal({
       });
 
       toast({
-        title: 'Signature Complete',
-        description: 'Your signature has been recorded and verified.',
+        title: 'Signature Complete / تم التوقيع بنجاح',
+        description: 'Your signature has been recorded and verified. / تم تسجيل توقيعك والتحقق منه.',
       });
 
       onOpenChange(false);
     } catch (error) {
       toast({
-        title: 'Signature Failed',
-        description: error instanceof Error ? error.message : 'Please try again.',
+        title: 'Signature Failed / فشل التوقيع',
+        description: error instanceof Error ? error.message : 'Please try again. / يرجى المحاولة مرة أخرى.',
         variant: 'destructive',
       });
     } finally {
@@ -248,10 +248,10 @@ export function SignatureConfirmationModal({
   };
 
   const methodTabs = [
-    { value: 'uuid', label: 'Quick Sign', icon: Shield, available: allowedMethods.includes('uuid') },
-    { value: 'handwriting', label: 'Draw Signature', icon: PenLine, available: allowedMethods.includes('handwriting') },
-    { value: 'email', label: 'Email OTP', icon: Mail, available: allowedMethods.includes('email') && !!userEmail },
-    { value: 'phone', label: 'Phone OTP', icon: Phone, available: allowedMethods.includes('phone') && !!userPhone },
+    { value: 'uuid', label: 'Quick Sign / توقيع سريع', icon: Shield, available: allowedMethods.includes('uuid') },
+    { value: 'handwriting', label: 'Draw Signature / رسم التوقيع', icon: PenLine, available: allowedMethods.includes('handwriting') },
+    { value: 'email', label: 'Email OTP / رمز البريد', icon: Mail, available: allowedMethods.includes('email') && !!userEmail },
+    { value: 'phone', label: 'Phone OTP / رمز الهاتف', icon: Phone, available: allowedMethods.includes('phone') && !!userPhone },
   ].filter(m => m.available);
 
   return (
@@ -260,10 +260,15 @@ export function SignatureConfirmationModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
-            Confirm Receipt with Signature
+            <div>
+              <div>Confirm Receipt with Signature</div>
+              <div className="text-sm font-normal" dir="rtl">تأكيد الاستلام بالتوقيع</div>
+            </div>
           </DialogTitle>
           <DialogDescription>
-            Please review and sign to confirm this transaction.
+            <span>Please review and sign to confirm this transaction.</span>
+            <br />
+            <span dir="rtl" className="text-xs">يرجى المراجعة والتوقيع لتأكيد هذه المعاملة.</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -301,7 +306,7 @@ export function SignatureConfirmationModal({
                 )}
                 {transaction.reference && (
                   <div className="text-muted-foreground">
-                    Ref: {transaction.reference}
+                    Ref / <span dir="rtl">المرجع</span>: {transaction.reference}
                   </div>
                 )}
               </div>
@@ -329,8 +334,9 @@ export function SignatureConfirmationModal({
               <Alert>
                 <Shield className="h-4 w-4" />
                 <AlertDescription>
-                  Click "Sign & Confirm" to instantly sign with your secure account credentials.
-                  This generates a cryptographic signature linked to your account.
+                  <span>Click "Sign & Confirm" to instantly sign with your secure account credentials. This generates a cryptographic signature linked to your account.</span>
+                  <br />
+                  <span dir="rtl" className="text-xs block mt-1">انقر على "توقيع وتأكيد" للتوقيع فوراً باستخدام بيانات حسابك الآمنة. يتم إنشاء توقيع رقمي مرتبط بحسابك.</span>
                 </AlertDescription>
               </Alert>
             </TabsContent>
@@ -349,18 +355,20 @@ export function SignatureConfirmationModal({
               <Alert>
                 <Mail className="h-4 w-4" />
                 <AlertDescription>
-                  We'll send a 6-digit verification code to: <strong>{userEmail}</strong>
+                  <span>We'll send a 6-digit verification code to: <strong>{userEmail}</strong></span>
+                  <br />
+                  <span dir="rtl" className="text-xs block mt-1">سنرسل رمز تحقق مكون من 6 أرقام إلى: <strong>{userEmail}</strong></span>
                 </AlertDescription>
               </Alert>
               
               {!otpSent ? (
                 <Button onClick={handleSendOTP} disabled={isSubmitting} className="w-full">
                   {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
-                  Send Verification Code
+                  Send Verification Code / <span dir="rtl">إرسال رمز التحقق</span>
                 </Button>
               ) : (
                 <div className="space-y-2">
-                  <Label htmlFor="otp-email">Enter Verification Code</Label>
+                  <Label htmlFor="otp-email">Enter Verification Code / <span dir="rtl">أدخل رمز التحقق</span></Label>
                   <Input
                     id="otp-email"
                     type="text"
@@ -379,18 +387,20 @@ export function SignatureConfirmationModal({
               <Alert>
                 <Phone className="h-4 w-4" />
                 <AlertDescription>
-                  We'll send a 6-digit verification code to: <strong>{userPhone}</strong>
+                  <span>We'll send a 6-digit verification code to: <strong>{userPhone}</strong></span>
+                  <br />
+                  <span dir="rtl" className="text-xs block mt-1">سنرسل رمز تحقق مكون من 6 أرقام إلى: <strong>{userPhone}</strong></span>
                 </AlertDescription>
               </Alert>
               
               {!otpSent ? (
                 <Button onClick={handleSendOTP} disabled={isSubmitting} className="w-full">
                   {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Phone className="h-4 w-4 mr-2" />}
-                  Send Verification Code
+                  Send Verification Code / <span dir="rtl">إرسال رمز التحقق</span>
                 </Button>
               ) : (
                 <div className="space-y-2">
-                  <Label htmlFor="otp-phone">Enter Verification Code</Label>
+                  <Label htmlFor="otp-phone">Enter Verification Code / <span dir="rtl">أدخل رمز التحقق</span></Label>
                   <Input
                     id="otp-phone"
                     type="text"
@@ -409,14 +419,16 @@ export function SignatureConfirmationModal({
           <Alert className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
             <AlertCircle className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800 dark:text-amber-200">
-              By signing, you confirm receipt of funds and agree this transaction is valid and accurate.
+              <span>By signing, you confirm receipt of funds and agree this transaction is valid and accurate.</span>
+              <br />
+              <span dir="rtl" className="text-xs block mt-1">بالتوقيع، تؤكد استلام الأموال وتوافق على أن هذه المعاملة صحيحة ودقيقة.</span>
             </AlertDescription>
           </Alert>
         </div>
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={handleCancel} disabled={isSubmitting}>
-            Cancel
+            Cancel / <span dir="rtl">إلغاء</span>
           </Button>
           <Button onClick={handleSubmitSignature} disabled={isSubmitting}>
             {isSubmitting ? (
@@ -424,7 +436,7 @@ export function SignatureConfirmationModal({
             ) : (
               <CheckCircle2 className="h-4 w-4 mr-2" />
             )}
-            Sign & Confirm
+            Sign & Confirm / <span dir="rtl">توقيع وتأكيد</span>
           </Button>
         </DialogFooter>
       </DialogContent>
