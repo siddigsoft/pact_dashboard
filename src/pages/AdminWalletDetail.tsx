@@ -247,14 +247,16 @@ const AdminWalletDetail = () => {
   }, [transactions]);
 
   const totals = useMemo(() => {
-    const earned = transactions
-      .filter(t => ['earning', 'site_visit_fee', 'bonus', 'adjustment'].includes(t.type))
-      .reduce((sum, t) => sum + (t.type === 'adjustment' && t.amount < 0 ? 0 : t.amount), 0);
-    
-    const withdrawn = transactions
-      .filter(t => t.type === 'withdrawal')
-      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-
+    let earned = 0;
+    let withdrawn = 0;
+    for (const t of transactions) {
+      const amt = Number(t.amount || 0);
+      if (['earning', 'site_visit_fee', 'bonus', 'adjustment'].includes(t.type)) {
+        earned += amt;
+      } else if (['withdrawal', 'penalty', 'debit'].includes(t.type)) {
+        withdrawn += Math.abs(amt);
+      }
+    }
     return { earned, withdrawn };
   }, [transactions]);
 
@@ -437,7 +439,7 @@ const AdminWalletDetail = () => {
     return <div className="flex items-center justify-center h-64 text-red-400">Wallet not found</div>;
   }
 
-  const currentBalance = wallet.balances[currency] || 0;
+  const currentBalance = totals.earned - totals.withdrawn;
 
   return (
     <div className="relative min-h-screen pb-safe">
@@ -556,7 +558,7 @@ const AdminWalletDetail = () => {
               <CardTitle className="text-purple-300 text-xs md:text-sm uppercase tracking-wider">Total Earned</CardTitle>
             </CardHeader>
             <CardContent className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent p-4 md:p-6" data-testid="text-total-earned">
-              {currencyFmt(wallet.totalEarned, currency)}
+              {currencyFmt(totals.earned, currency)}
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,211,238,0.2)]">
@@ -564,7 +566,7 @@ const AdminWalletDetail = () => {
               <CardTitle className="text-cyan-300 text-xs md:text-sm uppercase tracking-wider">Total Withdrawn</CardTitle>
             </CardHeader>
             <CardContent className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent p-4 md:p-6" data-testid="text-total-withdrawn">
-              {currencyFmt(wallet.totalWithdrawn, currency)}
+              {currencyFmt(totals.withdrawn, currency)}
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-slate-900/80 to-indigo-900/80 border-indigo-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(99,102,241,0.2)]">
@@ -656,16 +658,16 @@ const AdminWalletDetail = () => {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-purple-300/70">Total Earned:</span>
-                  <span className="text-xl font-bold text-blue-400">{currencyFmt(wallet?.totalEarned || 0, currency)}</span>
+                  <span className="text-xl font-bold text-blue-400">{currencyFmt(totals.earned, currency)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-purple-300/70">Total Withdrawn:</span>
-                  <span className="text-xl font-bold text-pink-400">{currencyFmt(wallet?.totalWithdrawn || 0, currency)}</span>
+                  <span className="text-xl font-bold text-pink-400">{currencyFmt(totals.withdrawn, currency)}</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-purple-500/30">
                   <span className="text-purple-300/70">Net Income:</span>
                   <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                    {currencyFmt((wallet?.totalEarned || 0) - (wallet?.totalWithdrawn || 0), currency)}
+                    {currencyFmt(totals.earned - totals.withdrawn, currency)}
                   </span>
                 </div>
               </CardContent>
