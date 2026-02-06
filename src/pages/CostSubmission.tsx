@@ -1972,13 +1972,6 @@ const CostSubmission = () => {
                                     className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
                                   >
                                     <Shield className="h-3 w-3" />
-                                    {signatureImages[oc.id] ? (
-                                      <img 
-                                        src={signatureImages[oc.id]!} 
-                                        alt="Signature" 
-                                        className="h-4 max-w-[40px] object-contain inline" 
-                                      />
-                                    ) : null}
                                     <span>Signed</span>
                                   </div>
                                 </>
@@ -2045,17 +2038,6 @@ const CostSubmission = () => {
                                         <span className="opacity-60"> — {tier2Approver.name || tier2Approver.email}</span>
                                       )}
                                     </span>
-                                    {signatureImages[oc.id] && (
-                                      <span className="inline-flex items-center ml-1" data-testid={`card-signature-${oc.id}`}>
-                                        <span className="inline-block rounded border bg-white dark:bg-slate-100 px-1 py-px">
-                                          <img 
-                                            src={signatureImages[oc.id]!} 
-                                            alt="Signature" 
-                                            className="h-4 max-w-[50px] object-contain" 
-                                          />
-                                        </span>
-                                      </span>
-                                    )}
                                   </div>
                                 </div>
                               )}
@@ -2690,24 +2672,6 @@ const CostSubmission = () => {
                       <p className="text-xs mt-1 italic text-muted-foreground">
                         "{oc.tier2_notes.replace(/\n?\[Signed:.*?\]/g, '').replace(/\s*\[SIG:.*?\]\s*/g, '').replace(/\s*Method:.*$/g, '').trim()}"
                       </p>
-                    )}
-                    {signatureImages[oc.id] && (
-                      <div className="mt-2 flex items-center gap-2" data-testid={`signature-display-${oc.id}`}>
-                        <p className="text-[10px] text-muted-foreground shrink-0">Digital Signature:</p>
-                        <div className="inline-block rounded border bg-white dark:bg-slate-100 px-2 py-0.5">
-                          <img 
-                            src={signatureImages[oc.id]!} 
-                            alt="Approver signature" 
-                            className="h-6 max-w-[80px] object-contain" 
-                          />
-                        </div>
-                        <p className="text-[10px] text-muted-foreground italic">
-                          {tier2Approver?.name || 'Approver'}
-                        </p>
-                      </div>
-                    )}
-                    {oc.tier2_notes?.includes('[Signed:') && !signatureImages[oc.id] && !(oc.id in signatureImages) && (
-                      <p className="text-xs text-muted-foreground mt-1 italic">Loading signature... / جارٍ تحميل التوقيع...</p>
                     )}
                   </div>
 
