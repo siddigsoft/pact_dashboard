@@ -656,14 +656,41 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       // 🔐 CRITICAL: Ensure valid session before database operations to prevent RLS failures
       console.log("📍 Checking session validity...");
       
-      // Wrap session check in timeout to prevent hanging
       let sessionResult: { success: boolean; user?: { id: string; email?: string }; error?: string };
       try {
-        const sessionPromise = ensureValidSession();
-        const sessionTimeoutPromise = new Promise<{ success: boolean; error: string }>((resolve) => 
-          setTimeout(() => resolve({ success: false, error: 'Session check timed out' }), 5000)
-        );
-        sessionResult = await Promise.race([sessionPromise, sessionTimeoutPromise]);
+        // Fast path: try local getSession() first (no network call)
+        const { data: localSession } = await supabase.auth.getSession();
+        if (localSession?.session?.user?.id) {
+          const expiresAt = localSession.session.expires_at || 0;
+          const now = Math.floor(Date.now() / 1000);
+          if (expiresAt > now + 30) {
+            // Session is valid and not expiring within 30 seconds - use it directly
+            console.log("📍 Session valid (fast path), expires in", expiresAt - now, "seconds");
+            sessionResult = {
+              success: true,
+              user: {
+                id: localSession.session.user.id,
+                email: localSession.session.user.email,
+              },
+            };
+          } else {
+            // Session expiring soon, refresh with generous timeout
+            console.log("📍 Session expiring soon, refreshing...");
+            const sessionPromise = ensureValidSession();
+            const sessionTimeoutPromise = new Promise<{ success: boolean; error: string }>((resolve) => 
+              setTimeout(() => resolve({ success: false, error: 'Session refresh timed out. Please try again.' }), 20000)
+            );
+            sessionResult = await Promise.race([sessionPromise, sessionTimeoutPromise]);
+          }
+        } else {
+          // No local session, do full refresh with generous timeout
+          console.log("📍 No local session, doing full refresh...");
+          const sessionPromise = ensureValidSession();
+          const sessionTimeoutPromise = new Promise<{ success: boolean; error: string }>((resolve) => 
+            setTimeout(() => resolve({ success: false, error: 'Session check timed out. Please try again.' }), 20000)
+          );
+          sessionResult = await Promise.race([sessionPromise, sessionTimeoutPromise]);
+        }
       } catch (sessionErr: any) {
         console.error("❌ Session check failed:", sessionErr);
         sessionResult = { success: false, error: sessionErr.message || 'Session check failed' };
