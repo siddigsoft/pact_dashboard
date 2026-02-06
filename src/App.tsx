@@ -75,6 +75,7 @@ const WalletReports = lazy(() => import('./pages/WalletReports'));
 const BudgetPage = lazy(() => import('./pages/Budget'));
 const Classifications = lazy(() => import('./pages/Classifications'));
 const ClassificationFeeManagement = lazy(() => import('./pages/ClassificationFeeManagement'));
+const RetainerManagement = lazy(() => import('./pages/RetainerManagement'));
 const CostSubmission = lazy(() => import('./pages/CostSubmission'));
 const CostSubmissionReports = lazy(() => import('./pages/CostSubmissionReports'));
 const DemoDataCollector = lazy(() => import('./pages/DemoDataCollector'));
@@ -254,6 +255,7 @@ const AppRoutes = () => {
         <Route path="/users/:id" element={<UserDetail />} />
         <Route path="/classifications" element={<Classifications />} />
         <Route path="/classification-fees" element={<ClassificationFeeManagement />} />
+        <Route path="/retainer-management" element={<RetainerManagement />} />
         <Route path="/map" element={<AdvancedMap />} />
         <Route path="/advanced-map" element={<Navigate to="/map" replace />} />
         <Route path="/audit-compliance" element={<AuditCompliance />} />
