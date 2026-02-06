@@ -117,6 +117,15 @@ const ClassificationFeeManagement = () => {
   const [loadingVisits, setLoadingVisits] = useState(false);
   const [updatingVisits, setUpdatingVisits] = useState(false);
   const [showVisitUpdates, setShowVisitUpdates] = useState(false);
+  
+  // Wallet sync state
+  const [syncingWallets, setSyncingWallets] = useState(false);
+  const [walletSyncResults, setWalletSyncResults] = useState<{
+    updated: number;
+    skipped: number;
+    failed: number;
+    details: Array<{ userName: string; oldEarned: number; newEarned: number; oldBalance: number; newBalance: number }>;
+  } | null>(null);
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.roles?.includes('admin' as any);
 
@@ -350,6 +359,159 @@ const ClassificationFeeManagement = () => {
       });
     } finally {
       setUpdatingVisits(false);
+    }
+  };
+
+  const syncWalletBalances = async () => {
+    setSyncingWallets(true);
+    setWalletSyncResults(null);
+    
+    try {
+      // Step 1: Get all wallets with their profiles
+      const { data: wallets, error: walletsError } = await supabase
+        .from('wallets')
+        .select('id, user_id, balances, total_earned, total_withdrawn, profiles:profiles!wallets_user_id_fkey(full_name, email)');
+      
+      if (walletsError) throw walletsError;
+      if (!wallets || wallets.length === 0) {
+        toast({ title: 'No Wallets', description: 'No wallets found to sync' });
+        setSyncingWallets(false);
+        return;
+      }
+
+      const details: Array<{ userName: string; oldEarned: number; newEarned: number; oldBalance: number; newBalance: number }> = [];
+      let updated = 0, skipped = 0, failed = 0;
+
+      for (const wallet of wallets) {
+        try {
+          // Step 2: Get all earning transactions for this user
+          const { data: transactions, error: txError } = await supabase
+            .from('wallet_transactions')
+            .select('id, amount, type, site_visit_id, related_site_visit_id')
+            .eq('user_id', wallet.user_id);
+          
+          if (txError) { failed++; continue; }
+          if (!transactions || transactions.length === 0) { skipped++; continue; }
+
+          // Step 3: For earning transactions linked to site entries, update amounts
+          const earningTxs = transactions.filter(tx => 
+            (tx.type === 'earning' || tx.type === 'site_visit_fee') && 
+            (tx.site_visit_id || tx.related_site_visit_id)
+          );
+
+          // Update earning transaction amounts from MMP entries (if any exist)
+          if (earningTxs.length > 0) {
+            const siteEntryIds = earningTxs
+              .map(tx => tx.site_visit_id || tx.related_site_visit_id)
+              .filter(Boolean) as string[];
+            
+            const { data: entries } = await supabase
+              .from('mmp_site_entries')
+              .select('id, enumerator_fee, transport_fee, cost')
+              .in('id', siteEntryIds);
+
+            const entryFeeMap = new Map(
+              (entries || []).map(e => {
+                const cost = Number(e.cost || 0);
+                const enumFee = Number(e.enumerator_fee || 0);
+                const transportFee = Number(e.transport_fee || 0);
+                const totalFee = cost > 0 ? cost : (enumFee + transportFee);
+                return [e.id, totalFee];
+              })
+            );
+
+            // Step 4: Update each earning transaction with correct amount
+            for (const tx of earningTxs) {
+              const entryId = tx.site_visit_id || tx.related_site_visit_id;
+              if (!entryId) continue;
+              
+              const correctAmount = entryFeeMap.get(entryId);
+              if (correctAmount === undefined || correctAmount <= 0) continue;
+              
+              const currentAmount = Number(tx.amount || 0);
+              if (Math.abs(currentAmount - correctAmount) < 0.01) continue;
+              
+              await supabase
+                .from('wallet_transactions')
+                .update({ amount: correctAmount, amount_cents: Math.round(correctAmount * 100) })
+                .eq('id', tx.id);
+            }
+          }
+
+          // Step 5: Always recalculate wallet totals from all transactions (re-fetch after updates)
+          const { data: allTxs, error: allTxError } = await supabase
+            .from('wallet_transactions')
+            .select('amount, type')
+            .eq('user_id', wallet.user_id);
+          
+          if (allTxError) { failed++; continue; }
+
+          let newTotalEarned = 0;
+          let netBalance = 0;
+          for (const tx of (allTxs || [])) {
+            const amt = Number(tx.amount || 0);
+            if (tx.type === 'earning' || tx.type === 'site_visit_fee' || tx.type === 'adjustment' || tx.type === 'bonus') {
+              newTotalEarned += amt;
+              netBalance += amt;
+            } else if (tx.type === 'withdrawal' || tx.type === 'penalty' || tx.type === 'debit') {
+              netBalance -= Math.abs(amt);
+            }
+          }
+
+          const oldEarned = Number(wallet.total_earned || 0);
+          const oldBalance = Number(wallet.balances?.SDG ?? wallet.balances?.[Object.keys(wallet.balances || {})[0]] ?? 0);
+          const currency = Object.keys(wallet.balances || {})[0] || 'SDG';
+
+          // Step 6: Update wallet with recalculated values
+          const { error: walletUpdateError } = await supabase
+            .from('wallets')
+            .update({
+              total_earned: newTotalEarned,
+              balances: { ...wallet.balances, [currency]: netBalance },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', wallet.id);
+
+          if (walletUpdateError) {
+            failed++;
+            continue;
+          }
+
+          const profileData = wallet.profiles as any;
+          const userName = profileData?.full_name || profileData?.email || wallet.user_id;
+          
+          if (Math.abs(oldEarned - newTotalEarned) > 0.01 || Math.abs(oldBalance - netBalance) > 0.01) {
+            details.push({
+              userName,
+              oldEarned,
+              newEarned: newTotalEarned,
+              oldBalance,
+              newBalance: netBalance,
+            });
+            updated++;
+          } else {
+            skipped++;
+          }
+        } catch (err) {
+          console.error(`Failed to sync wallet for user ${wallet.user_id}:`, err);
+          failed++;
+        }
+      }
+
+      setWalletSyncResults({ updated, skipped, failed, details });
+      toast({
+        title: 'Wallet Sync Complete',
+        description: `${updated} wallets updated, ${skipped} unchanged, ${failed} failed`,
+      });
+    } catch (error: any) {
+      console.error('Wallet sync error:', error);
+      toast({
+        title: 'Sync Failed',
+        description: error?.message || 'Failed to sync wallet balances',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncingWallets(false);
     }
   };
 
@@ -841,6 +1003,105 @@ const ClassificationFeeManagement = () => {
                   Update {pendingVisitUpdates.length} Entries
                 </Button>
               </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Sync Wallet Balances Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Sync Wallet Balances
+              </CardTitle>
+              <CardDescription>
+                Recalculate wallet totals based on updated MMP entry fees
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              onClick={syncWalletBalances}
+              disabled={syncingWallets}
+              data-testid="button-sync-wallets"
+            >
+              {syncingWallets ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Sync Wallets
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!walletSyncResults && !syncingWallets && (
+            <p className="text-sm text-muted-foreground">
+              After updating visit fees, use this to sync wallet balances. This will update each 
+              wallet transaction amount to match the corrected MMP entry fees, then recalculate 
+              the wallet's total earned and balance.
+            </p>
+          )}
+          
+          {syncingWallets && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Syncing wallet balances... This may take a moment.
+            </div>
+          )}
+
+          {walletSyncResults && (
+            <div className="space-y-4">
+              <div className="flex gap-4 flex-wrap">
+                <Badge variant="outline" className="bg-green-50 dark:bg-green-900/30">
+                  {walletSyncResults.updated} Updated
+                </Badge>
+                <Badge variant="outline">
+                  {walletSyncResults.skipped} Unchanged
+                </Badge>
+                {walletSyncResults.failed > 0 && (
+                  <Badge variant="destructive">
+                    {walletSyncResults.failed} Failed
+                  </Badge>
+                )}
+              </div>
+
+              {walletSyncResults.details.length > 0 && (
+                <div className="border rounded-md overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted">
+                      <tr>
+                        <th className="text-left p-2 font-medium">User</th>
+                        <th className="text-right p-2 font-medium">Old Earned</th>
+                        <th className="text-right p-2 font-medium">New Earned</th>
+                        <th className="text-right p-2 font-medium">Old Balance</th>
+                        <th className="text-right p-2 font-medium">New Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {walletSyncResults.details.map((d, i) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
+                          <td className="p-2 truncate max-w-[150px]">{d.userName}</td>
+                          <td className="p-2 text-right text-muted-foreground">
+                            {d.oldEarned.toLocaleString()} SDG
+                          </td>
+                          <td className="p-2 text-right font-medium text-green-600 dark:text-green-400">
+                            {d.newEarned.toLocaleString()} SDG
+                          </td>
+                          <td className="p-2 text-right text-muted-foreground">
+                            {d.oldBalance.toLocaleString()} SDG
+                          </td>
+                          <td className="p-2 text-right font-medium text-green-600 dark:text-green-400">
+                            {d.newBalance.toLocaleString()} SDG
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
