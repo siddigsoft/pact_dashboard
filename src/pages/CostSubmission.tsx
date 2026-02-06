@@ -30,6 +30,8 @@ import {
   ClipboardCheck,
   HelpCircle
 } from "lucide-react";
+import { SignatureConfirmationModal } from "@/components/signatures/SignatureConfirmationModal";
+import type { SignatureMethod } from "@/types/signature";
 
 interface OperationalCostSubmission {
   id: string;
@@ -120,6 +122,13 @@ const CostSubmission = () => {
   }>({ open: false, action: 'approve', tier: 1, submission: null });
   const [approvalNotes, setApprovalNotes] = useState('');
   const [approvalProcessing, setApprovalProcessing] = useState(false);
+  
+  const [signatureModal, setSignatureModal] = useState<{
+    open: boolean;
+    submission: OperationalCostSubmission | null;
+    tier: 1 | 2;
+    notes: string;
+  }>({ open: false, submission: null, tier: 2, notes: '' });
 
   const fetchOperationalCosts = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -260,6 +269,30 @@ const CostSubmission = () => {
     const { action, tier, submission } = approvalDialog;
     if (!submission || !currentUser?.id) return;
     
+    if (tier === 2 && action === 'approve') {
+      setApprovalProcessing(true);
+      setSignatureModal({
+        open: true,
+        submission,
+        tier: 2,
+        notes: approvalNotes,
+      });
+      setApprovalDialog({ open: false, action: 'approve', tier: 2, submission: null });
+      return;
+    }
+    
+    await processApproval(action, tier, submission, approvalNotes);
+  };
+
+  const processApproval = async (
+    action: 'approve' | 'reject',
+    tier: 1 | 2,
+    submission: OperationalCostSubmission,
+    notes: string,
+    signatureData?: { signatureId: string; signatureHash: string; method: SignatureMethod; signedAt: string }
+  ) => {
+    if (!currentUser?.id) return;
+    
     setApprovalProcessing(true);
     try {
       const updates: Record<string, any> = {};
@@ -268,23 +301,26 @@ const CostSubmission = () => {
         updates.tier1_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier1_approved_by = currentUser.id;
         updates.tier1_approved_at = new Date().toISOString();
-        updates.tier1_notes = approvalNotes || null;
+        updates.tier1_notes = notes || null;
         if (action === 'approve') {
           updates.status = 'under_review';
         } else {
           updates.status = 'rejected';
-          updates.rejection_reason = approvalNotes || 'Rejected at Tier 1';
+          updates.rejection_reason = notes || 'Rejected at Tier 1';
         }
       } else {
         updates.tier2_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier2_approved_by = currentUser.id;
         updates.tier2_approved_at = new Date().toISOString();
-        updates.tier2_notes = approvalNotes || null;
+        updates.tier2_notes = notes || null;
         if (action === 'approve') {
           updates.status = 'approved';
+          if (signatureData) {
+            updates.tier2_notes = `${notes || ''}\n[Signed: ${signatureData.method.toUpperCase()} | Hash: ${signatureData.signatureHash.substring(0, 12)}... | ID: ${signatureData.signatureId} | ${signatureData.signedAt}]`;
+          }
         } else {
           updates.status = 'rejected';
-          updates.rejection_reason = approvalNotes || 'Rejected at Tier 2';
+          updates.rejection_reason = notes || 'Rejected at Tier 2';
         }
       }
 
@@ -311,8 +347,10 @@ const CostSubmission = () => {
         });
       } else {
         toast({
-          title: action === 'approve' ? "Approved" : "Rejected",
-          description: `Tier ${tier} ${action === 'approve' ? 'approval' : 'rejection'} completed successfully.`,
+          title: action === 'approve' ? "Approved & Signed" : "Rejected",
+          description: tier === 2 && action === 'approve' && signatureData
+            ? `Final approval completed with digital signature (${signatureData.method}).`
+            : `Tier ${tier} ${action === 'approve' ? 'approval' : 'rejection'} completed successfully.`,
           duration: 5000,
         });
         fetchOperationalCosts();
@@ -328,7 +366,19 @@ const CostSubmission = () => {
       setApprovalProcessing(false);
       setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null });
       setApprovalNotes('');
+      setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
     }
+  };
+
+  const handleSignatureComplete = (signatureData: {
+    signatureId: string;
+    signatureHash: string;
+    method: SignatureMethod;
+    signedAt: string;
+  }) => {
+    const { submission, notes } = signatureModal;
+    if (!submission) return;
+    processApproval('approve', 2, submission, notes, signatureData);
   };
 
   const submissionStats = {
@@ -1180,7 +1230,7 @@ const CostSubmission = () => {
                     {approvalDialog.action === 'approve'
                       ? approvalDialog.tier === 1
                         ? 'This submission will move to Tier 2 (Admin/Super Admin) for final approval before payment can be processed.'
-                        : 'This submission will be marked as fully approved and cleared for payment processing by the finance team.'
+                        : 'This submission will be marked as fully approved and cleared for payment processing. Your digital signature will be required to finalize.'
                       : approvalDialog.tier === 1
                         ? 'This submission will be rejected and sent back to the submitter. They will see your rejection reason and can resubmit if needed.'
                         : 'This submission will be rejected at the final stage. The submitter and Tier 1 approver will be notified of the rejection.'}
@@ -1223,11 +1273,56 @@ const CostSubmission = () => {
               disabled={approvalProcessing || !approvalNotes.trim()}
               data-testid="button-approval-confirm"
             >
-              {approvalProcessing ? 'Processing...' : approvalDialog.action === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
+              {approvalProcessing ? 'Processing...' : approvalDialog.action === 'approve' 
+                ? (approvalDialog.tier === 2 ? 'Sign & Approve' : 'Confirm Approval') 
+                : 'Confirm Rejection'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {signatureModal.submission && (
+        <SignatureConfirmationModal
+          open={signatureModal.open}
+          onOpenChange={(open) => {
+            if (!open) {
+              const { submission: sub, notes } = signatureModal;
+              setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
+              setApprovalProcessing(false);
+              if (sub) {
+                setApprovalNotes(notes);
+                setApprovalDialog({ open: true, action: 'approve', tier: 2, submission: sub });
+              }
+            }
+          }}
+          transaction={{
+            id: signatureModal.submission.id,
+            type: 'cost_submission',
+            title: `Tier 2 Final Approval - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
+            description: signatureModal.submission.description || undefined,
+            amount: signatureModal.submission.amount_cents / 100,
+            currency: signatureModal.submission.currency || 'SDG',
+            counterparty: users.find(u => u.id === signatureModal.submission!.submitted_by)?.name || 'Unknown',
+            date: signatureModal.submission.expense_date || signatureModal.submission.submitted_at || undefined,
+            reference: signatureModal.submission.reference_number || undefined,
+          }}
+          userId={currentUser?.id || ''}
+          userName={currentUser?.name || currentUser?.email || 'Unknown'}
+          userEmail={currentUser?.email}
+          userRole={currentUser?.role}
+          allowedMethods={['uuid', 'handwriting']}
+          onSignatureComplete={handleSignatureComplete}
+          onCancel={() => {
+            const { submission: sub, notes } = signatureModal;
+            setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
+            setApprovalProcessing(false);
+            if (sub) {
+              setApprovalNotes(notes);
+              setApprovalDialog({ open: true, action: 'approve', tier: 2, submission: sub });
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
