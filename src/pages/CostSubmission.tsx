@@ -331,18 +331,21 @@ const CostSubmission = () => {
         }
       }
 
-      let query = supabase
+      console.log('[CostApproval] Processing:', {
+        action, tier, submissionId: submission.id,
+        currentStatus: submission.status,
+        currentTier1: submission.tier1_status,
+        currentTier2: submission.tier2_status,
+        userId: currentUser.id,
+        userRole: currentUser.role,
+        updates,
+      });
+
+      const { data: updatedRows, error } = await supabase
         .from('operational_cost_submissions')
         .update(updates)
-        .eq('id', submission.id);
-      
-      if (tier === 1) {
-        query = query.eq('tier1_status', 'pending');
-      } else {
-        query = query.eq('tier1_status', 'approved');
-      }
-
-      const { data: updatedRows, error } = await query.select('id');
+        .eq('id', submission.id)
+        .select('id');
 
       if (error) {
         console.error('Approval error:', error);
@@ -353,12 +356,17 @@ const CostSubmission = () => {
           duration: 8000,
         });
       } else if (!updatedRows || updatedRows.length === 0) {
-        console.error('Approval update matched 0 rows - submission may have been modified by another user');
+        console.error('[CostApproval] Update matched 0 rows. This is likely a database security policy (RLS) issue.', {
+          submissionId: submission.id,
+          userRole: currentUser.role,
+          tier,
+          action,
+        });
         toast({
-          title: "Update Not Applied / لم يتم تطبيق التحديث",
-          description: "The submission may have already been processed or modified. Please refresh and try again. / ربما تمت معالجة الطلب بالفعل أو تعديله. يرجى التحديث والمحاولة مرة أخرى.",
+          title: "Update Blocked / تم حظر التحديث",
+          description: "Database security policy may be blocking this update. Please run the latest migration (20260206_fix_admin_update_rls.sql) in your Supabase SQL editor, then refresh and try again. / قد تحظر سياسة أمان قاعدة البيانات هذا التحديث. يرجى تشغيل أحدث ملف ترحيل في محرر SQL الخاص بـ Supabase.",
           variant: "destructive",
-          duration: 8000,
+          duration: 12000,
         });
         fetchOperationalCosts();
       } else {
