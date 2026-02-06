@@ -263,7 +263,9 @@ export async function generateApprovalCertificatePdf(data: ApprovalCertificateDa
     tierNum: number,
     sigImage?: string | null
   ) => {
-    const rowH = sigImage ? 32 : 24;
+    const sig = tierNum === 2 ? parseSignatureFromNotes(tierData.notes) : null;
+    const hasSigBlock = tierNum === 2 && (sig || sigImage);
+    const rowH = hasSigBlock ? 38 : 24;
     ensureFit(rowH + 6);
 
     doc.setFillColor(...C.bgLight);
@@ -310,23 +312,48 @@ export async function generateApprovalCertificatePdf(data: ApprovalCertificateDa
       doc.text(`Notes: "${notesTrunc}"`, ix, iy);
     }
 
-    if (tierNum === 2) {
-      const sig = parseSignatureFromNotes(tierData.notes);
-      if (sig) {
-        iy += 5;
-        doc.setFontSize(6.5);
-        doc.setTextColor(...C.accent);
-        doc.setFont('helvetica', 'bold');
-        doc.text('DIGITAL SIGNATURE', ix, iy);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...C.label);
-        doc.text(`Method: ${sig.method}  |  Hash: ${sig.hash}...  |  ID: ${sig.id}`, ix + 30, iy);
-      }
+    if (tierNum === 2 && sig) {
+      iy += 5;
+      doc.setFontSize(6.5);
+      doc.setTextColor(...C.accent);
+      doc.setFont('helvetica', 'bold');
+      doc.text('DIGITAL SIGNATURE', ix, iy);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...C.label);
+      doc.text(`Method: ${sig.method}  |  Hash: ${sig.hash}...  |  ID: ${sig.id}`, ix + 30, iy);
+
+      const sigBoxX = pw - mr - 52;
+      const sigBoxY = y + 3;
+      const sigBoxW = 48;
+      const sigBoxH = rowH - 6;
+
+      doc.setDrawColor(...C.accent);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(sigBoxX, sigBoxY, sigBoxW, sigBoxH, 1, 1, 'S');
+      doc.setLineWidth(0.2);
 
       if (sigImage) {
         try {
-          doc.addImage(sigImage, 'PNG', pw - mr - 45, y + 4, 40, rowH - 8);
-        } catch { /* signature image failed */ }
+          doc.addImage(sigImage, 'PNG', sigBoxX + 2, sigBoxY + 2, sigBoxW - 4, sigBoxH - 8);
+        } catch { /* signature image render failed */ }
+      } else {
+        doc.setFontSize(12);
+        doc.setTextColor(...C.accent);
+        doc.setFont('helvetica', 'bolditalic');
+        const sigName = tierData.approverName.length > 18
+          ? tierData.approverName.substring(0, 18)
+          : tierData.approverName;
+        doc.text(sigName, sigBoxX + sigBoxW / 2, sigBoxY + sigBoxH / 2 - 1, { align: 'center' });
+
+        doc.setDrawColor(...C.accent);
+        doc.setLineWidth(0.3);
+        doc.line(sigBoxX + 6, sigBoxY + sigBoxH / 2 + 3, sigBoxX + sigBoxW - 6, sigBoxY + sigBoxH / 2 + 3);
+        doc.setLineWidth(0.2);
+
+        doc.setFontSize(5.5);
+        doc.setTextColor(...C.label);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Digitally Signed', sigBoxX + sigBoxW / 2, sigBoxY + sigBoxH - 3, { align: 'center' });
       }
     }
 
