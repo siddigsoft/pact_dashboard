@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -154,6 +154,60 @@ const CostSubmission = () => {
   const [reconcileActualAmount, setReconcileActualAmount] = useState('');
   const [reconcileProcessing, setReconcileProcessing] = useState(false);
   const [reconcileReceipts, setReconcileReceipts] = useState<SupportingDocument[]>([]);
+  const [signatureImages, setSignatureImages] = useState<Record<string, string | null>>({});
+  const sigCacheRef = useRef<Record<string, boolean>>({});
+
+  const fetchSignatureForSubmission = useCallback(async (oc: OperationalCostSubmission) => {
+    if (!oc.tier2_notes?.includes('[Signed:')) return;
+    if (sigCacheRef.current[oc.id]) return;
+    sigCacheRef.current[oc.id] = true;
+
+    let sigImage: string | null = null;
+
+    const sigMatch = oc.tier2_notes.match(/ID:\s*(\S+?)(?:\s*\||$)/);
+    if (sigMatch?.[1]) {
+      try {
+        const { data: sigRow } = await supabase
+          .from('document_signatures')
+          .select('signature_data')
+          .eq('id', sigMatch[1])
+          .single();
+        if (sigRow?.signature_data && typeof sigRow.signature_data === 'string' && sigRow.signature_data.startsWith('data:')) {
+          sigImage = sigRow.signature_data;
+        }
+      } catch { /* continue */ }
+    }
+
+    if (!sigImage && oc.tier2_approved_by) {
+      try {
+        const { data: savedSig } = await supabase
+          .from('handwriting_signatures')
+          .select('signature_image')
+          .eq('user_id', oc.tier2_approved_by)
+          .eq('is_default', true)
+          .eq('is_active', true)
+          .single();
+        if (savedSig?.signature_image && typeof savedSig.signature_image === 'string' && savedSig.signature_image.startsWith('data:')) {
+          sigImage = savedSig.signature_image;
+        }
+      } catch { /* continue */ }
+    }
+
+    setSignatureImages(prev => ({ ...prev, [oc.id]: sigImage }));
+  }, []);
+
+  useEffect(() => {
+    if (viewAdvanceDetails && viewAdvanceDetails.tier2_notes?.includes('[Signed:')) {
+      fetchSignatureForSubmission(viewAdvanceDetails);
+    }
+  }, [viewAdvanceDetails, fetchSignatureForSubmission]);
+
+  useEffect(() => {
+    const signedOps = operationalCosts.filter(oc => 
+      oc.tier2_notes?.includes('[Signed:') && !sigCacheRef.current[oc.id]
+    );
+    signedOps.forEach(oc => fetchSignatureForSubmission(oc));
+  }, [operationalCosts, fetchSignatureForSubmission]);
 
   const fetchOperationalCosts = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -1762,6 +1816,13 @@ const CostSubmission = () => {
                                     className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
                                   >
                                     <Shield className="h-3 w-3" />
+                                    {signatureImages[oc.id] ? (
+                                      <img 
+                                        src={signatureImages[oc.id]!} 
+                                        alt="Signature" 
+                                        className="h-4 max-w-[40px] object-contain inline" 
+                                      />
+                                    ) : null}
                                     <span>Signed</span>
                                   </div>
                                 </>
@@ -1785,12 +1846,25 @@ const CostSubmission = () => {
                               {cleanTier2Notes && (
                                 <div className="flex items-start gap-2 text-xs" data-testid={`text-tier2-notes-${oc.id}`}>
                                   <span className="font-medium text-muted-foreground shrink-0 mt-px">T2:</span>
-                                  <span className="text-muted-foreground">
-                                    {cleanTier2Notes}
-                                    {tier2Approver && (
-                                      <span className="opacity-60"> — {tier2Approver.name || tier2Approver.email}</span>
+                                  <div className="text-muted-foreground">
+                                    <span>
+                                      {cleanTier2Notes}
+                                      {tier2Approver && (
+                                        <span className="opacity-60"> — {tier2Approver.name || tier2Approver.email}</span>
+                                      )}
+                                    </span>
+                                    {signatureImages[oc.id] && (
+                                      <div className="mt-1" data-testid={`card-signature-${oc.id}`}>
+                                        <div className="inline-block rounded border bg-white dark:bg-slate-100 p-1">
+                                          <img 
+                                            src={signatureImages[oc.id]!} 
+                                            alt="Signature" 
+                                            className="h-8 max-w-[100px] object-contain" 
+                                          />
+                                        </div>
+                                      </div>
                                     )}
-                                  </span>
+                                  </div>
                                 </div>
                               )}
                               {oc.rejection_reason && (
@@ -2389,8 +2463,26 @@ const CostSubmission = () => {
                     </p>
                     {oc.tier2_notes && (
                       <p className="text-xs mt-1 italic text-muted-foreground">
-                        "{oc.tier2_notes.replace(/\s*\[SIG:.*?\]\s*/g, '').replace(/\s*Method:.*$/g, '').trim()}"
+                        "{oc.tier2_notes.replace(/\n?\[Signed:.*?\]/g, '').replace(/\s*\[SIG:.*?\]\s*/g, '').replace(/\s*Method:.*$/g, '').trim()}"
                       </p>
+                    )}
+                    {signatureImages[oc.id] && (
+                      <div className="mt-2" data-testid={`signature-display-${oc.id}`}>
+                        <p className="text-[10px] text-muted-foreground mb-1">Digital Signature / التوقيع الرقمي:</p>
+                        <div className="inline-block rounded border bg-white dark:bg-slate-100 p-1.5">
+                          <img 
+                            src={signatureImages[oc.id]!} 
+                            alt="Approver signature" 
+                            className="h-14 max-w-[180px] object-contain" 
+                          />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 italic">
+                          {tier2Approver?.name || 'Approver'}
+                        </p>
+                      </div>
+                    )}
+                    {oc.tier2_notes?.includes('[Signed:') && !signatureImages[oc.id] && !(oc.id in signatureImages) && (
+                      <p className="text-xs text-muted-foreground mt-1 italic">Loading signature... / جارٍ تحميل التوقيع...</p>
                     )}
                   </div>
                 </div>
