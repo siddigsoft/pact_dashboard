@@ -403,7 +403,7 @@ const CostSubmission = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              <CardTitle className="text-base text-blue-800 dark:text-blue-200">Cost Submission Process Guide</CardTitle>
+              <CardTitle className="text-base text-blue-800 dark:text-blue-200">Operational Cost Submission Guide</CardTitle>
             </div>
             <Button 
               variant="ghost" 
@@ -417,65 +417,118 @@ const CostSubmission = () => {
           </div>
         </CardHeader>
         {showGuide && (
-          <CardContent className="pt-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Step 1: Submit */}
-              <div className="flex flex-col p-4 rounded-lg bg-white dark:bg-slate-800 border">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">1</div>
-                  <h4 className="font-semibold">Submit Costs</h4>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Submit site visit costs, operational expenses, or request advances/reimbursements with supporting documents.
+          <CardContent className="pt-2 space-y-4">
+            <Alert className="border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/30">
+              <Info className="h-4 w-4 text-indigo-600" />
+              <AlertTitle className="text-indigo-800 dark:text-indigo-200">What is this page for?</AlertTitle>
+              <AlertDescription className="text-indigo-700 dark:text-indigo-300 text-sm mt-1">
+                <p className="mb-2">
+                  This page is for <strong>Operational Field Costs</strong> - expenses related to running field operations that are <strong>separate from site visit transportation costs</strong>.
                 </p>
-              </div>
-              
-              {/* Step 2: Review */}
-              <div className="flex flex-col p-4 rounded-lg bg-white dark:bg-slate-800 border">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center text-sm font-bold">2</div>
-                  <h4 className="font-semibold">Supervisor Review</h4>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Your supervisor reviews and verifies the submission. They may request additional information or approve/reject.
-                </p>
-              </div>
-              
-              {/* Step 3: Approval */}
-              <div className="flex flex-col p-4 rounded-lg bg-white dark:bg-slate-800 border">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center text-sm font-bold">3</div>
-                  <h4 className="font-semibold">Admin Approval</h4>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Admin performs final approval and authorizes payment. Digital signature may be required for certain amounts.
-                </p>
-              </div>
-              
-              {/* Step 4: Reconciliation */}
-              <div className="flex flex-col p-4 rounded-lg bg-white dark:bg-slate-800 border">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-full bg-purple-500 text-white flex items-center justify-center text-sm font-bold">4</div>
-                  <h4 className="font-semibold">Reconciliation</h4>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  For advances: Submit receipts to reconcile. Return unused funds or request additional if overspent.
-                </p>
-              </div>
-            </div>
-            
-            <Alert className="mt-4 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
-              <Info className="h-4 w-4 text-amber-600" />
-              <AlertTitle className="text-amber-800 dark:text-amber-200">Important Notes</AlertTitle>
-              <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
-                <ul className="list-disc list-inside space-y-1 mt-1">
-                  <li><strong>Site Visit Costs:</strong> Submit after completing a field visit with transportation and per diem details</li>
-                  <li><strong>Operational Costs:</strong> For permits, training, communications, and other field operation expenses</li>
-                  <li><strong>Advance Payments:</strong> Request funds before activities - must be reconciled with receipts after</li>
-                  <li><strong>Reimbursements:</strong> Get refunded for expenses you already paid from personal funds</li>
+                <p className="mb-1 font-medium">This page covers:</p>
+                <ul className="list-disc list-inside space-y-0.5 ml-2">
+                  <li>Permits & Licenses (locality access, government permits)</li>
+                  <li>Incentives & Allowances (team bonuses, field allowances)</li>
+                  <li>Internet & Communications (SIM cards, airtime, data)</li>
+                  <li>Training (workshops, materials, venue hire)</li>
+                  <li>General Transportation (office travel, hub visits - NOT site visit transport)</li>
+                  <li>Equipment & Supplies (field equipment, stationery)</li>
+                  <li>Printing & Materials (forms, reports)</li>
+                  <li>Meetings (venue, refreshments)</li>
+                  <li>Office Admin & Other operational expenses</li>
                 </ul>
               </AlertDescription>
             </Alert>
+
+            <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertTitle className="text-amber-800 dark:text-amber-200">This is NOT for Site Visit Transportation</AlertTitle>
+              <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm mt-1">
+                <p>Site visit transportation and enumerator fees are handled separately through the <strong>Site Visits</strong> and <strong>Finance Approval</strong> pages. Those costs are calculated automatically based on enumerator classification and are managed through the Down Payment / Advance system.</p>
+              </AlertDescription>
+            </Alert>
+
+            <div>
+              <h4 className="font-semibold text-sm mb-3 text-blue-800 dark:text-blue-200">Who can use this page?</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-sm">Can Submit Requests</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">FOM, Coordinator, Country Director, Admin, Super Admin, Supervisor</p>
+                </div>
+                <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span className="font-medium text-sm">Can Review & Approve</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Hub Supervisor (Tier 1), Admin / Super Admin (Tier 2)</p>
+                </div>
+                <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Shield className="h-4 w-4 text-purple-600" />
+                    <span className="font-medium text-sm">Can View All Submissions</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Admin, Super Admin, Hub Supervisor, Country Director</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-sm mb-3 text-blue-800 dark:text-blue-200">Two-Tier Approval Process</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">1</div>
+                    <h4 className="font-semibold text-sm">Submit Request</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Choose Advance (get funds first) or Reimbursement (already paid). Select expense category, enter amount, attach documents, and submit.
+                  </p>
+                </div>
+                
+                <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs font-bold">2</div>
+                    <h4 className="font-semibold text-sm">Tier 1: Supervisor Review</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Hub Supervisor or FOM reviews the submission, verifies details and documents. They can approve, reject, or request changes.
+                  </p>
+                </div>
+                
+                <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">3</div>
+                    <h4 className="font-semibold text-sm">Tier 2: Admin Approval</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Admin or Super Admin performs final approval and authorizes payment. Both tiers must approve before payment proceeds.
+                  </p>
+                </div>
+                
+                <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">4</div>
+                    <h4 className="font-semibold text-sm">Reconciliation</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    For advances: Submit receipts to reconcile after spending. Return unused funds or request more if overspent.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div dir="rtl" className="p-4 rounded-lg bg-white dark:bg-slate-800 border text-right">
+              <h4 className="font-semibold text-sm mb-2 text-blue-800 dark:text-blue-200">دليل تقديم التكاليف التشغيلية</h4>
+              <p className="text-xs text-muted-foreground mb-2">
+                هذه الصفحة مخصصة لتقديم <strong>التكاليف التشغيلية الميدانية</strong> مثل التصاريح، التدريب، الاتصالات، المعدات، والاجتماعات. هذه الصفحة <strong>ليست</strong> لتكاليف النقل الخاصة بزيارات المواقع.
+              </p>
+              <p className="text-xs text-muted-foreground mb-1"><strong>من يمكنه الاستخدام:</strong> مدير العمليات الميدانية، المنسق، المدير القطري، المشرف، المسؤول</p>
+              <p className="text-xs text-muted-foreground mb-1"><strong>عملية الموافقة:</strong> المرحلة الأولى (المشرف) ← المرحلة الثانية (المسؤول) ← الدفع</p>
+              <p className="text-xs text-muted-foreground"><strong>نوع الطلب:</strong> سلفة (استلام الأموال مقدماً ثم التسوية) أو استرداد (بعد الدفع من أموالك)</p>
+            </div>
           </CardContent>
         )}
       </Card>

@@ -284,6 +284,98 @@ export type Database = {
         }
         Relationships: []
       }
+      operational_cost_submissions: {
+        Row: {
+          id: string
+          expense_category: string
+          amount_cents: number
+          currency: string | null
+          description: string | null
+          expense_date: string | null
+          vendor: string | null
+          reference_number: string | null
+          hub_id: string | null
+          project_id: string | null
+          submitted_by: string
+          submitter_role: string | null
+          supporting_documents: Json | null
+          status: string | null
+          tier1_status: string | null
+          tier1_approved_by: string | null
+          tier1_approved_at: string | null
+          tier1_notes: string | null
+          tier2_status: string | null
+          tier2_approved_by: string | null
+          tier2_approved_at: string | null
+          tier2_notes: string | null
+          rejection_reason: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          expense_category: string
+          amount_cents: number
+          currency?: string | null
+          description?: string | null
+          expense_date?: string | null
+          vendor?: string | null
+          reference_number?: string | null
+          hub_id?: string | null
+          project_id?: string | null
+          submitted_by: string
+          submitter_role?: string | null
+          supporting_documents?: Json | null
+          status?: string | null
+          tier1_status?: string | null
+          tier1_approved_by?: string | null
+          tier1_approved_at?: string | null
+          tier1_notes?: string | null
+          tier2_status?: string | null
+          tier2_approved_by?: string | null
+          tier2_approved_at?: string | null
+          tier2_notes?: string | null
+          rejection_reason?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          expense_category?: string
+          amount_cents?: number
+          currency?: string | null
+          description?: string | null
+          expense_date?: string | null
+          vendor?: string | null
+          reference_number?: string | null
+          hub_id?: string | null
+          project_id?: string | null
+          submitted_by?: string
+          submitter_role?: string | null
+          supporting_documents?: Json | null
+          status?: string | null
+          tier1_status?: string | null
+          tier1_approved_by?: string | null
+          tier1_approved_at?: string | null
+          tier1_notes?: string | null
+          tier2_status?: string | null
+          tier2_approved_by?: string | null
+          tier2_approved_at?: string | null
+          tier2_notes?: string | null
+          rejection_reason?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operational_cost_submissions_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string | null

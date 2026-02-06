@@ -26,13 +26,14 @@ import {
   generateUserManualPDF, 
   generateUserManualDOCX, 
   getDocumentationSections, 
-  getWorkflowSteps 
+  getWorkflowSteps,
+  generateArabicUserManualDOCX
 } from '@/lib/docs-export';
 
 export default function Documentation() {
   const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
-  const [exportType, setExportType] = useState<'pdf' | 'docx' | null>(null);
+  const [exportType, setExportType] = useState<'pdf' | 'docx' | 'arabic' | null>(null);
 
   const sections = getDocumentationSections();
   const workflowSteps = getWorkflowSteps();
@@ -74,6 +75,28 @@ export default function Documentation() {
       toast({
         title: "Export Failed",
         description: "Unable to generate Word document. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+      setExportType(null);
+    }
+  };
+
+  const handleExportArabicDOCX = async () => {
+    try {
+      setExporting(true);
+      setExportType('arabic');
+      await generateArabicUserManualDOCX();
+      toast({
+        title: "Arabic Manual Generated",
+        description: "Arabic user manual has been downloaded as Word document",
+      });
+    } catch (error) {
+      console.error('Arabic DOCX export error:', error);
+      toast({
+        title: "Export Failed",
+        description: "Unable to generate Arabic document. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -128,7 +151,7 @@ export default function Documentation() {
           </p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button 
             onClick={handleExportPDF}
             disabled={exporting}
@@ -147,6 +170,16 @@ export default function Documentation() {
           >
             <Download className="h-4 w-4" />
             {exporting && exportType === 'docx' ? 'Generating...' : 'Export Word'}
+          </Button>
+          <Button 
+            onClick={handleExportArabicDOCX}
+            disabled={exporting}
+            variant="outline"
+            className="gap-2"
+            data-testid="button-export-arabic"
+          >
+            <FileDown className="h-4 w-4" />
+            {exporting && exportType === 'arabic' ? 'Generating...' : 'Arabic Manual'}
           </Button>
         </div>
       </div>
