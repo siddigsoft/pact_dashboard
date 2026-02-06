@@ -256,57 +256,47 @@ export function SignatureConfirmationModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[min(420px,90vw)] max-h-[90vh] overflow-y-auto p-4">
+      <DialogContent className="w-[95vw] max-w-[440px] max-h-[90vh] overflow-y-auto p-4 sm:p-5">
         <DialogHeader className="space-y-1 pr-6">
-          <DialogTitle className="flex items-center gap-2 text-sm">
+          <DialogTitle className="flex items-center gap-2 text-sm leading-tight">
             <Shield className="h-4 w-4 text-primary flex-shrink-0" />
-            <div className="min-w-0">
-              <div className="leading-tight">Confirm Receipt with Signature</div>
-              <div className="text-[11px] font-normal text-muted-foreground" dir="rtl">تأكيد الاستلام بالتوقيع</div>
-            </div>
+            <span>Confirm Receipt with Signature</span>
           </DialogTitle>
-          <DialogDescription className="text-[11px] leading-snug">
-            <span>Please review and sign to confirm this transaction.</span>
-            <br />
-            <span dir="rtl" className="text-muted-foreground">يرجى المراجعة والتوقيع لتأكيد هذه المعاملة.</span>
+          <p className="text-[11px] text-muted-foreground" dir="rtl">تأكيد الاستلام بالتوقيع</p>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Please review and sign to confirm this transaction.
           </DialogDescription>
+          <p className="text-[11px] text-muted-foreground" dir="rtl">يرجى المراجعة والتوقيع لتأكيد هذه المعاملة.</p>
         </DialogHeader>
 
-        <div className="space-y-2.5 overflow-hidden">
-          <Card className="bg-muted/30">
-            <CardContent className="p-3 space-y-1.5">
+        <div className="space-y-3">
+          <Card className="bg-muted/30 overflow-hidden">
+            <CardContent className="p-3 space-y-2">
               <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground min-w-0">
-                  <FileText className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                  <span className="break-words line-clamp-2">{transaction.title}</span>
+                <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                  <FileText className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground break-words line-clamp-2">{transaction.title}</span>
                 </div>
-                <Badge variant="secondary" className="text-[9px] flex-shrink-0 whitespace-nowrap">{transaction.type.replace('_', ' ')}</Badge>
+                <Badge variant="secondary" className="text-[10px] flex-shrink-0">{transaction.type.replace('_', ' ')}</Badge>
               </div>
               
               <Separator />
               
-              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
                 <div className="flex items-center gap-1">
-                  <DollarSign className="h-3 w-3 text-green-600 flex-shrink-0" />
-                  <span className="font-semibold text-xs">
-                    {formatAmount(transaction.amount, transaction.currency)}
-                  </span>
+                  <DollarSign className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                  <span className="font-semibold">{formatAmount(transaction.amount, transaction.currency)}</span>
                 </div>
                 {transaction.counterparty && (
                   <div className="flex items-center gap-1 min-w-0">
-                    <User className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate">{transaction.counterparty}</span>
+                    <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate max-w-[120px]">{transaction.counterparty}</span>
                   </div>
                 )}
                 {transaction.date && (
                   <div className="flex items-center gap-1">
-                    <Calendar className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span>{new Date(transaction.date).toLocaleDateString()}</span>
-                  </div>
-                )}
-                {transaction.reference && (
-                  <div className="text-muted-foreground truncate">
-                    Ref: {transaction.reference}
                   </div>
                 )}
               </div>
@@ -314,37 +304,35 @@ export function SignatureConfirmationModal({
               {transaction.description && (
                 <>
                   <Separator />
-                  <p className="text-[11px] text-muted-foreground line-clamp-2 break-words">{transaction.description}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2 break-words">{transaction.description}</p>
                 </>
               )}
             </CardContent>
           </Card>
 
           <Tabs value={selectedMethod} onValueChange={(v) => setSelectedMethod(v as SignatureMethod)}>
-            <TabsList className="w-full h-auto p-0.5">
+            <TabsList className="w-full">
               {methodTabs.map((method) => (
-                <TabsTrigger key={method.value} value={method.value} className="flex-1 gap-1 text-[10px] px-1 py-1.5">
-                  <method.icon className="h-3 w-3 flex-shrink-0" />
-                  <div className="leading-tight text-center">
-                    <div>{method.label}</div>
-                    <div dir="rtl" className="text-[9px] text-muted-foreground">{method.labelAr}</div>
-                  </div>
+                <TabsTrigger key={method.value} value={method.value} className="flex-1 gap-1.5 text-xs px-2">
+                  <method.icon className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>{method.label}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
 
-            <TabsContent value="uuid" className="mt-2">
-              <Alert>
-                <Shield className="h-3 w-3" />
-                <AlertDescription className="text-[11px] leading-snug">
-                  <span>Click "Sign & Confirm" to sign with your secure account credentials.</span>
-                  <br />
-                  <span dir="rtl" className="text-[10px] block mt-0.5 text-muted-foreground">انقر على "توقيع وتأكيد" للتوقيع باستخدام بيانات حسابك الآمنة.</span>
-                </AlertDescription>
-              </Alert>
+            <TabsContent value="uuid" className="mt-3">
+              <div className="rounded-md border p-3 space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <Shield className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <p>Click "Sign & Confirm" to sign with your secure account credentials.</p>
+                    <p className="text-muted-foreground mt-1" dir="rtl">انقر على "توقيع وتأكيد" للتوقيع باستخدام بيانات حسابك الآمنة.</p>
+                  </div>
+                </div>
+              </div>
             </TabsContent>
 
-            <TabsContent value="handwriting" className="mt-2">
+            <TabsContent value="handwriting" className="mt-3">
               <SignaturePad
                 onSignatureCapture={handleSignatureCapture}
                 onClear={() => setSignatureData(null)}
@@ -354,24 +342,24 @@ export function SignatureConfirmationModal({
               />
             </TabsContent>
 
-            <TabsContent value="email" className="mt-2 space-y-2">
-              <Alert>
-                <Mail className="h-3 w-3" />
-                <AlertDescription className="text-[11px] leading-snug">
-                  <span>We'll send a 6-digit code to: <strong className="break-all">{userEmail}</strong></span>
-                  <br />
-                  <span dir="rtl" className="text-[10px] block mt-0.5 text-muted-foreground">سنرسل رمز تحقق من 6 أرقام إلى بريدك</span>
-                </AlertDescription>
-              </Alert>
-              
+            <TabsContent value="email" className="mt-3 space-y-2">
+              <div className="rounded-md border p-3 space-y-1">
+                <div className="flex items-start gap-2">
+                  <Mail className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <p>We'll send a 6-digit code to: <strong className="break-all">{userEmail}</strong></p>
+                    <p className="text-muted-foreground mt-0.5" dir="rtl">سنرسل رمز تحقق من 6 أرقام إلى بريدك</p>
+                  </div>
+                </div>
+              </div>
               {!otpSent ? (
                 <Button onClick={handleSendOTP} disabled={isSubmitting} className="w-full" size="sm">
-                  {isSubmitting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Mail className="h-3.5 w-3.5 mr-1.5" />}
-                  <span className="text-xs">Send Code / <span dir="rtl">إرسال الرمز</span></span>
+                  {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
+                  Send Code / <span dir="rtl">إرسال الرمز</span>
                 </Button>
               ) : (
                 <div className="space-y-1.5">
-                  <Label htmlFor="otp-email" className="text-[11px]">Enter Code / <span dir="rtl">أدخل الرمز</span></Label>
+                  <Label htmlFor="otp-email" className="text-xs">Enter Code / <span dir="rtl">أدخل الرمز</span></Label>
                   <Input
                     id="otp-email"
                     type="text"
@@ -386,24 +374,24 @@ export function SignatureConfirmationModal({
               )}
             </TabsContent>
 
-            <TabsContent value="phone" className="mt-2 space-y-2">
-              <Alert>
-                <Phone className="h-3 w-3" />
-                <AlertDescription className="text-[11px] leading-snug">
-                  <span>We'll send a 6-digit code to: <strong>{userPhone}</strong></span>
-                  <br />
-                  <span dir="rtl" className="text-[10px] block mt-0.5 text-muted-foreground">سنرسل رمز تحقق من 6 أرقام إلى هاتفك</span>
-                </AlertDescription>
-              </Alert>
-              
+            <TabsContent value="phone" className="mt-3 space-y-2">
+              <div className="rounded-md border p-3 space-y-1">
+                <div className="flex items-start gap-2">
+                  <Phone className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                  <div className="text-xs leading-relaxed">
+                    <p>We'll send a 6-digit code to: <strong>{userPhone}</strong></p>
+                    <p className="text-muted-foreground mt-0.5" dir="rtl">سنرسل رمز تحقق من 6 أرقام إلى هاتفك</p>
+                  </div>
+                </div>
+              </div>
               {!otpSent ? (
                 <Button onClick={handleSendOTP} disabled={isSubmitting} className="w-full" size="sm">
-                  {isSubmitting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Phone className="h-3.5 w-3.5 mr-1.5" />}
-                  <span className="text-xs">Send Code / <span dir="rtl">إرسال الرمز</span></span>
+                  {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Phone className="h-4 w-4 mr-2" />}
+                  Send Code / <span dir="rtl">إرسال الرمز</span>
                 </Button>
               ) : (
                 <div className="space-y-1.5">
-                  <Label htmlFor="otp-phone" className="text-[11px]">Enter Code / <span dir="rtl">أدخل الرمز</span></Label>
+                  <Label htmlFor="otp-phone" className="text-xs">Enter Code / <span dir="rtl">أدخل الرمز</span></Label>
                   <Input
                     id="otp-phone"
                     type="text"
@@ -419,27 +407,28 @@ export function SignatureConfirmationModal({
             </TabsContent>
           </Tabs>
 
-          <Alert className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-            <AlertCircle className="h-3 w-3 text-amber-600" />
-            <AlertDescription className="text-[11px] leading-snug text-amber-800 dark:text-amber-200">
-              <span>By signing, you confirm receipt of funds and agree this transaction is valid and accurate.</span>
-              <br />
-              <span dir="rtl" className="text-[10px] block mt-0.5">بالتوقيع، تؤكد استلام الأموال وتوافق على أن هذه المعاملة صحيحة ودقيقة.</span>
-            </AlertDescription>
-          </Alert>
+          <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+                <p>By signing, you confirm receipt of funds and agree this transaction is valid and accurate.</p>
+                <p className="mt-1" dir="rtl">بالتوقيع، تؤكد استلام الأموال وتوافق على أن هذه المعاملة صحيحة ودقيقة.</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <DialogFooter className="gap-2 flex-wrap">
-          <Button variant="outline" onClick={handleCancel} disabled={isSubmitting} size="sm">
-            <span className="text-xs">Cancel / <span dir="rtl">إلغاء</span></span>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={handleCancel} disabled={isSubmitting}>
+            Cancel / <span dir="rtl">إلغاء</span>
           </Button>
-          <Button onClick={handleSubmitSignature} disabled={isSubmitting} size="sm">
+          <Button onClick={handleSubmitSignature} disabled={isSubmitting}>
             {isSubmitting ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+              <CheckCircle2 className="h-4 w-4 mr-2" />
             )}
-            <span className="text-xs">Sign & Confirm / <span dir="rtl">توقيع وتأكيد</span></span>
+            Sign & Confirm / <span dir="rtl">توقيع وتأكيد</span>
           </Button>
         </DialogFooter>
       </DialogContent>
