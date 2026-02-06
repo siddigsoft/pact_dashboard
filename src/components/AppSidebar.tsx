@@ -343,6 +343,9 @@
     if (!isHidden('/documentation')) {
       helpItems.push({ id: 'documentation', title: "Documentation", url: "/documentation", icon: BookOpen, priority: 1, isPinned: isPinned('/documentation') });
     }
+    if (!isHidden('/mobile-support-tickets') && (isSuperAdmin || isAdmin)) {
+      helpItems.push({ id: 'mobile-support-tickets', title: "Mobile Support Tickets", url: "/mobile-support-tickets", icon: Smartphone, priority: 2, isPinned: isPinned('/mobile-support-tickets') });
+    }
     if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 9, items: helpItems });
 
     // Finance category - Financial operations and approvals
@@ -418,9 +421,6 @@
       }
       if (!isHidden('/email-management')) {
         superAdminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 6, isPinned: isPinned('/email-management') });
-      }
-      if (!isHidden('/mobile-support-tickets')) {
-        superAdminItems.push({ id: 'mobile-support-tickets', title: "Mobile Support Tickets", url: "/mobile-support-tickets", icon: Smartphone, priority: 7, isPinned: isPinned('/mobile-support-tickets') });
       }
       if (!isHidden('/mobile-help-articles')) {
         superAdminItems.push({ id: 'mobile-help-articles', title: "Mobile Help Articles", url: "/mobile-help-articles", icon: HelpCircle, priority: 8, isPinned: isPinned('/mobile-help-articles') });

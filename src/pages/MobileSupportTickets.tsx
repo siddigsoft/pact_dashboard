@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -88,7 +88,7 @@ export default function MobileSupportTickets() {
       let query = supabase
         .from('support_tickets')
         .select(`
-          *,
+          id, user_id, subject, description, category, priority, status, source, assigned_to, created_at, updated_at, resolved_at,
           profiles:user_id (full_name, email)
         `)
         .order('created_at', { ascending: false });
@@ -124,6 +124,15 @@ export default function MobileSupportTickets() {
     },
     enabled: !!selectedTicket,
   });
+
+  // When ticket has no description, first user message is shown as "Original Message" so hide it from the reply thread
+  const replyMessages = useMemo(() => {
+    if (!selectedTicket || !ticketMessages.length) return ticketMessages;
+    const useFirstAsOriginal = !selectedTicket.description?.trim() && ticketMessages.some((m: TicketMessage) => !m.is_admin);
+    if (!useFirstAsOriginal) return ticketMessages;
+    const firstUserMsgId = ticketMessages.find((m: TicketMessage) => !m.is_admin)?.id;
+    return firstUserMsgId ? ticketMessages.filter((m: TicketMessage) => m.id !== firstUserMsgId) : ticketMessages;
+  }, [selectedTicket, ticketMessages]);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ ticketId, status }: { ticketId: string; status: string }) => {
@@ -496,7 +505,13 @@ export default function MobileSupportTickets() {
                   <CardContent className="flex-1 overflow-hidden flex flex-col p-0">
                     <div className="p-4 bg-muted/20 border-b">
                       <p className="text-sm font-medium mb-2 text-muted-foreground">Original Message</p>
-                      <p className="text-sm leading-relaxed">{selectedTicket.description}</p>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                        {selectedTicket.description?.trim() ||
+                          (ticketMessages.length > 0
+                            ? ticketMessages.find((m: TicketMessage) => !m.is_admin)?.message
+                            : null) ||
+                          '—'}
+                      </p>
                     </div>
 
                     <ScrollArea className="flex-1 p-4">
@@ -506,13 +521,13 @@ export default function MobileSupportTickets() {
                             <Skeleton className="h-16 w-3/4" />
                             <Skeleton className="h-16 w-3/4 ml-auto" />
                           </div>
-                        ) : ticketMessages.length === 0 ? (
+                        ) : replyMessages.length === 0 ? (
                           <div className="text-center text-muted-foreground py-8">
                             <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
                             <p className="text-sm">No replies yet</p>
                           </div>
                         ) : (
-                          ticketMessages.map((msg: TicketMessage) => (
+                          replyMessages.map((msg: TicketMessage) => (
                             <div
                               key={msg.id}
                               className={`flex ${msg.is_admin ? 'justify-end' : 'justify-start'}`}
