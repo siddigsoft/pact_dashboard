@@ -43,16 +43,19 @@ CREATE TABLE IF NOT EXISTS operational_cost_submissions (
   tier1_status TEXT NOT NULL DEFAULT 'pending' CHECK (tier1_status IN (
     'pending', 'approved', 'rejected', 'changes_requested'
   )),
-  tier1_reviewed_by UUID REFERENCES profiles(id),
-  tier1_reviewed_at TIMESTAMPTZ,
+  tier1_approved_by UUID REFERENCES profiles(id),
+  tier1_approved_at TIMESTAMPTZ,
   tier1_notes TEXT,
+  
+  -- Rejection reason
+  rejection_reason TEXT,
   
   -- Tier 2 approval (Admin)
   tier2_status TEXT NOT NULL DEFAULT 'pending' CHECK (tier2_status IN (
     'pending', 'approved', 'rejected'
   )),
-  tier2_reviewed_by UUID REFERENCES profiles(id),
-  tier2_reviewed_at TIMESTAMPTZ,
+  tier2_approved_by UUID REFERENCES profiles(id),
+  tier2_approved_at TIMESTAMPTZ,
   tier2_notes TEXT,
   
   -- Payment tracking
@@ -107,8 +110,8 @@ CREATE POLICY "Admins can view all operational cost submissions"
     )
   );
 
--- FOM, Coordinators, and Country Directors can create submissions
--- Country Director submissions require Admin → Super Admin approval chain
+-- All authorized roles can create operational cost submissions
+-- Includes: FOM, Coordinators, Country Directors, Admins, Super Admins, Supervisors
 CREATE POLICY "Authorized roles can create operational cost submissions"
   ON operational_cost_submissions FOR INSERT
   WITH CHECK (
@@ -116,7 +119,13 @@ CREATE POLICY "Authorized roles can create operational cost submissions"
     AND EXISTS (
       SELECT 1 FROM profiles p
       WHERE p.id = auth.uid()
-      AND p.role IN ('Field Operation Manager (FOM)', 'Coordinator', 'coordinator', 'CountryDirector')
+      AND p.role IN (
+        'Field Operation Manager (FOM)', 
+        'Coordinator', 'coordinator',
+        'CountryDirector',
+        'admin', 'SuperAdmin',
+        'hubSupervisor', 'supervisor'
+      )
     )
   );
 
@@ -148,9 +157,8 @@ CREATE POLICY "Supervisors can update tier1 for hub submissions"
     )
   )
   WITH CHECK (
-    -- Ensure tier2 and payment fields are not being modified by tier1 reviewers
     tier2_status = 'pending'
-    AND tier2_reviewed_by IS NULL
+    AND tier2_approved_by IS NULL
     AND wallet_transaction_id IS NULL
     AND paid_at IS NULL
   );

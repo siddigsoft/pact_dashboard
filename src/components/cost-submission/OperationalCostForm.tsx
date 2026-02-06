@@ -115,7 +115,20 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
           tier2_status: 'pending'
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase insert error:', error);
+        
+        let userMessage = error.message || 'Database insertion failed';
+        if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
+          userMessage = 'Your role does not have permission to submit operational costs. Please contact your administrator to update the database permissions.';
+        } else if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          userMessage = 'The operational cost submissions table has not been created yet. Please run the migration SQL in Supabase.';
+        } else if (error.code === '23514' || error.message?.includes('check constraint')) {
+          userMessage = 'Invalid expense category. Please run the latest database migration to update allowed categories.';
+        }
+        
+        throw new Error(userMessage);
+      }
 
       toast({
         title: "Expense Submitted",
@@ -131,7 +144,8 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
       toast({
         title: "Submission Failed",
         description: error.message || "Failed to submit expense. Please try again.",
-        variant: "destructive"
+        variant: "destructive",
+        duration: 10000
       });
     } finally {
       setIsSubmitting(false);
