@@ -283,25 +283,25 @@ const DocumentsPage = () => {
       const [mmpResult, costResult, photoResult, indexedDocsResult] = await Promise.all([
         supabase
           .from('mmp_files')
-          .select('id, name, original_filename, file_url, created_at, uploaded_at, updated_at, permits, project_id, project_name, status, uploaded_by')
+          .select('id, name, original_filename, file_url, created_at, uploaded_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
           .order('created_at', { ascending: false })
           .limit(500),
         (async () => {
           try {
             return await supabase
-              .from('cost_submissions')
-              .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, projects(name)')
+              .from('site_visit_cost_submissions')
+              .select('id, supporting_documents, submitted_at, created_at, status, site_visit_id, project_id, projects(name)')
               .order('created_at', { ascending: false })
               .limit(500);
           } catch {
-            return { data: null, error: { message: 'cost_submissions table may not exist' } };
+            return { data: null, error: { message: 'site_visit_cost_submissions table may not exist' } };
           }
         })(),
         (async () => {
           try {
             return await supabase
               .from('report_photos')
-              .select('id, photo_url, caption, created_at, site_visit_id')
+              .select('id, photo_url, created_at, report_id, reports(site_visit_id, notes)')
               .order('created_at', { ascending: false })
               .limit(200);
           } catch {
@@ -420,7 +420,7 @@ const DocumentsPage = () => {
 
         (mmpFiles || []).forEach((mmp: any) => {
           if (!mmp) return;
-          const projectName = mmp.project_name || 'Unknown Project';
+          const projectName = mmp.project_name || mmp.projects?.name || 'Unknown Project';
           const uploadDate = mmp.uploaded_at || mmp.created_at;
           const monthBucket = safeFormatDate(uploadDate, 'yyyy-MM');
           if (monthBucket) monthsSet.add(monthBucket);
@@ -587,83 +587,64 @@ const DocumentsPage = () => {
         console.warn('Error processing MMP files:', mmpErr);
       }
 
-      // 2. Process Cost Submission Receipts (already fetched in parallel above)
+      // 2. Process Cost Submission Receipts from site_visit_cost_submissions (supporting_documents)
       if (!costError && costSubmissions) {
         (costSubmissions || []).forEach((cost: any) => {
           if (!cost) return;
-          const costMonth = safeFormatDate(cost.created_at, 'yyyy-MM');
+          const costMonth = safeFormatDate(cost.submitted_at || cost.created_at, 'yyyy-MM');
           if (costMonth) monthsSet.add(costMonth);
           const projectName = cost.projects?.name;
-          
-          // Add main receipt if exists
-          if (cost.receipt_url) {
-            docs.push({
-              id: `cost-${cost.id}`,
-              indexNo: indexCounter++,
-              fileName: cost.receipt_filename || `Receipt - ${cost.amount ? `SDG ${cost.amount}` : 'Cost Submission'}`,
-              fileUrl: cost.receipt_url,
-              category: 'cost_receipt',
-              uploadedAt: cost.created_at || new Date().toISOString(),
-              projectId: cost.project_id,
-              projectName,
-              siteVisitId: cost.site_visit_id,
-              monthBucket: costMonth,
-              status: cost.status === 'approved' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending',
-              verified: cost.status === 'approved',
-              sourceType: 'cost'
-            });
-          }
-          // Add any additional documents from the documents JSON field
-          if (cost.documents && Array.isArray(cost.documents)) {
-            cost.documents.forEach((doc: any, idx: number) => {
+          const statusMap = cost.status === 'approved' || cost.status === 'paid' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending';
+          const verified = cost.status === 'approved' || cost.status === 'paid';
+
+          const supportingDocs = cost.supporting_documents;
+          if (supportingDocs && Array.isArray(supportingDocs)) {
+            supportingDocs.forEach((doc: any, idx: number) => {
               if (!doc) return;
-              if (doc.fileUrl || doc.url) {
-                const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', costMonth);
-                if (docMonth) monthsSet.add(docMonth);
-                
-                docs.push({
-                  id: `cost-doc-${cost.id}-${idx}`,
-                  indexNo: indexCounter++,
-                  fileName: doc.fileName || doc.name || `Cost Document ${idx + 1}`,
-                  fileUrl: doc.fileUrl || doc.url || '',
-                  category: 'cost_receipt',
-                  uploadedAt: doc.uploadedAt || cost.created_at || new Date().toISOString(),
-                  projectId: cost.project_id,
-                  projectName,
-                  siteVisitId: cost.site_visit_id,
-                  monthBucket: docMonth,
-                  status: cost.status === 'approved' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending',
-                  verified: cost.status === 'approved',
-                  sourceType: 'cost'
-                });
-              }
+              const fileUrl = doc.url || doc.fileUrl;
+              if (!fileUrl) return;
+              const docMonth = safeFormatDate(doc.uploadedAt || doc.uploaded_at || cost.submitted_at, 'yyyy-MM', costMonth);
+              if (docMonth) monthsSet.add(docMonth);
+              docs.push({
+                id: `cost-${cost.id}-${idx}`,
+                indexNo: indexCounter++,
+                fileName: doc.filename || doc.fileName || doc.name || `Cost Receipt ${idx + 1}`,
+                fileUrl,
+                category: 'cost_receipt',
+                uploadedAt: doc.uploadedAt || doc.uploaded_at || cost.submitted_at || cost.created_at || new Date().toISOString(),
+                projectId: cost.project_id,
+                projectName,
+                siteVisitId: cost.site_visit_id,
+                monthBucket: docMonth,
+                status: statusMap,
+                verified,
+                sourceType: 'cost'
+              });
             });
           }
         });
       }
 
-      // 3. Process Report Photos (already fetched in parallel above)
+      // 3. Process Report Photos (report_photos join reports for site_visit_id)
       if (!photoError && reportPhotos) {
         (reportPhotos || []).forEach((photo: any) => {
-          if (!photo) return;
-          if (photo.photo_url) {
-            const photoMonth = safeFormatDate(photo.created_at, 'yyyy-MM');
-            if (photoMonth) monthsSet.add(photoMonth);
-            
-            docs.push({
-              id: `photo-${photo.id}`,
-              indexNo: indexCounter++,
-              fileName: photo.caption || `Site Visit Photo`,
-              fileUrl: photo.photo_url,
-              category: 'site_visit_photo',
-              uploadedAt: photo.created_at || new Date().toISOString(),
-              siteVisitId: photo.site_visit_id,
-              monthBucket: photoMonth,
-              status: 'verified',
-              verified: true,
-              sourceType: 'site_visit'
-            });
-          }
+          if (!photo || !photo.photo_url) return;
+          const siteVisitId = photo.reports?.site_visit_id ?? photo.site_visit_id;
+          const photoMonth = safeFormatDate(photo.created_at, 'yyyy-MM');
+          if (photoMonth) monthsSet.add(photoMonth);
+          docs.push({
+            id: `photo-${photo.id}`,
+            indexNo: indexCounter++,
+            fileName: photo.reports?.notes || photo.caption || 'Site Visit Photo',
+            fileUrl: photo.photo_url,
+            category: 'site_visit_photo',
+            uploadedAt: photo.created_at || new Date().toISOString(),
+            siteVisitId,
+            monthBucket: photoMonth,
+            status: 'verified',
+            verified: true,
+            sourceType: 'site_visit'
+          });
         });
       }
 

@@ -128,22 +128,23 @@ export const DocumentIndexService = {
       
       const projectMap = new Map(projects?.map(p => [p.id, p]) || []);
 
-      // 1. Fetch MMP Files with permits
+      // 1. Fetch MMP Files with permits (mmp_files has name, original_filename; no filename column)
       const { data: mmpFiles, error: mmpError } = await supabase
         .from('mmp_files')
-        .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
+        .select('id, name, original_filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
         .order('created_at', { ascending: false });
 
       if (!mmpError && mmpFiles) {
         for (const mmp of mmpFiles) {
           const projectName = (mmp as any).projects?.name || projectMap.get(mmp.project_id)?.name || 'Unknown Project';
           const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : undefined;
+          const mmpFileName = (mmp as any).original_filename || (mmp as any).name || 'Untitled MMP';
 
           // Add the MMP file itself
           docs.push({
             id: `mmp-${mmp.id}`,
             indexNo: indexCounter++,
-            fileName: mmp.filename || 'Untitled MMP',
+            fileName: mmpFileName,
             fileUrl: mmp.file_url || '',
             category: 'mmp_file',
             uploadedAt: mmp.created_at || new Date().toISOString(),
@@ -151,7 +152,7 @@ export const DocumentIndexService = {
             projectId: mmp.project_id,
             projectName,
             mmpId: mmp.id,
-            mmpName: mmp.filename,
+            mmpName: mmpFileName,
             monthBucket,
             status: mmp.status === 'approved' ? 'approved' : mmp.status === 'rejected' ? 'rejected' : 'pending',
             verified: mmp.status === 'approved',
@@ -176,7 +177,7 @@ export const DocumentIndexService = {
                 projectId: mmp.project_id,
                 projectName,
                 mmpId: mmp.id,
-                mmpName: mmp.filename,
+                mmpName: mmpFileName,
                 monthBucket,
                 status: doc.validated ? 'verified' : 'pending',
                 verified: doc.validated || false,
@@ -202,7 +203,7 @@ export const DocumentIndexService = {
                   projectName,
                   state: sp.stateName,
                   mmpId: mmp.id,
-                  mmpName: mmp.filename,
+                  mmpName: mmpFileName,
                   monthBucket,
                   issueDate: doc.issueDate,
                   expiryDate: doc.expiryDate,
@@ -232,7 +233,7 @@ export const DocumentIndexService = {
                   state: lp.state,
                   locality: lp.localityName,
                   mmpId: mmp.id,
-                  mmpName: mmp.filename,
+                  mmpName: mmpFileName,
                   monthBucket,
                   issueDate: doc.issueDate,
                   expiryDate: doc.expiryDate,
@@ -248,64 +249,45 @@ export const DocumentIndexService = {
         }
       }
 
-      // 2. Fetch Cost Submission Receipts
+      // 2. Fetch Cost Submission Receipts from site_visit_cost_submissions (supporting_documents)
       const { data: costSubmissions, error: costError } = await supabase
-        .from('cost_submissions')
-        .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, submitted_by, project_id')
+        .from('site_visit_cost_submissions')
+        .select('id, supporting_documents, submitted_at, created_at, status, site_visit_id, submitted_by, project_id, projects(name)')
         .order('created_at', { ascending: false });
 
       if (!costError && costSubmissions) {
         for (const cost of costSubmissions) {
-          const projectName = projectMap.get(cost.project_id)?.name;
-          const monthBucket = cost.created_at ? format(parseISO(cost.created_at), 'yyyy-MM') : undefined;
-
-          if (cost.receipt_url) {
-            docs.push({
-              id: `cost-${cost.id}`,
-              indexNo: indexCounter++,
-              fileName: cost.receipt_filename || `Receipt - ${cost.amount ? `SDG ${cost.amount}` : 'Cost Submission'}`,
-              fileUrl: cost.receipt_url,
-              category: 'cost_receipt',
-              uploadedAt: cost.created_at,
-              uploadedBy: cost.submitted_by,
-              projectId: cost.project_id,
-              projectName,
-              siteVisitId: cost.site_visit_id,
-              costSubmissionId: cost.id,
-              monthBucket,
-              status: cost.status === 'approved' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending',
-              verified: cost.status === 'approved',
-              sourceType: 'cost',
-              sourceTable: 'cost_submissions',
-              sourceId: cost.id
+          const projectName = (cost as any).projects?.name || projectMap.get(cost.project_id)?.name;
+          const statusMap = cost.status === 'approved' || cost.status === 'paid' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending';
+          const verified = cost.status === 'approved' || cost.status === 'paid';
+          const supportingDocs = cost.supporting_documents as any[] | undefined;
+          if (supportingDocs && Array.isArray(supportingDocs)) {
+            supportingDocs.forEach((doc: any, idx: number) => {
+              const fileUrl = doc.url || doc.fileUrl;
+              if (!fileUrl) return;
+              const monthBucket = doc.uploadedAt || doc.uploaded_at || cost.submitted_at || cost.created_at
+                ? format(parseISO(doc.uploadedAt || doc.uploaded_at || cost.submitted_at || cost.created_at), 'yyyy-MM')
+                : undefined;
+              docs.push({
+                id: `cost-${cost.id}-${idx}`,
+                indexNo: indexCounter++,
+                fileName: doc.filename || doc.fileName || doc.name || `Cost Receipt ${idx + 1}`,
+                fileUrl,
+                category: 'cost_receipt',
+                uploadedAt: doc.uploadedAt || doc.uploaded_at || cost.submitted_at || cost.created_at,
+                uploadedBy: cost.submitted_by,
+                projectId: cost.project_id,
+                projectName,
+                siteVisitId: cost.site_visit_id,
+                costSubmissionId: cost.id,
+                monthBucket,
+                status: statusMap,
+                verified,
+                sourceType: 'cost',
+                sourceTable: 'site_visit_cost_submissions',
+                sourceId: `${cost.id}-${idx}`
+              });
             });
-          }
-
-          // Additional documents
-          const costDocs = cost.documents as any[];
-          if (costDocs && Array.isArray(costDocs)) {
-            for (const doc of costDocs) {
-              if (doc.fileUrl || doc.url) {
-                docs.push({
-                  id: `cost-doc-${cost.id}-${docs.length}`,
-                  indexNo: indexCounter++,
-                  fileName: doc.fileName || doc.name || 'Cost Document',
-                  fileUrl: doc.fileUrl || doc.url,
-                  category: 'cost_receipt',
-                  uploadedAt: doc.uploadedAt || cost.created_at,
-                  projectId: cost.project_id,
-                  projectName,
-                  siteVisitId: cost.site_visit_id,
-                  costSubmissionId: cost.id,
-                  monthBucket,
-                  status: cost.status === 'approved' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending',
-                  verified: cost.status === 'approved',
-                  sourceType: 'cost',
-                  sourceTable: 'cost_submissions',
-                  sourceId: cost.id
-                });
-              }
-            }
           }
         }
       }
@@ -348,26 +330,27 @@ export const DocumentIndexService = {
         }
       }
 
-      // 4. Fetch Report Photos (site visit attachments)
+      // 4. Fetch Report Photos (report_photos join reports for site_visit_id; no caption column)
       try {
         const { data: reportPhotos, error: photoError } = await supabase
           .from('report_photos')
-          .select('id, photo_url, caption, created_at, site_visit_id')
+          .select('id, photo_url, created_at, report_id, reports(site_visit_id, notes)')
           .order('created_at', { ascending: false });
 
         if (!photoError && reportPhotos) {
           for (const photo of reportPhotos) {
             if (photo.photo_url) {
+              const siteVisitId = (photo as any).reports?.site_visit_id ?? (photo as any).site_visit_id;
+              const caption = (photo as any).reports?.notes ?? (photo as any).caption;
               const monthBucket = photo.created_at ? format(parseISO(photo.created_at), 'yyyy-MM') : undefined;
-              
               docs.push({
                 id: `photo-${photo.id}`,
                 indexNo: indexCounter++,
-                fileName: photo.caption || 'Site Visit Photo',
+                fileName: caption || 'Site Visit Photo',
                 fileUrl: photo.photo_url,
                 category: 'site_visit_photo',
                 uploadedAt: photo.created_at,
-                siteVisitId: photo.site_visit_id,
+                siteVisitId,
                 monthBucket,
                 status: 'verified',
                 verified: true,
@@ -830,10 +813,10 @@ export const DocumentIndexService = {
 
       onProgress?.(5, 100, 'Fetching MMP files...');
 
-      // 1. Index MMP Files and their permits
+      // 1. Index MMP Files and their permits (mmp_files: name, original_filename; project via projects(name))
       const { data: mmpFiles, error: mmpError } = await supabase
         .from('mmp_files')
-        .select('id, name, original_filename, filename, file_url, created_at, permits, project_id, project_name, status, uploaded_by')
+        .select('id, name, original_filename, file_url, created_at, permits, project_id, status, uploaded_by, projects(name)')
         .order('created_at', { ascending: false });
 
       if (mmpError) {
@@ -849,9 +832,9 @@ export const DocumentIndexService = {
         mmpCount++;
         onProgress?.(5 + Math.floor((mmpCount / Math.max(totalMmps, 1)) * 40), 100, `Processing MMP ${mmpCount}/${totalMmps}...`);
 
-        const projectName = mmp.project_name || projectMap.get(mmp.project_id) || 'Unknown Project';
+        const projectName = (mmp as any).projects?.name || projectMap.get(mmp.project_id) || 'Unknown Project';
         const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : format(new Date(), 'yyyy-MM');
-        const mmpFileName = mmp.filename || mmp.original_filename || mmp.name || 'Untitled MMP';
+        const mmpFileName = (mmp as any).original_filename || (mmp as any).name || 'Untitled MMP';
 
         // Index MMP file itself - index even without file_url for tracking
         const mmpFileUrl = mmp.file_url || '';
@@ -999,10 +982,10 @@ export const DocumentIndexService = {
 
       onProgress?.(50, 100, 'Fetching cost submissions...');
 
-      // 2. Index Cost Submission Receipts
+      // 2. Index Cost Submission Receipts from site_visit_cost_submissions (supporting_documents)
       const { data: costSubmissions } = await supabase
-        .from('cost_submissions')
-        .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, submitted_by')
+        .from('site_visit_cost_submissions')
+        .select('id, supporting_documents, submitted_at, created_at, status, site_visit_id, project_id, submitted_by')
         .order('created_at', { ascending: false });
 
       const totalCosts = costSubmissions?.length || 0;
@@ -1013,41 +996,50 @@ export const DocumentIndexService = {
         onProgress?.(50 + Math.floor((costCount / Math.max(totalCosts, 1)) * 30), 100, `Processing cost ${costCount}/${totalCosts}...`);
 
         const projectName = projectMap.get(cost.project_id);
-        const monthBucket = cost.created_at ? format(parseISO(cost.created_at), 'yyyy-MM') : undefined;
-
-        if (cost.receipt_url && !seenUrls.has(cost.receipt_url)) {
-          seenUrls.add(cost.receipt_url);
-          const exists = await this.documentExists('cost_submissions', cost.id, cost.receipt_url);
-          if (!exists) {
-            const result = await this.recordDocument({
-              fileName: cost.receipt_filename || `Receipt - SDG ${cost.amount || 0}`,
-              fileUrl: cost.receipt_url,
-              category: 'cost_receipt',
-              uploadedAt: cost.created_at,
-              uploadedBy: cost.submitted_by,
-              projectId: cost.project_id,
-              projectName,
-              siteVisitId: cost.site_visit_id,
-              costSubmissionId: cost.id,
-              monthBucket,
-              status: cost.status === 'approved' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending',
-              verified: cost.status === 'approved',
-              sourceType: 'cost',
-              sourceTable: 'cost_submissions',
-              sourceId: cost.id
-            });
-            if (result.success) indexed++;
-            else errors++;
+        const statusMap = cost.status === 'approved' || cost.status === 'paid' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending';
+        const verified = cost.status === 'approved' || cost.status === 'paid';
+        const supportingDocs = cost.supporting_documents as any[] | undefined;
+        if (supportingDocs && Array.isArray(supportingDocs)) {
+          for (let idx = 0; idx < supportingDocs.length; idx++) {
+            const doc = supportingDocs[idx];
+            const fileUrl = doc.url || doc.fileUrl;
+            if (!fileUrl || seenUrls.has(fileUrl)) continue;
+            seenUrls.add(fileUrl);
+            const ex = await this.documentExists('site_visit_cost_submissions', `${cost.id}-${idx}`, fileUrl);
+            if (!ex) {
+              const monthBucket = doc.uploadedAt || doc.uploaded_at || cost.submitted_at || cost.created_at
+                ? format(parseISO(doc.uploadedAt || doc.uploaded_at || cost.submitted_at || cost.created_at), 'yyyy-MM')
+                : undefined;
+              const result = await this.recordDocument({
+                fileName: doc.filename || doc.fileName || doc.name || `Cost Receipt ${idx + 1}`,
+                fileUrl,
+                category: 'cost_receipt',
+                uploadedAt: doc.uploadedAt || doc.uploaded_at || cost.submitted_at || cost.created_at,
+                uploadedBy: cost.submitted_by,
+                projectId: cost.project_id,
+                projectName,
+                siteVisitId: cost.site_visit_id,
+                costSubmissionId: cost.id,
+                monthBucket,
+                status: statusMap,
+                verified,
+                sourceType: 'cost',
+                sourceTable: 'site_visit_cost_submissions',
+                sourceId: `${cost.id}-${idx}`
+              });
+              if (result.success) indexed++;
+              else errors++;
+            }
           }
         }
       }
 
       onProgress?.(85, 100, 'Fetching site visit photos...');
 
-      // 3. Index Report Photos
+      // 3. Index Report Photos (report_photos join reports for site_visit_id)
       const { data: reportPhotos } = await supabase
         .from('report_photos')
-        .select('id, photo_url, caption, created_at, site_visit_id')
+        .select('id, photo_url, created_at, report_id, reports(site_visit_id, notes)')
         .order('created_at', { ascending: false });
 
       const totalPhotos = reportPhotos?.length || 0;
@@ -1059,15 +1051,17 @@ export const DocumentIndexService = {
 
         if (photo.photo_url && !seenUrls.has(photo.photo_url)) {
           seenUrls.add(photo.photo_url);
+          const siteVisitId = (photo as any).reports?.site_visit_id ?? (photo as any).site_visit_id;
+          const caption = (photo as any).reports?.notes ?? (photo as any).caption;
           const exists = await this.documentExists('report_photos', photo.id, photo.photo_url);
           if (!exists) {
             const monthBucket = photo.created_at ? format(parseISO(photo.created_at), 'yyyy-MM') : undefined;
             const result = await this.recordDocument({
-              fileName: photo.caption || 'Site Visit Photo',
+              fileName: caption || 'Site Visit Photo',
               fileUrl: photo.photo_url,
               category: 'site_visit_photo',
               uploadedAt: photo.created_at,
-              siteVisitId: photo.site_visit_id,
+              siteVisitId,
               monthBucket,
               status: 'verified',
               verified: true,
