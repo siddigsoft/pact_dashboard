@@ -4,7 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
@@ -97,11 +100,24 @@ const CostSubmission = () => {
   // Admins and supervisors can see team submissions and approval status
   const canViewTeamSubmissions = isAdmin || isSupervisor || isCountryDirector;
   
+  const isSuperAdmin = isAdminOrSuperUser || 
+    currentUser?.role === 'SuperAdmin' || currentUser?.role === 'superAdmin' || 
+    currentUser?.role === 'super_admin' || currentUser?.role === 'Super Admin';
+
   // Default to Submit Request tab for all users
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
   const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);
+  
+  const [approvalDialog, setApprovalDialog] = useState<{
+    open: boolean;
+    action: 'approve' | 'reject';
+    tier: 1 | 2;
+    submission: OperationalCostSubmission | null;
+  }>({ open: false, action: 'approve', tier: 1, submission: null });
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [approvalProcessing, setApprovalProcessing] = useState(false);
 
   const fetchOperationalCosts = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -218,6 +234,97 @@ const CostSubmission = () => {
     if (oc.tier1_status === 'approved' && oc.tier2_status === 'pending') return 'under_review';
     if (oc.status === 'under_review') return 'under_review';
     return 'pending';
+  };
+
+  const canTier1Approve = (oc: OperationalCostSubmission): boolean => {
+    if (oc.tier1_status !== 'pending') return false;
+    if (oc.submitted_by === currentUser?.id) return false;
+    return isSupervisor || isFOM || isAdmin || isSuperAdmin;
+  };
+
+  const canTier2Approve = (oc: OperationalCostSubmission): boolean => {
+    if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
+    return isAdmin || isSuperAdmin;
+  };
+
+  const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2) => {
+    setApprovalDialog({ open: true, action, tier, submission: oc });
+    setApprovalNotes('');
+  };
+
+  const handleApprovalAction = async () => {
+    const { action, tier, submission } = approvalDialog;
+    if (!submission || !currentUser?.id) return;
+    
+    setApprovalProcessing(true);
+    try {
+      const updates: Record<string, any> = {};
+      
+      if (tier === 1) {
+        updates.tier1_status = action === 'approve' ? 'approved' : 'rejected';
+        updates.tier1_approved_by = currentUser.id;
+        updates.tier1_approved_at = new Date().toISOString();
+        updates.tier1_notes = approvalNotes || null;
+        if (action === 'approve') {
+          updates.status = 'under_review';
+        } else {
+          updates.status = 'rejected';
+          updates.rejection_reason = approvalNotes || 'Rejected at Tier 1';
+        }
+      } else {
+        updates.tier2_status = action === 'approve' ? 'approved' : 'rejected';
+        updates.tier2_approved_by = currentUser.id;
+        updates.tier2_approved_at = new Date().toISOString();
+        updates.tier2_notes = approvalNotes || null;
+        if (action === 'approve') {
+          updates.status = 'approved';
+        } else {
+          updates.status = 'rejected';
+          updates.rejection_reason = approvalNotes || 'Rejected at Tier 2';
+        }
+      }
+
+      let query = supabase
+        .from('operational_cost_submissions')
+        .update(updates)
+        .eq('id', submission.id);
+      
+      if (tier === 1) {
+        query = query.eq('tier1_status', 'pending');
+      } else {
+        query = query.eq('tier1_status', 'approved').eq('tier2_status', 'pending');
+      }
+
+      const { error } = await query;
+
+      if (error) {
+        console.error('Approval error:', error);
+        toast({
+          title: "Action Failed",
+          description: error.message || "Could not process the approval action. Please try again.",
+          variant: "destructive",
+          duration: 8000,
+        });
+      } else {
+        toast({
+          title: action === 'approve' ? "Approved" : "Rejected",
+          description: `Tier ${tier} ${action === 'approve' ? 'approval' : 'rejection'} completed successfully.`,
+          duration: 5000,
+        });
+        fetchOperationalCosts();
+      }
+    } catch (err) {
+      console.error('Approval error:', err);
+      toast({
+        title: "Action Failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setApprovalProcessing(false);
+      setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null });
+      setApprovalNotes('');
+    }
   };
 
   const submissionStats = {
@@ -801,8 +908,23 @@ const CostSubmission = () => {
                             <span>{oc.created_at ? format(new Date(oc.created_at), 'MMM d, yyyy') : 'N/A'}</span>
                             {oc.vendor && <span>Vendor: {oc.vendor}</span>}
                           </div>
+                          {oc.tier1_notes && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              <span className="font-medium">Tier 1 Notes:</span> {oc.tier1_notes}
+                            </p>
+                          )}
+                          {oc.tier2_notes && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              <span className="font-medium">Tier 2 Notes:</span> {oc.tier2_notes}
+                            </p>
+                          )}
+                          {oc.rejection_reason && (
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                              <span className="font-medium">Rejection Reason:</span> {oc.rejection_reason}
+                            </p>
+                          )}
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <div className="text-right">
                             <div className="font-bold text-lg">{oc.currency} {(oc.amount_cents / 100).toLocaleString()}</div>
                             <div className="text-xs text-muted-foreground">
@@ -810,6 +932,50 @@ const CostSubmission = () => {
                               {oc.tier2_status === 'approved' ? ' / Tier 2 Approved' : ''}
                             </div>
                           </div>
+                          {canTier1Approve(oc) && (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => openApprovalDialog(oc, 'approve', 1)}
+                                data-testid={`button-tier1-approve-${oc.id}`}
+                              >
+                                <ThumbsUp className="h-4 w-4 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => openApprovalDialog(oc, 'reject', 1)}
+                                data-testid={`button-tier1-reject-${oc.id}`}
+                              >
+                                <ThumbsDown className="h-4 w-4 mr-1" />
+                                Reject
+                              </Button>
+                            </div>
+                          )}
+                          {canTier2Approve(oc) && (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => openApprovalDialog(oc, 'approve', 2)}
+                                data-testid={`button-tier2-approve-${oc.id}`}
+                              >
+                                <ThumbsUp className="h-4 w-4 mr-1" />
+                                Final Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => openApprovalDialog(oc, 'reject', 2)}
+                                data-testid={`button-tier2-reject-${oc.id}`}
+                              >
+                                <ThumbsDown className="h-4 w-4 mr-1" />
+                                Reject
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -847,6 +1013,74 @@ const CostSubmission = () => {
           ) : null}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={approvalDialog.open} onOpenChange={(open) => {
+        if (!open) {
+          setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null });
+          setApprovalNotes('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle data-testid="dialog-approval-title">
+              {approvalDialog.action === 'approve' 
+                ? `Tier ${approvalDialog.tier} Approval` 
+                : `Tier ${approvalDialog.tier} Rejection`}
+            </DialogTitle>
+            <DialogDescription>
+              {approvalDialog.action === 'approve'
+                ? `You are about to approve this submission${approvalDialog.tier === 2 ? ' (final approval - clears for payment)' : ' (moves to Tier 2 review)'}.`
+                : 'You are about to reject this submission. Please provide a reason.'}
+            </DialogDescription>
+          </DialogHeader>
+          {approvalDialog.submission && (
+            <div className="space-y-3 py-2">
+              <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/50">
+                <div>
+                  <p className="font-medium text-sm">{approvalDialog.submission.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled'}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {users.find(u => u.id === approvalDialog.submission?.submitted_by)?.name || 'Unknown'} - {approvalDialog.submission.expense_category}
+                  </p>
+                </div>
+                <div className="font-bold">
+                  {approvalDialog.submission.currency} {(approvalDialog.submission.amount_cents / 100).toLocaleString()}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="approval-notes">
+                  {approvalDialog.action === 'approve' ? 'Notes (optional)' : 'Reason for rejection *'}
+                </Label>
+                <Textarea
+                  id="approval-notes"
+                  placeholder={approvalDialog.action === 'approve' ? 'Add any notes...' : 'Explain why this is being rejected...'}
+                  value={approvalNotes}
+                  onChange={(e) => setApprovalNotes(e.target.value)}
+                  rows={3}
+                  data-testid="input-approval-notes"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setApprovalDialog({ open: false, action: 'approve', tier: 1, submission: null })}
+              disabled={approvalProcessing}
+              data-testid="button-approval-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={approvalDialog.action === 'approve' ? 'default' : 'destructive'}
+              onClick={handleApprovalAction}
+              disabled={approvalProcessing || (approvalDialog.action === 'reject' && !approvalNotes.trim())}
+              data-testid="button-approval-confirm"
+            >
+              {approvalProcessing ? 'Processing...' : approvalDialog.action === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
