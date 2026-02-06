@@ -163,6 +163,7 @@ const CostSubmission = () => {
   const [reconcileActualAmount, setReconcileActualAmount] = useState('');
   const [reconcileProcessing, setReconcileProcessing] = useState(false);
   const [reconcileReceipts, setReconcileReceipts] = useState<SupportingDocument[]>([]);
+  const [reconcileReceiptAmounts, setReconcileReceiptAmounts] = useState<Record<string, string>>({});
   const [signatureImages, setSignatureImages] = useState<Record<string, string | null>>({});
   const sigCacheRef = useRef<Record<string, boolean>>({});
 
@@ -1068,6 +1069,7 @@ const CostSubmission = () => {
           setReconcileActualAmount('');
           setReconcileNotes('');
           setReconcileReceipts([]);
+          setReconcileReceiptAmounts({});
         }
         setActiveTab(v as any);
       }} className="space-y-6">
@@ -1260,7 +1262,7 @@ const CostSubmission = () => {
                           {activeReconciliation.reference_number}
                         </span>
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => setActiveReconciliation(null)} data-testid="button-cancel-reconciliation">
+                      <Button variant="outline" size="sm" onClick={() => { setActiveReconciliation(null); setReconcileReceiptAmounts({}); setReconcileActualAmount(''); setReconcileNotes(''); setReconcileReceipts([]); }} data-testid="button-cancel-reconciliation">
                         <XCircle className="h-4 w-4 mr-1" /> Cancel
                       </Button>
                     </div>
@@ -1318,50 +1320,127 @@ const CostSubmission = () => {
                         Reconciliation Details / تفاصيل التسوية
                       </h4>
 
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="actual-amount">Actual Amount Spent / المبلغ الفعلي المنفق</Label>
-                          <div className="relative">
-                            <Input
-                              id="actual-amount"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="0.00"
-                              value={reconcileActualAmount}
-                              onChange={(e) => setReconcileActualAmount(e.target.value)}
-                              data-testid="input-actual-amount"
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                              {activeReconciliation.currency}
-                            </span>
-                          </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm font-semibold">
+                            Transfer Receipts / إيصالات التحويل <span className="text-red-500">*</span>
+                          </Label>
+                          <Badge variant="outline" className="text-xs">
+                            Required / مطلوب
+                          </Badge>
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                          Upload all bank transfer receipts and enter the amount for each one. The total will be calculated automatically. / قم بتحميل جميع إيصالات التحويل البنكي وأدخل المبلغ لكل واحد. سيتم حساب الإجمالي تلقائيًا.
+                        </p>
+                        <CostDocumentUpload
+                          documents={reconcileReceipts}
+                          onChange={(newDocs) => {
+                            setReconcileReceipts(newDocs);
+                            const newUrls = new Set(newDocs.map(d => d.url));
+                            const cleanedAmounts: Record<string, string> = {};
+                            for (const [key, val] of Object.entries(reconcileReceiptAmounts)) {
+                              if (newUrls.has(key)) cleanedAmounts[key] = val;
+                            }
+                            setReconcileReceiptAmounts(cleanedAmounts);
+                            const total = Object.values(cleanedAmounts).reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
+                            setReconcileActualAmount(total > 0 ? total.toString() : '');
+                          }}
+                        />
+                        {reconcileReceipts.length === 0 && (
+                          <p className="text-xs text-red-500">
+                            At least one receipt is required to submit reconciliation. / مطلوب إيصال واحد على الأقل لتقديم التسوية.
+                          </p>
+                        )}
+                      </div>
 
-                        <div className="rounded-lg border p-3 space-y-2">
-                          <p className="text-sm font-medium">Balance Summary / ملخص الرصيد</p>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Advance / السلفة:</span>
-                            <span>{activeReconciliation.currency} {advanceAmount.toLocaleString()}</span>
+                      {reconcileReceipts.length > 0 && (
+                        <div className="space-y-3">
+                          <Label className="text-sm font-semibold">
+                            Receipt Amounts / مبالغ الإيصالات
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Enter the transaction amount shown on each receipt. / أدخل مبلغ المعاملة الظاهر على كل إيصال.
+                          </p>
+                          <div className="space-y-2">
+                            {reconcileReceipts.map((receipt, idx) => (
+                              <div key={receipt.url} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30" data-testid={`receipt-amount-row-${idx}`}>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{receipt.filename}</p>
+                                  <p className="text-xs text-muted-foreground">Receipt {idx + 1} of {reconcileReceipts.length}</p>
+                                </div>
+                                <div className="relative w-40 shrink-0">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    value={reconcileReceiptAmounts[receipt.url] || ''}
+                                    onChange={(e) => {
+                                      const newAmounts = { ...reconcileReceiptAmounts, [receipt.url]: e.target.value };
+                                      setReconcileReceiptAmounts(newAmounts);
+                                      const total = reconcileReceipts.reduce((sum, r) => sum + (parseFloat(newAmounts[r.url] || '0') || 0), 0);
+                                      setReconcileActualAmount(total > 0 ? total.toString() : '');
+                                    }}
+                                    data-testid={`input-receipt-amount-${idx}`}
+                                  />
+                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                                    {activeReconciliation.currency}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Spent / المنفق:</span>
-                            <span>{activeReconciliation.currency} {actualSpent.toLocaleString()}</span>
-                          </div>
-                          <Separator />
-                          <div className="flex justify-between text-sm font-semibold">
-                            <span>{difference >= 0 ? 'To Return / للإرجاع:' : 'Overspent / تجاوز:'}</span>
-                            <span className={difference >= 0 ? 'text-green-600' : 'text-red-600'}>
-                              {activeReconciliation.currency} {Math.abs(difference).toLocaleString()}
-                            </span>
-                          </div>
-                          {difference >= 0 && actualSpent > 0 && (
-                            <p className="text-xs text-green-600">Return the unused amount to finance. / أعد المبلغ غير المستخدم للمالية.</p>
+
+                          {reconcileReceipts.length > 1 && (
+                            <div className="flex items-center justify-between p-3 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5">
+                              <span className="text-sm font-semibold">Total from all receipts / إجمالي جميع الإيصالات:</span>
+                              <span className="text-base font-bold">
+                                {activeReconciliation.currency} {actualSpent.toLocaleString()}
+                              </span>
+                            </div>
                           )}
-                          {difference < 0 && (
-                            <p className="text-xs text-red-600">Submit a reimbursement request for the overspent amount. / قدم طلب تعويض عن المبلغ الزائد.</p>
-                          )}
+
+                          {(() => {
+                            const hasEmptyAmounts = reconcileReceipts.some(r => !reconcileReceiptAmounts[r.url] || parseFloat(reconcileReceiptAmounts[r.url]) <= 0);
+                            if (hasEmptyAmounts && reconcileReceipts.length > 0) {
+                              return (
+                                <p className="text-xs text-amber-600">
+                                  Please enter the amount for each receipt. / يرجى إدخال المبلغ لكل إيصال.
+                                </p>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
+                      )}
+
+                      <Separator />
+
+                      <div className="rounded-lg border p-3 space-y-2">
+                        <p className="text-sm font-medium">Balance Summary / ملخص الرصيد</p>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Advance / السلفة:</span>
+                          <span>{activeReconciliation.currency} {advanceAmount.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Spent ({reconcileReceipts.length} receipt{reconcileReceipts.length !== 1 ? 's' : ''}) / المنفق:
+                          </span>
+                          <span>{activeReconciliation.currency} {actualSpent.toLocaleString()}</span>
+                        </div>
+                        <Separator />
+                        <div className="flex justify-between text-sm font-semibold">
+                          <span>{difference >= 0 ? 'To Return / للإرجاع:' : 'Overspent / تجاوز:'}</span>
+                          <span className={difference >= 0 ? 'text-green-600' : 'text-red-600'}>
+                            {activeReconciliation.currency} {Math.abs(difference).toLocaleString()}
+                          </span>
+                        </div>
+                        {difference >= 0 && actualSpent > 0 && (
+                          <p className="text-xs text-green-600">Return the unused amount to finance. / أعد المبلغ غير المستخدم للمالية.</p>
+                        )}
+                        {difference < 0 && (
+                          <p className="text-xs text-red-600">Submit a reimbursement request for the overspent amount. / قدم طلب تعويض عن المبلغ الزائد.</p>
+                        )}
                       </div>
 
                       <div className="space-y-2">
@@ -1375,59 +1454,59 @@ const CostSubmission = () => {
                           data-testid="input-reconcile-notes"
                         />
                       </div>
-
-                      <Separator />
-
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Label className="text-sm font-semibold">
-                            Transfer Receipt / إيصال التحويل <span className="text-red-500">*</span>
-                          </Label>
-                          <Badge variant="outline" className="text-xs">
-                            Required / مطلوب
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Upload the bank transfer receipt (screenshot or photo) showing the transaction details. / قم بتحميل إيصال التحويل البنكي (لقطة شاشة أو صورة) يظهر تفاصيل المعاملة.
-                        </p>
-                        <CostDocumentUpload
-                          documents={reconcileReceipts}
-                          onChange={setReconcileReceipts}
-                        />
-                        {reconcileReceipts.length === 0 && (
-                          <p className="text-xs text-red-500">
-                            At least one receipt is required to submit reconciliation. / مطلوب إيصال واحد على الأقل لتقديم التسوية.
-                          </p>
-                        )}
-                      </div>
                     </div>
 
                     <div className="flex items-center justify-end gap-3 pt-2">
                       <Button
                         variant="outline"
-                        onClick={() => setActiveReconciliation(null)}
+                        onClick={() => { setActiveReconciliation(null); setReconcileReceiptAmounts({}); setReconcileActualAmount(''); setReconcileNotes(''); setReconcileReceipts([]); }}
                         data-testid="button-reconcile-cancel"
                       >
                         Cancel / إلغاء
                       </Button>
                       <Button
-                        disabled={!reconcileActualAmount || parseFloat(reconcileActualAmount) < 0 || !reconcileNotes.trim() || reconcileReceipts.length === 0 || reconcileProcessing}
+                        disabled={
+                          !reconcileActualAmount || 
+                          parseFloat(reconcileActualAmount) < 0 || 
+                          !reconcileNotes.trim() || 
+                          reconcileReceipts.length === 0 || 
+                          reconcileProcessing ||
+                          reconcileReceipts.some(r => !reconcileReceiptAmounts[r.url] || parseFloat(reconcileReceiptAmounts[r.url]) <= 0)
+                        }
                         onClick={async () => {
                           if (!activeReconciliation) return;
                           if (reconcileReceipts.length === 0) {
                             toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please upload at least one transfer receipt before submitting. / يرجى تحميل إيصال تحويل واحد على الأقل قبل التقديم.", variant: "destructive" });
                             return;
                           }
+                          const hasEmptyAmounts = reconcileReceipts.some(r => !reconcileReceiptAmounts[r.url] || parseFloat(reconcileReceiptAmounts[r.url]) <= 0);
+                          if (hasEmptyAmounts) {
+                            toast({ title: "Missing Amounts / مبالغ مفقودة", description: "Please enter the amount for each receipt before submitting. / يرجى إدخال المبلغ لكل إيصال قبل التقديم.", variant: "destructive" });
+                            return;
+                          }
                           setReconcileProcessing(true);
                           try {
-                            const actual = parseFloat(reconcileActualAmount) * 100;
+                            const actual = reconcileReceipts.reduce((sum, r) => sum + (parseFloat(reconcileReceiptAmounts[r.url] || '0') || 0), 0) * 100;
                             const diff = activeReconciliation.amount_cents - actual;
-                            const receiptUrls = reconcileReceipts.map(r => r.url).join(', ');
-                            const receiptFilenames = reconcileReceipts.map(r => r.filename).join(', ');
-                            const descUpdate = `${activeReconciliation.description || ''}\n[RECONCILED] Actual: ${activeReconciliation.currency} ${(actual/100).toLocaleString()} | Balance: ${activeReconciliation.currency} ${(diff/100).toLocaleString()} | Notes: ${reconcileNotes.trim()} | Receipts: ${receiptFilenames}`;
+                            const receiptBreakdown = reconcileReceipts.map((r) => {
+                              const amt = parseFloat(reconcileReceiptAmounts[r.url] || '0');
+                              return `${r.filename}: ${activeReconciliation.currency} ${amt.toLocaleString()}`;
+                            }).join(' | ');
+                            const descUpdate = `${activeReconciliation.description || ''}\n[RECONCILED] Actual: ${activeReconciliation.currency} ${(actual/100).toLocaleString()} | Balance: ${activeReconciliation.currency} ${(diff/100).toLocaleString()} | Notes: ${reconcileNotes.trim()} | Receipts (${reconcileReceipts.length}): ${receiptBreakdown}`;
                             
                             const existingDocs = Array.isArray(activeReconciliation.supporting_documents) ? activeReconciliation.supporting_documents : [];
-                            const allDocs = [...existingDocs, ...reconcileReceipts.map(r => ({ ...r, description: `Reconciliation receipt: ${r.filename}` }))];
+                            const allDocs = [
+                              ...existingDocs, 
+                              ...reconcileReceipts.map((r) => ({ 
+                                ...r, 
+                                description: `Reconciliation receipt: ${r.filename} - Amount: ${activeReconciliation.currency} ${parseFloat(reconcileReceiptAmounts[r.url] || '0').toLocaleString()}` 
+                              }))
+                            ];
+
+                            const receiptTotal = reconcileReceipts.reduce((sum, r) => sum + (parseFloat(reconcileReceiptAmounts[r.url] || '0') || 0), 0);
+                            const reconciliationNotesWithBreakdown = reconcileReceipts.length > 1
+                              ? `${reconcileNotes.trim()}\n\n--- Receipt Breakdown ---\n${reconcileReceipts.map((r, idx) => `${idx + 1}. ${r.filename}: ${activeReconciliation.currency} ${parseFloat(reconcileReceiptAmounts[r.url] || '0').toLocaleString()}`).join('\n')}\nTotal: ${activeReconciliation.currency} ${receiptTotal.toLocaleString()}`
+                              : reconcileNotes.trim();
 
                             const { error } = await supabase
                               .from('operational_cost_submissions')
@@ -1438,7 +1517,7 @@ const CostSubmission = () => {
                                 reconciled_at: new Date().toISOString(),
                                 reconciled_by: currentUser?.id,
                                 reconciled_amount_cents: actual,
-                                reconciliation_notes: reconcileNotes.trim(),
+                                reconciliation_notes: reconciliationNotesWithBreakdown,
                                 updated_at: new Date().toISOString(),
                               })
                               .eq('id', activeReconciliation.id);
@@ -1457,6 +1536,7 @@ const CostSubmission = () => {
                               setReconcileActualAmount('');
                               setReconcileNotes('');
                               setReconcileReceipts([]);
+                              setReconcileReceiptAmounts({});
                               fetchOperationalCosts();
                             }
                           } catch {
