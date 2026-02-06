@@ -20,7 +20,9 @@ import { AppRole } from "@/types";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
 import UnifiedCostRequestForm from "@/components/cost-submission/UnifiedCostRequestForm";
 import CostReconciliationForm from "@/components/cost-submission/CostReconciliationForm";
+import CostDocumentUpload from "@/components/cost-submission/CostDocumentUpload";
 import OutstandingAdvances from "@/components/cost-submission/OutstandingAdvances";
+import type { SupportingDocument } from "@/types/cost-submission";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -144,6 +146,7 @@ const CostSubmission = () => {
   const [reconcileNotes, setReconcileNotes] = useState('');
   const [reconcileActualAmount, setReconcileActualAmount] = useState('');
   const [reconcileProcessing, setReconcileProcessing] = useState(false);
+  const [reconcileReceipts, setReconcileReceipts] = useState<SupportingDocument[]>([]);
 
   const fetchOperationalCosts = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -934,6 +937,7 @@ const CostSubmission = () => {
           setActiveReconciliation(null);
           setReconcileActualAmount('');
           setReconcileNotes('');
+          setReconcileReceipts([]);
         }
         setActiveTab(v as any);
       }} className="space-y-6">
@@ -1187,15 +1191,40 @@ const CostSubmission = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="reconcile-notes">Notes & Receipt Description / ملاحظات ووصف الإيصال</Label>
+                        <Label htmlFor="reconcile-notes">Notes / ملاحظات</Label>
                         <Textarea
                           id="reconcile-notes"
-                          placeholder="Describe how the funds were used, list receipts collected..."
+                          placeholder="Describe how the funds were used... / صف كيف تم استخدام الأموال..."
                           value={reconcileNotes}
                           onChange={(e) => setReconcileNotes(e.target.value)}
                           rows={3}
                           data-testid="input-reconcile-notes"
                         />
+                      </div>
+
+                      <Separator />
+
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm font-semibold">
+                            Transfer Receipt / إيصال التحويل <span className="text-red-500">*</span>
+                          </Label>
+                          <Badge variant="outline" className="text-xs">
+                            Required / مطلوب
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Upload the bank transfer receipt (screenshot or photo) showing the transaction details. / قم بتحميل إيصال التحويل البنكي (لقطة شاشة أو صورة) يظهر تفاصيل المعاملة.
+                        </p>
+                        <CostDocumentUpload
+                          documents={reconcileReceipts}
+                          onChange={setReconcileReceipts}
+                        />
+                        {reconcileReceipts.length === 0 && (
+                          <p className="text-xs text-red-500">
+                            At least one receipt is required to submit reconciliation. / مطلوب إيصال واحد على الأقل لتقديم التسوية.
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1208,27 +1237,30 @@ const CostSubmission = () => {
                         Cancel / إلغاء
                       </Button>
                       <Button
-                        disabled={!reconcileActualAmount || parseFloat(reconcileActualAmount) < 0 || !reconcileNotes.trim() || reconcileProcessing}
+                        disabled={!reconcileActualAmount || parseFloat(reconcileActualAmount) < 0 || !reconcileNotes.trim() || reconcileReceipts.length === 0 || reconcileProcessing}
                         onClick={async () => {
                           if (!activeReconciliation) return;
+                          if (reconcileReceipts.length === 0) {
+                            toast({ title: "Receipt Required / الإيصال مطلوب", description: "Please upload at least one transfer receipt before submitting. / يرجى تحميل إيصال تحويل واحد على الأقل قبل التقديم.", variant: "destructive" });
+                            return;
+                          }
                           setReconcileProcessing(true);
                           try {
                             const actual = parseFloat(reconcileActualAmount) * 100;
                             const diff = activeReconciliation.amount_cents - actual;
-                            const reconciliationData = {
-                              actual_spent_cents: actual,
-                              balance_cents: diff,
-                              balance_status: diff === 0 ? 'settled' : diff > 0 ? 'refund_due' : 'overspent',
-                              reconciliation_notes: reconcileNotes.trim(),
-                              reconciled_at: new Date().toISOString(),
-                              reconciled_by: currentUser?.id,
-                            };
-                            const descUpdate = `${activeReconciliation.description || ''}\n[RECONCILED] Actual: ${activeReconciliation.currency} ${(actual/100).toLocaleString()} | Balance: ${activeReconciliation.currency} ${(diff/100).toLocaleString()} | ${reconcileNotes.trim()}`;
+                            const receiptUrls = reconcileReceipts.map(r => r.url).join(', ');
+                            const receiptFilenames = reconcileReceipts.map(r => r.filename).join(', ');
+                            const descUpdate = `${activeReconciliation.description || ''}\n[RECONCILED] Actual: ${activeReconciliation.currency} ${(actual/100).toLocaleString()} | Balance: ${activeReconciliation.currency} ${(diff/100).toLocaleString()} | Notes: ${reconcileNotes.trim()} | Receipts: ${receiptFilenames}`;
+                            
+                            const existingDocs = Array.isArray(activeReconciliation.supporting_documents) ? activeReconciliation.supporting_documents : [];
+                            const allDocs = [...existingDocs, ...reconcileReceipts.map(r => ({ ...r, description: `Reconciliation receipt: ${r.filename}` }))];
+
                             const { error } = await supabase
                               .from('operational_cost_submissions')
                               .update({
                                 status: 'reconciled',
                                 description: descUpdate,
+                                supporting_documents: allDocs,
                                 updated_at: new Date().toISOString(),
                               })
                               .eq('id', activeReconciliation.id);
@@ -1236,21 +1268,28 @@ const CostSubmission = () => {
                             if (error) {
                               toast({ title: "Reconciliation Failed / فشلت التسوية", description: error.message, variant: "destructive" });
                             } else {
-                              toast({ title: "Reconciled / تمت التسوية", description: `Advance reconciled successfully. Balance: ${activeReconciliation.currency} ${Math.abs(diff/100).toLocaleString()} ${diff > 0 ? '(to return)' : diff < 0 ? '(overspent)' : '(settled)'}` });
+                              const balanceStr = `${activeReconciliation.currency} ${Math.abs(diff/100).toLocaleString()}`;
+                              const balanceLabel = diff > 0 ? `(to return / للإرجاع)` : diff < 0 ? `(overspent / تجاوز)` : `(settled / مسوّى)`;
+                              toast({ 
+                                title: "Reconciled Successfully / تمت التسوية بنجاح", 
+                                description: `Advance "${activeReconciliation.reference_number}" reconciled with ${reconcileReceipts.length} receipt(s). Balance: ${balanceStr} ${balanceLabel}. / تمت تسوية السلفة "${activeReconciliation.reference_number}" مع ${reconcileReceipts.length} إيصال(ات). الرصيد: ${balanceStr} ${balanceLabel}.`,
+                                duration: 8000,
+                              });
                               setActiveReconciliation(null);
                               setReconcileActualAmount('');
                               setReconcileNotes('');
+                              setReconcileReceipts([]);
                               fetchOperationalCosts();
                             }
                           } catch {
-                            toast({ title: "Error / خطأ", description: "Failed to reconcile. Please try again.", variant: "destructive" });
+                            toast({ title: "Error / خطأ", description: "Failed to reconcile. Please try again. / فشلت التسوية. يرجى المحاولة مرة أخرى.", variant: "destructive" });
                           } finally {
                             setReconcileProcessing(false);
                           }
                         }}
                         data-testid="button-submit-reconciliation"
                       >
-                        {reconcileProcessing ? 'Processing... / جارٍ المعالجة...' : 'Submit Reconciliation / تقديم التسوية'}
+                        {reconcileProcessing ? 'Processing... / جارٍ المعالجة...' : `Submit Reconciliation (${reconcileReceipts.length} receipt${reconcileReceipts.length !== 1 ? 's' : ''}) / تقديم التسوية`}
                       </Button>
                     </div>
                   </div>
@@ -1262,11 +1301,12 @@ const CostSubmission = () => {
                     <AlertTitle className="text-purple-800 dark:text-purple-200">How Reconciliation Works / كيف تعمل التسوية</AlertTitle>
                     <AlertDescription className="text-purple-700 dark:text-purple-300 text-sm mt-2">
                       <ol className="list-decimal list-inside space-y-1">
-                        <li>Go to <strong>"Outstanding"</strong> tab to see advances pending reconciliation</li>
-                        <li>Click <strong>"Reconcile"</strong> on an advance to start the process</li>
-                        <li>Enter the actual amount spent and describe how funds were used</li>
-                        <li>If you spent less, return the unused amount to finance</li>
-                        <li>If you overspent, submit a reimbursement request for the difference</li>
+                        <li>Go to <strong>"Outstanding"</strong> tab to see advances pending reconciliation / اذهب إلى علامة التبويب "المستحقة"</li>
+                        <li>Click <strong>"Reconcile"</strong> on an advance to start the process / انقر على "تسوية" على السلفة</li>
+                        <li>Enter the actual amount spent and describe how funds were used / أدخل المبلغ الفعلي المنفق</li>
+                        <li>Upload the bank transfer receipt (mandatory) / قم بتحميل إيصال التحويل البنكي (إلزامي)</li>
+                        <li>If you spent less, return the unused amount to finance / إذا أنفقت أقل، أعد المبلغ غير المستخدم</li>
+                        <li>If you overspent, submit a reimbursement request for the difference / إذا تجاوزت، قدم طلب تعويض</li>
                       </ol>
                     </AlertDescription>
                   </Alert>
