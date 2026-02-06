@@ -549,7 +549,7 @@ const CostSubmission = () => {
 
             <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
               <AlertCircle className="h-4 w-4 text-amber-600" />
-              <AlertTitle className="text-amber-800 dark:text-amber-200">This is NOT for Site Visit Transportation</AlertTitle>
+              <AlertTitle className="text-amber-800 dark:text-amber-200">This is NOT for Site Visit Transportation or Enumerator Fees</AlertTitle>
               <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm mt-1">
                 <p>Site visit transportation and enumerator fees are handled separately through the <strong>Site Visits</strong> and <strong>Finance Approval</strong> pages. Those costs are calculated automatically based on enumerator classification and are managed through the Down Payment / Advance system.</p>
               </AlertDescription>
