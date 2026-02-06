@@ -248,64 +248,64 @@ export function SignatureConfirmationModal({
   };
 
   const methodTabs = [
-    { value: 'uuid', label: 'Quick Sign / توقيع سريع', icon: Shield, available: allowedMethods.includes('uuid') },
-    { value: 'handwriting', label: 'Draw Signature / رسم التوقيع', icon: PenLine, available: allowedMethods.includes('handwriting') },
-    { value: 'email', label: 'Email OTP / رمز البريد', icon: Mail, available: allowedMethods.includes('email') && !!userEmail },
-    { value: 'phone', label: 'Phone OTP / رمز الهاتف', icon: Phone, available: allowedMethods.includes('phone') && !!userPhone },
+    { value: 'uuid', label: 'Quick Sign', labelAr: 'توقيع سريع', icon: Shield, available: allowedMethods.includes('uuid') },
+    { value: 'handwriting', label: 'Draw', labelAr: 'رسم التوقيع', icon: PenLine, available: allowedMethods.includes('handwriting') },
+    { value: 'email', label: 'Email OTP', labelAr: 'رمز البريد', icon: Mail, available: allowedMethods.includes('email') && !!userEmail },
+    { value: 'phone', label: 'Phone OTP', labelAr: 'رمز الهاتف', icon: Phone, available: allowedMethods.includes('phone') && !!userPhone },
   ].filter(m => m.available);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            <div>
-              <div>Confirm Receipt with Signature</div>
-              <div className="text-sm font-normal" dir="rtl">تأكيد الاستلام بالتوقيع</div>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-4 w-4 text-primary flex-shrink-0" />
+            <div className="min-w-0">
+              <div className="text-base leading-tight">Confirm Receipt with Signature</div>
+              <div className="text-xs font-normal text-muted-foreground" dir="rtl">تأكيد الاستلام بالتوقيع</div>
             </div>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             <span>Please review and sign to confirm this transaction.</span>
             <br />
-            <span dir="rtl" className="text-xs">يرجى المراجعة والتوقيع لتأكيد هذه المعاملة.</span>
+            <span dir="rtl">يرجى المراجعة والتوقيع لتأكيد هذه المعاملة.</span>
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <Card className="bg-muted/30">
-            <CardContent className="pt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <FileText className="h-4 w-4" />
-                  {transaction.title}
+            <CardContent className="pt-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 truncate">
+                  <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">{transaction.title}</span>
                 </div>
-                <Badge variant="secondary">{transaction.type.replace('_', ' ')}</Badge>
+                <Badge variant="secondary" className="text-[10px] flex-shrink-0">{transaction.type.replace('_', ' ')}</Badge>
               </div>
               
               <Separator />
               
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-green-600" />
-                  <span className="font-semibold text-lg">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <DollarSign className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                  <span className="font-semibold text-sm">
                     {formatAmount(transaction.amount, transaction.currency)}
                   </span>
                 </div>
                 {transaction.counterparty && (
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span>{transaction.counterparty}</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate">{transaction.counterparty}</span>
                   </div>
                 )}
                 {transaction.date && (
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span>{new Date(transaction.date).toLocaleDateString()}</span>
                   </div>
                 )}
                 {transaction.reference && (
-                  <div className="text-muted-foreground">
+                  <div className="text-muted-foreground truncate">
                     Ref / <span dir="rtl">المرجع</span>: {transaction.reference}
                   </div>
                 )}
@@ -314,7 +314,7 @@ export function SignatureConfirmationModal({
               {transaction.description && (
                 <>
                   <Separator />
-                  <p className="text-sm text-muted-foreground">{transaction.description}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{transaction.description}</p>
                 </>
               )}
             </CardContent>
@@ -323,20 +323,20 @@ export function SignatureConfirmationModal({
           <Tabs value={selectedMethod} onValueChange={(v) => setSelectedMethod(v as SignatureMethod)}>
             <TabsList className="w-full">
               {methodTabs.map((method) => (
-                <TabsTrigger key={method.value} value={method.value} className="flex-1 gap-1">
-                  <method.icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{method.label}</span>
+                <TabsTrigger key={method.value} value={method.value} className="flex-1 gap-1 text-[11px] px-1.5">
+                  <method.icon className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="hidden sm:inline leading-tight">{method.label}<br /><span dir="rtl" className="text-[10px]">{method.labelAr}</span></span>
                 </TabsTrigger>
               ))}
             </TabsList>
 
-            <TabsContent value="uuid" className="mt-4">
+            <TabsContent value="uuid" className="mt-3">
               <Alert>
-                <Shield className="h-4 w-4" />
-                <AlertDescription>
+                <Shield className="h-3.5 w-3.5" />
+                <AlertDescription className="text-xs">
                   <span>Click "Sign & Confirm" to instantly sign with your secure account credentials. This generates a cryptographic signature linked to your account.</span>
                   <br />
-                  <span dir="rtl" className="text-xs block mt-1">انقر على "توقيع وتأكيد" للتوقيع فوراً باستخدام بيانات حسابك الآمنة. يتم إنشاء توقيع رقمي مرتبط بحسابك.</span>
+                  <span dir="rtl" className="text-[11px] block mt-1 text-muted-foreground">انقر على "توقيع وتأكيد" للتوقيع فوراً باستخدام بيانات حسابك الآمنة. يتم إنشاء توقيع رقمي مرتبط بحسابك.</span>
                 </AlertDescription>
               </Alert>
             </TabsContent>
@@ -351,13 +351,13 @@ export function SignatureConfirmationModal({
               />
             </TabsContent>
 
-            <TabsContent value="email" className="mt-4 space-y-3">
+            <TabsContent value="email" className="mt-3 space-y-2">
               <Alert>
-                <Mail className="h-4 w-4" />
-                <AlertDescription>
-                  <span>We'll send a 6-digit verification code to: <strong>{userEmail}</strong></span>
+                <Mail className="h-3.5 w-3.5" />
+                <AlertDescription className="text-xs">
+                  <span>We'll send a 6-digit code to: <strong>{userEmail}</strong></span>
                   <br />
-                  <span dir="rtl" className="text-xs block mt-1">سنرسل رمز تحقق مكون من 6 أرقام إلى: <strong>{userEmail}</strong></span>
+                  <span dir="rtl" className="text-[11px] block mt-0.5 text-muted-foreground">سنرسل رمز تحقق من 6 أرقام إلى: <strong>{userEmail}</strong></span>
                 </AlertDescription>
               </Alert>
               
@@ -383,13 +383,13 @@ export function SignatureConfirmationModal({
               )}
             </TabsContent>
 
-            <TabsContent value="phone" className="mt-4 space-y-3">
+            <TabsContent value="phone" className="mt-3 space-y-2">
               <Alert>
-                <Phone className="h-4 w-4" />
-                <AlertDescription>
-                  <span>We'll send a 6-digit verification code to: <strong>{userPhone}</strong></span>
+                <Phone className="h-3.5 w-3.5" />
+                <AlertDescription className="text-xs">
+                  <span>We'll send a 6-digit code to: <strong>{userPhone}</strong></span>
                   <br />
-                  <span dir="rtl" className="text-xs block mt-1">سنرسل رمز تحقق مكون من 6 أرقام إلى: <strong>{userPhone}</strong></span>
+                  <span dir="rtl" className="text-[11px] block mt-0.5 text-muted-foreground">سنرسل رمز تحقق من 6 أرقام إلى: <strong>{userPhone}</strong></span>
                 </AlertDescription>
               </Alert>
               
@@ -417,11 +417,11 @@ export function SignatureConfirmationModal({
           </Tabs>
 
           <Alert className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-            <AlertCircle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800 dark:text-amber-200">
+            <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+            <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
               <span>By signing, you confirm receipt of funds and agree this transaction is valid and accurate.</span>
               <br />
-              <span dir="rtl" className="text-xs block mt-1">بالتوقيع، تؤكد استلام الأموال وتوافق على أن هذه المعاملة صحيحة ودقيقة.</span>
+              <span dir="rtl" className="text-[11px] block mt-0.5">بالتوقيع، تؤكد استلام الأموال وتوافق على أن هذه المعاملة صحيحة ودقيقة.</span>
             </AlertDescription>
           </Alert>
         </div>

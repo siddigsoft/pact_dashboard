@@ -339,10 +339,10 @@ const CostSubmission = () => {
       if (tier === 1) {
         query = query.eq('tier1_status', 'pending');
       } else {
-        query = query.eq('tier1_status', 'approved').eq('tier2_status', 'pending');
+        query = query.eq('tier1_status', 'approved');
       }
 
-      const { error } = await query;
+      const { data: updatedRows, error } = await query.select('id');
 
       if (error) {
         console.error('Approval error:', error);
@@ -352,6 +352,15 @@ const CostSubmission = () => {
           variant: "destructive",
           duration: 8000,
         });
+      } else if (!updatedRows || updatedRows.length === 0) {
+        console.error('Approval update matched 0 rows - submission may have been modified by another user');
+        toast({
+          title: "Update Not Applied / لم يتم تطبيق التحديث",
+          description: "The submission may have already been processed or modified. Please refresh and try again. / ربما تمت معالجة الطلب بالفعل أو تعديله. يرجى التحديث والمحاولة مرة أخرى.",
+          variant: "destructive",
+          duration: 8000,
+        });
+        fetchOperationalCosts();
       } else {
         const tierAr = tier === 1 ? 'الأولى' : 'الثانية';
         toast({
