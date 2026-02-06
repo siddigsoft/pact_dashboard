@@ -1159,68 +1159,153 @@ const CostSubmission = () => {
                     const submitterName = users.find(u => u.id === oc.submitted_by)?.name || 'Unknown';
                     const title = oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
 
+                    const cleanTier1Notes = oc.tier1_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
+                    const cleanTier2Notes = oc.tier2_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
+                    const tier1Approver = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
+                    const tier2Approver = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
+                    const hasSig = oc.tier2_notes?.includes('[Signed:');
+
                     return (
                       <div
                         key={oc.id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-lg border bg-background hover-elevate"
+                        className="rounded-md border bg-background p-4 space-y-3"
                         data-testid={`operational-cost-${oc.id}`}
                       >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium truncate">{title}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {categoryLabels[oc.expense_category] || oc.expense_category}
-                            </Badge>
-                            <Badge className={`text-xs border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
-                              {statusLabels[derivedStatus] || derivedStatus}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
-                            {canViewTeamSubmissions && (
-                              <span className="flex items-center gap-1">
-                                <Users className="h-3 w-3" />
-                                {submitterName}
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-base truncate" data-testid={`text-title-${oc.id}`}>{title}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {categoryLabels[oc.expense_category] || oc.expense_category}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                                {canViewTeamSubmissions && (
+                                  <span className="flex items-center gap-1">
+                                    <Users className="h-3 w-3" />
+                                    {submitterName}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {oc.created_at ? format(new Date(oc.created_at), 'MMM d, yyyy') : 'N/A'}
+                                </span>
+                                {oc.vendor && (
+                                  <span className="flex items-center gap-1">
+                                    <Building2 className="h-3 w-3" />
+                                    {oc.vendor}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              <span className="font-bold text-lg tabular-nums" data-testid={`text-amount-${oc.id}`}>
+                                {oc.currency} {(oc.amount_cents / 100).toLocaleString()}
                               </span>
-                            )}
-                            <span>{oc.created_at ? format(new Date(oc.created_at), 'MMM d, yyyy') : 'N/A'}</span>
-                            {oc.vendor && <span>Vendor: {oc.vendor}</span>}
-                          </div>
-                          {oc.tier1_notes && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              <span className="font-medium">Tier 1 Notes / ملاحظات المرحلة ١:</span> {oc.tier1_notes}
-                            </p>
-                          )}
-                          {oc.tier2_notes && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              <span className="font-medium">Tier 2 Notes / ملاحظات المرحلة ٢:</span> {oc.tier2_notes}
-                            </p>
-                          )}
-                          {oc.rejection_reason && (
-                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                              <span className="font-medium">Rejection Reason / سبب الرفض:</span> {oc.rejection_reason}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <div className="text-right">
-                            <div className="font-bold text-lg">{oc.currency} {(oc.amount_cents / 100).toLocaleString()}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {oc.tier1_status === 'approved' ? 'Tier 1 Approved / المرحلة ١ ✓' : ''}
-                              {oc.tier2_status === 'approved' ? ' | Tier 2 Approved / المرحلة ٢ ✓' : ''}
+                              <Badge className={`text-xs border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
+                                {statusLabels[derivedStatus] || derivedStatus}
+                              </Badge>
                             </div>
                           </div>
-                          {canTier1Approve(oc) && (
-                            <div className="flex flex-col items-end gap-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Tier 1 Review / مراجعة المرحلة ١</span>
-                              <div className="flex gap-2">
+
+                          <div className="flex items-center gap-2" data-testid={`status-progress-${oc.id}`}>
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                              <div
+                                data-testid={`status-tier1-${oc.id}`}
+                                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
+                                oc.tier1_status === 'approved'
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+                                  : oc.tier1_status === 'rejected'
+                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+                                    : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {oc.tier1_status === 'approved' ? (
+                                  <CheckCircle className="h-3 w-3" />
+                                ) : oc.tier1_status === 'rejected' ? (
+                                  <XCircle className="h-3 w-3" />
+                                ) : (
+                                  <Clock className="h-3 w-3" />
+                                )}
+                                <span>T1</span>
+                              </div>
+                              <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <div
+                                data-testid={`status-tier2-${oc.id}`}
+                                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
+                                oc.tier2_status === 'approved'
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+                                  : oc.tier2_status === 'rejected'
+                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+                                    : 'bg-muted text-muted-foreground'
+                              }`}>
+                                {oc.tier2_status === 'approved' ? (
+                                  <CheckCircle className="h-3 w-3" />
+                                ) : oc.tier2_status === 'rejected' ? (
+                                  <XCircle className="h-3 w-3" />
+                                ) : (
+                                  <Clock className="h-3 w-3" />
+                                )}
+                                <span>T2</span>
+                              </div>
+                              {hasSig && (
+                                <>
+                                  <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                  <div
+                                    data-testid={`status-signed-${oc.id}`}
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                                  >
+                                    <Shield className="h-3 w-3" />
+                                    <span>Signed</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {(cleanTier1Notes || cleanTier2Notes || oc.rejection_reason) && (
+                            <div className="space-y-1.5 pt-1 border-t" data-testid={`notes-section-${oc.id}`}>
+                              {cleanTier1Notes && (
+                                <div className="flex items-start gap-2 text-xs" data-testid={`text-tier1-notes-${oc.id}`}>
+                                  <span className="font-medium text-muted-foreground shrink-0 mt-px">T1:</span>
+                                  <span className="text-muted-foreground">
+                                    {cleanTier1Notes}
+                                    {tier1Approver && (
+                                      <span className="opacity-60"> — {tier1Approver.name || tier1Approver.email}</span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              {cleanTier2Notes && (
+                                <div className="flex items-start gap-2 text-xs" data-testid={`text-tier2-notes-${oc.id}`}>
+                                  <span className="font-medium text-muted-foreground shrink-0 mt-px">T2:</span>
+                                  <span className="text-muted-foreground">
+                                    {cleanTier2Notes}
+                                    {tier2Approver && (
+                                      <span className="opacity-60"> — {tier2Approver.name || tier2Approver.email}</span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              {oc.rejection_reason && (
+                                <div className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400" data-testid={`text-rejection-${oc.id}`}>
+                                  <XCircle className="h-3 w-3 shrink-0 mt-px" />
+                                  <span>{oc.rejection_reason}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 pt-1 border-t flex-wrap">
+                            {canTier1Approve(oc) && (
+                              <>
                                 <Button
                                   size="sm"
                                   variant="default"
                                   onClick={() => openApprovalDialog(oc, 'approve', 1)}
                                   data-testid={`button-tier1-approve-${oc.id}`}
                                 >
-                                  <ThumbsUp className="h-4 w-4 mr-1" />
-                                  Approve / موافقة
+                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+                                  Approve T1
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1228,24 +1313,21 @@ const CostSubmission = () => {
                                   onClick={() => openApprovalDialog(oc, 'reject', 1)}
                                   data-testid={`button-tier1-reject-${oc.id}`}
                                 >
-                                  <ThumbsDown className="h-4 w-4 mr-1" />
-                                  Reject / رفض
+                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                                  Reject
                                 </Button>
-                              </div>
-                            </div>
-                          )}
-                          {canTier2Approve(oc) && (
-                            <div className="flex flex-col items-end gap-1">
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Tier 2 Final / المرحلة ٢ نهائي</span>
-                              <div className="flex gap-2">
+                              </>
+                            )}
+                            {canTier2Approve(oc) && (
+                              <>
                                 <Button
                                   size="sm"
                                   variant="default"
                                   onClick={() => openApprovalDialog(oc, 'approve', 2)}
                                   data-testid={`button-tier2-approve-${oc.id}`}
                                 >
-                                  <ThumbsUp className="h-4 w-4 mr-1" />
-                                  Final Approve / موافقة نهائية
+                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+                                  Final Approve
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1253,68 +1335,68 @@ const CostSubmission = () => {
                                   onClick={() => openApprovalDialog(oc, 'reject', 2)}
                                   data-testid={`button-tier2-reject-${oc.id}`}
                                 >
-                                  <ThumbsDown className="h-4 w-4 mr-1" />
-                                  Reject / رفض
+                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                                  Reject
                                 </Button>
-                              </div>
-                            </div>
-                          )}
-                          {oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDownloadCertificate(oc)}
-                              data-testid={`button-download-certificate-${oc.id}`}
-                            >
-                              <Download className="h-4 w-4 mr-1" />
-                              Certificate / شهادة
-                            </Button>
-                          )}
-                          {canEditSubmission(oc) && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditSubmission(oc)}
-                              data-testid={`button-edit-submission-${oc.id}`}
-                            >
-                              <Pencil className="h-4 w-4 mr-1" />
-                              Edit
-                            </Button>
-                          )}
-                          {canDeleteSubmission(oc) && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => setDeleteConfirm(oc)}
-                              data-testid={`button-delete-submission-${oc.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                              Delete
-                            </Button>
-                          )}
-                          {canResubmitSubmission(oc) && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleEditSubmission(oc)}
-                              data-testid={`button-resubmit-submission-${oc.id}`}
-                            >
-                              <SendHorizonal className="h-4 w-4 mr-1" />
-                              Edit & Resubmit
-                            </Button>
-                          )}
-                          {canRecallSubmission(oc) && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setRecallConfirm(oc)}
-                              data-testid={`button-recall-submission-${oc.id}`}
-                            >
-                              <RotateCcw className="h-4 w-4 mr-1" />
-                              Recall
-                            </Button>
-                          )}
-                        </div>
+                              </>
+                            )}
+                            {oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDownloadCertificate(oc)}
+                                data-testid={`button-download-certificate-${oc.id}`}
+                              >
+                                <Download className="h-3.5 w-3.5 mr-1" />
+                                PDF
+                              </Button>
+                            )}
+                            <div className="flex-1" />
+                            {canEditSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEditSubmission(oc)}
+                                data-testid={`button-edit-submission-${oc.id}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5 mr-1" />
+                                Edit
+                              </Button>
+                            )}
+                            {canDeleteSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => setDeleteConfirm(oc)}
+                                data-testid={`button-delete-submission-${oc.id}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                                Delete
+                              </Button>
+                            )}
+                            {canResubmitSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleEditSubmission(oc)}
+                                data-testid={`button-resubmit-submission-${oc.id}`}
+                              >
+                                <SendHorizonal className="h-3.5 w-3.5 mr-1" />
+                                Resubmit
+                              </Button>
+                            )}
+                            {canRecallSubmission(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRecallConfirm(oc)}
+                                data-testid={`button-recall-submission-${oc.id}`}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                                Recall
+                              </Button>
+                            )}
+                          </div>
                       </div>
                     );
                   })}
