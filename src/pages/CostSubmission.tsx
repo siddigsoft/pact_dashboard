@@ -112,6 +112,7 @@ const CostSubmission = () => {
 
   // Default to Submit Request tab for all users
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "under_review" | "approved" | "rejected" | "paid">("all");
   const [showGuide, setShowGuide] = useState(false);
   const [operationalCosts, setOperationalCosts] = useState<OperationalCostSubmission[]>([]);
   const [operationalCostsLoading, setOperationalCostsLoading] = useState(true);
@@ -1140,6 +1141,45 @@ const CostSubmission = () => {
             </CardHeader>
           </Card>
 
+          {/* Status Filter Tabs */}
+          <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
+            {([
+              { key: 'all', label: 'All', labelAr: 'الكل', count: filteredOperationalCosts.length, color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+              { key: 'pending', label: 'Pending', labelAr: 'معلق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'pending').length, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
+              { key: 'under_review', label: 'In Review', labelAr: 'قيد المراجعة', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'under_review').length, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
+              { key: 'approved', label: 'Approved', labelAr: 'موافق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length, color: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' },
+              { key: 'rejected', label: 'Rejected', labelAr: 'مرفوض', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'rejected').length, color: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
+              { key: 'paid', label: 'Paid', labelAr: 'مدفوع', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid').length, color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' },
+            ] as const).map(f => (
+              <Button
+                key={f.key}
+                size="sm"
+                variant={statusFilter === f.key ? 'default' : 'outline'}
+                onClick={() => setStatusFilter(f.key)}
+                data-testid={`button-filter-${f.key}`}
+                className={statusFilter === f.key ? '' : f.count === 0 ? 'opacity-50' : ''}
+              >
+                <span>{f.label}</span>
+                {f.count > 0 && (
+                  <span className={`ml-1.5 text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none ${statusFilter === f.key ? 'bg-white/20' : f.color}`}>
+                    {f.count}
+                  </span>
+                )}
+              </Button>
+            ))}
+            <div className="flex-1" />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={fetchOperationalCosts}
+              disabled={operationalCostsLoading}
+              data-testid="button-refresh-operational"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${operationalCostsLoading ? 'animate-spin' : ''}`} />
+              {operationalCostsLoading ? 'Loading...' : 'Refresh'}
+            </Button>
+          </div>
+
           {/* Operational Cost Submissions */}
           {operationalCostsLoading && filteredOperationalCosts.length === 0 && (
             <Card>
@@ -1148,30 +1188,24 @@ const CostSubmission = () => {
               </CardContent>
             </Card>
           )}
-          {filteredOperationalCosts.length > 0 && (
+          {(() => {
+            const statusFiltered = statusFilter === 'all'
+              ? filteredOperationalCosts
+              : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+            return statusFiltered.length > 0 ? (
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Receipt className="h-5 w-5 text-blue-600" />
                     <CardTitle className="text-base">Operational Cost Requests</CardTitle>
-                    <Badge variant="secondary">{filteredOperationalCosts.length}</Badge>
+                    <Badge variant="secondary">{statusFiltered.length}</Badge>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={fetchOperationalCosts}
-                    disabled={operationalCostsLoading}
-                    data-testid="button-refresh-operational"
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-1 ${operationalCostsLoading ? 'animate-spin' : ''}`} />
-                    {operationalCostsLoading ? 'Loading...' : 'Refresh'}
-                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {filteredOperationalCosts.map((oc) => {
+                  {statusFiltered.map((oc) => {
                     const categoryLabels: Record<string, string> = {
                       permits: 'Permits & Licenses',
                       incentives: 'Incentives & Allowances',
@@ -1447,7 +1481,14 @@ const CostSubmission = () => {
                 </div>
               </CardContent>
             </Card>
-          )}
+            ) : !operationalCostsLoading ? (
+              <div className="text-center py-8 text-muted-foreground" data-testid="text-no-results">
+                <FileText className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No {statusFilter === 'all' ? '' : statusFilter.replace('_', ' ')} submissions found</p>
+                <p className="text-xs">لا توجد طلبات {statusFilter !== 'all' ? 'بهذه الحالة' : ''}</p>
+              </div>
+            ) : null;
+          })()}
 
           {/* Site Visit Cost Submissions */}
           {(isLoading || operationalCostsLoading) ? (
