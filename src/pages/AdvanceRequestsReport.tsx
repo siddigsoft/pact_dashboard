@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -62,6 +62,7 @@ function AdvanceRequestsReportContent() {
   const [reconciledFilter, setReconciledFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const PAGE_SIZE = 25;
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
@@ -845,6 +846,9 @@ function AdvanceRequestsReportContent() {
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
               <img src="/pact-logo.png" alt="PACT" className="h-12 w-auto" />
               <div>
                 <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -1249,15 +1253,76 @@ function AdvanceRequestsReportContent() {
                     </TableHeader>
                     <TableBody>
                       {byTeamMember.map((member, idx) => (
-                        <TableRow key={idx} data-testid={`row-team-${idx}`}>
-                          <TableCell className="font-medium">{member.name}</TableCell>
-                          <TableCell className="text-right">{member.requests}</TableCell>
-                          <TableCell className="text-right font-mono">{member.totalRequested.toLocaleString()}</TableCell>
-                          <TableCell className="text-right font-mono text-green-600">{member.totalApproved.toLocaleString()}</TableCell>
-                          <TableCell className="text-right">
-                            {member.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{member.pending}</Badge>}
-                          </TableCell>
-                        </TableRow>
+                        <Fragment key={member.id}>
+                          <TableRow data-testid={`row-team-${idx}`} className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedMember(expandedMember === member.id ? null : member.id)}>
+                            <TableCell className="font-medium">
+                              <button className="flex items-center gap-2 text-left text-primary hover:underline" data-testid={`button-expand-member-${idx}`}>
+                                <ChevronRight className={`w-4 h-4 transition-transform ${expandedMember === member.id ? 'rotate-90' : ''}`} />
+                                {member.name}
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-right">{member.requests}</TableCell>
+                            <TableCell className="text-right font-mono">{member.totalRequested.toLocaleString()}</TableCell>
+                            <TableCell className="text-right font-mono text-green-600">{member.totalApproved.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">
+                              {member.pending > 0 && <Badge variant="outline" className="border-amber-500 text-amber-600">{member.pending}</Badge>}
+                            </TableCell>
+                          </TableRow>
+                          {expandedMember === member.id && (
+                            <TableRow key={`${idx}-detail`}>
+                              <TableCell colSpan={5} className="p-0 bg-muted/30">
+                                <div className="p-4">
+                                  <p className="text-sm font-semibold mb-3 text-muted-foreground">Requests by {member.name}</p>
+                                  <div className="overflow-x-auto rounded-lg border">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow className="bg-muted/40">
+                                          <TableHead className="text-xs">Date</TableHead>
+                                          <TableHead className="text-xs">Site</TableHead>
+                                          <TableHead className="text-xs">Hub</TableHead>
+                                          <TableHead className="text-xs text-right">Amount (SDG)</TableHead>
+                                          <TableHead className="text-xs">Status</TableHead>
+                                          <TableHead className="text-xs text-right">Paid</TableHead>
+                                          <TableHead className="text-xs text-right">Remaining</TableHead>
+                                          <TableHead className="text-xs text-center">Actions</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {member.items.map(req => {
+                                          const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
+                                          return (
+                                            <TableRow key={req.id} data-testid={`row-member-detail-${req.id}`}>
+                                              <TableCell className="text-xs whitespace-nowrap">{format(parseISO(req.createdAt), 'MMM dd, yyyy')}</TableCell>
+                                              <TableCell className="text-xs max-w-[150px] truncate">{req.siteName}</TableCell>
+                                              <TableCell className="text-xs">{req.hubName}</TableCell>
+                                              <TableCell className="text-xs text-right font-mono">{req.requestedAmount.toLocaleString()}</TableCell>
+                                              <TableCell className="text-xs">{getStatusBadge(req.status)}</TableCell>
+                                              <TableCell className="text-xs text-right font-mono">{(req.totalPaidAmount || 0).toLocaleString()}</TableCell>
+                                              <TableCell className="text-xs text-right font-mono">{remaining > 0 ? remaining.toLocaleString() : '—'}</TableCell>
+                                              <TableCell className="text-center">
+                                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); navigate(`/down-payment-approval`); }} data-testid={`button-view-request-${req.id}`}>
+                                                  <ExternalLink className="w-3.5 h-3.5" />
+                                                </Button>
+                                              </TableCell>
+                                            </TableRow>
+                                          );
+                                        })}
+                                        <TableRow className="bg-muted/40 font-semibold border-t">
+                                          <TableCell colSpan={3} className="text-xs">Subtotal ({member.items.length} requests)</TableCell>
+                                          <TableCell className="text-xs text-right font-mono">{member.totalRequested.toLocaleString()}</TableCell>
+                                          <TableCell />
+                                          <TableCell className="text-xs text-right font-mono">{member.items.reduce((s, r) => s + (r.totalPaidAmount || 0), 0).toLocaleString()}</TableCell>
+                                          <TableCell className="text-xs text-right font-mono">{member.items.reduce((s, r) => s + (r.remainingAmount || (r.requestedAmount - (r.totalPaidAmount || 0))), 0).toLocaleString()}</TableCell>
+                                          <TableCell />
+                                        </TableRow>
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
                       ))}
                     </TableBody>
                     <tfoot>
