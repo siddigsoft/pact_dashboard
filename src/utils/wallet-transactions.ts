@@ -219,12 +219,14 @@ export async function createSiteVisitWalletTransaction(
 
     // Step 3c: Build detailed description with site info and fee breakdown
     const descParts: string[] = [];
-    descParts.push(`Site: ${siteName}${siteCode ? ` (${siteCode})` : ''}`);
-    if (directCost > 0 && !providedAmount) {
-      descParts.push(`Total fee: ${directCost} SDG`);
-    } else if (!providedAmount) {
-      descParts.push(`Enumerator fee: ${enumeratorFee} SDG`);
-      descParts.push(`Transport fee: ${transportFee} SDG`);
+    descParts.push(`Site visit completed: ${siteName}${siteCode ? ` (${siteCode})` : ''}`);
+    if (!providedAmount) {
+      const calculatedFromFees = enumeratorFee + transportFee;
+      if (calculatedFromFees > 0) {
+        descParts.push(`Enumerator: ${enumeratorFee} + Transport: ${transportFee} = ${calculatedFromFees} SDG`);
+      } else if (directCost > 0) {
+        descParts.push(`Total fee: ${directCost} SDG`);
+      }
     }
     if (advanceDeducted > 0) {
       descParts.push(`Advance deducted: -${advanceDeducted} SDG`);
