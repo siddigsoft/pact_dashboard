@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/advance_request_report.dart';
 import '../services/advance_report_service.dart';
 import '../widgets/pact_header.dart';
+import '../widgets/advance_receipt_confirmation_dialog.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -115,7 +117,7 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
       
       switch (groupType) {
         case 'all':
-          rows.add(['Date', 'Team Member', 'Site', 'Hub', 'State', 'Project', 'Amount (SDG)', 'Status', 'Paid', 'Remaining']);
+          rows.add(['Date', 'Team Member', 'Site', 'Hub', 'State', 'Project', 'Amount (SDG)', 'Status', 'Paid', 'Remaining', 'Receipt Confirmed']);
           for (var req in _requests) {
             rows.add([
               DateFormat('yyyy-MM-dd').format(req.requestedAt),
@@ -128,6 +130,7 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
               req.status.replaceAll('_', ' '),
               req.totalPaidAmount,
               (req.remainingAmount ?? (req.requestedAmount - req.totalPaidAmount)),
+              req.isReceiptConfirmed ? 'Yes' : 'No',
             ]);
           }
           break;
@@ -428,7 +431,10 @@ class _AdvanceRequestsReportScreenState extends State<AdvanceRequestsReportScree
                   itemCount: _requests.length,
                   itemBuilder: (context, index) {
                     final req = _requests[index];
-                    return _RequestCard(request: req);
+                    return _RequestCard(
+                      request: req,
+                      onReceiptConfirmed: _loadData,
+                    );
                   },
                 ),
         ),
@@ -604,8 +610,9 @@ class _StatCard extends StatelessWidget {
 
 class _RequestCard extends StatelessWidget {
   final AdvanceRequestData request;
+  final VoidCallback? onReceiptConfirmed;
 
-  const _RequestCard({required this.request});
+  const _RequestCard({required this.request, this.onReceiptConfirmed});
 
   @override
   Widget build(BuildContext context) {
@@ -679,8 +686,72 @@ class _RequestCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (request.isReceiptConfirmed) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_circle, size: 16, color: Colors.green),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Receipt Confirmed / تم تأكيد الاستلام',
+                      style: TextStyle(
+                        color: Colors.green[700],
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_canShowConfirmButton(request)) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showReceiptConfirmation(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.draw, size: 18),
+                  label: const Text('Confirm Receipt / تأكيد الاستلام'),
+                ),
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  bool _canShowConfirmButton(AdvanceRequestData req) {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return false;
+    if (req.requestedBy != userId) return false;
+    final status = req.status.toLowerCase();
+    if (status != 'partially_paid' && status != 'fully_paid') return false;
+    if (req.isReceiptConfirmed) return false;
+    return true;
+  }
+
+  void _showReceiptConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AdvanceReceiptConfirmationDialog(
+        requestId: request.id,
+        amount: request.requestedAmount,
+        siteName: request.siteName,
+        onConfirmed: () {
+          onReceiptConfirmed?.call();
+        },
       ),
     );
   }

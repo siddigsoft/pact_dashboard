@@ -166,6 +166,29 @@ class DownPaymentRequest with _$DownPaymentRequest {
     if (!hasPendingInstallments) return null;
     return installmentPlan[paidInstallmentsCount];
   }
+
+  /// Check if receipt has been confirmed with digital signature
+  bool get isReceiptConfirmed {
+    final rc = metadata['receipt_confirmation'] as Map<String, dynamic>?;
+    return rc?['confirmed'] == true;
+  }
+
+  /// Get receipt confirmation timestamp
+  String? get receiptConfirmedAt {
+    final rc = metadata['receipt_confirmation'] as Map<String, dynamic>?;
+    return rc?['confirmedAt'] as String?;
+  }
+
+  /// Get receipt signature method (handwriting or uuid)
+  String? get receiptSignatureMethod {
+    final rc = metadata['receipt_confirmation'] as Map<String, dynamic>?;
+    return rc?['signatureMethod'] as String?;
+  }
+
+  /// Check if receipt can be confirmed (paid but not yet confirmed)
+  bool get canConfirmReceipt {
+    return (isPartiallyPaid || isFullyPaid) && !isReceiptConfirmed;
+  }
 }
 
 // ============================================================================
