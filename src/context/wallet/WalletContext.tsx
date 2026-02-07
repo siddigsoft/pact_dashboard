@@ -241,32 +241,39 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     );
     const completedSiteVisits = earningTransactions.length;
 
-    // Calculate weekly earnings using UTC to ensure consistency across all clients
-    // Week starts on Sunday (day 0) at 00:00:00 UTC
     const now = new Date();
     const utcNow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    const dayOfWeek = new Date(utcNow).getUTCDay(); // 0 = Sunday
+    const dayOfWeek = new Date(utcNow).getUTCDay();
     const weekStartMs = utcNow - (dayOfWeek * 24 * 60 * 60 * 1000);
-    const weekStartDate = new Date(weekStartMs);
     
     const weeklyEarnings = earningTransactions
       .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
       .reduce((sum, t) => sum + t.amount, 0);
 
-    // Calculate monthly earnings using UTC (first day of current month at 00:00:00 UTC)
     const monthStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
     const monthlyEarnings = earningTransactions
       .filter(t => new Date(t.createdAt).getTime() >= monthStartMs)
       .reduce((sum, t) => sum + t.amount, 0);
 
-    // Calculate weekly site visits count
     const weeklySiteVisits = earningTransactions
       .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
       .length;
 
+    const calculatedEarned = transactions
+      .filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment')
+      .filter(t => t.amount > 0)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const calculatedWithdrawn = transactions
+      .filter(t => t.type === 'withdrawal')
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    const totalEarned = Math.max(wallet.totalEarned, calculatedEarned);
+    const totalWithdrawn = Math.max(wallet.totalWithdrawn, calculatedWithdrawn);
+
     setStats({
-      totalEarned: wallet.totalEarned,
-      totalWithdrawn: wallet.totalWithdrawn,
+      totalEarned,
+      totalWithdrawn,
       pendingWithdrawals,
       currentBalance: wallet.balances.SDG || 0,
       totalTransactions: transactions.length,

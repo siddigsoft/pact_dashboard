@@ -188,10 +188,9 @@ const AdminWallets: React.FC = () => {
   }, []);
 
   const filtered = useMemo(() => {
-    // Filter out wallets with no balance and no earnings
     let filtered = rows.filter(r => {
       const balance = r.balances?.[currency] || 0;
-      const earned = Number(r.total_earned || 0);
+      const earned = Number(r.totalEarned || 0);
       return balance > 0 || earned > 0;
     });
     
@@ -389,15 +388,14 @@ const AdminWallets: React.FC = () => {
                 <TableBody>
                   {filtered.map(wallet => {
                     const balance = (wallet.balances?.[currency] || 0);
-                    const earned = Number(wallet.total_earned || 0);
-                    const withdrawn = Number(wallet.total_withdrawn || 0);
+                    const earned = Number(wallet.totalEarned || 0);
+                    const withdrawn = Number(wallet.totalWithdrawn || 0);
                     const isActive = balance > 0 || earned > 0;
                     const isExpanded = expandedWallets.has(wallet.id);
                     const transactions = transactionDetails[wallet.id] || [];
                     
-                    // Calculate breakdown from transactions
                     const breakdown = wallet.breakdown || {};
-                    const siteVisitFees = Number(breakdown.site_visit_fee || 0);
+                    const siteVisitFees = Number(breakdown.earning || 0) + Number(breakdown.site_visit_fee || 0);
                     const bonuses = Number(breakdown.bonus || 0);
                     const adjustments = Number(breakdown.adjustment || 0);
                     const penalties = Number(breakdown.penalty || 0);
@@ -651,10 +649,10 @@ const AdminWallets: React.FC = () => {
                 userName: wallet.owner_name || wallet.profiles?.full_name || wallet.profiles?.username,
                 userEmail: wallet.profiles?.email,
                 balances: wallet.balances || {},
-                totalEarned: wallet.total_earned,
-                totalWithdrawn: wallet.total_withdrawn,
+                totalEarned: wallet.totalEarned,
+                totalWithdrawn: wallet.totalWithdrawn,
                 updatedAt: wallet.updated_at,
-                pendingPayouts: (Number(wallet.total_earned)||0) - (Number(wallet.total_withdrawn)||0) - (wallet.balances?.[currency] || 0),
+                pendingPayouts: (Number(wallet.totalEarned)||0) - (Number(wallet.totalWithdrawn)||0) - (wallet.balances?.[currency] || 0),
               }}
               currency={currency}
               onClick={(userId) => navigate(`/admin/wallets/${userId}`)}

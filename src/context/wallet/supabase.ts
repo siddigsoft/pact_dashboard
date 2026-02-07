@@ -23,45 +23,40 @@ export const adminListWallets = async (params: { search?: string; page?: number;
     return [];
   }
   
-  // Get transaction breakdowns for all wallets in parallel
-  // Query by both wallet_id AND user_id to handle legacy transactions
   const walletIds = (data || []).map((w: any) => w.id);
   const userIds = (data || []).map((w: any) => w.user_id);
   
-  // Build a map of user_id -> wallet_id for fallback matching
   const userToWalletMap: Record<string, string> = {};
   (data || []).forEach((w: any) => {
     userToWalletMap[w.user_id] = w.id;
   });
   
-  // Query transactions by wallet_id first
   const { data: txByWallet } = await supabase
     .from('wallet_transactions')
-    .select('wallet_id, user_id, type, amount')
+    .select('id, wallet_id, user_id, type, amount')
     .in('wallet_id', walletIds);
   
-  // Also query by user_id for legacy transactions that might not have wallet_id set
   const { data: txByUser } = await supabase
     .from('wallet_transactions')
-    .select('wallet_id, user_id, type, amount')
+    .select('id, wallet_id, user_id, type, amount')
     .in('user_id', userIds);
   
-  // Combine and dedupe transactions
   const seenTxIds = new Set<string>();
   const allTransactions: any[] = [];
   
   [...(txByWallet || []), ...(txByUser || [])].forEach(tx => {
-    const txKey = `${tx.wallet_id || tx.user_id}-${tx.type}-${tx.amount}`;
-    if (!seenTxIds.has(txKey)) {
-      seenTxIds.add(txKey);
+    if (!tx.id) return;
+    if (!seenTxIds.has(tx.id)) {
+      seenTxIds.add(tx.id);
       allTransactions.push(tx);
     }
   });
   
-  // Group transactions by wallet_id (or user_id mapped to wallet_id)
   const transactionsByWallet: Record<string, Record<string, number>> = {};
+  const earnedByWallet: Record<string, number> = {};
+  const withdrawnByWallet: Record<string, number> = {};
+  
   allTransactions.forEach((tx: any) => {
-    // Use wallet_id if available, otherwise map user_id to wallet_id
     const walletId = tx.wallet_id || userToWalletMap[tx.user_id];
     if (!walletId) return;
     
@@ -72,18 +67,27 @@ export const adminListWallets = async (params: { search?: string; page?: number;
       transactionsByWallet[walletId][tx.type] = 0;
     }
     transactionsByWallet[walletId][tx.type] += Number(tx.amount || 0);
+    
+    if (tx.type === 'earning' || tx.type === 'site_visit_fee' || tx.type === 'adjustment') {
+      earnedByWallet[walletId] = (earnedByWallet[walletId] || 0) + Number(tx.amount || 0);
+    }
+    if (tx.type === 'withdrawal') {
+      withdrawnByWallet[walletId] = (withdrawnByWallet[walletId] || 0) + Math.abs(Number(tx.amount || 0));
+    }
   });
   
   const rows = (data || []).map((r: any) => {
     const breakdown = transactionsByWallet[r.id] || {};
+    const storedEarned = Number(r.total_earned || 0);
+    const calculatedEarned = earnedByWallet[r.id] || 0;
+    const storedWithdrawn = Number(r.total_withdrawn || 0);
+    const calculatedWithdrawn = withdrawnByWallet[r.id] || 0;
     
     return {
       ...r,
       owner_name: r.profiles?.full_name || r.profiles?.username || r.profiles?.email || r.user_id,
-      // Convert numeric strings to numbers for proper calculations
-      totalEarned: Number(r.total_earned || 0),
-      totalWithdrawn: Number(r.total_withdrawn || 0),
-      // Add transaction breakdown
+      totalEarned: Math.max(storedEarned, calculatedEarned),
+      totalWithdrawn: Math.max(storedWithdrawn, calculatedWithdrawn),
       breakdown,
     };
   });
