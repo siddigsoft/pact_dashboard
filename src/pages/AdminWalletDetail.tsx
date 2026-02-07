@@ -767,7 +767,7 @@ const AdminWalletDetail = () => {
             <Card className="bg-gradient-to-br from-slate-900/80 to-green-900/80 border-green-500/30 backdrop-blur-xl">
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-green-300/70 uppercase tracking-wider">Completed & Paid</p>
+                  <p className="text-xs text-green-300/70 uppercase tracking-wider">Completed & Credited to Wallet</p>
                   <p className="text-2xl font-bold text-green-400 mt-1">
                     {siteVisits.filter(s => s.isCompleted && s.payment).length}
                   </p>
@@ -877,7 +877,7 @@ const AdminWalletDetail = () => {
                                   {currencyFmt(site.payment.amount, currency)}
                                 </div>
                                 <div className="text-xs text-green-300/50">
-                                  Paid {new Date(site.payment.date).toLocaleDateString()}
+                                  Credited {new Date(site.payment.date).toLocaleDateString()}
                                 </div>
                               </div>
                             ) : site.isCompleted ? (
