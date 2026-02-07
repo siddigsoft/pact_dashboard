@@ -334,10 +334,12 @@ const AdminWalletDetail = () => {
             const storedCost = Number(e.cost || 0);
             const calculatedTotal = enumFee + transportFee;
             const totalFee = calculatedTotal > 0 ? calculatedTotal : (storedCost > 0 ? storedCost : 0);
+            console.log(`[Recalculate] Site "${e.site_name}" (${e.id}): enumerator_fee=${e.enumerator_fee}, transport_fee=${e.transport_fee}, cost=${e.cost} → totalFee=${totalFee} (using ${calculatedTotal > 0 ? 'enum+transport' : 'cost field'})`);
             return [e.id, { 
               totalFee, 
               enumFee, 
               transportFee, 
+              storedCost,
               siteName: e.site_name || '', 
               siteCode: e.site_code || '' 
             }];
@@ -421,9 +423,18 @@ const AdminWalletDetail = () => {
 
       const primaryCurrency = Object.keys(balancesByCurrency)[0] || currency;
       const primaryBalance = balancesByCurrency[primaryCurrency] || 0;
+      
+      let toastDesc = '';
+      if (txUpdated > 0) {
+        toastDesc = `${txUpdated} transactions corrected. `;
+      } else if (earningTxs.length > 0) {
+        toastDesc = 'No corrections needed (amounts match site entries). ';
+      }
+      toastDesc += `Earned: ${newTotalEarned.toLocaleString()} ${primaryCurrency}, Balance: ${primaryBalance.toLocaleString()} ${primaryCurrency}`;
+      
       toast({ 
         title: 'Wallet Recalculated', 
-        description: `${txUpdated > 0 ? `${txUpdated} transactions corrected. ` : ''}Earned: ${newTotalEarned.toLocaleString()} ${primaryCurrency}, Balance: ${primaryBalance.toLocaleString()} ${primaryCurrency}` 
+        description: toastDesc
       });
       await loadWalletData();
     } catch (error: any) {
