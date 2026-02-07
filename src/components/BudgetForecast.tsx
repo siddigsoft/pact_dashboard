@@ -1,186 +1,226 @@
 
-import React from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Sparkles, ArrowUpRight, TrendingUp, TrendingDown, BarChart3, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { TrendingUp, TrendingDown, BarChart3, Info, DollarSign } from "lucide-react";
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, Legend
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
+import { supabase } from "@/integrations/supabase/client";
+import { format, subMonths } from "date-fns";
 
-export const BudgetForecast: React.FC = () => {
-  // Mock data for the forecast charts
-  const forecastData = [
-    { name: 'May', actual: 8500, predicted: 9000 },
-    { name: 'Jun', actual: 9200, predicted: 9500 },
-    { name: 'Jul', actual: 0, predicted: 10200 },
-    { name: 'Aug', actual: 0, predicted: 11000 },
-    { name: 'Sep', actual: 0, predicted: 10500 },
-    { name: 'Oct', actual: 0, predicted: 11800 },
-  ];
+interface MonthlySpending {
+  name: string;
+  spending: number;
+}
 
-  const siteVisitCosts = [
-    { id: 'SV001', location: 'North District', actual: 1200, predicted: 1350, variance: 12.5 },
-    { id: 'SV002', location: 'Central Area', actual: 1500, predicted: 1450, variance: -3.3 },
-    { id: 'SV003', location: 'Eastern Region', actual: 2200, predicted: 1950, variance: -11.4 },
-    { id: 'SV004', location: 'Western Zone', actual: 1800, predicted: 2100, variance: 16.7 },
-  ];
+interface CategoryBreakdown {
+  category: string;
+  total: number;
+  count: number;
+}
+
+export const BudgetForecast = () => {
+  const [walletStats, setWalletStats] = useState({ totalEarned: 0, totalWithdrawn: 0 });
+  const [monthlyData, setMonthlyData] = useState<MonthlySpending[]>([]);
+  const [categoryBreakdown, setCategoryBreakdown] = useState<CategoryBreakdown[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [hasData, setHasData] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const { data: wallets } = await supabase
+          .from('wallets')
+          .select('total_earned, total_withdrawn');
+
+        let totalEarned = 0;
+        let totalWithdrawn = 0;
+        (wallets || []).forEach((w: any) => {
+          totalEarned += parseFloat(w.total_earned || '0');
+          totalWithdrawn += parseFloat(w.total_withdrawn || '0');
+        });
+        setWalletStats({ totalEarned, totalWithdrawn });
+
+        const { data: opCosts } = await supabase
+          .from('operational_cost_submissions')
+          .select('amount_cents, currency, expense_category, created_at, status, tier1_status, tier2_status')
+          .order('created_at', { ascending: true });
+
+        const allSubmissions = opCosts || [];
+        const submissions = allSubmissions.filter((s: any) => 
+          s.status !== 'rejected' && s.tier1_status !== 'rejected' && s.tier2_status !== 'rejected'
+        );
+
+        const { data: wtxData } = await supabase
+          .from('wallet_transactions')
+          .select('amount, type, created_at')
+          .order('created_at', { ascending: true });
+
+        const transactions = wtxData || [];
+
+        const allDataExists = submissions.length > 0 || transactions.length > 0 || totalEarned > 0;
+        setHasData(allDataExists);
+
+        const monthly: Record<string, number> = {};
+        for (let i = 5; i >= 0; i--) {
+          const d = subMonths(new Date(), i);
+          const key = format(d, 'MMM yyyy');
+          monthly[key] = 0;
+        }
+
+        submissions.forEach((s: any) => {
+          if (s.created_at) {
+            const month = format(new Date(s.created_at), 'MMM yyyy');
+            if (monthly[month] !== undefined) {
+              monthly[month] += (s.amount_cents || 0) / 100;
+            }
+          }
+        });
+
+        transactions.forEach((t: any) => {
+          if (t.created_at && t.type === 'debit') {
+            const month = format(new Date(t.created_at), 'MMM yyyy');
+            if (monthly[month] !== undefined) {
+              monthly[month] += parseFloat(t.amount || '0');
+            }
+          }
+        });
+
+        setMonthlyData(
+          Object.entries(monthly).map(([name, spending]) => ({ name: name.split(' ')[0], spending }))
+        );
+
+        const catMap: Record<string, { total: number; count: number }> = {};
+        submissions.forEach((s: any) => {
+          const cat = s.expense_category || 'other';
+          if (!catMap[cat]) catMap[cat] = { total: 0, count: 0 };
+          catMap[cat].total += (s.amount_cents || 0) / 100;
+          catMap[cat].count += 1;
+        });
+
+        setCategoryBreakdown(
+          Object.entries(catMap)
+            .map(([category, data]) => ({ category, ...data }))
+            .sort((a, b) => b.total - a.total)
+        );
+      } catch (err) {
+        console.error('Error fetching budget data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const availableFunds = walletStats.totalEarned - walletStats.totalWithdrawn;
+  const totalSpending = monthlyData.reduce((sum, m) => sum + m.spending, 0);
 
   return (
-    <Card className="border-t-4 border-t-purple-600 overflow-hidden transition-all hover:shadow-md">
-      <CardHeader className="bg-slate-50 pb-2">
-        <div className="flex items-center justify-between">
+    <Card data-testid="card-budget-forecast">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-1 flex-wrap">
           <CardTitle className="text-xl flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-600" />
-            AI-Driven Budget Forecast
+            <DollarSign className="h-5 w-5 text-primary" />
+            Financial Overview
           </CardTitle>
-          <Badge variant="outline" className="bg-purple-50 text-purple-700 flex items-center gap-1">
-            <ArrowUpRight className="h-3 w-3" /> Predictive
-          </Badge>
+          <Badge variant="outline">Live Data</Badge>
         </div>
-        <CardDescription>Smart budget allocation with predictive insights</CardDescription>
+        <CardDescription>Real-time financial summary from wallet and cost submission data</CardDescription>
       </CardHeader>
       <CardContent className="pt-4 space-y-6">
-        {/* Budget Health Status */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Budget Health Status</h3>
-          <div className="grid grid-cols-3 gap-3">
-            <Card className="p-3">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Available Funds</span>
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                </div>
-                <p className="text-lg font-bold">SDG 42,500</p>
-                <Progress value={65} className="h-1 bg-slate-100" />
-              </div>
-            </Card>
-            <Card className="p-3">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Projected Costs</span>
-                  <TrendingDown className="h-4 w-4 text-amber-500" />
-                </div>
-                <p className="text-lg font-bold">SDG 31,200</p>
-                <Progress value={48} className="h-1 bg-slate-100" indicatorClassName="bg-amber-500" />
-              </div>
-            </Card>
-            <Card className="p-3">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Budget Efficiency</span>
-                  <BarChart3 className="h-4 w-4 text-blue-500" />
-                </div>
-                <p className="text-lg font-bold">92.4%</p>
-                <Progress value={92.4} className="h-1 bg-slate-100" indicatorClassName="bg-blue-500" />
-              </div>
-            </Card>
+        {loading ? (
+          <div className="text-center py-8 text-muted-foreground" data-testid="text-loading-budget">Loading financial data...</div>
+        ) : !hasData ? (
+          <div className="text-center py-8" data-testid="text-no-budget-data">
+            <Info className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-muted-foreground">No financial data available yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Financial overview will populate as wallet transactions and cost submissions are created</p>
           </div>
-        </div>
-
-        {/* Budget Trend Forecast */}
-        <div>
-          <h3 className="text-sm font-semibold mb-2">6-Month Budget Forecast</h3>
-          <div className="h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={forecastData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(value) => [`SDG ${value}`, '']} />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="actual" 
-                  stroke="#10B981" 
-                  name="Actual Spending" 
-                  strokeWidth={2} 
-                  dot={{ r: 4 }} 
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="predicted" 
-                  stroke="#6366F1" 
-                  name="AI Predicted" 
-                  strokeWidth={2} 
-                  strokeDasharray="5 5"
-                  dot={{ r: 4 }} 
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Site Visit Cost Predictions */}
-        <div>
-          <h3 className="text-sm font-semibold mb-2">Site Visit Cost Predictions</h3>
-          <div className="rounded-md border">
-            <div className="grid grid-cols-5 gap-2 p-2 border-b bg-slate-50 text-xs font-medium">
-              <div>Site ID</div>
-              <div>Location</div>
-              <div>Actual Cost</div>
-              <div>AI Predicted</div>
-              <div>Variance</div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Wallet Summary</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Card className="p-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className="text-xs text-muted-foreground">Total Earned</span>
+                      <TrendingUp className="h-4 w-4 text-green-500" />
+                    </div>
+                    <p className="text-lg font-bold" data-testid="text-total-earned">SDG {walletStats.totalEarned.toLocaleString()}</p>
+                  </div>
+                </Card>
+                <Card className="p-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className="text-xs text-muted-foreground">Total Withdrawn</span>
+                      <TrendingDown className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <p className="text-lg font-bold" data-testid="text-total-withdrawn">SDG {walletStats.totalWithdrawn.toLocaleString()}</p>
+                  </div>
+                </Card>
+                <Card className="p-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className="text-xs text-muted-foreground">Available Balance</span>
+                      <BarChart3 className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <p className="text-lg font-bold" data-testid="text-available-balance">SDG {availableFunds.toLocaleString()}</p>
+                  </div>
+                </Card>
+              </div>
             </div>
-            <div className="divide-y">
-              {siteVisitCosts.map((site) => (
-                <div key={site.id} className="grid grid-cols-5 gap-2 p-2 text-sm hover:bg-slate-50 transition-colors">
-                  <div className="font-medium">{site.id}</div>
-                  <div>{site.location}</div>
-                  <div>SDG {site.actual}</div>
-                  <div>SDG {site.predicted}</div>
-                  <div>
-                    <span 
-                      className={
-                        site.variance > 10 
-                          ? "text-red-600" 
-                          : site.variance < 0 
-                          ? "text-green-600" 
-                          : "text-amber-600"
-                      }
-                    >
-                      {site.variance > 0 ? '+' : ''}{site.variance}%
-                    </span>
+
+            {totalSpending > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold mb-2">6-Month Spending Trend</h3>
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`SDG ${Number(value).toLocaleString()}`, '']} />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="spending" 
+                        stroke="#10B981" 
+                        name="Spending" 
+                        strokeWidth={2} 
+                        dot={{ r: 4 }} 
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {categoryBreakdown.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Cost Submissions by Category</h3>
+                <div className="rounded-md border">
+                  <div className="grid grid-cols-3 gap-2 p-2 border-b bg-muted/50 text-xs font-medium">
+                    <div>Category</div>
+                    <div>Total Amount</div>
+                    <div>Submissions</div>
+                  </div>
+                  <div className="divide-y">
+                    {categoryBreakdown.map((cat) => (
+                      <div key={cat.category} className="grid grid-cols-3 gap-2 p-2 text-sm" data-testid={`row-category-${cat.category}`}>
+                        <div className="font-medium capitalize">{cat.category.replace(/_/g, ' ')}</div>
+                        <div>SDG {cat.total.toLocaleString()}</div>
+                        <div>{cat.count}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* AI Recommendations */}
-        <div>
-          <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
-            <Sparkles className="h-4 w-4 text-purple-500" />
-            Smart Budget Recommendations
-          </h3>
-          <div className="space-y-2">
-            <Card className="p-3 bg-purple-50 border-purple-100">
-              <div className="flex items-start gap-2">
-                <ArrowUpRight className="h-4 w-4 text-purple-600 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-purple-900">Reallocate Transportation Budget</p>
-                  <p className="text-xs text-purple-700">Increase Eastern Region budget by 15% to match actual spending patterns.</p>
-                </div>
               </div>
-            </Card>
-            <Card className="p-3 bg-purple-50 border-purple-100">
-              <div className="flex items-start gap-2">
-                <TrendingDown className="h-4 w-4 text-purple-600 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-purple-900">Logistics Cost Optimization</p>
-                  <p className="text-xs text-purple-700">Consolidate Western Zone visits to reduce logistics costs by approximately 12%.</p>
-                </div>
-              </div>
-            </Card>
-            <Button variant="outline" className="w-full mt-2 group">
-              View All AI Recommendations
-              <ArrowRight className="h-4 w-4 ml-1 transition-transform group-hover:translate-x-1" />
-            </Button>
-          </div>
-        </div>
+            )}
+          </>
+        )}
       </CardContent>
     </Card>
   );

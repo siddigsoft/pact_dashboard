@@ -254,13 +254,7 @@ const Finance: React.FC = () => {
           <div className="grid gap-6">
             <h2 className="text-xl font-bold tracking-tight">Financial Dashboard</h2>
             
-            <ApprovalTierAnalytics 
-              pendingCount={7}
-              approvedCount={24}
-              escalatedCount={5}
-              rejectedCount={2}
-              totalTransactions={38}
-            />
+            <ApprovalTierAnalytics />
             
             <BudgetForecast />
             
