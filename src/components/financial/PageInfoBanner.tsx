@@ -95,31 +95,35 @@ export function PageInfoBanner({ title, description, descriptionAr, workflowStep
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="px-3 pb-3 space-y-3">
-            <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-page-description">
-              {description}
-            </p>
+            <div data-testid="section-english">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">English</span>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-page-description">
+                {description}
+              </p>
+              {workflowSteps && workflowSteps.length > 0 && (
+                <div className="mt-3">
+                  <WorkflowStepsSection steps={workflowSteps} label="Who does what - Step by step" />
+                </div>
+              )}
+            </div>
 
             {hasArabic && (
-              <div className="border-t border-blue-200/50 dark:border-blue-800/50 pt-3">
-                <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="border-t border-blue-200/50 dark:border-blue-800/50 pt-3" data-testid="section-arabic">
+                <div className="flex items-center gap-1.5 mb-1.5" dir="rtl">
                   <Languages className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
-                  <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">العربية</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">العربية</span>
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed" dir="rtl" data-testid="text-page-description-ar">
                   {descriptionAr}
                 </p>
-              </div>
-            )}
-
-            {workflowSteps && workflowSteps.length > 0 && (
-              <>
-                <WorkflowStepsSection steps={workflowSteps} label="Who does what - Step by step" />
                 {workflowStepsAr && workflowStepsAr.length > 0 && (
-                  <div className="border-t border-blue-200/50 dark:border-blue-800/50 pt-3">
+                  <div className="mt-3">
                     <WorkflowStepsSection steps={workflowStepsAr} label="من يفعل ماذا - خطوة بخطوة" isRtl />
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </CollapsibleContent>
