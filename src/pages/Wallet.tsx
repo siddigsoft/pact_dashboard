@@ -368,8 +368,8 @@ const WalletPage = () => {
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div>
-            <h1 className="text-xl font-bold">Wallet</h1>
-            <p className="text-white/60 text-xs">Manage your funds</p>
+            <h1 className="text-xl font-bold">My Wallet</h1>
+            <p className="text-white/60 text-xs">Your personal payment account</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -423,7 +423,7 @@ const WalletPage = () => {
                     </Badge>
                   </h1>
                   <p className="text-blue-300/80 mt-1 text-lg">
-                    Cyber-Financial Command Center
+                    Your personal payment account
                   </p>
                   <DataFreshnessBadge lastUpdated={lastRefresh} className="mt-2" />
                 </div>

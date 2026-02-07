@@ -255,14 +255,8 @@
     if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || perms.dashboard)) {
       overviewItems.push({ id: 'dashboard', title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
     }
-    if (!isHidden('/wallet') && (isFinancialAdmin || isFOM || isSupervisor || isDataCollector || isCoordinator)) {
-      overviewItems.push({ id: 'my-wallet', title: "My Wallet", url: "/wallet", icon: CreditCard, priority: 2, isPinned: isPinned('/wallet') });
-    }
-    if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM)) {
-      overviewItems.push({ id: 'cost-submission', title: "Cost Submission", url: "/cost-submission", icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
-    }
     if (!isHidden('/signatures')) {
-      overviewItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 4, isPinned: isPinned('/signatures') });
+      overviewItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 2, isPinned: isPinned('/signatures') });
     }
     if (overviewItems.length) groups.push({ id: 'overview', label: "Overview", order: 1, items: overviewItems });
 
@@ -335,9 +329,6 @@
     if (!isHidden('/map') && (isSuperAdmin || isAdmin || isFOM)) {
       dataItems.push({ id: 'advanced-map', title: "Advanced Map", url: "/map", icon: Map, priority: 6, isPinned: isPinned('/map') });
     }
-    if (!isHidden('/wallet-reports') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      dataItems.push({ id: 'wallet-reports', title: "Wallet Reports", url: "/wallet-reports", icon: BarChart3, priority: 7, isPinned: isPinned('/wallet-reports') });
-    }
     if (dataItems.length) groups.push({ id: 'reports', label: "Data & Reports", order: 5, items: dataItems });
 
     const helpItems: MenuGroup['items'] = [];
@@ -349,42 +340,64 @@
     }
     if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 9, items: helpItems });
 
-    // Finance category - Financial operations and approvals
-    const financeItems: MenuGroup['items'] = [];
-    if (!isHidden('/budget') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      financeItems.push({ id: 'budget', title: "Budget", url: "/budget", icon: DollarSign, priority: 1, isPinned: isPinned('/budget') });
+    // Payments & Finance - organized into sub-categories
+    // Sub-group 1: My Money (personal wallet, cost submissions - visible to most users)
+    const myMoneyItems: MenuGroup['items'] = [];
+    if (!isHidden('/wallet') && (isFinancialAdmin || isFOM || isSupervisor || isDataCollector || isCoordinator)) {
+      myMoneyItems.push({ id: 'my-wallet', title: "My Wallet", url: "/wallet", icon: CreditCard, priority: 1, isPinned: isPinned('/wallet') });
     }
-    if (!isHidden('/admin/wallets') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      financeItems.push({ id: 'wallets', title: "Wallets", url: "/admin/wallets", icon: CreditCard, priority: 2, isPinned: isPinned('/admin/wallets') });
+    if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM)) {
+      myMoneyItems.push({ id: 'cost-submission', title: "Cost Submission", url: "/cost-submission", icon: Receipt, priority: 2, isPinned: isPinned('/cost-submission') });
     }
-    if (!isHidden('/financial-operations') && (isSuperAdmin || perms.financialOperations)) {
-      financeItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 3, isPinned: isPinned('/financial-operations') });
-    }
+    if (myMoneyItems.length) groups.push({ id: 'finance-my-money', label: "My Money", order: 5.1, items: myMoneyItems, parentGroup: 'finance' } as any);
+
+    // Sub-group 2: Approvals (all approval workflows)
+    const approvalItems: MenuGroup['items'] = [];
     if (!isHidden('/supervisor-approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
-      financeItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 4, isPinned: isPinned('/supervisor-approvals') });
+      approvalItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 1, isPinned: isPinned('/supervisor-approvals') });
     }
     if (!isHidden('/withdrawal-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      financeItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 5, isPinned: isPinned('/withdrawal-approval') });
+      approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
     }
     if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor)) {
-      financeItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 6, isPinned: isPinned('/down-payment-approval') });
-    }
-    if (!isHidden('/advance-requests-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
-      financeItems.push({ id: 'advance-requests-report', title: "Transportation Advance Cost", url: "/advance-requests-report", icon: BarChart3, priority: 6.5, isPinned: isPinned('/advance-requests-report') });
+      approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
     }
     if (!isHidden('/finance-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      financeItems.push({ id: 'finance-approval', title: "Finance Approval", url: "/finance-approval", icon: Banknote, priority: 7, isPinned: isPinned('/finance-approval') });
+      approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
     }
-    if (!isHidden('/cost-predictions') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      financeItems.push({ id: 'cost-predictions', title: "Cost Predictions", url: "/cost-predictions", icon: TrendingUp, priority: 8, isPinned: isPinned('/cost-predictions') });
+    if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
+
+    // Sub-group 3: Financial Management (admin-level management)
+    const finMgmtItems: MenuGroup['items'] = [];
+    if (!isHidden('/budget') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      finMgmtItems.push({ id: 'budget', title: "Budget", url: "/budget", icon: DollarSign, priority: 1, isPinned: isPinned('/budget') });
     }
-    if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      financeItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 9, isPinned: isPinned('/exchange-rates') });
+    if (!isHidden('/admin/wallets') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      finMgmtItems.push({ id: 'wallets', title: "Wallets Admin", url: "/admin/wallets", icon: CreditCard, priority: 2, isPinned: isPinned('/admin/wallets') });
+    }
+    if (!isHidden('/financial-operations') && (isSuperAdmin || perms.financialOperations)) {
+      finMgmtItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 3, isPinned: isPinned('/financial-operations') });
     }
     if (!isHidden('/retainer-management') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      financeItems.push({ id: 'retainer-management', title: "Retainer Management", url: "/retainer-management", icon: Banknote, priority: 10, isPinned: isPinned('/retainer-management') });
+      finMgmtItems.push({ id: 'retainer-management', title: "Retainer Management", url: "/retainer-management", icon: Banknote, priority: 4, isPinned: isPinned('/retainer-management') });
     }
-    if (financeItems.length) groups.push({ id: 'finance', label: "Finance", order: 6, items: financeItems });
+    if (finMgmtItems.length) groups.push({ id: 'finance-management', label: "Financial Management", order: 5.3, items: finMgmtItems, parentGroup: 'finance' } as any);
+
+    // Sub-group 4: Financial Reports & Tools
+    const finReportItems: MenuGroup['items'] = [];
+    if (!isHidden('/wallet-reports') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      finReportItems.push({ id: 'wallet-reports', title: "Wallet Reports", url: "/wallet-reports", icon: BarChart3, priority: 1, isPinned: isPinned('/wallet-reports') });
+    }
+    if (!isHidden('/advance-requests-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+      finReportItems.push({ id: 'advance-requests-report', title: "Transport Advance Report", url: "/advance-requests-report", icon: BarChart3, priority: 2, isPinned: isPinned('/advance-requests-report') });
+    }
+    if (!isHidden('/cost-predictions') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      finReportItems.push({ id: 'cost-predictions', title: "Cost Predictions", url: "/cost-predictions", icon: TrendingUp, priority: 3, isPinned: isPinned('/cost-predictions') });
+    }
+    if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      finReportItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 4, isPinned: isPinned('/exchange-rates') });
+    }
+    if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
 
     // Administration category - User and role management
     const adminItems: MenuGroup['items'] = [];
@@ -656,93 +669,206 @@
             </Collapsible>
           )}
 
-          {menuGroups.map((group, index) => {
-            const isCollapsed = collapsedGroups.has(group.id);
-            
-            return (
-              <Collapsible key={group.id} open={!isCollapsed} className="">
-                <SidebarGroup className="py-0 px-0">
-                  <CollapsibleTrigger asChild>
-                    <SidebarGroupLabel 
-                      className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
-                      onClick={() => toggleGroupCollapse(group.id)}
-                      data-testid={`group-label-${group.id}`}
-                    >
-                      <span>{group.label}</span>
-                      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
-                    </SidebarGroupLabel>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarGroupContent>
-                      <SidebarMenu className="space-y-0">
-                        {group.items.map((item, itemIndex) => {
-                          const isItemFavorite = isFavorite(item.url);
-                          return (
-                            <SidebarMenuItem key={item.id} index={itemIndex} className="py-0 group/item">
-                              <div className="flex items-center w-full">
-                                <SidebarMenuButton
-                                  asChild
-                                  isActive={pathname === item.url}
-                                  tooltip={item.title}
-                                  className={`flex-1 rounded text-[13px] font-medium transition-all duration-200 
-                                    ${
-                                      pathname === item.url
-                                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
-                                        : ""
-                                    }`}
-                                >
-                                  <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-link-${item.id}`}>
-                                    <item.icon
-                                      className={`h-4 w-4 ${
-                                        pathname === item.url
-                                          ? "text-blue-700 dark:text-blue-300"
-                                          : "text-blue-600 dark:text-blue-400"
-                                      }`}
-                                    />
-                                    <span className="truncate flex-1">{item.title}</span>
-                                  </Link>
-                                </SidebarMenuButton>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        toggleFavorite(item.url, item.title, item.icon?.name || 'Star'); 
-                                      }}
-                                      className={`transition-opacity shrink-0 ${
-                                        isItemFavorite 
-                                          ? 'opacity-100' 
-                                          : 'opacity-0 group-hover/item:opacity-100'
-                                      }`}
-                                      aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                                      data-testid={`button-favorite-${item.id}`}
+          {(() => {
+            const financeSubGroups = menuGroups.filter((g: any) => g.parentGroup === 'finance');
+            const regularGroups = menuGroups.filter((g: any) => !g.parentGroup);
+            const allGroupsSorted = [...regularGroups].sort((a, b) => a.order - b.order);
+
+            const renderMenuItems = (items: MenuGroup['items']) => (
+              <SidebarMenu className="space-y-0">
+                {items.map((item, itemIndex) => {
+                  const isItemFavorite = isFavorite(item.url);
+                  return (
+                    <SidebarMenuItem key={item.id} index={itemIndex} className="py-0 group/item">
+                      <div className="flex items-center w-full">
+                        <SidebarMenuButton
+                          asChild
+                          isActive={pathname === item.url}
+                          tooltip={item.title}
+                          className={`flex-1 rounded text-[13px] font-medium transition-all duration-200 
+                            ${
+                              pathname === item.url
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
+                                : ""
+                            }`}
+                        >
+                          <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-link-${item.id}`}>
+                            <item.icon
+                              className={`h-4 w-4 ${
+                                pathname === item.url
+                                  ? "text-blue-700 dark:text-blue-300"
+                                  : "text-blue-600 dark:text-blue-400"
+                              }`}
+                            />
+                            <span className="truncate flex-1">{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                toggleFavorite(item.url, item.title, item.icon?.name || 'Star'); 
+                              }}
+                              className={`transition-opacity shrink-0 ${
+                                isItemFavorite 
+                                  ? 'opacity-100' 
+                                  : 'opacity-0 group-hover/item:opacity-100'
+                              }`}
+                              aria-label={isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                              data-testid={`button-favorite-${item.id}`}
+                            >
+                              <Star 
+                                className={`h-3 w-3 ${
+                                  isItemFavorite 
+                                    ? 'text-amber-500 fill-amber-500' 
+                                    : 'text-muted-foreground'
+                                }`} 
+                              />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>{isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            );
+
+            const rendered: JSX.Element[] = [];
+            let financeInserted = false;
+
+            for (const group of allGroupsSorted) {
+              if (!financeInserted && group.order > 5 && financeSubGroups.length > 0) {
+                financeInserted = true;
+                const isFinanceCollapsed = collapsedGroups.has('finance-parent');
+                rendered.push(
+                  <Collapsible key="finance-parent" open={!isFinanceCollapsed}>
+                    <SidebarGroup className="py-0 px-0">
+                      <CollapsibleTrigger asChild>
+                        <SidebarGroupLabel 
+                          className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-green-600 dark:text-green-300 cursor-pointer flex items-center justify-between hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
+                          onClick={() => toggleGroupCollapse('finance-parent')}
+                          data-testid="group-label-finance-parent"
+                        >
+                          <span className="flex items-center gap-1">
+                            <Banknote className="h-3 w-3" />
+                            Payments & Finance
+                          </span>
+                          <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isFinanceCollapsed ? '-rotate-90' : ''}`} />
+                        </SidebarGroupLabel>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarGroupContent>
+                          {financeSubGroups.sort((a, b) => a.order - b.order).map(subGroup => {
+                            const isSubCollapsed = collapsedGroups.has(subGroup.id);
+                            return (
+                              <Collapsible key={subGroup.id} open={!isSubCollapsed}>
+                                <div className="pl-1">
+                                  <CollapsibleTrigger asChild>
+                                    <div 
+                                      className="px-1 py-0.5 h-5 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground cursor-pointer flex items-center justify-between hover:bg-muted/50 rounded transition-colors"
+                                      onClick={() => toggleGroupCollapse(subGroup.id)}
+                                      data-testid={`group-label-${subGroup.id}`}
                                     >
-                                      <Star 
-                                        className={`h-3 w-3 ${
-                                          isItemFavorite 
-                                            ? 'text-amber-500 fill-amber-500' 
-                                            : 'text-muted-foreground'
-                                        }`} 
-                                      />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right">
-                                    <p>{isItemFavorite ? 'Remove from favorites' : 'Add to favorites'}</p>
-                                  </TooltipContent>
-                                </Tooltip>
+                                      <span>{subGroup.label}</span>
+                                      <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-200 ${isSubCollapsed ? '-rotate-90' : ''}`} />
+                                    </div>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    {renderMenuItems(subGroup.items)}
+                                  </CollapsibleContent>
+                                </div>
+                              </Collapsible>
+                            );
+                          })}
+                        </SidebarGroupContent>
+                      </CollapsibleContent>
+                    </SidebarGroup>
+                  </Collapsible>
+                );
+              }
+
+              const isCollapsed = collapsedGroups.has(group.id);
+              rendered.push(
+                <Collapsible key={group.id} open={!isCollapsed}>
+                  <SidebarGroup className="py-0 px-0">
+                    <CollapsibleTrigger asChild>
+                      <SidebarGroupLabel 
+                        className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                        onClick={() => toggleGroupCollapse(group.id)}
+                        data-testid={`group-label-${group.id}`}
+                      >
+                        <span>{group.label}</span>
+                        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                      </SidebarGroupLabel>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarGroupContent>
+                        {renderMenuItems(group.items)}
+                      </SidebarGroupContent>
+                    </CollapsibleContent>
+                  </SidebarGroup>
+                </Collapsible>
+              );
+            }
+
+            if (!financeInserted && financeSubGroups.length > 0) {
+              const isFinanceCollapsed = collapsedGroups.has('finance-parent');
+              rendered.push(
+                <Collapsible key="finance-parent" open={!isFinanceCollapsed}>
+                  <SidebarGroup className="py-0 px-0">
+                    <CollapsibleTrigger asChild>
+                      <SidebarGroupLabel 
+                        className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-green-600 dark:text-green-300 cursor-pointer flex items-center justify-between hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
+                        onClick={() => toggleGroupCollapse('finance-parent')}
+                        data-testid="group-label-finance-parent-end"
+                      >
+                        <span className="flex items-center gap-1">
+                          <Banknote className="h-3 w-3" />
+                          Payments & Finance
+                        </span>
+                        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isFinanceCollapsed ? '-rotate-90' : ''}`} />
+                      </SidebarGroupLabel>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarGroupContent>
+                        {financeSubGroups.sort((a, b) => a.order - b.order).map(subGroup => {
+                          const isSubCollapsed = collapsedGroups.has(subGroup.id);
+                          return (
+                            <Collapsible key={subGroup.id} open={!isSubCollapsed}>
+                              <div className="pl-1">
+                                <CollapsibleTrigger asChild>
+                                  <div 
+                                    className="px-1 py-0.5 h-5 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground cursor-pointer flex items-center justify-between hover:bg-muted/50 rounded transition-colors"
+                                    onClick={() => toggleGroupCollapse(subGroup.id)}
+                                    data-testid={`group-label-${subGroup.id}`}
+                                  >
+                                    <span>{subGroup.label}</span>
+                                    <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-200 ${isSubCollapsed ? '-rotate-90' : ''}`} />
+                                  </div>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  {renderMenuItems(subGroup.items)}
+                                </CollapsibleContent>
                               </div>
-                            </SidebarMenuItem>
+                            </Collapsible>
                           );
                         })}
-                      </SidebarMenu>
-                    </SidebarGroupContent>
-                  </CollapsibleContent>
-                </SidebarGroup>
-              </Collapsible>
-            );
-          })}
+                      </SidebarGroupContent>
+                    </CollapsibleContent>
+                  </SidebarGroup>
+                </Collapsible>
+              );
+            }
+
+            return rendered;
+          })()}
         </SidebarContent>
 
         <SidebarFooter className="border-t p-0">

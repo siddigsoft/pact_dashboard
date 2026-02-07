@@ -42,6 +42,7 @@ import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 function AdvanceRequestsReportContent() {
   const { requests, loading, refreshRequests } = useDownPayment();
@@ -872,6 +873,17 @@ function AdvanceRequestsReportContent() {
           </div>
         </CardContent>
       </Card>
+
+      <PageInfoBanner
+        title="Transport Advance Report"
+        description="View and analyze all transportation advance (down-payment) requests. Track outstanding advances, reconciliation status, and total advance costs by hub, project, or time period. Export reports for financial tracking."
+        workflowSteps={[
+          { step: 1, role: 'Data Collector', action: 'Requests advance', description: 'Staff requests transportation advance before a site visit.' },
+          { step: 2, role: 'Supervisor', action: 'Approves request', description: 'Supervisor reviews and approves the advance amount.' },
+          { step: 3, role: 'Finance Admin', action: 'Disburses payment', description: 'Finance processes the advance payment to the staff member.' },
+          { step: 4, role: 'System', action: 'Reconciles on completion', description: 'When the site visit is completed, the advance is automatically deducted from the earned fee.' },
+        ]}
+      />
 
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">

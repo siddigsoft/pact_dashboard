@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -236,6 +237,18 @@ const FinancialOperations = () => {
           New Submission
         </Button>
       </div>
+
+      <PageInfoBanner
+        title="Financial Operations"
+        description="This is the central hub for all operational costs. View transportation costs, operational cost submissions, and a consolidated financial overview across all projects. Use this page to track spending, compare costs, and generate reports."
+        workflowSteps={[
+          { step: 1, role: 'Field Staff', action: 'Submits costs', description: 'Data collectors and supervisors submit operational or transportation costs through the Cost Submission page.' },
+          { step: 2, role: 'Supervisor', action: 'Reviews (Tier 1)', description: 'Supervisors review and approve/reject cost submissions from their team members.' },
+          { step: 3, role: 'Admin', action: 'Final Approval (Tier 2)', description: 'Admin or Finance Admin gives final approval on supervisor-approved requests.' },
+          { step: 4, role: 'Finance Admin', action: 'Processes Payment', description: 'Finance processes the approved request and releases funds to the staff member\'s wallet.' },
+          { step: 5, role: 'System', action: 'Credits Wallet', description: 'The system automatically credits the approved amount to the staff member\'s wallet, deducting any advance payments.' },
+        ]}
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">

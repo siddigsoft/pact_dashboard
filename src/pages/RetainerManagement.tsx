@@ -59,6 +59,7 @@ import { useWallet } from '@/context/wallet/WalletContext';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { format, subMonths } from 'date-fns';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface RetainerTransaction {
   id: string;
@@ -478,6 +479,17 @@ const RetainerManagement = () => {
           </Button>
         </div>
       </div>
+
+      <PageInfoBanner
+        title="Retainer Management"
+        description="Track and process monthly retainer payments for classified team members. View payment history, check eligibility, and process batch payments. The system prevents duplicate payments and maintains a full audit trail."
+        workflowSteps={[
+          { step: 1, role: 'Admin', action: 'Reviews eligible members', description: 'Check which team members are classified for retainer payments this month.' },
+          { step: 2, role: 'Finance Admin', action: 'Previews batch', description: 'Review the payment batch including amounts and recipients before processing.' },
+          { step: 3, role: 'Finance Admin', action: 'Processes payments', description: 'Execute the batch payment, which credits retainer amounts to each eligible member\'s wallet.' },
+          { step: 4, role: 'System', action: 'Records transactions', description: 'Each payment is logged as a wallet transaction with full audit trail.' },
+        ]}
+      />
 
       {loading ? (
         <div className="space-y-4">

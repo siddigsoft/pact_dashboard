@@ -24,6 +24,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval, formatDistanceToNow } from 'date-fns';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 export default function WalletReports() {
   const { withdrawalRequests } = useWallet();
@@ -181,6 +182,11 @@ export default function WalletReports() {
           </Tabs>
         </div>
       </div>
+
+      <PageInfoBanner
+        title="Wallet Reports & Analytics"
+        description="View detailed analytics and reports across all wallets. Track withdrawal trends, analyze spending patterns, and monitor overall financial health. Export reports for auditing and compliance purposes."
+      />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard

@@ -51,6 +51,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { FinanceApprovalSignature, SignatureRequirementAlert } from '@/components/finance/FinanceSignatureIntegration';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 export default function FinanceApproval() {
   const navigate = useNavigate();
@@ -728,6 +729,17 @@ export default function FinanceApproval() {
           </Button>
         </div>
       </div>
+
+      <PageInfoBanner
+        title="Finance Processing"
+        description="This is the final step in the payment pipeline. Process withdrawal requests that have been fully approved through Tier 1 and Tier 2. Release payments to team members' bank accounts or mobile wallets."
+        workflowSteps={[
+          { step: 1, role: 'Data Collector', action: 'Requested withdrawal', description: 'A team member submitted a withdrawal request.' },
+          { step: 2, role: 'Supervisor', action: 'Approved (Tier 1)', description: 'The supervisor reviewed and approved the request.' },
+          { step: 3, role: 'Admin', action: 'Approved (Tier 2)', description: 'The admin gave final authorization.' },
+          { step: 4, role: 'Finance Admin', action: 'Releases payment (YOU ARE HERE)', description: 'You verify all approvals are in order and process the actual payment to the team member.' },
+        ]}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-500/5 via-blue-500/10 to-indigo-500/5 border-blue-500/20">

@@ -39,6 +39,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface SupervisedRequest extends WithdrawalRequest {
   requesterName?: string;
@@ -442,10 +443,10 @@ export default function SupervisorApprovals() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
-            Supervisor Approvals
+            Tier 1 Approvals
           </h1>
           <p className="text-muted-foreground mt-1">
-            Review and approve withdrawal requests from your team (Tier 1)
+            Review and approve withdrawal requests from your team
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -471,6 +472,17 @@ export default function SupervisorApprovals() {
           </Button>
         </div>
       </div>
+
+      <PageInfoBanner
+        title="Tier 1 Approvals"
+        description="This is where Supervisors review withdrawal requests from their team members. When a field staff member requests a wallet withdrawal, it first comes here for initial review. You can approve, reject, or request changes."
+        workflowSteps={[
+          { step: 1, role: 'Data Collector', action: 'Requests withdrawal', description: 'A team member submits a request to withdraw funds from their wallet.' },
+          { step: 2, role: 'Supervisor', action: 'Reviews request (YOU ARE HERE)', description: 'You review the request details, check the amount and reason, then approve or reject it.' },
+          { step: 3, role: 'Admin', action: 'Final approval (Tier 2)', description: 'After your approval, the request goes to Admin/Finance for final sign-off.' },
+          { step: 4, role: 'Finance Admin', action: 'Processes payment', description: 'Finance processes the approved withdrawal and releases the funds.' },
+        ]}
+      />
 
       <Alert>
         <Info className="h-4 w-4" />

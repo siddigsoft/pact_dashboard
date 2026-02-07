@@ -43,6 +43,7 @@ import { format } from 'date-fns';
 import { BUDGET_STATUS_COLORS, BUDGET_ALERT_SEVERITY_COLORS } from '@/types/budget';
 import { exportBudgetToPDF, exportBudgetToExcel, exportBudgetToCSV } from '@/utils/budget-export';
 import type { BudgetExportData } from '@/utils/budget-export';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 const formatCurrency = (cents: number) => {
   return new Intl.NumberFormat('en-SD', {
@@ -323,6 +324,17 @@ const BudgetPage = () => {
           </Button>
         </div>
       </div>
+
+      <PageInfoBanner
+        title="Budget Management"
+        description="Set and track budgets for projects and MMPs (Monthly Monitoring Plans). Monitor how much has been spent versus allocated, track task-level costs, and get alerts when spending approaches budget limits."
+        workflowSteps={[
+          { step: 1, role: 'Admin', action: 'Sets budget', description: 'Admin creates budget allocations for each project and MMP, setting spending limits.' },
+          { step: 2, role: 'Field Staff', action: 'Incurs costs', description: 'As field staff complete site visits and submit costs, spending is tracked against budgets.' },
+          { step: 3, role: 'System', action: 'Tracks spending', description: 'The system automatically calculates utilization rates and flags when budgets are nearing limits.' },
+          { step: 4, role: 'Finance Admin', action: 'Reviews variance', description: 'Finance reviews budget vs. actual spending and adjusts allocations as needed.' },
+        ]}
+      />
 
         {/* Alerts Section */}
         {activeAlerts.length > 0 && (

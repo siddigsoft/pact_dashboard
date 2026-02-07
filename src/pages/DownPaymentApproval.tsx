@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DollarSign, Shield, AlertTriangle, Info, Users, UserCheck, TrendingUp, Receipt, Wallet } from 'lucide-react';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 export default function DownPaymentApproval() {
   const navigate = useNavigate();
@@ -128,6 +129,18 @@ export default function DownPaymentApproval() {
             Wallet
           </Button>
         </div>
+
+        <PageInfoBanner
+          title="Down-Payment Approval"
+          description="Manage transportation advance (down-payment) requests. Field staff request advance payments before site visits to cover transportation costs. These advances are later deducted when the site visit fee is credited to their wallet."
+          workflowSteps={[
+            { step: 1, role: 'Data Collector', action: 'Requests advance', description: 'A field staff member requests a transportation advance before going on a site visit.' },
+            { step: 2, role: 'Supervisor', action: 'Reviews request (Tier 1)', description: 'Supervisor reviews and approves or rejects the advance request.' },
+            { step: 3, role: 'Admin', action: 'Approves payment (Tier 2)', description: 'Admin or Finance Admin approves the advance and authorizes the payment amount.' },
+            { step: 4, role: 'Finance Admin', action: 'Disburses funds', description: 'Finance processes the payment. The amount is recorded as a debit in the staff member\'s wallet.' },
+            { step: 5, role: 'System', action: 'Auto-deducts on completion', description: 'When the site visit is completed and fees are credited, the advance amount is automatically deducted.' },
+          ]}
+        />
 
         <Alert className={selectedTier === 'tier1' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : ''}>
           <Info className="h-4 w-4" />
