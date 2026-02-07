@@ -142,18 +142,19 @@ export async function createSiteVisitWalletTransaction(
     // Step 3: Calculate amount (use provided amount, or calculate from site entry fees)
     let amount: number;
     let transactionDescription: string;
+    let advanceDeducted = 0;
+    let advanceDetails: { requestId: string; amount: number; siteName: string }[] = [];
+
+    const enumeratorFee = Number(siteEntry.enumerator_fee || 0);
+    const transportFee = Number(siteEntry.transport_fee || 0);
+    const directCost = Number(siteEntry.cost || 0);
+    const siteCode = siteEntry.site_code || '';
+    const siteName = siteEntry.site_name || 'Site';
 
     if (providedAmount !== undefined && providedAmount > 0) {
       amount = providedAmount;
-      transactionDescription = providedDescription || `Site visit completion: ${siteEntry.site_name || 'Site'}`;
       console.log(`[WalletTransaction] Using provided amount: ${amount} SDG`);
     } else {
-      // Calculate from site entry fees
-      const enumeratorFee = Number(siteEntry.enumerator_fee || 0);
-      const transportFee = Number(siteEntry.transport_fee || 0);
-      const directCost = Number(siteEntry.cost || 0);
-
-      // Use direct cost if available, otherwise sum fees
       amount = directCost > 0 ? directCost : (enumeratorFee + transportFee);
       
       if (amount <= 0) {
@@ -168,14 +169,67 @@ export async function createSiteVisitWalletTransaction(
         }
         return { success: false, message: errorMsg };
       }
-
-      transactionDescription = providedDescription || 
-        (directCost > 0 
-          ? `Site visit completion: ${siteEntry.site_name || 'Site'}`
-          : `Site visit completion: ${siteEntry.site_name || 'Site'} (${enumeratorFee} SDG enumerator + ${transportFee} SDG transport)`);
       
       console.log(`[WalletTransaction] Calculated amount from site entry: ${amount} SDG (cost: ${directCost}, enumerator: ${enumeratorFee}, transport: ${transportFee})`);
     }
+
+    const grossAmount = amount;
+
+    // Step 3b: Check for approved/paid transportation advances (down payments) for this site
+    // Only deduct advances that haven't been reconciled yet (no advance_reconciled_at)
+    // After deducting, we mark them as reconciled to prevent double-deduction
+    let advancesToReconcile: string[] = [];
+    try {
+      const { data: advances, error: advanceError } = await supabase
+        .from('down_payment_requests')
+        .select('id, site_name, total_paid_amount, status, mmp_site_entry_id, requested_by, metadata')
+        .or(`mmp_site_entry_id.eq.${siteVisitId},site_visit_id.eq.${siteVisitId}`)
+        .in('status', ['partially_paid', 'fully_paid'])
+        .eq('requested_by', userIdToPay);
+
+      if (advanceError) {
+        console.warn(`[WalletTransaction] Could not check for advances: ${advanceError.message}`);
+      } else if (advances && advances.length > 0) {
+        for (const adv of advances) {
+          const meta = (adv.metadata as Record<string, any>) || {};
+          if (meta.advance_reconciled_at) {
+            console.log(`[WalletTransaction] Skipping already-reconciled advance ${adv.id}`);
+            continue;
+          }
+          const paidAmount = Number(adv.total_paid_amount || 0);
+          if (paidAmount > 0) {
+            advanceDeducted += paidAmount;
+            advanceDetails.push({
+              requestId: adv.id,
+              amount: paidAmount,
+              siteName: adv.site_name || siteName,
+            });
+            advancesToReconcile.push(adv.id);
+          }
+        }
+        if (advanceDeducted > 0) {
+          amount = Math.max(0, amount - advanceDeducted);
+          console.log(`[WalletTransaction] Deducting ${advanceDeducted} SDG in unreconciled advances. Gross: ${grossAmount}, Net: ${amount} SDG`);
+        }
+      }
+    } catch (advErr: any) {
+      console.warn(`[WalletTransaction] Advance lookup failed (non-fatal): ${advErr.message}`);
+    }
+
+    // Step 3c: Build detailed description with site info and fee breakdown
+    const descParts: string[] = [];
+    descParts.push(`Site: ${siteName}${siteCode ? ` (${siteCode})` : ''}`);
+    if (directCost > 0 && !providedAmount) {
+      descParts.push(`Total fee: ${directCost} SDG`);
+    } else if (!providedAmount) {
+      descParts.push(`Enumerator fee: ${enumeratorFee} SDG`);
+      descParts.push(`Transport fee: ${transportFee} SDG`);
+    }
+    if (advanceDeducted > 0) {
+      descParts.push(`Advance deducted: -${advanceDeducted} SDG`);
+      descParts.push(`Net credited: ${amount} SDG`);
+    }
+    transactionDescription = providedDescription || descParts.join(' | ');
 
     // Step 4: Check for existing transactions (duplicate prevention)
     if (!skipDuplicateCheck) {
@@ -333,6 +387,19 @@ export async function createSiteVisitWalletTransaction(
       newBalance
     });
 
+    const transactionMetadata: Record<string, any> = {
+      site_name: siteName,
+      site_code: siteCode,
+      enumerator_fee: enumeratorFee,
+      transport_fee: transportFee,
+      gross_amount: grossAmount,
+    };
+    if (advanceDeducted > 0) {
+      transactionMetadata.advance_deducted = advanceDeducted;
+      transactionMetadata.net_amount = amount;
+      transactionMetadata.advance_details = advanceDetails;
+    }
+
     const transactionData = {
       wallet_id: walletId,
       user_id: userIdToPay,
@@ -341,10 +408,11 @@ export async function createSiteVisitWalletTransaction(
       amount_cents: Math.round(amount * 100),
       currency: 'SDG' as const,
       site_visit_id: siteVisitId,
-      related_site_visit_id: siteVisitId, // For legacy compatibility
+      related_site_visit_id: siteVisitId,
       description: transactionDescription,
       balance_before: currentBalance,
       balance_after: newBalance,
+      metadata: transactionMetadata,
     };
 
     console.log(`[WalletTransaction] Transaction data:`, JSON.stringify(transactionData, null, 2));
@@ -404,6 +472,36 @@ export async function createSiteVisitWalletTransaction(
     }
 
     console.log(`[WalletTransaction] ✅ Successfully created transaction ${transaction.id} for site visit ${siteVisitId}: ${amount} SDG to user ${userIdToPay}`);
+
+    // Step 9: Mark reconciled advances to prevent double-deduction on replays
+    if (advancesToReconcile.length > 0) {
+      try {
+        for (const advId of advancesToReconcile) {
+          const { data: advRow } = await supabase
+            .from('down_payment_requests')
+            .select('metadata')
+            .eq('id', advId)
+            .single();
+
+          const existingMeta = (advRow?.metadata as Record<string, any>) || {};
+          await supabase
+            .from('down_payment_requests')
+            .update({
+              metadata: {
+                ...existingMeta,
+                advance_reconciled_at: new Date().toISOString(),
+                reconciled_transaction_id: transaction.id,
+                reconciled_site_visit_id: siteVisitId,
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', advId);
+        }
+        console.log(`[WalletTransaction] Marked ${advancesToReconcile.length} advance(s) as reconciled`);
+      } catch (reconcileErr: any) {
+        console.warn(`[WalletTransaction] Failed to mark advances as reconciled (non-fatal): ${reconcileErr.message}`);
+      }
+    }
 
     return {
       success: true,

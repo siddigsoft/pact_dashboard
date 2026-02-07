@@ -655,6 +655,20 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       if (walletUpdateError) throw walletUpdateError;
 
+      const advanceMetadata: Record<string, any> = {
+        type: 'transportation_advance',
+        down_payment_request_id: data.requestId,
+        site_name: request.siteName,
+        state: request.stateName,
+        locality: request.localityName,
+        project: request.projectName,
+        activity_type: request.activityType,
+        hub: request.hubName,
+        requested_amount: request.requestedAmount,
+        approved_amount: request.approvedAmount,
+      };
+      if (request.mmpSiteEntryId) advanceMetadata.mmp_site_entry_id = request.mmpSiteEntryId;
+
       const { data: transactionData, error: transactionError } = await supabase
         .from('wallet_transactions')
         .insert({
@@ -663,10 +677,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           type: 'down_payment',
           amount: data.amount,
           currency: 'SDG',
-          description: `Down-payment for ${request.siteName}${data.notes ? ': ' + data.notes : ''}`,
+          description: `Transport advance: ${request.siteName}${request.stateName ? ' - ' + request.stateName : ''}${request.projectName ? ' | Project: ' + request.projectName : ''}${data.notes ? ' | ' + data.notes : ''}`,
           balance_before: currentBalance,
           balance_after: newBalance,
           created_by: data.processedBy,
+          metadata: advanceMetadata,
         })
         .select()
         .single();

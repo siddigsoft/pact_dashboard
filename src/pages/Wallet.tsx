@@ -40,7 +40,11 @@ import {
   ArrowLeft,
   Menu,
   Bell,
-  Settings
+  Settings,
+  FileText,
+  Banknote,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import { DEFAULT_CURRENCY } from '@/types/wallet';
@@ -142,8 +146,12 @@ const WalletPage = () => {
       case 'earning':
       case 'site_visit_fee':
         return <ArrowUpRight className="w-4 h-4 text-green-600" />;
+      case 'down_payment':
+        return <Banknote className="w-4 h-4 text-amber-500" />;
       case 'withdrawal':
         return <ArrowDownRight className="w-4 h-4 text-red-600" />;
+      case 'adjustment':
+        return <Activity className="w-4 h-4 text-purple-500" />;
       case 'bonus':
         return <TrendingUp className="w-4 h-4 text-blue-600" />;
       case 'penalty':
@@ -267,6 +275,54 @@ const WalletPage = () => {
   const pendingWithdrawals = withdrawalRequests.filter(r => r.status === 'pending');
   const completedWithdrawals = withdrawalRequests.filter(r => r.status === 'approved');
   const rejectedWithdrawals = withdrawalRequests.filter(r => r.status === 'rejected');
+
+  const [selectedStatementMonth, setSelectedStatementMonth] = useState<string>(() => format(new Date(), 'yyyy-MM'));
+
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    transactions.forEach(t => {
+      monthSet.add(format(new Date(t.createdAt), 'yyyy-MM'));
+    });
+    return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+  }, [transactions]);
+
+  const monthlyStatement = useMemo(() => {
+    if (!selectedStatementMonth || transactions.length === 0) return null;
+    const [year, month] = selectedStatementMonth.split('-').map(Number);
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = endOfMonth(monthStart);
+
+    const monthTxns = transactions
+      .filter(t => {
+        const d = new Date(t.createdAt);
+        return isWithinInterval(d, { start: monthStart, end: monthEnd });
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    const allSorted = [...transactions].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const beforeMonth = allSorted.filter(t => new Date(t.createdAt) < monthStart);
+
+    // Use balanceBefore of first month transaction or balanceAfter of last prior transaction
+    let openingBalance = 0;
+    if (monthTxns.length > 0 && monthTxns[0].balanceBefore !== undefined) {
+      openingBalance = monthTxns[0].balanceBefore;
+    } else if (beforeMonth.length > 0) {
+      openingBalance = beforeMonth[beforeMonth.length - 1].balanceAfter ?? 0;
+    }
+
+    const rows = monthTxns.map(t => {
+      const credit = t.amount > 0 ? t.amount : 0;
+      const debit = t.amount < 0 ? Math.abs(t.amount) : 0;
+      const runningBalance = t.balanceAfter ?? 0;
+      return { ...t, credit, debit, runningBalance };
+    });
+
+    const totalCredits = rows.reduce((s, r) => s + r.credit, 0);
+    const totalDebits = rows.reduce((s, r) => s + r.debit, 0);
+    const closingBalance = rows.length > 0 ? rows[rows.length - 1].runningBalance : openingBalance;
+
+    return { openingBalance, closingBalance, totalCredits, totalDebits, rows, monthLabel: format(monthStart, 'MMMM yyyy') };
+  }, [transactions, selectedStatementMonth]);
 
   const withdrawalSuccessRate = withdrawalRequests.length > 0
     ? (completedWithdrawals.length / withdrawalRequests.length) * 100
@@ -402,6 +458,16 @@ const WalletPage = () => {
                   <Receipt className="w-4 h-4 mr-2" />
                   <span className="hidden xs:inline">COSTS</span>
                   <span className="xs:hidden">C</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/down-payment-approval')}
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
+                  data-testid="button-goto-advances"
+                >
+                  <Banknote className="w-4 h-4 mr-2" />
+                  <span className="hidden xs:inline">ADVANCES</span>
+                  <span className="xs:hidden">A</span>
                 </button>
                 <button
                   type="button"
@@ -779,6 +845,13 @@ const WalletPage = () => {
                 >
                   ACTIVITY
                 </TabsTrigger>
+                <TabsTrigger 
+                  value="statements" 
+                  data-testid="tab-statements"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                >
+                  STATEMENTS
+                </TabsTrigger>
               </TabsList>
             </div>
 
@@ -972,7 +1045,9 @@ const WalletPage = () => {
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
                       <SelectItem value="earning">Site Visit Fees</SelectItem>
+                      <SelectItem value="down_payment">Transport Advances</SelectItem>
                       <SelectItem value="withdrawal">Withdrawals</SelectItem>
+                      <SelectItem value="adjustment">Adjustments</SelectItem>
                       <SelectItem value="bonus">Bonuses</SelectItem>
                       <SelectItem value="penalty">Penalties</SelectItem>
                     </SelectContent>
@@ -1391,7 +1466,6 @@ const WalletPage = () => {
         {/* Activity Tab */}
         <TabsContent value="activity" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Activity Summary */}
             <Card>
               <CardHeader>
                 <CardTitle>Activity Summary</CardTitle>
@@ -1428,8 +1502,6 @@ const WalletPage = () => {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Performance Metrics */}
             <Card>
               <CardHeader>
                 <CardTitle>Performance Metrics</CardTitle>
@@ -1476,6 +1548,212 @@ const WalletPage = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Statements Tab - Bank-like monthly statements */}
+        <TabsContent value="statements" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-400" />
+                  <div>
+                    <CardTitle>Monthly Statement</CardTitle>
+                    <CardDescription>Bank-style account statement</CardDescription>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Select value={selectedStatementMonth} onValueChange={setSelectedStatementMonth}>
+                    <SelectTrigger className="w-[180px] min-h-[44px]" data-testid="select-statement-month">
+                      <Calendar className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="Select month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableMonths.map(m => {
+                        const [y, mo] = m.split('-').map(Number);
+                        return (
+                          <SelectItem key={m} value={m}>
+                            {format(new Date(y, mo - 1, 1), 'MMMM yyyy')}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  {monthlyStatement && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!monthlyStatement) return;
+                        const csvRows = [
+                          ['Date', 'Type', 'Description', 'Credit (SDG)', 'Debit (SDG)', 'Balance (SDG)'],
+                          ['', '', 'Opening Balance', '', '', monthlyStatement.openingBalance.toFixed(2)],
+                          ...monthlyStatement.rows.map(r => [
+                            format(new Date(r.createdAt), 'yyyy-MM-dd HH:mm'),
+                            r.type,
+                            (r.description || '').replace(/,/g, ';'),
+                            r.credit > 0 ? r.credit.toFixed(2) : '',
+                            r.debit > 0 ? r.debit.toFixed(2) : '',
+                            r.runningBalance.toFixed(2),
+                          ]),
+                          ['', '', 'Closing Balance', monthlyStatement.totalCredits.toFixed(2), monthlyStatement.totalDebits.toFixed(2), monthlyStatement.closingBalance.toFixed(2)],
+                        ];
+                        const csv = csvRows.map(r => r.join(',')).join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `wallet-statement-${selectedStatementMonth}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 transition-all backdrop-blur-xl inline-flex items-center min-h-[44px]"
+                      data-testid="button-export-statement-csv"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Export CSV
+                    </button>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!monthlyStatement || monthlyStatement.rows.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                  <p>No transactions for this month</p>
+                  <p className="text-xs mt-1">Select a different month to view its statement</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Statement Header Summary */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-md border bg-slate-800/30">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Opening Balance</p>
+                      <p className="text-lg font-bold tabular-nums text-blue-300 mt-1">
+                        {formatCurrency(monthlyStatement.openingBalance)}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-md border bg-slate-800/30">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Credits</p>
+                      <p className="text-lg font-bold tabular-nums text-green-400 mt-1">
+                        +{formatCurrency(monthlyStatement.totalCredits)}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-md border bg-slate-800/30">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Debits</p>
+                      <p className="text-lg font-bold tabular-nums text-red-400 mt-1">
+                        -{formatCurrency(monthlyStatement.totalDebits)}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-md border bg-slate-800/30">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Closing Balance</p>
+                      <p className="text-lg font-bold tabular-nums text-blue-300 mt-1">
+                        {formatCurrency(monthlyStatement.closingBalance)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mobile Statement View */}
+                  <div className="block sm:hidden space-y-2">
+                    <div className="p-3 rounded-md border border-dashed border-blue-500/30 bg-blue-900/10 flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Opening Balance</span>
+                      <span className="text-sm font-semibold tabular-nums text-blue-300">{formatCurrency(monthlyStatement.openingBalance)}</span>
+                    </div>
+                    {monthlyStatement.rows.map((row) => (
+                      <div key={row.id} className="p-3 rounded-md border border-slate-700/50 bg-slate-800/30">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {getTransactionIcon(row.type)}
+                            <div>
+                              <span className="text-xs font-medium capitalize text-slate-300">
+                                {row.type === 'earning' ? 'Site Visit Fee' : row.type === 'down_payment' ? 'Transport Advance' : row.type.replace('_', ' ')}
+                              </span>
+                              <p className="text-xs text-slate-500">{format(new Date(row.createdAt), 'dd MMM HH:mm')}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {row.credit > 0 && <p className="text-sm font-semibold tabular-nums text-green-400">+{formatCurrency(row.credit)}</p>}
+                            {row.debit > 0 && <p className="text-sm font-semibold tabular-nums text-red-400">-{formatCurrency(row.debit)}</p>}
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed mb-1">{row.description || '-'}</p>
+                        <div className="text-right">
+                          <span className="text-xs text-muted-foreground">Balance: </span>
+                          <span className="text-xs font-semibold tabular-nums text-blue-300">{formatCurrency(row.runningBalance)}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="p-3 rounded-md border border-dashed border-blue-500/30 bg-blue-900/10 flex items-center justify-between">
+                      <span className="text-xs font-medium text-blue-300">Closing Balance</span>
+                      <span className="text-sm font-bold tabular-nums text-blue-300">{formatCurrency(monthlyStatement.closingBalance)}</span>
+                    </div>
+                  </div>
+
+                  {/* Desktop Statement Table */}
+                  <div className="hidden sm:block rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-800/50">
+                          <TableHead className="text-xs uppercase tracking-wide">Date</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wide">Type</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wide min-w-[200px]">Description</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wide text-right">Credit</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wide text-right">Debit</TableHead>
+                          <TableHead className="text-xs uppercase tracking-wide text-right">Balance</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow className="border-b border-dashed border-blue-500/20 bg-blue-900/5">
+                          <TableCell colSpan={5} className="text-sm font-medium text-muted-foreground">Opening Balance</TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums text-blue-300">{formatCurrency(monthlyStatement.openingBalance)}</TableCell>
+                        </TableRow>
+                        {monthlyStatement.rows.map((row) => (
+                          <TableRow key={row.id} data-testid={`row-stmt-${row.id}`}>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {format(new Date(row.createdAt), 'dd MMM HH:mm')}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {getTransactionIcon(row.type)}
+                                <span className="text-sm capitalize whitespace-nowrap">
+                                  {row.type === 'earning' ? 'Site Visit Fee' : row.type === 'down_payment' ? 'Transport Advance' : row.type.replace('_', ' ')}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm max-w-xs">
+                              <p className="truncate" title={row.description || ''}>{row.description || '-'}</p>
+                              {row.metadata?.advance_deducted && (
+                                <p className="text-xs text-orange-400 mt-0.5">Advance deducted: -{formatCurrency(row.metadata.advance_deducted)}</p>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-medium text-green-400">
+                              {row.credit > 0 ? `+${formatCurrency(row.credit)}` : ''}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-medium text-red-400">
+                              {row.debit > 0 ? `-${formatCurrency(row.debit)}` : ''}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold text-blue-300">
+                              {formatCurrency(row.runningBalance)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="border-t-2 border-blue-500/30 bg-blue-900/10">
+                          <TableCell colSpan={3} className="text-sm font-bold text-blue-300">Closing Balance</TableCell>
+                          <TableCell className="text-right tabular-nums font-bold text-green-400">+{formatCurrency(monthlyStatement.totalCredits)}</TableCell>
+                          <TableCell className="text-right tabular-nums font-bold text-red-400">-{formatCurrency(monthlyStatement.totalDebits)}</TableCell>
+                          <TableCell className="text-right tabular-nums font-bold text-blue-300">{formatCurrency(monthlyStatement.closingBalance)}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    Statement for {monthlyStatement.monthLabel} &middot; {monthlyStatement.rows.length} transaction{monthlyStatement.rows.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
         </CardContent>
