@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GradientStatCard, GRADIENT_PRESETS } from '@/components/dashboard/GradientStatCard';
@@ -13,8 +12,7 @@ import {
   Receipt,
   TrendingUp,
   Wallet,
-  ArrowRight,
-  Download,
+  Award,
   FileSpreadsheet,
   FileText,
   BarChart3,
@@ -23,7 +21,6 @@ import {
   AlertTriangle,
   PieChart,
   FolderKanban,
-  Building2,
   ExternalLink,
 } from 'lucide-react';
 import {
@@ -345,12 +342,8 @@ export function ConsolidatedFinancialTab({
   }
 
   return (
-    <div className="space-y-6 mt-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold" data-testid="text-consolidated-title">Consolidated Financial Overview</h2>
-          <p className="text-sm text-muted-foreground">Transportation + Operational costs in one view</p>
-        </div>
+    <div className="space-y-4 mt-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Select value={projectFilter} onValueChange={setProjectFilter}>
             <SelectTrigger className="w-[180px]" data-testid="select-project-filter">
@@ -363,37 +356,39 @@ export function ConsolidatedFinancialTab({
               ))}
             </SelectContent>
           </Select>
+        </div>
+        <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleExportExcel} data-testid="button-export-excel">
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            <FileSpreadsheet className="h-4 w-4 mr-1.5" />
             Excel
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportPDF} data-testid="button-export-pdf">
-            <FileText className="h-4 w-4 mr-2" />
+            <FileText className="h-4 w-4 mr-1.5" />
             PDF
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <GradientStatCard
           title="Total Paid Out"
           value={formatCurrency(combinedTotals.totalSpend)}
-          subtitle="Transportation + Operational"
+          subtitle="Transport + Operational"
           icon={DollarSign}
           gradient={GRADIENT_PRESETS.blue}
           testId="card-total-spend"
         />
         <GradientStatCard
-          title="Transportation Costs"
+          title="Transportation"
           value={formatCurrency(transportStats.paid)}
-          subtitle={`${transportStats.total} advance requests`}
+          subtitle={`${transportStats.total} requests`}
           icon={Truck}
           gradient={GRADIENT_PRESETS.teal}
           onClick={() => navigate('/advance-requests-report')}
           testId="card-transport-total"
         />
         <GradientStatCard
-          title="Operational Costs"
+          title="Operational"
           value={formatCurrency(opStats.paidAmount)}
           subtitle={`${opStats.total} submissions`}
           icon={Receipt}
@@ -402,128 +397,129 @@ export function ConsolidatedFinancialTab({
           testId="card-op-total"
         />
         <GradientStatCard
-          title="Pending Approvals"
+          title="Pending"
           value={combinedTotals.totalPendingCount}
-          subtitle={formatCurrency(combinedTotals.totalPending) + ' awaiting'}
+          subtitle={formatCurrency(combinedTotals.totalPending)}
           icon={Clock}
           gradient={GRADIENT_PRESETS.orange}
           testId="card-total-pending"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-muted-foreground" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
               Monthly Spending Trend
             </CardTitle>
-            <CardDescription>Transportation vs Operational costs (last 6 months)</CardDescription>
+            <CardDescription className="text-xs">Last 6 months</CardDescription>
           </CardHeader>
           <CardContent>
             {monthlyTrend.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={monthlyTrend}>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={monthlyTrend} barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="label" className="text-xs" tick={{ fill: 'currentColor' }} />
-                  <YAxis className="text-xs" tick={{ fill: 'currentColor' }} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                  <XAxis dataKey="label" className="text-xs" tick={{ fill: 'currentColor', fontSize: 11 }} />
+                  <YAxis className="text-xs" tick={{ fill: 'currentColor', fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} width={50} />
                   <Tooltip
                     formatter={(value: number) => [formatCurrency(value), '']}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: 12 }}
                   />
-                  <Legend />
-                  <Bar dataKey="transport" name="Transportation" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="operational" name="Operational" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="transport" name="Transportation" fill="#06b6d4" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="operational" name="Operational" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[280px] text-muted-foreground">No data available</div>
+              <div className="flex items-center justify-center h-[260px] text-muted-foreground text-sm">No data available</div>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChart className="h-5 w-5 text-muted-foreground" />
-              Cost Distribution
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <PieChart className="h-4 w-4 text-muted-foreground" />
+              By Category
             </CardTitle>
-            <CardDescription>Spending by category</CardDescription>
+            <CardDescription className="text-xs">Spending distribution</CardDescription>
           </CardHeader>
           <CardContent>
             {categoryBreakdown.length > 0 ? (
-              <div className="flex flex-col md:flex-row items-center gap-4">
-                <ResponsiveContainer width="100%" height={240}>
+              <div className="space-y-3">
+                <ResponsiveContainer width="100%" height={180}>
                   <RechartsPieChart>
-                    <Pie data={categoryBreakdown.slice(0, 8)} cx="50%" cy="50%" outerRadius={90} innerRadius={45} dataKey="value" label={({ name, percent }) => `${name.length > 12 ? name.slice(0, 12) + '..' : name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {categoryBreakdown.slice(0, 8).map((_, i) => (
+                    <Pie data={categoryBreakdown.slice(0, 6)} cx="50%" cy="50%" outerRadius={70} innerRadius={35} dataKey="value" paddingAngle={2}>
+                      {categoryBreakdown.slice(0, 6).map((_, i) => (
                         <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value: number) => [formatCurrency(value), 'Amount']} />
+                    <Tooltip formatter={(value: number) => [formatCurrency(value), 'Amount']} contentStyle={{ fontSize: 12 }} />
                   </RechartsPieChart>
                 </ResponsiveContainer>
+                <div className="space-y-1.5">
+                  {categoryBreakdown.slice(0, 6).map((cat, i) => {
+                    const totalCat = categoryBreakdown.reduce((s, c) => s + c.value, 0);
+                    const pct = totalCat > 0 ? ((cat.value / totalCat) * 100).toFixed(0) : '0';
+                    return (
+                      <div key={cat.name} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="flex items-center gap-1.5 truncate min-w-0">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                          <span className="truncate">{cat.name}</span>
+                        </span>
+                        <span className="text-muted-foreground shrink-0">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-[240px] text-muted-foreground">No data available</div>
+              <div className="flex items-center justify-center h-[260px] text-muted-foreground text-sm">No data</div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Truck className="h-5 w-5 text-muted-foreground" />
-                Transportation Summary
+              <CardTitle className="text-base flex items-center gap-2">
+                <Truck className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                Transportation
               </CardTitle>
-              <CardDescription>Advance request pipeline</CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={() => navigate('/advance-requests-report')} data-testid="button-goto-advance-report">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Full Report
+            <Button variant="ghost" size="sm" onClick={() => navigate('/advance-requests-report')} data-testid="button-goto-advance-report">
+              <ExternalLink className="h-3.5 w-3.5" />
             </Button>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-md bg-muted/50 p-3">
-                <div className="text-xs text-muted-foreground">Total Requested</div>
-                <div className="text-lg font-bold" data-testid="text-transport-requested">{formatCurrency(transportStats.requested)}</div>
+          <CardContent className="space-y-3 pt-0">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-md bg-muted/50 p-2.5">
+                <div className="text-[11px] text-muted-foreground">Requested</div>
+                <div className="text-sm font-bold" data-testid="text-transport-requested">{formatCurrency(transportStats.requested)}</div>
               </div>
-              <div className="rounded-md bg-muted/50 p-3">
-                <div className="text-xs text-muted-foreground">Total Paid</div>
-                <div className="text-lg font-bold" data-testid="text-transport-paid">{formatCurrency(transportStats.paid)}</div>
+              <div className="rounded-md bg-muted/50 p-2.5">
+                <div className="text-[11px] text-muted-foreground">Paid</div>
+                <div className="text-sm font-bold" data-testid="text-transport-paid">{formatCurrency(transportStats.paid)}</div>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5 text-amber-500" />
-                  Pending
-                </span>
+                <span className="flex items-center gap-1.5"><Clock className="h-3 w-3 text-amber-500" />Pending</span>
                 <Badge variant="secondary">{transportStats.pendingCount}</Badge>
               </div>
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-                  Approved
-                </span>
+                <span className="flex items-center gap-1.5"><CheckCircle className="h-3 w-3 text-green-500" />Approved</span>
                 <Badge variant="secondary">{transportStats.approvedCount}</Badge>
               </div>
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <Wallet className="h-3.5 w-3.5 text-blue-500" />
-                  Paid
-                </span>
+                <span className="flex items-center gap-1.5"><Wallet className="h-3 w-3 text-blue-500" />Paid</span>
                 <Badge variant="secondary">{transportStats.paidCount}</Badge>
               </div>
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-                  Rejected
-                </span>
+                <span className="flex items-center gap-1.5"><AlertTriangle className="h-3 w-3 text-red-500" />Rejected</span>
                 <Badge variant="secondary">{transportStats.rejectedCount}</Badge>
               </div>
             </div>
@@ -531,57 +527,43 @@ export function ConsolidatedFinancialTab({
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Receipt className="h-5 w-5 text-muted-foreground" />
-                Operational Cost Summary
+              <CardTitle className="text-base flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                Operational Costs
               </CardTitle>
-              <CardDescription>Cost submission pipeline</CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={() => navigate('/cost-submission/reports')} data-testid="button-goto-cost-reports">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Full Report
+            <Button variant="ghost" size="sm" onClick={() => navigate('/cost-submission/reports')} data-testid="button-goto-cost-reports">
+              <ExternalLink className="h-3.5 w-3.5" />
             </Button>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-md bg-muted/50 p-3">
-                <div className="text-xs text-muted-foreground">Total Submitted</div>
-                <div className="text-lg font-bold" data-testid="text-op-submitted">{formatCurrency(opStats.totalAmount)}</div>
+          <CardContent className="space-y-3 pt-0">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-md bg-muted/50 p-2.5">
+                <div className="text-[11px] text-muted-foreground">Submitted</div>
+                <div className="text-sm font-bold" data-testid="text-op-submitted">{formatCurrency(opStats.totalAmount)}</div>
               </div>
-              <div className="rounded-md bg-muted/50 p-3">
-                <div className="text-xs text-muted-foreground">Total Paid</div>
-                <div className="text-lg font-bold" data-testid="text-op-paid">{formatCurrency(opStats.paidAmount)}</div>
+              <div className="rounded-md bg-muted/50 p-2.5">
+                <div className="text-[11px] text-muted-foreground">Paid</div>
+                <div className="text-sm font-bold" data-testid="text-op-paid">{formatCurrency(opStats.paidAmount)}</div>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5 text-amber-500" />
-                  Pending
-                </span>
+                <span className="flex items-center gap-1.5"><Clock className="h-3 w-3 text-amber-500" />Pending</span>
                 <Badge variant="secondary">{opStats.pendingCount}</Badge>
               </div>
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-                  Approved
-                </span>
+                <span className="flex items-center gap-1.5"><CheckCircle className="h-3 w-3 text-green-500" />Approved</span>
                 <Badge variant="secondary">{opStats.approvedCount}</Badge>
               </div>
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <Wallet className="h-3.5 w-3.5 text-blue-500" />
-                  Paid
-                </span>
+                <span className="flex items-center gap-1.5"><Wallet className="h-3 w-3 text-blue-500" />Paid</span>
                 <Badge variant="secondary">{opStats.paidCount}</Badge>
               </div>
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex items-center gap-2">
-                  <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-                  Rejected
-                </span>
+                <span className="flex items-center gap-1.5"><AlertTriangle className="h-3 w-3 text-red-500" />Rejected</span>
                 <Badge variant="secondary">{opStats.rejectedCount}</Badge>
               </div>
             </div>
@@ -589,25 +571,25 @@ export function ConsolidatedFinancialTab({
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FolderKanban className="h-5 w-5 text-muted-foreground" />
-            Spending by Project
-          </CardTitle>
-          <CardDescription>Cross-category comparison: Transportation vs Operational by project</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {projectBreakdown.length > 0 ? (
+      {projectBreakdown.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FolderKanban className="h-4 w-4 text-muted-foreground" />
+              Spending by Project
+            </CardTitle>
+            <CardDescription className="text-xs">Transportation vs Operational by project</CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Project</TableHead>
-                    <TableHead className="text-right">Transportation (SDG)</TableHead>
-                    <TableHead className="text-right">Operational (SDG)</TableHead>
-                    <TableHead className="text-right">Total (SDG)</TableHead>
-                    <TableHead className="w-[200px]">Distribution</TableHead>
+                    <TableHead className="text-xs">Project</TableHead>
+                    <TableHead className="text-right text-xs">Transport</TableHead>
+                    <TableHead className="text-right text-xs">Operational</TableHead>
+                    <TableHead className="text-right text-xs">Total</TableHead>
+                    <TableHead className="w-[140px] text-xs hidden md:table-cell">Split</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -615,144 +597,63 @@ export function ConsolidatedFinancialTab({
                     const tPct = p.total > 0 ? (p.transport / p.total) * 100 : 0;
                     return (
                       <TableRow key={i} data-testid={`row-project-${i}`}>
-                        <TableCell className="font-medium">{p.projectName}</TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(p.transport)}</TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(p.operational)}</TableCell>
-                        <TableCell className="text-right font-mono font-semibold">{formatCurrency(p.total)}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden flex">
-                              <div className="h-full bg-cyan-500" style={{ width: `${tPct}%` }} />
-                              <div className="h-full bg-purple-500" style={{ width: `${100 - tPct}%` }} />
-                            </div>
+                        <TableCell className="font-medium text-sm">{p.projectName}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{formatCurrency(p.transport)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{formatCurrency(p.operational)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm font-semibold">{formatCurrency(p.total)}</TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden flex">
+                            <div className="h-full bg-cyan-500" style={{ width: `${tPct}%` }} />
+                            <div className="h-full bg-purple-500" style={{ width: `${100 - tPct}%` }} />
                           </div>
                         </TableCell>
                       </TableRow>
                     );
                   })}
                   <TableRow className="bg-muted/50 font-semibold">
-                    <TableCell>Total</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(projectBreakdown.reduce((s, p) => s + p.transport, 0))}</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(projectBreakdown.reduce((s, p) => s + p.operational, 0))}</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(projectBreakdown.reduce((s, p) => s + p.total, 0))}</TableCell>
-                    <TableCell />
+                    <TableCell className="text-sm">Total</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatCurrency(projectBreakdown.reduce((s, p) => s + p.transport, 0))}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatCurrency(projectBreakdown.reduce((s, p) => s + p.operational, 0))}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatCurrency(projectBreakdown.reduce((s, p) => s + p.total, 0))}</TableCell>
+                    <TableCell className="hidden md:table-cell" />
                   </TableRow>
                 </TableBody>
               </Table>
-              <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-cyan-500" /> Transportation</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-purple-500" /> Operational</span>
+              <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-1.5 rounded-sm bg-cyan-500" /> Transport</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-1.5 rounded-sm bg-purple-500" /> Operational</span>
               </div>
             </div>
-          ) : (
-            <div className="flex items-center justify-center h-24 text-muted-foreground">No project data available</div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ArrowRight className="h-5 w-5 text-muted-foreground" />
-            Quick Navigation
-          </CardTitle>
-          <CardDescription>Jump to detailed financial views</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Button
-              variant="outline"
-              className="justify-start h-auto py-4"
-              onClick={() => navigate('/advance-requests-report')}
-              data-testid="button-nav-advance-report"
-            >
-              <div className="flex items-center gap-3 w-full">
-                <Truck className="h-5 w-5 text-cyan-600 dark:text-cyan-400 shrink-0" />
-                <div className="text-left flex-1 min-w-0">
-                  <div className="font-semibold">Transportation Advance Report</div>
-                  <div className="text-xs text-muted-foreground">{transportStats.total} requests, {formatCurrency(transportStats.paid)} paid</div>
-                </div>
-                <ArrowRight className="h-4 w-4 shrink-0" />
-              </div>
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start h-auto py-4"
-              onClick={() => navigate('/cost-submission/reports')}
-              data-testid="button-nav-cost-reports"
-            >
-              <div className="flex items-center gap-3 w-full">
-                <Receipt className="h-5 w-5 text-purple-600 dark:text-purple-400 shrink-0" />
-                <div className="text-left flex-1 min-w-0">
-                  <div className="font-semibold">Operational Cost Reports</div>
-                  <div className="text-xs text-muted-foreground">{opStats.total} submissions, {formatCurrency(opStats.paidAmount)} paid</div>
-                </div>
-                <ArrowRight className="h-4 w-4 shrink-0" />
-              </div>
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start h-auto py-4"
-              onClick={() => navigate('/cost-submission')}
-              data-testid="button-nav-cost-submission"
-            >
-              <div className="flex items-center gap-3 w-full">
-                <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
-                <div className="text-left flex-1 min-w-0">
-                  <div className="font-semibold">Submit New Cost</div>
-                  <div className="text-xs text-muted-foreground">Create a new operational cost submission</div>
-                </div>
-                <ArrowRight className="h-4 w-4 shrink-0" />
-              </div>
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start h-auto py-4"
-              onClick={() => navigate('/finance-approval')}
-              data-testid="button-nav-finance-approval"
-            >
-              <div className="flex items-center gap-3 w-full">
-                <CheckCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
-                <div className="text-left flex-1 min-w-0">
-                  <div className="font-semibold">Finance Approval</div>
-                  <div className="text-xs text-muted-foreground">Review and approve payments</div>
-                </div>
-                <ArrowRight className="h-4 w-4 shrink-0" />
-              </div>
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start h-auto py-4"
-              onClick={() => navigate('/wallet-reports')}
-              data-testid="button-nav-wallet-reports"
-            >
-              <div className="flex items-center gap-3 w-full">
-                <Wallet className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-                <div className="text-left flex-1 min-w-0">
-                  <div className="font-semibold">Wallet Reports</div>
-                  <div className="text-xs text-muted-foreground">View wallet balances and transactions</div>
-                </div>
-                <ArrowRight className="h-4 w-4 shrink-0" />
-              </div>
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start h-auto py-4"
-              onClick={() => navigate('/budget')}
-              data-testid="button-nav-budget"
-            >
-              <div className="flex items-center gap-3 w-full">
-                <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <div className="text-left flex-1 min-w-0">
-                  <div className="font-semibold">Budget Management</div>
-                  <div className="text-xs text-muted-foreground">Track budget utilization and variance</div>
-                </div>
-                <ArrowRight className="h-4 w-4 shrink-0" />
-              </div>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+        <Button variant="outline" className="justify-start h-auto py-2.5 px-3" onClick={() => navigate('/advance-requests-report')} data-testid="button-nav-advance-report">
+          <Truck className="h-4 w-4 mr-2 text-cyan-600 dark:text-cyan-400 shrink-0" />
+          <span className="text-xs font-medium truncate">Advance Report</span>
+        </Button>
+        <Button variant="outline" className="justify-start h-auto py-2.5 px-3" onClick={() => navigate('/cost-submission/reports')} data-testid="button-nav-cost-reports">
+          <Receipt className="h-4 w-4 mr-2 text-purple-600 dark:text-purple-400 shrink-0" />
+          <span className="text-xs font-medium truncate">Cost Reports</span>
+        </Button>
+        <Button variant="outline" className="justify-start h-auto py-2.5 px-3" onClick={() => navigate('/finance-approval')} data-testid="button-nav-finance-approval">
+          <CheckCircle className="h-4 w-4 mr-2 text-blue-600 dark:text-blue-400 shrink-0" />
+          <span className="text-xs font-medium truncate">Approvals</span>
+        </Button>
+        <Button variant="outline" className="justify-start h-auto py-2.5 px-3" onClick={() => navigate('/wallet-reports')} data-testid="button-nav-wallet-reports">
+          <Wallet className="h-4 w-4 mr-2 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="text-xs font-medium truncate">Wallets</span>
+        </Button>
+        <Button variant="outline" className="justify-start h-auto py-2.5 px-3" onClick={() => navigate('/budget')} data-testid="button-nav-budget">
+          <TrendingUp className="h-4 w-4 mr-2 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="text-xs font-medium truncate">Budget</span>
+        </Button>
+        <Button variant="outline" className="justify-start h-auto py-2.5 px-3" onClick={() => navigate('/classifications')} data-testid="button-nav-classifications">
+          <Award className="h-4 w-4 mr-2 text-indigo-600 dark:text-indigo-400 shrink-0" />
+          <span className="text-xs font-medium truncate">Classifications</span>
+        </Button>
+      </div>
     </div>
   );
 }
