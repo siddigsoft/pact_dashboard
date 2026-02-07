@@ -382,7 +382,7 @@ export default function HubOperations() {
       
       // Run queries in parallel for better performance
       // Use * to select all available columns for maximum compatibility
-      const mmpColumns = 'id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, visit_date, status';
+      const mmpColumns = 'id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at, visit_date, status, cp_name, mmp_file_id, activity_at_site, monitoring_by, survey_tool, visit_type, main_activity, use_market_diversion, use_warehouse_monitoring, mmp_files(project_name, projects(name))';
       
       // Run queries in parallel
       const registryPromise = supabase
@@ -594,8 +594,8 @@ export default function HubOperations() {
           created_by: '',
           source: 'mmp' as const,
           // MMP-specific fields with proper boolean parsing
-          cp_name: mmpSite.cp_name || '',
-          cpName: mmpSite.cp_name || '',
+          cp_name: mmpSite.cp_name || (mmpSite as any).mmp_files?.projects?.name || (mmpSite as any).mmp_files?.project_name || '',
+          cpName: mmpSite.cp_name || (mmpSite as any).mmp_files?.projects?.name || (mmpSite as any).mmp_files?.project_name || '',
           activity_at_site: mmpSite.activity_at_site || '',
           siteActivity: mmpSite.activity_at_site || '',
           monitoring_by: mmpSite.monitoring_by || '',
@@ -699,10 +699,12 @@ export default function HubOperations() {
       
       let mmpEntry = null;
       
+      const mmpEnrichSelect = '*, mmp_files(project_name, projects(name))';
+      
       if (site.id) {
         const { data: entryById, error: byIdError } = await supabase
           .from('mmp_site_entries')
-          .select('*')
+          .select(mmpEnrichSelect)
           .eq('registry_site_id', site.id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -716,7 +718,7 @@ export default function HubOperations() {
       if (!mmpEntry && site.site_code) {
         const { data: entryByCode, error: byCodeError } = await supabase
           .from('mmp_site_entries')
-          .select('*')
+          .select(mmpEnrichSelect)
           .eq('site_code', site.site_code)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -730,7 +732,7 @@ export default function HubOperations() {
       if (!mmpEntry && site.site_name && site.state_name) {
         const { data: entryByName, error: byNameError } = await supabase
           .from('mmp_site_entries')
-          .select('*')
+          .select(mmpEnrichSelect)
           .ilike('site_name', site.site_name)
           .ilike('state', site.state_name)
           .order('created_at', { ascending: false })
@@ -743,12 +745,13 @@ export default function HubOperations() {
       }
       
       if (mmpEntry) {
+        const resolvedCpName = mmpEntry.cp_name || mmpEntry.mmp_files?.projects?.name || mmpEntry.mmp_files?.project_name || '';
         return {
           ...site,
           hub_office: mmpEntry.hub_office,
           hubOffice: mmpEntry.hub_office,
-          cp_name: mmpEntry.cp_name,
-          cpName: mmpEntry.cp_name,
+          cp_name: resolvedCpName,
+          cpName: resolvedCpName,
           activity_at_site: mmpEntry.activity_at_site,
           siteActivity: mmpEntry.activity_at_site,
           survey_tool: mmpEntry.survey_tool,

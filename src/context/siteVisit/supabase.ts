@@ -204,7 +204,7 @@ const transformSiteVisitsData = (data: any[]): SiteVisit[] => {
       description: entry.comments,
       // Additional fields
       hub: entry.hub_office || "",
-      cpName: entry.cp_name,
+      cpName: entry.cp_name || (entry as any).mmp_files?.projects?.name || (entry as any).mmp_files?.project_name || '',
       // Monitoring Plan Structure Fields
       hubOffice: entry.hub_office || "Farchana Hub",
       siteActivity: entry.activity_at_site || "GFA",
@@ -413,7 +413,7 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
     scheduledDate: updatedData.visit_date ? new Date(updatedData.visit_date).toISOString() : undefined,
     description: updatedData.comments,
     hub: updatedData.hub_office || "",
-    cpName: updatedData.cp_name,
+    cpName: updatedData.cp_name || (updatedData as any).mmp_files?.projects?.name || (updatedData as any).mmp_files?.project_name || '',
     permitDetails: ad.permitDetails || {
       federal: false,
       state: false,

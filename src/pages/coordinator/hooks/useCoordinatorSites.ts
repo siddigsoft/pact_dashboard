@@ -145,8 +145,12 @@ export const useCoordinatorSites = () => {
             id,
             name,
             project_id,
+            project_name,
             status,
-            hub
+            hub,
+            projects (
+              name
+            )
           )
         `)
         .neq('status', 'returned_to_fom');
@@ -197,7 +201,7 @@ export const useCoordinatorSites = () => {
           comments: entry.comments,
           mmp_file_id: entry.mmp_file_id,
           hub_office: entry.hub_office,
-          cp_name: entry.cp_name,
+          cp_name: entry.cp_name || (entry as any).mmp_files?.projects?.name || (entry as any).mmp_files?.project_name || '',
           monitoring_by: entry.monitoring_by,
           survey_tool: entry.survey_tool,
           use_market_diversion: entry.use_market_diversion ?? false,

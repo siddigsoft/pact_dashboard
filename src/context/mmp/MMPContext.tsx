@@ -255,7 +255,15 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
     fileUrl: dbRecord.file_url,
     projectId: dbRecord.project_id,
     projectName: dbRecord.project?.name || dbRecord.project_name || dbRecord.projectname || dbRecord.name,
-    siteEntries,
+    siteEntries: (() => {
+      const resolvedProjectName = dbRecord.project?.name || dbRecord.project_name || dbRecord.projectname || '';
+      if (!resolvedProjectName) return siteEntries;
+      return siteEntries.map((entry: any) => ({
+        ...entry,
+        cpName: entry.cpName || resolvedProjectName,
+        cp_name: entry.cp_name || resolvedProjectName,
+      }));
+    })(),
     workflow: dbRecord.workflow,
     approvalWorkflow: dbRecord.approval_workflow,
     location: dbRecord.location,
@@ -547,6 +555,7 @@ export const useMMPProvider = () => {
                 additionalData: migrated.additional_data || {},
                 status: migrated.status,
                 forwardedToUserId: migrated.forwarded_to_user_id,
+                mmp_file_id: migrated.mmp_file_id,
               };
             });
 
@@ -564,7 +573,13 @@ export const useMMPProvider = () => {
         setMMPFiles((prev: MMPFile[]) =>
           prev.map((mmp) => {
             const found = validResults.find((r) => r.mmpId === mmp.id);
-            return found ? { ...mmp, siteEntries: found.entries } : mmp;
+            if (!found) return mmp;
+            const enrichedEntries = found.entries.map((entry: any) => ({
+              ...entry,
+              cpName: entry.cpName || mmp.projectName || '',
+              cp_name: entry.cp_name || mmp.projectName || '',
+            }));
+            return { ...mmp, siteEntries: enrichedEntries };
           })
         );
       }
