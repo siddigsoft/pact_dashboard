@@ -279,10 +279,16 @@ export default function ExchangeRates() {
       <PageInfoBanner
         title="Exchange Rates - Currency Conversion Settings"
         description="This page is for managing the USD to SDG exchange rates used across the entire platform. When cost submissions, budgets, and financial reports need to convert between currencies, they use the rate set here. This is a SETTINGS page for Finance Admins only -- it does not process payments or approvals. Changing the rate here affects how all future cost calculations are displayed on other financial pages."
+        descriptionAr="هذه الصفحة مخصصة لإدارة أسعار صرف الدولار الأمريكي إلى الجنيه السوداني المستخدمة في جميع أنحاء المنصة. عندما تحتاج طلبات التكاليف والميزانيات والتقارير المالية إلى تحويل بين العملات، تستخدم السعر المحدد هنا. هذه صفحة إعدادات لمديري المالية فقط -- لا تعالج مدفوعات أو موافقات. تغيير السعر هنا يؤثر على كيفية عرض جميع حسابات التكاليف المستقبلية في الصفحات المالية الأخرى."
         workflowSteps={[
           { step: 1, role: 'Finance Admin', action: 'Updates exchange rate', description: 'Enter the current USD to SDG exchange rate. You can source it from different banks.' },
           { step: 2, role: 'System', action: 'Applies to all calculations', description: 'All cost submissions, budget reports, and financial dashboards automatically use the latest rate for currency conversions.' },
           { step: 3, role: 'Finance Admin', action: 'Reviews history', description: 'View how the exchange rate has changed over time to understand impact on cost reporting.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'مدير المالية', action: 'يُحدّث سعر الصرف', description: 'أدخل سعر صرف الدولار الأمريكي إلى الجنيه السوداني الحالي. يمكنك الحصول عليه من بنوك مختلفة.' },
+          { step: 2, role: 'النظام', action: 'يُطبّق على جميع الحسابات', description: 'تستخدم جميع طلبات التكاليف وتقارير الميزانية ولوحات المعلومات المالية تلقائياً أحدث سعر لتحويل العملات.' },
+          { step: 3, role: 'مدير المالية', action: 'يراجع السجل', description: 'اعرض كيف تغير سعر الصرف بمرور الوقت لفهم تأثيره على تقارير التكاليف.' },
         ]}
       />
 

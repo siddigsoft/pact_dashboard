@@ -186,11 +186,18 @@ export default function WalletReports() {
       <PageInfoBanner
         title="Wallet Reports - Withdrawal Analytics"
         description="This page shows REPORTS and ANALYTICS for wallet withdrawals across the organization. It tracks how much has been requested, approved, processed, and rejected. This is a REPORTING page only -- to request a withdrawal, use the My Wallet page. To approve withdrawals, use the Tier 1/Tier 2 Approval pages. Use this page for auditing, compliance checks, and understanding withdrawal patterns across teams and time periods."
+        descriptionAr="تعرض هذه الصفحة التقارير والتحليلات لعمليات سحب المحفظة عبر المنظمة. تتتبع المبالغ المطلوبة والمعتمدة والمعالجة والمرفوضة. هذه صفحة تقارير فقط -- لطلب سحب، استخدم صفحة محفظتي. للموافقة على طلبات السحب، استخدم صفحات الموافقات المستوى الأول والثاني. استخدم هذه الصفحة للتدقيق والتحقق من الامتثال وفهم أنماط السحب عبر الفرق والفترات الزمنية."
         workflowSteps={[
           { step: 1, role: 'Field Staff', action: 'Request withdrawals', description: 'Team members request withdrawals from their wallets on the My Wallet page.' },
           { step: 2, role: 'Supervisor & Admin', action: 'Approve requests', description: 'Withdrawals go through Tier 1 and Tier 2 approvals on the respective approval pages.' },
           { step: 3, role: 'Finance Admin', action: 'Processes payments', description: 'Finance releases approved payments on the Finance Processing page.' },
           { step: 4, role: 'Finance Admin', action: 'Reviews reports here', description: 'All withdrawal activity is summarized on this page for tracking, auditing, and export.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'موظف ميداني', action: 'يطلب السحب', description: 'يطلب أعضاء الفريق السحب من محافظهم في صفحة محفظتي.' },
+          { step: 2, role: 'المشرف والمدير', action: 'يوافقون على الطلبات', description: 'تمر طلبات السحب عبر موافقات المستوى الأول والثاني في صفحات الموافقات المخصصة.' },
+          { step: 3, role: 'مدير المالية', action: 'يعالج المدفوعات', description: 'يصرف قسم المالية المدفوعات المعتمدة في صفحة المعالجة المالية.' },
+          { step: 4, role: 'مدير المالية', action: 'يراجع التقارير هنا', description: 'تُلخَّص جميع أنشطة السحب في هذه الصفحة للتتبع والتدقيق والتصدير.' },
         ]}
       />
 

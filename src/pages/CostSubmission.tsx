@@ -833,11 +833,18 @@ const CostSubmission = () => {
       <PageInfoBanner
         title="Cost Submission - Operational Expenses"
         description="This page is for submitting OPERATIONAL COSTS you have already spent during fieldwork -- things like transportation, accommodation, communication, supplies, and other work-related expenses (9 categories available). This is DIFFERENT from wallet withdrawals (taking money out of your wallet -- use My Wallet page) and transportation advances (getting money upfront before a trip -- use Down-Payment Approval page). Here you are requesting REIMBURSEMENT for expenses already incurred. Each submission goes through a two-tier approval before the amount is credited to your wallet."
+        descriptionAr="هذه الصفحة مخصصة لتقديم التكاليف التشغيلية التي أنفقتها أثناء العمل الميداني -- مثل النقل، والإقامة، والاتصالات، والمستلزمات، وغيرها من المصاريف المتعلقة بالعمل (٩ فئات متاحة). هذه الصفحة مختلفة عن سحب المحفظة (سحب الأموال من محفظتك -- استخدم صفحة محفظتي) وعن السلف المسبقة للنقل (الحصول على أموال مقدماً قبل الرحلة -- استخدم صفحة الموافقة على الدفعات المقدمة). هنا أنت تطلب استرداد مصاريف تم إنفاقها بالفعل. كل طلب يمر بموافقة على مستويين قبل إضافة المبلغ إلى محفظتك."
         workflowSteps={[
           { step: 1, role: 'Field Staff', action: 'Submits expense (YOU ARE HERE)', description: 'Fill in cost details, select the expense category, attach receipts if needed, and submit for review.' },
           { step: 2, role: 'Supervisor', action: 'Reviews submission (Tier 1)', description: 'Your supervisor checks the expense is legitimate, then approves, rejects, or sends it back for edits.' },
           { step: 3, role: 'Admin', action: 'Final approval with signature (Tier 2)', description: 'Admin or Finance Admin gives final approval and signs digitally. An approval certificate PDF is generated.' },
           { step: 4, role: 'System', action: 'Credits your wallet', description: 'The approved amount is automatically added to your wallet balance. You can then request a withdrawal from the My Wallet page.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'موظف ميداني', action: 'يقدم المصروف (أنت هنا)', description: 'قم بملء تفاصيل التكلفة، واختر فئة المصروف، وأرفق الإيصالات إن لزم الأمر، ثم أرسل للمراجعة.' },
+          { step: 2, role: 'المشرف', action: 'يراجع الطلب (المستوى الأول)', description: 'يتحقق مشرفك من صحة المصروف، ثم يوافق عليه أو يرفضه أو يعيده للتعديل.' },
+          { step: 3, role: 'المدير', action: 'الموافقة النهائية مع التوقيع (المستوى الثاني)', description: 'يمنح المدير أو مدير المالية الموافقة النهائية ويوقّع رقمياً. يتم إنشاء شهادة موافقة بصيغة PDF.' },
+          { step: 4, role: 'النظام', action: 'يُضيف رصيداً لمحفظتك', description: 'يُضاف المبلغ المعتمد تلقائياً إلى رصيد محفظتك. يمكنك بعدها طلب سحب من صفحة محفظتي.' },
         ]}
       />
 

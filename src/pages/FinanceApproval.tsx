@@ -733,11 +733,18 @@ export default function FinanceApproval() {
       <PageInfoBanner
         title="Finance Processing - Final Payment Release"
         description="This is the FINAL step where money actually moves. You process WALLET WITHDRAWAL requests that have already been fully approved through both Tier 1 (Supervisor) and Tier 2 (Admin). Your job is to release the payment to the team member's bank account or mobile wallet. This page does NOT handle transportation advances -- those are managed on the Down-Payment Approval page."
+        descriptionAr="هذه هي الخطوة الأخيرة حيث تُنقل الأموال فعلياً. تقوم بمعالجة طلبات سحب المحفظة التي تمت الموافقة عليها بالكامل عبر المستوى الأول (المشرف) والمستوى الثاني (المدير). مهمتك هي صرف الدفعة إلى الحساب البنكي أو المحفظة الإلكترونية لعضو الفريق. هذه الصفحة لا تتعامل مع السلف المسبقة للنقل -- تلك تُدار عبر صفحة الموافقة على الدفعات المقدمة."
         workflowSteps={[
           { step: 1, role: 'Data Collector', action: 'Requested wallet withdrawal', description: 'A team member submitted a request to withdraw earned funds from their wallet.' },
           { step: 2, role: 'Supervisor', action: 'Approved (Tier 1)', description: 'The Supervisor reviewed and approved the request on the Tier 1 Approvals page.' },
           { step: 3, role: 'Admin', action: 'Authorized (Tier 2)', description: 'The Admin gave final authorization on the Tier 2 Approvals page.' },
           { step: 4, role: 'Finance Admin', action: 'Sends payment (YOU ARE HERE)', description: 'You verify everything is in order, then process the actual payment and record the transaction reference.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'جامع بيانات', action: 'طلب سحب المحفظة', description: 'قدّم عضو الفريق طلباً لسحب الأموال المكتسبة من محفظته.' },
+          { step: 2, role: 'المشرف', action: 'وافق (المستوى الأول)', description: 'قام المشرف بمراجعة الطلب والموافقة عليه في صفحة الموافقات - المستوى الأول.' },
+          { step: 3, role: 'المدير', action: 'اعتمد (المستوى الثاني)', description: 'منح المدير الاعتماد النهائي في صفحة الموافقات - المستوى الثاني.' },
+          { step: 4, role: 'مدير المالية', action: 'يُرسل الدفعة (أنت هنا)', description: 'تتحقق من أن كل شيء صحيح، ثم تعالج الدفعة الفعلية وتسجّل مرجع المعاملة.' },
         ]}
       />
 

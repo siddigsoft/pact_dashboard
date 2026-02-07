@@ -877,11 +877,18 @@ function AdvanceRequestsReportContent() {
       <PageInfoBanner
         title="Transport Advance Report - Outstanding & Reconciled"
         description="This page shows REPORTS on all transportation advance (down-payment) requests. Track which advances are still outstanding (not yet deducted), which have been reconciled (automatically deducted when work was completed), and total advance costs by hub, project, or time period. This is a REPORTING page only -- to request or approve advances, use the Down-Payment Approval page. This is DIFFERENT from the Wallet Reports page, which tracks wallet withdrawals (earned money going out)."
+        descriptionAr="تعرض هذه الصفحة تقارير عن جميع طلبات السلف المسبقة للنقل (الدفعات المقدمة). تتبّع السلف التي لا تزال معلقة (لم تُخصم بعد)، والتي تمت تسويتها (خُصمت تلقائياً عند إنجاز العمل)، وإجمالي تكاليف السلف حسب المحور أو المشروع أو الفترة الزمنية. هذه صفحة تقارير فقط -- لطلب أو الموافقة على السلف، استخدم صفحة الموافقة على الدفعات المقدمة. هذه الصفحة مختلفة عن صفحة تقارير المحفظة التي تتتبع عمليات سحب المحفظة (أموال مكتسبة يتم سحبها)."
         workflowSteps={[
           { step: 1, role: 'Data Collector', action: 'Requested advance', description: 'Staff requested upfront money for transportation on the Down-Payment Approval page.' },
           { step: 2, role: 'Supervisor & Admin', action: 'Approved advance', description: 'The advance was approved through the Tier 1 and Tier 2 process on the Down-Payment Approval page.' },
           { step: 3, role: 'Finance Admin', action: 'Sent payment', description: 'Finance sent the advance money to the staff member.' },
           { step: 4, role: 'System', action: 'Reconciles automatically', description: 'When work is completed and fees are credited, advances are auto-deducted. This report tracks that status.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'جامع بيانات', action: 'طلب سلفة', description: 'طلب الموظف أموالاً مقدمة للنقل في صفحة الموافقة على الدفعات المقدمة.' },
+          { step: 2, role: 'المشرف والمدير', action: 'وافقوا على السلفة', description: 'تمت الموافقة على السلفة عبر عملية المستوى الأول والثاني في صفحة الموافقة على الدفعات المقدمة.' },
+          { step: 3, role: 'مدير المالية', action: 'أرسل الدفعة', description: 'قام قسم المالية بإرسال مبلغ السلفة للموظف.' },
+          { step: 4, role: 'النظام', action: 'يُسوّي تلقائياً', description: 'عند اكتمال العمل وإضافة الأتعاب، تُخصم السلف تلقائياً. يتتبع هذا التقرير تلك الحالة.' },
         ]}
       />
 

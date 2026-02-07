@@ -2019,11 +2019,18 @@ export default function CostPredictions() {
       <PageInfoBanner
         title="Cost Predictions & Analytics - Forecasting"
         description="This page uses HISTORICAL spending data to PREDICT future costs for field operations. It analyzes past cost submissions, site visit expenses, and spending patterns to forecast what upcoming operations will likely cost. This is a REPORTING and PLANNING tool only -- no payments or approvals happen here. Use it to plan budgets more accurately, spot cost trends by region or site, and identify where spending may be higher or lower than expected."
+        descriptionAr="تستخدم هذه الصفحة بيانات الإنفاق التاريخية للتنبؤ بالتكاليف المستقبلية للعمليات الميدانية. تحلل طلبات التكاليف السابقة، ومصاريف الزيارات الميدانية، وأنماط الإنفاق للتنبؤ بالتكاليف المتوقعة للعمليات القادمة. هذه أداة للتقارير والتخطيط فقط -- لا تتم هنا أي مدفوعات أو موافقات. استخدمها لتخطيط الميزانيات بدقة أكبر، ورصد اتجاهات التكاليف حسب المنطقة أو الموقع، وتحديد أماكن الإنفاق المرتفع أو المنخفض عن المتوقع."
         workflowSteps={[
           { step: 1, role: 'System', action: 'Collects historical data', description: 'The system gathers all past cost submissions, site visit expenses, and transportation costs.' },
           { step: 2, role: 'System', action: 'Generates predictions', description: 'Using historical patterns, the system forecasts future costs by site, hub, and project.' },
           { step: 3, role: 'Finance Admin', action: 'Reviews forecasts', description: 'Finance reviews predictions to plan budgets and identify areas where costs may exceed expectations.' },
           { step: 4, role: 'Admin', action: 'Adjusts plans', description: 'Admins use the insights to adjust budgets on the Budget Management page or reallocate resources.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'النظام', action: 'يجمع البيانات التاريخية', description: 'يجمع النظام جميع طلبات التكاليف السابقة، ومصاريف الزيارات الميدانية، وتكاليف النقل.' },
+          { step: 2, role: 'النظام', action: 'يُنشئ التنبؤات', description: 'باستخدام الأنماط التاريخية، يتنبأ النظام بالتكاليف المستقبلية حسب الموقع والمحور والمشروع.' },
+          { step: 3, role: 'مدير المالية', action: 'يراجع التوقعات', description: 'يراجع قسم المالية التنبؤات لتخطيط الميزانيات وتحديد المجالات التي قد تتجاوز فيها التكاليف التوقعات.' },
+          { step: 4, role: 'المدير', action: 'يُعدّل الخطط', description: 'يستخدم المديرون هذه الرؤى لتعديل الميزانيات في صفحة إدارة الميزانية أو إعادة تخصيص الموارد.' },
         ]}
       />
 
