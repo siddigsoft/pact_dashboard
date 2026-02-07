@@ -129,7 +129,7 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
     mainActivity: entry.main_activity || '',
     projectActivities: [],
     hub: entry.hub_office || entry.mmp_files?.hub || '',
-    cpName: entry.cp_name || '',
+    cpName: entry.cp_name || (entry.mmp_files as any)?.projects?.name || (entry.mmp_files as any)?.project_name || '',
     team: {},
     resources: [],
     risks: '',
