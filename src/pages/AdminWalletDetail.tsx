@@ -990,17 +990,43 @@ const AdminWalletDetail = () => {
                 </div>
               </div>
 
-              <div className="p-4 rounded-lg bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg text-blue-200">Total Income:</span>
-                  <span className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                    {currencyFmt(
-                      earningsBreakdown.siteVisitEarnings + 
-                      earningsBreakdown.bonuses + 
-                      earningsBreakdown.adjustments,
-                      currency
-                    )}
-                  </span>
+              <div className="space-y-3">
+                <div className="p-4 rounded-lg bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg text-green-200">Total Earned:</span>
+                    <span className="text-3xl font-bold text-green-400">
+                      {currencyFmt(
+                        earningsBreakdown.siteVisitEarnings + 
+                        earningsBreakdown.bonuses + 
+                        earningsBreakdown.adjustments,
+                        currency
+                      )}
+                    </span>
+                  </div>
+                </div>
+                {earningsBreakdown.withdrawals > 0 && (
+                  <div className="p-4 rounded-lg bg-gradient-to-r from-red-500/20 to-pink-500/20 border border-red-500/30">
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg text-red-200">Total Withdrawn:</span>
+                      <span className="text-3xl font-bold text-red-400">
+                        -{currencyFmt(earningsBreakdown.withdrawals, currency)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <div className="p-4 rounded-lg bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg text-blue-200">Net Balance:</span>
+                    <span className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                      {currencyFmt(
+                        earningsBreakdown.siteVisitEarnings + 
+                        earningsBreakdown.bonuses + 
+                        earningsBreakdown.adjustments -
+                        earningsBreakdown.withdrawals,
+                        currency
+                      )}
+                    </span>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1116,6 +1142,48 @@ const AdminWalletDetail = () => {
                           </TableCell>
                         </TableRow>
                       ))
+                    )}
+                    {transactions.length > 0 && (
+                      <>
+                        <TableRow className="border-cyan-500/30 bg-green-500/10 font-semibold">
+                          <TableCell colSpan={3} className="text-green-300 text-right">
+                            Total Earned:
+                          </TableCell>
+                          <TableCell className="text-right text-green-400 font-bold">
+                            +{currencyFmt(
+                              transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0),
+                              currency
+                            )}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                        {transactions.some(t => t.amount < 0) && (
+                          <TableRow className="border-cyan-500/30 bg-red-500/10 font-semibold">
+                            <TableCell colSpan={3} className="text-red-300 text-right">
+                              Total Deducted:
+                            </TableCell>
+                            <TableCell className="text-right text-red-400 font-bold">
+                              {currencyFmt(
+                                transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0),
+                                currency
+                              )}
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        )}
+                        <TableRow className="border-cyan-500/30 bg-blue-500/10 font-semibold">
+                          <TableCell colSpan={3} className="text-blue-200 text-right">
+                            Net Balance:
+                          </TableCell>
+                          <TableCell className="text-right text-blue-300 font-bold text-lg">
+                            {currencyFmt(
+                              transactions.reduce((sum, t) => sum + t.amount, 0),
+                              currency
+                            )}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </>
                     )}
                   </TableBody>
                 </Table>
