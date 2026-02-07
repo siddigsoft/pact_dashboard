@@ -29,6 +29,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, startOfDay, isToday, isYesterday } from 'date-fns';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface ExchangeRateRecord {
   id: string;
@@ -274,6 +275,15 @@ export default function ExchangeRates() {
           Refresh
         </Button>
       </div>
+
+      <PageInfoBanner
+        title="Exchange Rates"
+        description="Manage USD to SDG exchange rates used for cost calculations across the platform. Set current rates and view historical rate changes. All cost calculations and conversions use the rates configured here."
+        workflowSteps={[
+          { step: 1, role: 'Finance Admin', action: 'Sets exchange rate', description: 'Enter the current USD to SDG exchange rate used across the platform.' },
+          { step: 2, role: 'System', action: 'Applies to calculations', description: 'All cost submissions and financial reports automatically use the latest rate for conversions.' },
+        ]}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>

@@ -45,6 +45,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface OperationalCostSubmission {
   id: string;
@@ -828,6 +829,17 @@ const CostSubmission = () => {
           </div>
         </div>
       </div>
+
+      <PageInfoBanner
+        title="Cost Submission"
+        description="Submit operational costs for reimbursement. Choose from 9 expense categories including transportation, accommodation, communication, and more. Each submission goes through a two-tier approval process before payment."
+        workflowSteps={[
+          { step: 1, role: 'Field Staff', action: 'Creates submission (YOU ARE HERE)', description: 'Fill in the cost details, select the category, attach receipts, and submit for review.' },
+          { step: 2, role: 'Supervisor', action: 'Reviews (Tier 1)', description: 'Your supervisor reviews the submission and either approves, rejects, or sends it back for changes.' },
+          { step: 3, role: 'Admin', action: 'Final approval (Tier 2)', description: 'Admin or Finance Admin gives final approval with a digital signature.' },
+          { step: 4, role: 'System', action: 'Generates certificate', description: 'An approval certificate PDF is generated and the amount is credited to your wallet.' },
+        ]}
+      />
 
       {/* Stats Cards - Cyber Tech Theme */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">

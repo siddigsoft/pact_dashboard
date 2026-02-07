@@ -56,6 +56,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
@@ -2014,6 +2015,11 @@ export default function CostPredictions() {
           )}
         </div>
       </div>
+
+      <PageInfoBanner
+        title="Cost Predictions & Analytics"
+        description="Forecast future field operation costs based on historical data. Analyze spending trends, predict upcoming expenses, and plan budgets more accurately. Use data-driven insights to optimize resource allocation."
+      />
 
       {/* Main Tabs */}
       <Tabs value={mainTab} onValueChange={setMainTab} className="space-y-4">

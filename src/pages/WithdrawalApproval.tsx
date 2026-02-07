@@ -44,6 +44,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface SupervisedRequest extends WithdrawalRequest {
   requesterName?: string;
@@ -514,7 +515,7 @@ export default function WithdrawalApproval() {
               <div className="p-2 rounded-lg bg-amber-500/10">
                 <Shield className="w-6 h-6 text-amber-600" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Approval</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Tier 2 Approvals</h1>
             </div>
             {isSupervisor && hubName && (
               <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1">
@@ -576,6 +577,17 @@ export default function WithdrawalApproval() {
           </Button>
         </div>
       </div>
+
+      <PageInfoBanner
+        title="Tier 2 Approvals"
+        description="This page is for Admin and Finance Admin to process withdrawal requests that have already been approved by Supervisors in Tier 1. You give the final approval before payment is released."
+        workflowSteps={[
+          { step: 1, role: 'Data Collector', action: 'Requested withdrawal', description: 'A team member submitted a withdrawal request from their wallet.' },
+          { step: 2, role: 'Supervisor', action: 'Approved in Tier 1', description: 'The supervisor has already reviewed and approved this request.' },
+          { step: 3, role: 'Admin', action: 'Final approval (YOU ARE HERE)', description: 'You review the supervisor-approved request and give final authorization for payment.' },
+          { step: 4, role: 'Finance Admin', action: 'Processes payment', description: 'After your approval, finance releases the funds to the team member.' },
+        ]}
+      />
 
       <Alert>
         <Info className="h-4 w-4" />
