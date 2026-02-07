@@ -216,120 +216,38 @@ const FinancialOperations = () => {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="container mx-auto p-4 md:p-6 space-y-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3" data-testid="text-financial-ops-title">
-            <DollarSign className="h-8 w-8 text-primary" />
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2" data-testid="text-financial-ops-title">
+            <DollarSign className="h-6 w-6 md:h-8 md:w-8 text-primary" />
             Financial Operations
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Unified dashboard for cost approvals, classifications, and payments
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Unified dashboard for cost management and approvals
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/classifications')}
-            data-testid="button-view-classifications"
-          >
-            <Award className="h-4 w-4 mr-2" />
-            Classifications
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/finance')}
-            data-testid="button-view-finance"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Finance Details
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/budget')}
-            data-testid="button-view-budget"
-          >
-            <Wallet className="h-4 w-4 mr-2" />
-            Budget
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/admin/wallets')}
-            data-testid="button-view-admin-wallets"
-          >
-            <Wallet className="h-4 w-4 mr-2" />
-            Admin Wallets
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/wallet-reports')}
-            data-testid="button-view-wallet-reports"
-          >
-            <BarChart3 className="h-4 w-4 mr-2" />
-            Wallet Reports
-          </Button>
-          <Button
-            onClick={() => navigate('/cost-submission')}
-            data-testid="button-new-submission"
-          >
-            New Submission
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <GradientStatCard
-          title="Pending Approvals"
-          value={pendingCount}
-          subtitle={`${formatCurrency(totalPendingAmount / 100, 'SDG')} total`}
-          icon={Clock}
-          gradient={GRADIENT_PRESETS.blue}
-          onClick={() => setActiveTab('workflow')}
-          testId="card-pending-approvals"
-        />
-        <GradientStatCard
-          title="Approved & Paid"
-          value={approvedCount + paidCount}
-          subtitle={`${approvalRate}% approval rate`}
-          icon={CheckCircle}
-          gradient={GRADIENT_PRESETS.green}
-          onClick={() => setActiveTab('workflow')}
-          testId="card-approved"
-        />
-        <GradientStatCard
-          title="Classified Users"
-          value={userClassifications?.length || 0}
-          subtitle={`${feeStructures?.length || 0} fee structures`}
-          icon={Users}
-          gradient={GRADIENT_PRESETS.purple}
-          onClick={() => setActiveTab('classifications')}
-          testId="card-classifications"
-        />
-        <GradientStatCard
-          title="Total Paid Out"
-          value={paidCount}
-          subtitle={`${formatCurrency(totalPaidAmount / 100, 'SDG')} paid`}
-          icon={Wallet}
-          gradient={GRADIENT_PRESETS.red}
-          onClick={() => setActiveTab('payments')}
-          testId="card-payments"
-        />
+        <Button
+          size="sm"
+          onClick={() => navigate('/cost-submission')}
+          data-testid="button-new-submission"
+        >
+          <Receipt className="h-4 w-4 mr-2" />
+          New Submission
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full grid grid-cols-3 md:grid-cols-6 gap-1 h-auto p-1">
-          <TabsTrigger value="consolidated" data-testid="tab-consolidated">Consolidated</TabsTrigger>
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="workflow" data-testid="tab-workflow">Workflow</TabsTrigger>
-          <TabsTrigger value="classifications" data-testid="tab-classifications">Classifications</TabsTrigger>
-          <TabsTrigger value="budget" data-testid="tab-budget">Budget</TabsTrigger>
-          <TabsTrigger value="payments" data-testid="tab-payments">Payments</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+          <TabsList className="inline-flex w-auto min-w-full md:w-full h-auto p-1 gap-1">
+            <TabsTrigger value="consolidated" className="text-xs md:text-sm px-3" data-testid="tab-consolidated">Consolidated</TabsTrigger>
+            <TabsTrigger value="overview" className="text-xs md:text-sm px-3" data-testid="tab-overview">Overview</TabsTrigger>
+            <TabsTrigger value="workflow" className="text-xs md:text-sm px-3" data-testid="tab-workflow">Workflow</TabsTrigger>
+            <TabsTrigger value="classifications" className="text-xs md:text-sm px-3" data-testid="tab-classifications">Classifications</TabsTrigger>
+            <TabsTrigger value="budget" className="text-xs md:text-sm px-3" data-testid="tab-budget">Budget</TabsTrigger>
+            <TabsTrigger value="payments" className="text-xs md:text-sm px-3" data-testid="tab-payments">Payments</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="consolidated">
           <ConsolidatedFinancialTab
@@ -341,8 +259,45 @@ const FinancialOperations = () => {
           />
         </TabsContent>
 
-        <TabsContent value="overview" className="space-y-6 mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="overview" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <GradientStatCard
+              title="Pending"
+              value={pendingCount}
+              subtitle={formatCurrency(totalPendingAmount / 100, 'SDG')}
+              icon={Clock}
+              gradient={GRADIENT_PRESETS.blue}
+              onClick={() => setActiveTab('workflow')}
+              testId="card-pending-approvals"
+            />
+            <GradientStatCard
+              title="Approved & Paid"
+              value={approvedCount + paidCount}
+              subtitle={`${approvalRate}% rate`}
+              icon={CheckCircle}
+              gradient={GRADIENT_PRESETS.green}
+              testId="card-approved"
+            />
+            <GradientStatCard
+              title="Classified Users"
+              value={userClassifications?.length || 0}
+              subtitle={`${feeStructures?.length || 0} fee structures`}
+              icon={Users}
+              gradient={GRADIENT_PRESETS.purple}
+              onClick={() => setActiveTab('classifications')}
+              testId="card-classifications"
+            />
+            <GradientStatCard
+              title="Total Paid"
+              value={formatCurrency(totalPaidAmount / 100, 'SDG')}
+              subtitle={`${paidCount} payments`}
+              icon={Wallet}
+              gradient={GRADIENT_PRESETS.red}
+              onClick={() => setActiveTab('payments')}
+              testId="card-payments"
+            />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
