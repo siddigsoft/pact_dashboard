@@ -1,35 +1,45 @@
-import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
+import { supabase } from '@/integrations/supabase/client';
+import { adminListWallets } from '@/context/wallet/supabase';
 import { 
   DollarSign, 
   TrendingUp, 
-  TrendingDown, 
   Users, 
   Wallet,
   ArrowUpCircle,
   ArrowDownCircle,
   Activity,
-  PieChart,
   ExternalLink,
-  Clock,
-  FileText,
   History,
-  MapPin
+  MapPin,
+  FileText,
+  RefreshCw,
+  Search,
+  Download,
+  Loader2,
+  Eye
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isWithinInterval, formatDistanceToNow } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 export default function WalletReports() {
   const { withdrawalRequests } = useWallet();
   const { users } = useUser();
-  const [timeframe, setTimeframe] = useState<'month' | 'all'>('month');
+  const navigate = useNavigate();
+  const [timeframe, setTimeframe] = useState<'month' | 'all'>('all');
+  const [loading, setLoading] = useState(true);
+  const [walletRows, setWalletRows] = useState<any[]>([]);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const currentMonth = useMemo(() => {
     const now = new Date();
@@ -39,61 +49,28 @@ export default function WalletReports() {
     };
   }, []);
 
-  const filteredRequests = useMemo(() => {
-    if (timeframe === 'all') return withdrawalRequests;
-    return withdrawalRequests.filter((req) => {
-      const reqDate = new Date(req.createdAt);
-      return isWithinInterval(reqDate, currentMonth);
-    });
-  }, [withdrawalRequests, timeframe, currentMonth]);
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const data = await adminListWallets({ pageSize: 500 });
+      setWalletRows(data || []);
 
-  const stats = useMemo(() => {
-    const totalRequested = filteredRequests.reduce((sum, req) => sum + req.amount, 0);
-    const approvedRequests = filteredRequests.filter((r) => r.status === 'approved');
-    const rejectedRequests = filteredRequests.filter((r) => r.status === 'rejected');
-    const pendingRequests = filteredRequests.filter((r) => r.status === 'pending');
-    const totalApproved = approvedRequests.reduce((sum, req) => sum + req.amount, 0);
-    const totalRejected = rejectedRequests.reduce((sum, req) => sum + req.amount, 0);
-    const totalPending = pendingRequests.reduce((sum, req) => sum + req.amount, 0);
+      const { data: txData } = await supabase
+        .from('wallet_transactions')
+        .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(site_name, site_code, state, locality)')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+      setAllTransactions(txData || []);
+    } catch (err) {
+      console.error('Error loading wallet reports:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return {
-      totalRequested,
-      totalApproved,
-      totalRejected,
-      totalPending,
-      requestCount: filteredRequests.length,
-      approvedCount: approvedRequests.length,
-      rejectedCount: rejectedRequests.length,
-      pendingCount: pendingRequests.length,
-      approvalRate: filteredRequests.length > 0 
-        ? (approvedRequests.length / filteredRequests.length) * 100 
-        : 0,
-    };
-  }, [filteredRequests]);
-
-  const enumeratorStats = useMemo(() => {
-    const enumerators = users.filter((u) => 
-      u.role === 'dataCollector' || u.role === 'datacollector'
-    );
-
-    return enumerators.map((user) => {
-      const userRequests = filteredRequests.filter((r) => r.userId === user.id);
-      const approvedRequests = userRequests.filter((r) => r.status === 'approved');
-      const totalRequested = userRequests.reduce((sum, req) => sum + req.amount, 0);
-      const totalApproved = approvedRequests.reduce((sum, req) => sum + req.amount, 0);
-
-      return {
-        userId: user.id,
-        name: user.name,
-        email: user.email,
-        requestCount: userRequests.length,
-        approvedCount: approvedRequests.length,
-        totalRequested,
-        totalApproved,
-      };
-    }).filter((stat) => stat.requestCount > 0)
-      .sort((a, b) => b.totalApproved - a.totalApproved);
-  }, [users, filteredRequests]);
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const formatCurrency = (amount: number, currency: string = 'SDG') => {
     return new Intl.NumberFormat('en-SD', {
@@ -103,18 +80,113 @@ export default function WalletReports() {
     }).format(amount);
   };
 
+  const filteredTransactions = useMemo(() => {
+    if (timeframe === 'all') return allTransactions;
+    return allTransactions.filter((tx) => {
+      const txDate = new Date(tx.created_at);
+      return isWithinInterval(txDate, currentMonth);
+    });
+  }, [allTransactions, timeframe, currentMonth]);
+
+  const filteredWithdrawals = useMemo(() => {
+    if (timeframe === 'all') return withdrawalRequests;
+    return withdrawalRequests.filter((req) => {
+      const reqDate = new Date(req.createdAt);
+      return isWithinInterval(reqDate, currentMonth);
+    });
+  }, [withdrawalRequests, timeframe, currentMonth]);
+
+  const walletSummary = useMemo(() => {
+    const totalBalance = walletRows.reduce((sum, w) => {
+      const bal = w.balances ? Object.values(w.balances as Record<string, number>).reduce((s: number, v: any) => s + (Number(v) || 0), 0) : 0;
+      return sum + bal;
+    }, 0);
+    const totalEarned = walletRows.reduce((sum, w) => sum + (w.totalEarned || 0), 0);
+    const totalWithdrawn = walletRows.reduce((sum, w) => sum + (w.totalWithdrawn || 0), 0);
+    const activeWallets = walletRows.filter(w => {
+      const bal = w.balances ? Object.values(w.balances as Record<string, number>).reduce((s: number, v: any) => s + (Number(v) || 0), 0) : 0;
+      return bal > 0;
+    }).length;
+
+    const earningTx = filteredTransactions.filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment' || Number(t.amount) > 0);
+    const withdrawalTx = filteredTransactions.filter(t => t.type === 'withdrawal' || Number(t.amount) < 0);
+    const totalTxEarnings = earningTx.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+    const totalTxWithdrawals = withdrawalTx.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+
+    return {
+      totalBalance,
+      totalEarned,
+      totalWithdrawn,
+      activeWallets,
+      totalWallets: walletRows.length,
+      totalTxEarnings,
+      totalTxWithdrawals,
+      totalTransactions: filteredTransactions.length,
+    };
+  }, [walletRows, filteredTransactions]);
+
+  const withdrawalStats = useMemo(() => {
+    const totalRequested = filteredWithdrawals.reduce((sum, req) => sum + req.amount, 0);
+    const approvedRequests = filteredWithdrawals.filter((r) => r.status === 'approved');
+    const rejectedRequests = filteredWithdrawals.filter((r) => r.status === 'rejected');
+    const pendingRequests = filteredWithdrawals.filter((r) => r.status === 'pending');
+    return {
+      totalRequested,
+      totalApproved: approvedRequests.reduce((sum, req) => sum + req.amount, 0),
+      totalPending: pendingRequests.reduce((sum, req) => sum + req.amount, 0),
+      requestCount: filteredWithdrawals.length,
+      approvedCount: approvedRequests.length,
+      rejectedCount: rejectedRequests.length,
+      pendingCount: pendingRequests.length,
+      approvalRate: filteredWithdrawals.length > 0
+        ? (approvedRequests.length / filteredWithdrawals.length) * 100
+        : 0,
+    };
+  }, [filteredWithdrawals]);
+
+  const userWalletStats = useMemo(() => {
+    const filtered = searchQuery
+      ? walletRows.filter(w =>
+          (w.owner_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (w.profiles?.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : walletRows;
+
+    return filtered
+      .map((w) => {
+        const balance = w.balances ? Object.values(w.balances as Record<string, number>).reduce((s: number, v: any) => s + (Number(v) || 0), 0) : 0;
+        const userTx = filteredTransactions.filter(t => t.user_id === w.user_id);
+        const earned = userTx.filter(t => t.type === 'earning' || t.type === 'site_visit_fee' || t.type === 'adjustment' || Number(t.amount) > 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+        const withdrawn = userTx.filter(t => t.type === 'withdrawal' || Number(t.amount) < 0).reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+        const siteVisits = userTx.filter(t => t.site_visit_id).length;
+
+        return {
+          userId: w.user_id,
+          walletId: w.id,
+          name: w.owner_name || 'Unknown',
+          email: w.profiles?.email || '',
+          balance,
+          totalEarned: w.totalEarned || earned,
+          totalWithdrawn: w.totalWithdrawn || withdrawn,
+          transactionCount: userTx.length,
+          siteVisits,
+        };
+      })
+      .sort((a, b) => b.totalEarned - a.totalEarned);
+  }, [walletRows, filteredTransactions, searchQuery]);
+
   const StatCard = ({ title, value, icon: Icon, trend, color }: any) => (
     <Card className={`bg-gradient-to-br ${color}`}>
       <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
             <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
             <p className="text-2xl font-bold tabular-nums mt-1">{value}</p>
             {trend && (
               <p className="text-xs text-muted-foreground mt-1">{trend}</p>
             )}
           </div>
-          <div className={`p-3 rounded-lg bg-background/50`}>
+          <div className="p-3 rounded-lg bg-background/50 shrink-0">
             <Icon className="w-6 h-6" />
           </div>
         </div>
@@ -122,14 +194,27 @@ export default function WalletReports() {
     </Card>
   );
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-3 text-muted-foreground">Loading wallet reports...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight" data-testid="text-wallet-reports-title">Wallet Reports & Analytics</h1>
-          <p className="text-muted-foreground mt-1">Financial insights and withdrawal trends</p>
+          <p className="text-muted-foreground mt-1">Financial insights and wallet performance across all users</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          <Button variant="outline" size="sm" onClick={loadData} data-testid="button-refresh">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
           <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" asChild data-testid="link-admin-wallets">
               <Link to="/admin/wallets">
@@ -184,203 +269,425 @@ export default function WalletReports() {
       </div>
 
       <PageInfoBanner
-        title="Wallet Reports - Withdrawal Analytics"
-        description="This page shows REPORTS and ANALYTICS for wallet withdrawals across the organization. It tracks how much has been requested, approved, processed, and rejected. This is a REPORTING page only -- to request a withdrawal, use the My Wallet page. To approve withdrawals, use the Tier 1/Tier 2 Approval pages. Use this page for auditing, compliance checks, and understanding withdrawal patterns across teams and time periods."
-        descriptionAr="تعرض هذه الصفحة التقارير والتحليلات لعمليات سحب المحفظة عبر المنظمة. تتتبع المبالغ المطلوبة والمعتمدة والمعالجة والمرفوضة. هذه صفحة تقارير فقط -- لطلب سحب، استخدم صفحة محفظتي. للموافقة على طلبات السحب، استخدم صفحات الموافقات المستوى الأول والثاني. استخدم هذه الصفحة للتدقيق والتحقق من الامتثال وفهم أنماط السحب عبر الفرق والفترات الزمنية."
+        title="Wallet Reports - Financial Analytics"
+        description="This page shows REPORTS and ANALYTICS for all wallets across the organization. It tracks wallet balances, earnings from site visits, withdrawals, and per-user performance. Use this page for auditing, compliance checks, and understanding financial patterns across teams."
+        descriptionAr="تعرض هذه الصفحة التقارير والتحليلات لجميع المحافظ عبر المنظمة. تتتبع أرصدة المحافظ والأرباح من زيارات المواقع والسحوبات والأداء لكل مستخدم. استخدم هذه الصفحة للتدقيق والتحقق من الامتثال وفهم الأنماط المالية عبر الفرق."
         workflowSteps={[
-          { step: 1, role: 'Field Staff', action: 'Request withdrawals', description: 'Team members request withdrawals from their wallets on the My Wallet page.' },
-          { step: 2, role: 'Supervisor & Admin', action: 'Approve requests', description: 'Withdrawals go through Tier 1 and Tier 2 approvals on the respective approval pages.' },
-          { step: 3, role: 'Finance Admin', action: 'Processes payments', description: 'Finance releases approved payments on the Finance Processing page.' },
-          { step: 4, role: 'Finance Admin', action: 'Reviews reports here', description: 'All withdrawal activity is summarized on this page for tracking, auditing, and export.' },
+          { step: 1, role: 'Field Staff', action: 'Complete site visits', description: 'Data collectors complete site visits and fees are credited to their wallets.' },
+          { step: 2, role: 'System', action: 'Credits wallets', description: 'The system automatically calculates fees (enumerator + transport) and credits wallets upon site visit completion.' },
+          { step: 3, role: 'Field Staff', action: 'Request withdrawals', description: 'Team members request withdrawals from their wallets when needed.' },
+          { step: 4, role: 'Finance Admin', action: 'Reviews reports here', description: 'All wallet activity is summarized on this page for tracking, auditing, and export.' },
         ]}
         workflowStepsAr={[
-          { step: 1, role: 'موظف ميداني', action: 'يطلب السحب', description: 'يطلب أعضاء الفريق السحب من محافظهم في صفحة محفظتي.' },
-          { step: 2, role: 'المشرف والمدير', action: 'يوافقون على الطلبات', description: 'تمر طلبات السحب عبر موافقات المستوى الأول والثاني في صفحات الموافقات المخصصة.' },
-          { step: 3, role: 'مدير المالية', action: 'يعالج المدفوعات', description: 'يصرف قسم المالية المدفوعات المعتمدة في صفحة المعالجة المالية.' },
-          { step: 4, role: 'مدير المالية', action: 'يراجع التقارير هنا', description: 'تُلخَّص جميع أنشطة السحب في هذه الصفحة للتتبع والتدقيق والتصدير.' },
+          { step: 1, role: 'موظف ميداني', action: 'إكمال زيارات المواقع', description: 'يكمل جامعو البيانات زيارات المواقع ويتم إضافة الرسوم إلى محافظهم.' },
+          { step: 2, role: 'النظام', action: 'يضيف للمحافظ', description: 'يحسب النظام تلقائياً الرسوم (رسوم العداد + النقل) ويضيفها للمحافظ عند إكمال زيارة الموقع.' },
+          { step: 3, role: 'موظف ميداني', action: 'يطلب السحب', description: 'يطلب أعضاء الفريق السحب من محافظهم عند الحاجة.' },
+          { step: 4, role: 'مدير المالية', action: 'يراجع التقارير هنا', description: 'تُلخَّص جميع أنشطة المحافظ في هذه الصفحة للتتبع والتدقيق والتصدير.' },
         ]}
       />
 
+      {/* Wallet Overview KPIs */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Requested"
-          value={formatCurrency(stats.totalRequested)}
-          icon={DollarSign}
-          trend={`${stats.requestCount} requests`}
+          title="Total Wallets"
+          value={walletSummary.totalWallets}
+          icon={Wallet}
+          trend={`${walletSummary.activeWallets} with balance`}
           color="from-blue-500/10 to-blue-500/5"
         />
         <StatCard
-          title="Total Approved"
-          value={formatCurrency(stats.totalApproved)}
+          title="Total Earned"
+          value={formatCurrency(walletSummary.totalEarned)}
           icon={ArrowUpCircle}
-          trend={`${stats.approvedCount} approved`}
+          trend={`${walletSummary.totalTransactions} transactions`}
           color="from-green-500/10 to-green-500/5"
         />
         <StatCard
-          title="Total Pending"
-          value={formatCurrency(stats.totalPending)}
-          icon={Activity}
-          trend={`${stats.pendingCount} pending`}
-          color="from-yellow-500/10 to-yellow-500/5"
+          title="Total Withdrawn"
+          value={formatCurrency(walletSummary.totalWithdrawn)}
+          icon={ArrowDownCircle}
+          trend={`${withdrawalStats.approvedCount} approved withdrawals`}
+          color="from-red-500/10 to-red-500/5"
         />
         <StatCard
-          title="Approval Rate"
-          value={`${stats.approvalRate.toFixed(1)}%`}
-          icon={TrendingUp}
-          trend={`${stats.rejectedCount} rejected`}
+          title="Net Balance (All)"
+          value={formatCurrency(walletSummary.totalEarned - walletSummary.totalWithdrawn)}
+          icon={DollarSign}
+          trend={`Across ${walletSummary.activeWallets} active wallets`}
           color="from-purple-500/10 to-purple-500/5"
         />
       </div>
 
-      <Tabs defaultValue="datacollectors" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="datacollectors">
+      <Tabs defaultValue="userwallets" className="space-y-4">
+        <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="userwallets" data-testid="tab-user-wallets">
             <Users className="w-4 h-4 mr-2" />
-            Data Collector Performance
+            Per-User Wallets
           </TabsTrigger>
-          <TabsTrigger value="transactions">
+          <TabsTrigger value="transactions" data-testid="tab-recent-transactions">
             <Activity className="w-4 h-4 mr-2" />
-            Transaction Breakdown
+            Recent Transactions
+          </TabsTrigger>
+          <TabsTrigger value="withdrawals" data-testid="tab-withdrawal-requests">
+            <ArrowDownCircle className="w-4 h-4 mr-2" />
+            Withdrawal Requests
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="datacollectors">
+        {/* Per-User Wallets Tab */}
+        <TabsContent value="userwallets">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" />
-                Data Collector Withdrawal Summary
-              </CardTitle>
-              <CardDescription>
-                Individual data collector withdrawal statistics and performance
-              </CardDescription>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-primary" />
+                    All User Wallets ({userWalletStats.length})
+                  </CardTitle>
+                  <CardDescription>
+                    Balance, earnings, and activity for each user
+                  </CardDescription>
+                </div>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-search-wallets"
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data Collector</TableHead>
-                    <TableHead className="text-right">Requests</TableHead>
-                    <TableHead className="text-right">Approved</TableHead>
-                    <TableHead className="text-right">Total Requested</TableHead>
-                    <TableHead className="text-right">Total Approved</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {enumeratorStats.length === 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No data collector data available
-                      </TableCell>
+                      <TableHead>User</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead className="text-right">Total Earned</TableHead>
+                      <TableHead className="text-right">Total Withdrawn</TableHead>
+                      <TableHead className="text-right">Site Visits</TableHead>
+                      <TableHead className="text-right">Transactions</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    enumeratorStats.map((stat) => (
-                      <TableRow key={stat.userId} className="hover-elevate" data-testid={`row-collector-${stat.userId}`}>
-                        <TableCell>
-                          <Link 
-                            to={`/users/${stat.userId}`} 
-                            className="group"
-                            data-testid={`link-user-${stat.userId}`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div>
-                                <p className="font-medium group-hover:text-primary transition-colors flex items-center gap-1">
-                                  {stat.name}
-                                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </p>
-                                <p className="text-xs text-muted-foreground">{stat.email}</p>
-                              </div>
-                            </div>
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{stat.requestCount}</TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant={stat.approvedCount > 0 ? 'default' : 'secondary'}>
-                            {stat.approvedCount}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums font-medium">
-                          {formatCurrency(stat.totalRequested)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums font-bold text-green-600">
-                          {formatCurrency(stat.totalApproved)}
+                  </TableHeader>
+                  <TableBody>
+                    {userWalletStats.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          No wallet data available
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      <>
+                        {userWalletStats.map((stat) => (
+                          <TableRow key={stat.userId} data-testid={`row-wallet-${stat.userId}`}>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">{stat.name}</p>
+                                <p className="text-xs text-muted-foreground">{stat.email}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-bold">
+                              <span className={stat.balance > 0 ? 'text-green-600 dark:text-green-400' : ''}>
+                                {formatCurrency(stat.balance)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-medium text-green-600 dark:text-green-400">
+                              {formatCurrency(stat.totalEarned)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {stat.totalWithdrawn > 0 ? (
+                                <span className="text-red-600 dark:text-red-400">{formatCurrency(stat.totalWithdrawn)}</span>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              <Badge variant="secondary">{stat.siteVisits}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{stat.transactionCount}</TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => navigate(`/admin/wallets/${stat.userId}`)}
+                                data-testid={`button-view-wallet-${stat.userId}`}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {/* Totals Row */}
+                        <TableRow className="bg-muted/50 font-semibold border-t-2">
+                          <TableCell className="font-bold">TOTALS ({userWalletStats.length} users)</TableCell>
+                          <TableCell className="text-right tabular-nums font-bold text-lg">
+                            {formatCurrency(userWalletStats.reduce((s, u) => s + u.balance, 0))}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-bold text-green-600 dark:text-green-400">
+                            {formatCurrency(userWalletStats.reduce((s, u) => s + u.totalEarned, 0))}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-bold text-red-600 dark:text-red-400">
+                            {formatCurrency(userWalletStats.reduce((s, u) => s + u.totalWithdrawn, 0))}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-bold">
+                            {userWalletStats.reduce((s, u) => s + u.siteVisits, 0)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-bold">
+                            {userWalletStats.reduce((s, u) => s + u.transactionCount, 0)}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Recent Transactions Tab */}
         <TabsContent value="transactions">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ArrowUpCircle className="w-5 h-5 text-green-600" />
-                  Approved
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-3xl font-bold tabular-nums text-green-600">
-                      {stats.approvedCount}
-                    </span>
-                    <span className="text-sm text-muted-foreground">requests</span>
-                  </div>
-                  <div className="pt-2 border-t">
-                    <p className="text-sm text-muted-foreground">Total Amount</p>
-                    <p className="text-xl font-bold tabular-nums">{formatCurrency(stats.totalApproved)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-primary" />
+                Recent Transactions ({filteredTransactions.length})
+              </CardTitle>
+              <CardDescription>
+                Latest wallet transactions across all users
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>User</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransactions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          No transactions found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      <>
+                        {filteredTransactions.slice(0, 50).map((tx) => {
+                          const userName = walletRows.find(w => w.user_id === tx.user_id)?.owner_name || 'Unknown';
+                          const siteName = tx.mmp_site_entries?.site_name || '';
+                          return (
+                            <TableRow key={tx.id} data-testid={`row-tx-${tx.id}`}>
+                              <TableCell className="text-sm whitespace-nowrap">
+                                {format(new Date(tx.created_at), 'MMM d, yyyy h:mm a')}
+                              </TableCell>
+                              <TableCell>
+                                <span className="font-medium text-sm">{userName}</span>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={Number(tx.amount) >= 0 ? 'default' : 'destructive'} className="capitalize">
+                                  {(tx.type || '').replace('_', ' ')}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-sm max-w-[200px] truncate">
+                                {tx.description || '-'}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {siteName || '-'}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums font-semibold">
+                                <span className={Number(tx.amount) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                                  {Number(tx.amount) >= 0 ? '+' : ''}{formatCurrency(Number(tx.amount))}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        {/* Totals */}
+                        <TableRow className="bg-green-500/10 font-semibold border-t-2">
+                          <TableCell colSpan={5} className="text-right text-green-700 dark:text-green-300">Total Earned:</TableCell>
+                          <TableCell className="text-right tabular-nums font-bold text-green-600 dark:text-green-400">
+                            +{formatCurrency(filteredTransactions.filter(t => Number(t.amount) > 0).reduce((s, t) => s + Number(t.amount), 0))}
+                          </TableCell>
+                        </TableRow>
+                        {filteredTransactions.some(t => Number(t.amount) < 0) && (
+                          <TableRow className="bg-red-500/10 font-semibold">
+                            <TableCell colSpan={5} className="text-right text-red-700 dark:text-red-300">Total Deducted:</TableCell>
+                            <TableCell className="text-right tabular-nums font-bold text-red-600 dark:text-red-400">
+                              {formatCurrency(filteredTransactions.filter(t => Number(t.amount) < 0).reduce((s, t) => s + Number(t.amount), 0))}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        <TableRow className="bg-blue-500/10 font-semibold">
+                          <TableCell colSpan={5} className="text-right text-blue-700 dark:text-blue-300">Net Total:</TableCell>
+                          <TableCell className="text-right tabular-nums font-bold text-blue-600 dark:text-blue-400 text-lg">
+                            {formatCurrency(filteredTransactions.reduce((s, t) => s + Number(t.amount), 0))}
+                          </TableCell>
+                        </TableRow>
+                      </>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {filteredTransactions.length > 50 && (
+                <p className="text-sm text-muted-foreground text-center mt-4">
+                  Showing 50 of {filteredTransactions.length} transactions. Use Admin Wallets to view all transactions per user.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-yellow-600" />
-                  Pending
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-3xl font-bold tabular-nums text-yellow-600">
-                      {stats.pendingCount}
-                    </span>
-                    <span className="text-sm text-muted-foreground">requests</span>
+        {/* Withdrawal Requests Tab */}
+        <TabsContent value="withdrawals">
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ArrowUpCircle className="w-5 h-5 text-green-600" />
+                    Approved
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-3xl font-bold tabular-nums text-green-600">
+                        {withdrawalStats.approvedCount}
+                      </span>
+                      <span className="text-sm text-muted-foreground">requests</span>
+                    </div>
+                    <div className="pt-2 border-t">
+                      <p className="text-sm text-muted-foreground">Total Amount</p>
+                      <p className="text-xl font-bold tabular-nums">{formatCurrency(withdrawalStats.totalApproved)}</p>
+                    </div>
                   </div>
-                  <div className="pt-2 border-t">
-                    <p className="text-sm text-muted-foreground">Total Amount</p>
-                    <p className="text-xl font-bold tabular-nums">{formatCurrency(stats.totalPending)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-yellow-600" />
+                    Pending
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-3xl font-bold tabular-nums text-yellow-600">
+                        {withdrawalStats.pendingCount}
+                      </span>
+                      <span className="text-sm text-muted-foreground">requests</span>
+                    </div>
+                    <div className="pt-2 border-t">
+                      <p className="text-sm text-muted-foreground">Total Amount</p>
+                      <p className="text-xl font-bold tabular-nums">{formatCurrency(withdrawalStats.totalPending)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ArrowDownCircle className="w-5 h-5 text-red-600" />
+                    Rejected
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-3xl font-bold tabular-nums text-red-600">
+                        {withdrawalStats.rejectedCount}
+                      </span>
+                      <span className="text-sm text-muted-foreground">requests</span>
+                    </div>
+                    <div className="pt-2 border-t">
+                      <p className="text-sm text-muted-foreground">Total Amount</p>
+                      <p className="text-xl font-bold tabular-nums">{formatCurrency(withdrawalStats.totalRequested)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Withdrawal request table */}
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ArrowDownCircle className="w-5 h-5 text-red-600" />
-                  Rejected
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <History className="w-5 h-5 text-primary" />
+                  Withdrawal Request History ({filteredWithdrawals.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-3xl font-bold tabular-nums text-red-600">
-                      {stats.rejectedCount}
-                    </span>
-                    <span className="text-sm text-muted-foreground">requests</span>
-                  </div>
-                  <div className="pt-2 border-t">
-                    <p className="text-sm text-muted-foreground">Total Amount</p>
-                    <p className="text-xl font-bold tabular-nums">{formatCurrency(stats.totalRejected)}</p>
-                  </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredWithdrawals.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                            No withdrawal requests yet
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        <>
+                          {filteredWithdrawals.map((req) => {
+                            const user = users.find(u => u.id === req.userId);
+                            return (
+                              <TableRow key={req.id} data-testid={`row-withdrawal-${req.id}`}>
+                                <TableCell className="text-sm whitespace-nowrap">
+                                  {format(new Date(req.createdAt), 'MMM d, yyyy h:mm a')}
+                                </TableCell>
+                                <TableCell className="font-medium">{user?.name || req.userId}</TableCell>
+                                <TableCell>
+                                  <Badge variant={
+                                    req.status === 'approved' ? 'default' :
+                                    req.status === 'rejected' ? 'destructive' :
+                                    'secondary'
+                                  } className="capitalize">
+                                    {req.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-sm max-w-[200px] truncate">{req.requestReason || '-'}</TableCell>
+                                <TableCell className="text-right tabular-nums font-semibold">
+                                  {formatCurrency(req.amount)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                          <TableRow className="bg-muted/50 font-semibold border-t-2">
+                            <TableCell colSpan={4} className="text-right font-bold">Total Requested:</TableCell>
+                            <TableCell className="text-right tabular-nums font-bold text-lg">
+                              {formatCurrency(withdrawalStats.totalRequested)}
+                            </TableCell>
+                          </TableRow>
+                        </>
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
