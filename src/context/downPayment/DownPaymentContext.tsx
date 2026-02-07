@@ -80,9 +80,9 @@ function transformFromDB(data: any): DownPaymentRequest {
     hubName: data.hub_name,
     totalTransportationBudget: parseFloat(data.total_transportation_budget),
     requestedAmount: parseFloat(data.requested_amount),
-    approvedAmount: data.approved_amount ? parseFloat(data.approved_amount) : undefined,
-    approvalType: data.approval_type,
-    approvalPercentage: data.approval_percentage,
+    approvedAmount: data.metadata?.approved_amount ? parseFloat(data.metadata.approved_amount) : undefined,
+    approvalType: data.metadata?.approval_type,
+    approvalPercentage: data.metadata?.approval_percentage,
     paymentType: data.payment_type,
     installmentPlan: data.installment_plan || [],
     paidInstallments: data.paid_installments || [],
@@ -95,19 +95,19 @@ function transformFromDB(data: any): DownPaymentRequest {
     supervisorApprovedAt: data.supervisor_approved_at,
     supervisorNotes: data.supervisor_notes,
     supervisorRejectionReason: data.supervisor_rejection_reason,
-    supervisorApprovedAmount: data.supervisor_approved_amount ? parseFloat(data.supervisor_approved_amount) : undefined,
+    supervisorApprovedAmount: data.metadata?.supervisor_approved_amount ? parseFloat(data.metadata.supervisor_approved_amount) : undefined,
     adminStatus: data.admin_status,
     adminProcessedBy: data.admin_processed_by,
     adminProcessedByName: data.metadata?.admin_processed_by_name || undefined,
     adminProcessedAt: data.admin_processed_at,
     adminNotes: data.admin_notes,
     adminRejectionReason: data.admin_rejection_reason,
-    adminApprovedAmount: data.admin_approved_amount ? parseFloat(data.admin_approved_amount) : undefined,
+    adminApprovedAmount: data.metadata?.admin_approved_amount ? parseFloat(data.metadata.admin_approved_amount) : undefined,
     status: data.status,
     totalPaidAmount: parseFloat(data.total_paid_amount || 0),
     remainingAmount: parseFloat(data.remaining_amount || 0),
     walletTransactionIds: data.wallet_transaction_ids || [],
-    auditLog: data.audit_log || [],
+    auditLog: data.metadata?.audit_log || [],
     createdAt: data.created_at,
     updatedAt: data.updated_at,
     metadata: data.metadata || {},
@@ -413,10 +413,6 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           supervisor_approved_by: data.approvedBy,
           supervisor_approved_at: new Date().toISOString(),
           supervisor_notes: data.notes,
-          supervisor_approved_amount: approvedAmount,
-          approval_type: data.approvalType || 'full',
-          approval_percentage: data.approvalPercentage,
-          approved_amount: approvedAmount,
           remaining_amount: approvedAmount,
           status: 'pending_admin',
           admin_status: 'pending',
@@ -424,6 +420,10 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           metadata: {
             ...request.metadata,
             supervisor_approved_by_name: data.approvedByName,
+            supervisor_approved_amount: approvedAmount,
+            approval_type: data.approvalType || 'full',
+            approval_percentage: data.approvalPercentage,
+            approved_amount: approvedAmount,
           },
         })
         .eq('id', data.requestId);
@@ -530,14 +530,14 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           admin_processed_by: data.approvedBy,
           admin_processed_at: new Date().toISOString(),
           admin_notes: data.notes,
-          admin_approved_amount: approvedAmount,
-          approved_amount: approvedAmount,
           remaining_amount: approvedAmount - request.totalPaidAmount,
           status: 'approved',
           updated_at: new Date().toISOString(),
           metadata: {
             ...request.metadata,
             admin_processed_by_name: data.approvedByName,
+            admin_approved_amount: approvedAmount,
+            approved_amount: approvedAmount,
           },
         })
         .eq('id', data.requestId);
@@ -807,7 +807,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       const { error } = await supabase
         .from('down_payment_requests')
         .update({
-          audit_log: updatedAuditLog,
+          metadata: { ...request.metadata, audit_log: updatedAuditLog },
           updated_at: new Date().toISOString(),
         })
         .eq('id', requestId);
@@ -906,54 +906,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         updated_at: new Date().toISOString(),
       };
 
-      if (data.targetStatus === 'pending_supervisor') {
-        // Revert to initial state - clear all approval data
-        updateData = {
-          ...updateData,
-          supervisor_status: 'pending',
-          supervisor_approved_by: null,
-          supervisor_approved_at: null,
-          supervisor_notes: null,
-          supervisor_rejection_reason: null,
-          supervisor_approved_amount: null,
-          admin_status: 'pending',
-          admin_processed_by: null,
-          admin_processed_at: null,
-          admin_notes: null,
-          admin_rejection_reason: null,
-          admin_approved_amount: null,
-          approved_amount: null,
-        };
-      } else if (data.targetStatus === 'pending_admin') {
-        // Revert to pending admin - keep supervisor approval, clear admin data
-        updateData = {
-          ...updateData,
-          admin_status: 'pending',
-          admin_processed_by: null,
-          admin_processed_at: null,
-          admin_notes: null,
-          admin_rejection_reason: null,
-          admin_approved_amount: null,
-        };
-      } else if (data.targetStatus === 'approved') {
-        // Revert to approved - keep all approval data, just change status
-        // Used for fully_paid items to revert to approved (for reprocessing)
-        updateData = {
-          ...updateData,
-          total_paid_amount: 0,
-          // Keep approved_amount and remaining_amount
-        };
-      }
-
-      const { error } = await supabase
-        .from('down_payment_requests')
-        .update(updateData)
-        .eq('id', data.requestId);
-
-      if (error) throw error;
-
-      // Add audit entry
-      const newEntry: ApprovalAuditEntry = {
+      const auditEntry: ApprovalAuditEntry = {
         id: crypto.randomUUID(),
         action: 'restored',
         performedBy: data.revertedBy,
@@ -964,13 +917,54 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         newValue: data.targetStatus,
         notes: data.reason || `Reverted to ${data.targetStatus === 'pending_supervisor' ? 'Pending Supervisor' : 'Pending Admin'}`,
       };
+      const updatedAuditLog = [...(request.auditLog || []), auditEntry];
+      const updatedMetadata: Record<string, any> = { ...request.metadata, audit_log: updatedAuditLog };
 
-      const updatedAuditLog = [...(request.auditLog || []), newEntry];
+      if (data.targetStatus === 'pending_supervisor') {
+        updatedMetadata.supervisor_approved_amount = null;
+        updatedMetadata.admin_approved_amount = null;
+        updatedMetadata.approved_amount = null;
+        updatedMetadata.approval_type = null;
+        updatedMetadata.approval_percentage = null;
+        updateData = {
+          ...updateData,
+          supervisor_status: 'pending',
+          supervisor_approved_by: null,
+          supervisor_approved_at: null,
+          supervisor_notes: null,
+          supervisor_rejection_reason: null,
+          admin_status: 'pending',
+          admin_processed_by: null,
+          admin_processed_at: null,
+          admin_notes: null,
+          admin_rejection_reason: null,
+          metadata: updatedMetadata,
+        };
+      } else if (data.targetStatus === 'pending_admin') {
+        updatedMetadata.admin_approved_amount = null;
+        updateData = {
+          ...updateData,
+          admin_status: 'pending',
+          admin_processed_by: null,
+          admin_processed_at: null,
+          admin_notes: null,
+          admin_rejection_reason: null,
+          metadata: updatedMetadata,
+        };
+      } else if (data.targetStatus === 'approved') {
+        updateData = {
+          ...updateData,
+          total_paid_amount: 0,
+          metadata: updatedMetadata,
+        };
+      }
 
-      await supabase
+      const { error } = await supabase
         .from('down_payment_requests')
-        .update({ audit_log: updatedAuditLog })
+        .update(updateData)
         .eq('id', data.requestId);
+
+      if (error) throw error;
 
       toast({
         title: 'Status Reverted',
