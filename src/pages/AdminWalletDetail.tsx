@@ -818,18 +818,24 @@ const AdminWalletDetail = () => {
                       <TableHead className="text-blue-300">Status</TableHead>
                       <TableHead className="text-blue-300">Assigned Date</TableHead>
                       <TableHead className="text-blue-300">Completed Date</TableHead>
-                      <TableHead className="text-blue-300 text-right">Payment</TableHead>
+                      <TableHead className="text-blue-300 text-right">Enumerator Fee</TableHead>
+                      <TableHead className="text-blue-300 text-right">Transport Cost</TableHead>
+                      <TableHead className="text-blue-300 text-right">Total / Payment</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {siteVisits.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-blue-300/50 h-24">
+                        <TableCell colSpan={7} className="text-center text-blue-300/50 h-24">
                           No sites visited yet
                         </TableCell>
                       </TableRow>
                     ) : (
-                      siteVisits.map((site) => (
+                      siteVisits.map((site) => {
+                        const enumFee = Number(site.enumerator_fee || 0);
+                        const transFee = Number(site.transport_fee || 0);
+                        const totalFee = enumFee + transFee > 0 ? enumFee + transFee : Number(site.cost || 0);
+                        return (
                         <TableRow key={site.id} className="border-blue-500/20 hover:bg-blue-500/5">
                           <TableCell className="text-blue-100">{site.site_name}</TableCell>
                           <TableCell>
@@ -850,28 +856,38 @@ const AdminWalletDetail = () => {
                             {(site.visit_completed_at || site.completed_at) ? new Date(site.visit_completed_at || site.completed_at).toLocaleDateString() : '-'}
                           </TableCell>
                           <TableCell className="text-right">
+                            {enumFee > 0 ? (
+                              <span className="text-emerald-400 font-medium">{currencyFmt(enumFee, currency)}</span>
+                            ) : (
+                              <span className="text-blue-300/40">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {transFee > 0 ? (
+                              <span className="text-cyan-400 font-medium">{currencyFmt(transFee, currency)}</span>
+                            ) : (
+                              <span className="text-blue-300/40">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
                             {site.payment ? (
-                              <div className="flex items-center justify-end gap-2">
-                                <div>
-                                  <div className="text-green-400 font-semibold flex items-center gap-1">
-                                    <CheckCircle className="w-3 h-3" />
-                                    {currencyFmt(site.payment.amount, currency)}
-                                  </div>
-                                  <div className="text-xs text-green-300/50">
-                                    Paid {new Date(site.payment.date).toLocaleDateString()}
-                                  </div>
+                              <div>
+                                <div className="text-green-400 font-semibold flex items-center justify-end gap-1">
+                                  <CheckCircle className="w-3 h-3" />
+                                  {currencyFmt(site.payment.amount, currency)}
+                                </div>
+                                <div className="text-xs text-green-300/50">
+                                  Paid {new Date(site.payment.date).toLocaleDateString()}
                                 </div>
                               </div>
                             ) : site.isCompleted ? (
-                              <div className="flex items-center justify-end gap-2">
-                                <div>
-                                  <div className="text-yellow-400 font-semibold flex items-center gap-1">
-                                    <Clock className="w-3 h-3" />
-                                    {site.cost > 0 ? currencyFmt(site.cost, currency) : 'Awaiting'}
-                                  </div>
-                                  <div className="text-xs text-yellow-300/50">
-                                    Payment pending
-                                  </div>
+                              <div>
+                                <div className="text-yellow-400 font-semibold flex items-center justify-end gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {totalFee > 0 ? currencyFmt(totalFee, currency) : 'Awaiting'}
+                                </div>
+                                <div className="text-xs text-yellow-300/50">
+                                  Payment pending
                                 </div>
                               </div>
                             ) : (
@@ -882,7 +898,28 @@ const AdminWalletDetail = () => {
                             )}
                           </TableCell>
                         </TableRow>
-                      ))
+                        );
+                      })
+                    )}
+                    {siteVisits.length > 0 && (
+                      <TableRow className="border-blue-500/30 bg-blue-500/10 font-semibold">
+                        <TableCell colSpan={4} className="text-blue-200 text-right">
+                          Totals:
+                        </TableCell>
+                        <TableCell className="text-right text-emerald-400">
+                          {currencyFmt(siteVisits.reduce((sum, s) => sum + Number(s.enumerator_fee || 0), 0), currency)}
+                        </TableCell>
+                        <TableCell className="text-right text-cyan-400">
+                          {currencyFmt(siteVisits.reduce((sum, s) => sum + Number(s.transport_fee || 0), 0), currency)}
+                        </TableCell>
+                        <TableCell className="text-right text-green-400">
+                          {currencyFmt(siteVisits.reduce((sum, s) => {
+                            const ef = Number(s.enumerator_fee || 0);
+                            const tf = Number(s.transport_fee || 0);
+                            return sum + (ef + tf > 0 ? ef + tf : Number(s.cost || 0));
+                          }, 0), currency)}
+                        </TableCell>
+                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
