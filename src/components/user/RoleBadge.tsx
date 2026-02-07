@@ -91,6 +91,42 @@ const getRoleConfig = (role: string) => {
         iconColor: 'text-sky-100',
         label: 'Data Collector'
       };
+    case 'countrydirector':
+      return {
+        gradient: 'bg-gradient-to-r from-rose-500 to-red-500',
+        border: 'border-rose-400/50',
+        glow: 'shadow-lg shadow-rose-500/20',
+        icon: Shield,
+        iconColor: 'text-rose-100',
+        label: 'Country Director'
+      };
+    case 'projectmanager':
+      return {
+        gradient: 'bg-gradient-to-r from-indigo-500 to-blue-500',
+        border: 'border-indigo-400/50',
+        glow: 'shadow-lg shadow-indigo-500/20',
+        icon: Briefcase,
+        iconColor: 'text-indigo-100',
+        label: 'Project Manager'
+      };
+    case 'senioroperationslead':
+      return {
+        gradient: 'bg-gradient-to-r from-orange-500 to-amber-500',
+        border: 'border-orange-400/50',
+        glow: 'shadow-lg shadow-orange-500/20',
+        icon: UserCog,
+        iconColor: 'text-orange-100',
+        label: 'Senior Operations Lead'
+      };
+    case 'datateam':
+      return {
+        gradient: 'bg-gradient-to-r from-cyan-500 to-teal-500',
+        border: 'border-cyan-400/50',
+        glow: 'shadow-lg shadow-cyan-500/20',
+        icon: LineChart,
+        iconColor: 'text-cyan-100',
+        label: 'Data Team'
+      };
     case 'reviewer':
       return {
         gradient: 'bg-gradient-to-r from-violet-500 to-purple-500',

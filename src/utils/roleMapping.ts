@@ -28,13 +28,13 @@ export type RoleLabel =
   | 'Country Director'
   | 'ICT'
   | 'Field Operation Manager (FOM)'
-  | 'FinancialAdmin'
+  | 'Financial Admin'
   | 'Project Manager'
   | 'Senior Operations Lead'
   | 'Supervisor'
   | 'Coordinator'
   | 'Data Team'
-  | 'DataCollector'
+  | 'Data Collector'
   | 'Reviewer';
 
 // Role configuration type
@@ -75,8 +75,8 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
   },
   financialAdmin: {
     code: 'financialAdmin',
-    label: 'FinancialAdmin',
-    legacy: ['FinancialAdmin', 'financialAdmin', 'financial_admin']
+    label: 'Financial Admin',
+    legacy: ['FinancialAdmin', 'financialAdmin', 'financial_admin', 'Financial Admin']
   },
   projectManager: {
     code: 'projectManager',
@@ -105,8 +105,8 @@ export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
   },
   dataCollector: {
     code: 'dataCollector',
-    label: 'DataCollector',
-    legacy: ['DataCollector', 'dataCollector', 'data_collector']
+    label: 'Data Collector',
+    legacy: ['DataCollector', 'dataCollector', 'data_collector', 'Data Collector', 'datacollector']
   },
   reviewer: {
     code: 'reviewer',
@@ -170,6 +170,18 @@ export function toRoleCode(input: string): RoleCode {
  */
 export function toRoleLabel(code: RoleCode): RoleLabel {
   return ROLE_MAP[code].label;
+}
+
+/**
+ * Convert any role string (legacy, camelCase, etc.) to a clean display label.
+ * Returns the input as-is if no mapping is found.
+ */
+export function toDisplayLabel(input: string): string {
+  const normalized = normalizeRole(input);
+  if (normalized) {
+    return ROLE_MAP[normalized].label;
+  }
+  return input;
 }
 
 /**
