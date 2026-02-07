@@ -56,12 +56,14 @@ import {
   Globe,
   Activity,
   Undo2,
+  PenLine,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
 
 interface DownPaymentApprovalPanelProps {
   userRole: 'supervisor' | 'admin';
@@ -79,10 +81,11 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
 
 export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
   const { currentUser } = useUser();
-  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending } = useDownPayment();
+  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt } = useDownPayment();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
   const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
+  const [signatureRequest, setSignatureRequest] = useState<DownPaymentRequest | null>(null);
   const [notes, setNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -348,14 +351,16 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     const status = request.status;
     const supervisorPassed = status !== 'pending_supervisor';
     const adminPassed = status === 'approved' || status === 'partially_paid' || status === 'fully_paid';
-    const isComplete = status === 'fully_paid';
+    const isPaid = status === 'partially_paid' || status === 'fully_paid';
+    const receiptConfirmed = !!(request.metadata as any)?.receipt_confirmation?.confirmed;
     const isRejected = status === 'rejected';
     
     const steps = [
       { key: 'submitted', label: 'Submitted', done: true },
       { key: 'supervisor', label: 'Supervisor', done: supervisorPassed && !isRejected },
       { key: 'admin', label: 'Admin', done: adminPassed },
-      { key: 'complete', label: 'Complete', done: isComplete },
+      { key: 'paid', label: 'Paid', done: isPaid },
+      { key: 'confirmed', label: 'Confirmed', done: receiptConfirmed },
     ];
     
     const getRejectedStep = () => {
@@ -391,7 +396,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         ))}
         <span className="ml-1 text-muted-foreground">{
           status === 'rejected' ? 'Rejected' :
-          status === 'fully_paid' ? 'Completed' :
+          receiptConfirmed ? 'Receipt Confirmed' :
+          status === 'fully_paid' ? 'Awaiting Confirmation' :
           status === 'partially_paid' ? 'Partial Payment' :
           status === 'approved' ? 'Approved' :
           status === 'pending_admin' ? 'With Admin' :
@@ -579,6 +585,27 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   Revert to Pending
                 </Button>
               </>
+            )}
+
+            {currentUser && request.requestedBy === currentUser.id && 
+              (request.status === 'partially_paid' || request.status === 'fully_paid') && 
+              !(request.metadata as any)?.receipt_confirmation?.confirmed && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => setSignatureRequest(request)}
+                data-testid={`button-confirm-receipt-${request.id}`}
+              >
+                <PenLine className="h-4 w-4 mr-1" />
+                Confirm Receipt / تأكيد الاستلام
+              </Button>
+            )}
+
+            {(request.metadata as any)?.receipt_confirmation?.confirmed && (
+              <Badge variant="default" className="gap-1" data-testid={`badge-receipt-confirmed-${request.id}`}>
+                <CheckCircle2 className="h-3 w-3" />
+                Receipt Confirmed / تم التأكيد
+              </Badge>
             )}
 
             {request.auditLog && request.auditLog.length > 0 && (
@@ -1374,6 +1401,42 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {signatureRequest && currentUser && (
+        <SignatureConfirmationModal
+          open={!!signatureRequest}
+          onOpenChange={(open) => { if (!open) setSignatureRequest(null); }}
+          transaction={{
+            id: signatureRequest.id,
+            type: 'advance_payment',
+            title: `Advance Receipt Confirmation / تأكيد استلام السلفة`,
+            description: `I confirm that I have received the transportation advance for site: ${signatureRequest.siteName}. / أؤكد أنني استلمت سلفة النقل لموقع: ${signatureRequest.siteName}`,
+            amount: signatureRequest.totalPaidAmount,
+            currency: 'SDG',
+            counterparty: signatureRequest.adminProcessedByName || 'Finance',
+            date: new Date().toISOString(),
+            reference: signatureRequest.id,
+          }}
+          userId={currentUser.id}
+          userName={currentUser.fullName || currentUser.email || ''}
+          userEmail={currentUser.email}
+          userRole={currentUser.role}
+          allowedMethods={['handwriting', 'uuid']}
+          onSignatureComplete={async (signature) => {
+            await confirmReceipt({
+              requestId: signatureRequest.id,
+              userId: currentUser.id,
+              userName: currentUser.fullName || currentUser.email || '',
+              signatureId: signature.signatureId,
+              signatureHash: signature.signatureHash,
+              signatureMethod: signature.method,
+              signedAt: signature.signedAt,
+            });
+            setSignatureRequest(null);
+          }}
+          onCancel={() => setSignatureRequest(null)}
+        />
+      )}
     </>
   );
 }

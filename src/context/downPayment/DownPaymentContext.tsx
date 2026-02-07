@@ -38,6 +38,7 @@ interface DownPaymentContextType {
   bulkApprove: (data: BulkApprovalRequest) => Promise<{ success: number; failed: number }>;
   addAuditEntry: (requestId: string, entry: Omit<ApprovalAuditEntry, 'id' | 'timestamp'>) => Promise<boolean>;
   revertToPending: (data: RevertToPendingData) => Promise<boolean>;
+  confirmReceipt: (data: { requestId: string; userId: string; userName: string; signatureId: string; signatureHash: string; signatureMethod: string; signedAt: string }) => Promise<boolean>;
 }
 
 const DownPaymentContext = createContext<DownPaymentContextType | undefined>(undefined);
@@ -984,6 +985,72 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const confirmReceipt = async (data: { requestId: string; userId: string; userName: string; signatureId: string; signatureHash: string; signatureMethod: string; signedAt: string }): Promise<boolean> => {
+    try {
+      const request = requests.find(r => r.id === data.requestId);
+      if (!request) throw new Error('Request not found');
+
+      if (request.requestedBy !== data.userId) {
+        throw new Error('Only the person who requested the advance can confirm receipt');
+      }
+
+      if (request.status !== 'partially_paid' && request.status !== 'fully_paid') {
+        throw new Error('Can only confirm receipt for paid advances');
+      }
+
+      if ((request.metadata as any)?.receipt_confirmation?.confirmed) {
+        throw new Error('Receipt has already been confirmed');
+      }
+
+      const existingMetadata = request.metadata || {};
+      const receiptConfirmation = {
+        confirmed: true,
+        confirmedBy: data.userId,
+        confirmedByName: data.userName,
+        confirmedAt: data.signedAt,
+        signatureId: data.signatureId,
+        signatureHash: data.signatureHash,
+        signatureMethod: data.signatureMethod,
+      };
+
+      const { error: updateError } = await supabase
+        .from('down_payment_requests')
+        .update({
+          metadata: {
+            ...existingMetadata,
+            receipt_confirmation: receiptConfirmation,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', data.requestId);
+
+      if (updateError) throw updateError;
+
+      await addAuditEntry(data.requestId, {
+        action: 'receipt_confirmed',
+        performedBy: data.userId,
+        performedByName: data.userName,
+        notes: `Funds receipt confirmed via ${data.signatureMethod} signature`,
+      });
+
+      toast({
+        title: 'Receipt Confirmed / تم تأكيد الاستلام',
+        description: 'You have confirmed receiving the advance funds. / لقد أكدت استلام أموال السلفة.',
+      });
+
+      await refreshRequests();
+      return true;
+    } catch (error: any) {
+      console.error('Failed to confirm receipt:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to confirm receipt',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const value: DownPaymentContextType = {
     requests,
     loading,
@@ -998,6 +1065,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     bulkApprove,
     addAuditEntry,
     revertToPending,
+    confirmReceipt,
   };
 
   return <DownPaymentContext.Provider value={value}>{children}</DownPaymentContext.Provider>;
