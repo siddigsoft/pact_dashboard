@@ -239,14 +239,14 @@ const FinancialOperations = () => {
       </div>
 
       <PageInfoBanner
-        title="Financial Operations"
-        description="This is the central hub for all operational costs. View transportation costs, operational cost submissions, and a consolidated financial overview across all projects. Use this page to track spending, compare costs, and generate reports."
+        title="Financial Operations - Overview & Reporting"
+        description="This is the CENTRAL HUB for viewing all financial activity across the organization. It brings together transportation costs, operational cost submissions, and a consolidated overview in one place. This page is for VIEWING and REPORTING only -- to submit new costs, use the Cost Submission page. To approve costs, use the Tier 1 or Tier 2 Approval pages. Use this page to track spending trends, compare costs across projects, and export reports."
         workflowSteps={[
-          { step: 1, role: 'Field Staff', action: 'Submits costs', description: 'Data collectors and supervisors submit operational or transportation costs through the Cost Submission page.' },
-          { step: 2, role: 'Supervisor', action: 'Reviews (Tier 1)', description: 'Supervisors review and approve/reject cost submissions from their team members.' },
-          { step: 3, role: 'Admin', action: 'Final Approval (Tier 2)', description: 'Admin or Finance Admin gives final approval on supervisor-approved requests.' },
-          { step: 4, role: 'Finance Admin', action: 'Processes Payment', description: 'Finance processes the approved request and releases funds to the staff member\'s wallet.' },
-          { step: 5, role: 'System', action: 'Credits Wallet', description: 'The system automatically credits the approved amount to the staff member\'s wallet, deducting any advance payments.' },
+          { step: 1, role: 'Field Staff', action: 'Submits costs', description: 'Team members submit operational expenses through the Cost Submission page, or incur transportation costs via site visits.' },
+          { step: 2, role: 'Supervisor', action: 'Approves (Tier 1)', description: 'Supervisors review and approve cost submissions -- those approved costs appear in this dashboard.' },
+          { step: 3, role: 'Admin', action: 'Final Approval (Tier 2)', description: 'Admin gives final sign-off. Fully approved costs are reflected in spending totals here.' },
+          { step: 4, role: 'System', action: 'Credits wallet & reconciles', description: 'Approved amounts are credited to wallets. Any transportation advances are automatically deducted.' },
+          { step: 5, role: 'Finance Admin', action: 'Reviews reports here', description: 'Finance uses this page to view consolidated spending, compare projects, spot trends, and export reports.' },
         ]}
       />
 

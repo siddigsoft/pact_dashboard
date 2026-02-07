@@ -184,8 +184,14 @@ export default function WalletReports() {
       </div>
 
       <PageInfoBanner
-        title="Wallet Reports & Analytics"
-        description="View detailed analytics and reports across all wallets. Track withdrawal trends, analyze spending patterns, and monitor overall financial health. Export reports for auditing and compliance purposes."
+        title="Wallet Reports - Withdrawal Analytics"
+        description="This page shows REPORTS and ANALYTICS for wallet withdrawals across the organization. It tracks how much has been requested, approved, processed, and rejected. This is a REPORTING page only -- to request a withdrawal, use the My Wallet page. To approve withdrawals, use the Tier 1/Tier 2 Approval pages. Use this page for auditing, compliance checks, and understanding withdrawal patterns across teams and time periods."
+        workflowSteps={[
+          { step: 1, role: 'Field Staff', action: 'Request withdrawals', description: 'Team members request withdrawals from their wallets on the My Wallet page.' },
+          { step: 2, role: 'Supervisor & Admin', action: 'Approve requests', description: 'Withdrawals go through Tier 1 and Tier 2 approvals on the respective approval pages.' },
+          { step: 3, role: 'Finance Admin', action: 'Processes payments', description: 'Finance releases approved payments on the Finance Processing page.' },
+          { step: 4, role: 'Finance Admin', action: 'Reviews reports here', description: 'All withdrawal activity is summarized on this page for tracking, auditing, and export.' },
+        ]}
       />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

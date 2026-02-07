@@ -2017,8 +2017,14 @@ export default function CostPredictions() {
       </div>
 
       <PageInfoBanner
-        title="Cost Predictions & Analytics"
-        description="Forecast future field operation costs based on historical data. Analyze spending trends, predict upcoming expenses, and plan budgets more accurately. Use data-driven insights to optimize resource allocation."
+        title="Cost Predictions & Analytics - Forecasting"
+        description="This page uses HISTORICAL spending data to PREDICT future costs for field operations. It analyzes past cost submissions, site visit expenses, and spending patterns to forecast what upcoming operations will likely cost. This is a REPORTING and PLANNING tool only -- no payments or approvals happen here. Use it to plan budgets more accurately, spot cost trends by region or site, and identify where spending may be higher or lower than expected."
+        workflowSteps={[
+          { step: 1, role: 'System', action: 'Collects historical data', description: 'The system gathers all past cost submissions, site visit expenses, and transportation costs.' },
+          { step: 2, role: 'System', action: 'Generates predictions', description: 'Using historical patterns, the system forecasts future costs by site, hub, and project.' },
+          { step: 3, role: 'Finance Admin', action: 'Reviews forecasts', description: 'Finance reviews predictions to plan budgets and identify areas where costs may exceed expectations.' },
+          { step: 4, role: 'Admin', action: 'Adjusts plans', description: 'Admins use the insights to adjust budgets on the Budget Management page or reallocate resources.' },
+        ]}
       />
 
       {/* Main Tabs */}

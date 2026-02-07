@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import { DEFAULT_CURRENCY } from '@/types/wallet';
+import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { WalletSignatureIntegration } from '@/components/wallet/WalletSignatureIntegration';
 
 const formatCurrency = (amount: number, currency: string = DEFAULT_CURRENCY) => {
@@ -405,6 +406,18 @@ const WalletPage = () => {
       </div>
 
       <div className="relative space-y-6 p-3 sm:p-4 md:p-6 lg:p-8">
+        <PageInfoBanner
+          title="My Wallet - Your Earnings & Withdrawals"
+          description="This is YOUR personal wallet showing money you have EARNED from completed site visits, approved cost submissions, and retainer payments. From here you can request to WITHDRAW your earned funds. This is DIFFERENT from cost submissions (requesting reimbursement for expenses you spent -- use the Cost Submission page) and transportation advances (getting money upfront before a trip -- use the Down-Payment Approval page). Withdrawals requested here go through Tier 1 (Supervisor) and Tier 2 (Admin) approvals before Finance releases the payment."
+          workflowSteps={[
+            { step: 1, role: 'System', action: 'Credits your wallet', description: 'Money is added to your wallet when site visit fees are paid, cost submissions are approved, or retainers are processed.' },
+            { step: 2, role: 'Field Staff', action: 'Requests withdrawal (YOU ARE HERE)', description: 'You request to withdraw funds from your wallet balance to your bank account or mobile wallet.' },
+            { step: 3, role: 'Supervisor', action: 'Approves (Tier 1)', description: 'Your supervisor reviews the withdrawal request on the Tier 1 Approvals page.' },
+            { step: 4, role: 'Admin', action: 'Authorizes (Tier 2)', description: 'Admin gives final authorization on the Tier 2 Approvals page.' },
+            { step: 5, role: 'Finance Admin', action: 'Sends payment', description: 'Finance releases the money to you on the Finance Processing page.' },
+          ]}
+        />
+
         {/* Cyber Header */}
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 rounded-2xl blur-xl"></div>

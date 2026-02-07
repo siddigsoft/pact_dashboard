@@ -831,13 +831,13 @@ const CostSubmission = () => {
       </div>
 
       <PageInfoBanner
-        title="Cost Submission"
-        description="Submit operational costs for reimbursement. Choose from 9 expense categories including transportation, accommodation, communication, and more. Each submission goes through a two-tier approval process before payment."
+        title="Cost Submission - Operational Expenses"
+        description="This page is for submitting OPERATIONAL COSTS you have already spent during fieldwork -- things like transportation, accommodation, communication, supplies, and other work-related expenses (9 categories available). This is DIFFERENT from wallet withdrawals (taking money out of your wallet -- use My Wallet page) and transportation advances (getting money upfront before a trip -- use Down-Payment Approval page). Here you are requesting REIMBURSEMENT for expenses already incurred. Each submission goes through a two-tier approval before the amount is credited to your wallet."
         workflowSteps={[
-          { step: 1, role: 'Field Staff', action: 'Creates submission (YOU ARE HERE)', description: 'Fill in the cost details, select the category, attach receipts, and submit for review.' },
-          { step: 2, role: 'Supervisor', action: 'Reviews (Tier 1)', description: 'Your supervisor reviews the submission and either approves, rejects, or sends it back for changes.' },
-          { step: 3, role: 'Admin', action: 'Final approval (Tier 2)', description: 'Admin or Finance Admin gives final approval with a digital signature.' },
-          { step: 4, role: 'System', action: 'Generates certificate', description: 'An approval certificate PDF is generated and the amount is credited to your wallet.' },
+          { step: 1, role: 'Field Staff', action: 'Submits expense (YOU ARE HERE)', description: 'Fill in cost details, select the expense category, attach receipts if needed, and submit for review.' },
+          { step: 2, role: 'Supervisor', action: 'Reviews submission (Tier 1)', description: 'Your supervisor checks the expense is legitimate, then approves, rejects, or sends it back for edits.' },
+          { step: 3, role: 'Admin', action: 'Final approval with signature (Tier 2)', description: 'Admin or Finance Admin gives final approval and signs digitally. An approval certificate PDF is generated.' },
+          { step: 4, role: 'System', action: 'Credits your wallet', description: 'The approved amount is automatically added to your wallet balance. You can then request a withdrawal from the My Wallet page.' },
         ]}
       />
 
