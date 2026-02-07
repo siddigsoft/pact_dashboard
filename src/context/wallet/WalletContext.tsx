@@ -1009,11 +1009,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return { success: false, message: 'Site has no fee assigned (cost is 0)' };
       }
 
-      console.log(`[Wallet Reconciliation] Adding fee of ${cost} SDG for site entry ${siteVisitId} to user ${userIdToPay}`);
+      const feeSource = calculatedFromParts > 0
+        ? `(enumerator: ${enumFeePart} + transport: ${transportFeePart})`
+        : '(from cost field)';
+      console.log(`[Wallet Reconciliation] Adding fee of ${cost} SDG ${feeSource} for site entry ${siteVisitId} to user ${userIdToPay}`);
 
       await addSiteVisitFeeToWallet(userIdToPay, siteVisitId, 1.0);
 
-      return { success: true, message: `Successfully added ${cost} SDG to wallet for site "${entry.site_name}"` };
+      return { success: true, message: `Successfully added ${cost} SDG to wallet for site "${entry.site_name || 'Unknown'}"` };
     } catch (error: any) {
       console.error('[Wallet Reconciliation] Error:', error);
       return { success: false, message: `Failed to reconcile: ${error.message}` };
