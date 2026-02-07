@@ -326,13 +326,13 @@ const BudgetPage = () => {
       </div>
 
       <PageInfoBanner
-        title="Budget Management"
-        description="Set and track budgets for projects and MMPs (Monthly Monitoring Plans). Monitor how much has been spent versus allocated, track task-level costs, and get alerts when spending approaches budget limits."
+        title="Budget Management - Spending Limits & Tracking"
+        description="This page is for setting and monitoring BUDGETS -- the spending limits for each project and MMP (Monthly Monitoring Plan). It shows how much has been allocated vs. how much has actually been spent through cost submissions and site visits. This page does NOT handle payments or approvals -- it only tracks whether spending stays within limits. When costs are submitted and approved on other pages, the spending totals update here automatically."
         workflowSteps={[
-          { step: 1, role: 'Admin', action: 'Sets budget', description: 'Admin creates budget allocations for each project and MMP, setting spending limits.' },
-          { step: 2, role: 'Field Staff', action: 'Incurs costs', description: 'As field staff complete site visits and submit costs, spending is tracked against budgets.' },
-          { step: 3, role: 'System', action: 'Tracks spending', description: 'The system automatically calculates utilization rates and flags when budgets are nearing limits.' },
-          { step: 4, role: 'Finance Admin', action: 'Reviews variance', description: 'Finance reviews budget vs. actual spending and adjusts allocations as needed.' },
+          { step: 1, role: 'Admin', action: 'Sets budget limits', description: 'Admin creates budget allocations for each project and MMP, defining how much can be spent.' },
+          { step: 2, role: 'Field Staff', action: 'Submits costs elsewhere', description: 'As staff submit costs on the Cost Submission page and complete site visits, spending is tracked here against budgets.' },
+          { step: 3, role: 'System', action: 'Monitors utilization', description: 'The system automatically calculates how much of each budget has been used and sends alerts when limits are near.' },
+          { step: 4, role: 'Finance Admin', action: 'Reviews and adjusts', description: 'Finance reviews budget vs. actual spending, identifies variances, and adjusts allocations as needed.' },
         ]}
       />
 

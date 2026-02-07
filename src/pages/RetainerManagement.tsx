@@ -481,13 +481,13 @@ const RetainerManagement = () => {
       </div>
 
       <PageInfoBanner
-        title="Retainer Management"
-        description="Track and process monthly retainer payments for classified team members. View payment history, check eligibility, and process batch payments. The system prevents duplicate payments and maintains a full audit trail."
+        title="Retainer Management - Monthly Fixed Payments"
+        description="This page handles RETAINER PAYMENTS -- fixed monthly amounts paid to classified team members as part of their ongoing engagement. This is DIFFERENT from cost submissions (reimbursement for expenses), wallet withdrawals (taking out earned money), and transportation advances (upfront travel money). Retainers are regular, recurring payments that go directly into team members' wallets each month. The system prevents duplicate payments for the same period."
         workflowSteps={[
-          { step: 1, role: 'Admin', action: 'Reviews eligible members', description: 'Check which team members are classified for retainer payments this month.' },
-          { step: 2, role: 'Finance Admin', action: 'Previews batch', description: 'Review the payment batch including amounts and recipients before processing.' },
-          { step: 3, role: 'Finance Admin', action: 'Processes payments', description: 'Execute the batch payment, which credits retainer amounts to each eligible member\'s wallet.' },
-          { step: 4, role: 'System', action: 'Records transactions', description: 'Each payment is logged as a wallet transaction with full audit trail.' },
+          { step: 1, role: 'Admin', action: 'Reviews eligible members', description: 'Check which team members are classified for retainer payments and eligible this month.' },
+          { step: 2, role: 'Finance Admin', action: 'Previews payment batch', description: 'Review the list of recipients and amounts before processing -- verify everything looks correct.' },
+          { step: 3, role: 'Finance Admin', action: 'Processes batch payment', description: 'Execute the batch payment, which credits the retainer amount to each eligible member\'s wallet.' },
+          { step: 4, role: 'System', action: 'Records & prevents duplicates', description: 'Each payment is logged with a full audit trail. The system blocks duplicate payments for the same month.' },
         ]}
       />
 

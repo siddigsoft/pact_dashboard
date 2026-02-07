@@ -875,13 +875,13 @@ function AdvanceRequestsReportContent() {
       </Card>
 
       <PageInfoBanner
-        title="Transport Advance Report"
-        description="View and analyze all transportation advance (down-payment) requests. Track outstanding advances, reconciliation status, and total advance costs by hub, project, or time period. Export reports for financial tracking."
+        title="Transport Advance Report - Outstanding & Reconciled"
+        description="This page shows REPORTS on all transportation advance (down-payment) requests. Track which advances are still outstanding (not yet deducted), which have been reconciled (automatically deducted when work was completed), and total advance costs by hub, project, or time period. This is a REPORTING page only -- to request or approve advances, use the Down-Payment Approval page. This is DIFFERENT from the Wallet Reports page, which tracks wallet withdrawals (earned money going out)."
         workflowSteps={[
-          { step: 1, role: 'Data Collector', action: 'Requests advance', description: 'Staff requests transportation advance before a site visit.' },
-          { step: 2, role: 'Supervisor', action: 'Approves request', description: 'Supervisor reviews and approves the advance amount.' },
-          { step: 3, role: 'Finance Admin', action: 'Disburses payment', description: 'Finance processes the advance payment to the staff member.' },
-          { step: 4, role: 'System', action: 'Reconciles on completion', description: 'When the site visit is completed, the advance is automatically deducted from the earned fee.' },
+          { step: 1, role: 'Data Collector', action: 'Requested advance', description: 'Staff requested upfront money for transportation on the Down-Payment Approval page.' },
+          { step: 2, role: 'Supervisor & Admin', action: 'Approved advance', description: 'The advance was approved through the Tier 1 and Tier 2 process on the Down-Payment Approval page.' },
+          { step: 3, role: 'Finance Admin', action: 'Sent payment', description: 'Finance sent the advance money to the staff member.' },
+          { step: 4, role: 'System', action: 'Reconciles automatically', description: 'When work is completed and fees are credited, advances are auto-deducted. This report tracks that status.' },
         ]}
       />
 

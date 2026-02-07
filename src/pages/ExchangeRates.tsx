@@ -277,11 +277,12 @@ export default function ExchangeRates() {
       </div>
 
       <PageInfoBanner
-        title="Exchange Rates"
-        description="Manage USD to SDG exchange rates used for cost calculations across the platform. Set current rates and view historical rate changes. All cost calculations and conversions use the rates configured here."
+        title="Exchange Rates - Currency Conversion Settings"
+        description="This page is for managing the USD to SDG exchange rates used across the entire platform. When cost submissions, budgets, and financial reports need to convert between currencies, they use the rate set here. This is a SETTINGS page for Finance Admins only -- it does not process payments or approvals. Changing the rate here affects how all future cost calculations are displayed on other financial pages."
         workflowSteps={[
-          { step: 1, role: 'Finance Admin', action: 'Sets exchange rate', description: 'Enter the current USD to SDG exchange rate used across the platform.' },
-          { step: 2, role: 'System', action: 'Applies to calculations', description: 'All cost submissions and financial reports automatically use the latest rate for conversions.' },
+          { step: 1, role: 'Finance Admin', action: 'Updates exchange rate', description: 'Enter the current USD to SDG exchange rate. You can source it from different banks.' },
+          { step: 2, role: 'System', action: 'Applies to all calculations', description: 'All cost submissions, budget reports, and financial dashboards automatically use the latest rate for currency conversions.' },
+          { step: 3, role: 'Finance Admin', action: 'Reviews history', description: 'View how the exchange rate has changed over time to understand impact on cost reporting.' },
         ]}
       />
 
