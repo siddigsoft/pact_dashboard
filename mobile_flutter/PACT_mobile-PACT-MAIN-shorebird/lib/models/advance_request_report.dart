@@ -34,6 +34,25 @@ class AdvanceRequestData {
   final String? projectName;
   final String? requesterName;
   final String? requesterEmail;
+  final Map<String, dynamic>? metadata;
+
+  bool get isReceiptConfirmed {
+    if (metadata == null) return false;
+    final rc = metadata!['receipt_confirmation'] as Map<String, dynamic>?;
+    return rc?['confirmed'] == true;
+  }
+
+  String? get receiptConfirmedAt {
+    if (metadata == null) return null;
+    final rc = metadata!['receipt_confirmation'] as Map<String, dynamic>?;
+    return rc?['confirmedAt'] as String?;
+  }
+
+  String? get receiptSignatureMethod {
+    if (metadata == null) return null;
+    final rc = metadata!['receipt_confirmation'] as Map<String, dynamic>?;
+    return rc?['signatureMethod'] as String?;
+  }
 
   AdvanceRequestData({
     required this.id,
@@ -69,6 +88,7 @@ class AdvanceRequestData {
     this.projectName,
     this.requesterName,
     this.requesterEmail,
+    this.metadata,
   });
 
   factory AdvanceRequestData.fromJson(Map<String, dynamic> json) {
@@ -113,6 +133,7 @@ class AdvanceRequestData {
       projectName: mmpEntry?['cp_name'] as String?,
       requesterName: profile?['full_name'] as String? ?? profile?['username'] as String?,
       requesterEmail: profile?['email'] as String?,
+      metadata: json['metadata'] as Map<String, dynamic>?,
     );
   }
 }
