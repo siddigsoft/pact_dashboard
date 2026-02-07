@@ -155,7 +155,8 @@ export async function createSiteVisitWalletTransaction(
       amount = providedAmount;
       console.log(`[WalletTransaction] Using provided amount: ${amount} SDG`);
     } else {
-      amount = directCost > 0 ? directCost : (enumeratorFee + transportFee);
+      const calculatedFromFees = enumeratorFee + transportFee;
+      amount = calculatedFromFees > 0 ? calculatedFromFees : (directCost > 0 ? directCost : 0);
       
       if (amount <= 0) {
         const errorMsg = `No fee amount available for site visit ${siteVisitId} (cost: ${directCost}, enumerator_fee: ${enumeratorFee}, transport_fee: ${transportFee})`;
@@ -170,7 +171,7 @@ export async function createSiteVisitWalletTransaction(
         return { success: false, message: errorMsg };
       }
       
-      console.log(`[WalletTransaction] Calculated amount from site entry: ${amount} SDG (cost: ${directCost}, enumerator: ${enumeratorFee}, transport: ${transportFee})`);
+      console.log(`[WalletTransaction] Calculated amount from site entry: ${amount} SDG (enumerator: ${enumeratorFee}, transport: ${transportFee}, cost field: ${directCost})`);
     }
 
     const grossAmount = amount;
@@ -554,7 +555,8 @@ export function calculateFeeAmount(siteEntry: {
   const enumeratorFee = Number(siteEntry.enumerator_fee || 0);
   const transportFee = Number(siteEntry.transport_fee || 0);
 
-  return directCost > 0 ? directCost : (enumeratorFee + transportFee);
+  const calculatedFromFees = enumeratorFee + transportFee;
+  return calculatedFromFees > 0 ? calculatedFromFees : directCost;
 }
 
 /**
