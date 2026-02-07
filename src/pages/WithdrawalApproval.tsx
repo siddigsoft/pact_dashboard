@@ -581,11 +581,18 @@ export default function WithdrawalApproval() {
       <PageInfoBanner
         title="Tier 2 Approvals - Wallet Withdrawals"
         description="This page handles the SECOND approval step for WALLET WITHDRAWAL requests -- money that team members have already earned and want to withdraw. These requests have already been approved by a Supervisor in Tier 1. This is NOT for transportation advances (those go through the Down-Payment Approval page instead). As an Admin, you give the final authorization before Finance releases the payment."
+        descriptionAr="تتعامل هذه الصفحة مع خطوة الموافقة الثانية لطلبات سحب المحفظة -- أموال كسبها أعضاء الفريق بالفعل ويريدون سحبها. هذه الطلبات تمت الموافقة عليها مسبقاً من قبل المشرف في المستوى الأول. هذه الصفحة ليست للسلف المسبقة للنقل (تلك تتم عبر صفحة الموافقة على الدفعات المقدمة). بصفتك مديراً، أنت تمنح الاعتماد النهائي قبل أن يقوم قسم المالية بصرف الدفعة."
         workflowSteps={[
           { step: 1, role: 'Data Collector', action: 'Requested wallet withdrawal', description: 'A team member submitted a request to withdraw earned funds from their wallet.' },
           { step: 2, role: 'Supervisor', action: 'Approved in Tier 1', description: 'The Supervisor already reviewed and approved this request on the Tier 1 Approvals page.' },
           { step: 3, role: 'Admin', action: 'Final authorization (YOU ARE HERE)', description: 'You review the supervisor-approved request and give final sign-off for payment.' },
           { step: 4, role: 'Finance Admin', action: 'Releases payment', description: 'Once you approve, Finance sends the money to the team member via the Finance Processing page.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'جامع بيانات', action: 'طلب سحب المحفظة', description: 'قدّم عضو الفريق طلباً لسحب الأموال المكتسبة من محفظته.' },
+          { step: 2, role: 'المشرف', action: 'وافق في المستوى الأول', description: 'قام المشرف بمراجعة الطلب والموافقة عليه في صفحة الموافقات - المستوى الأول.' },
+          { step: 3, role: 'المدير', action: 'الاعتماد النهائي (أنت هنا)', description: 'تراجع الطلب الذي وافق عليه المشرف وتمنح الاعتماد النهائي للصرف.' },
+          { step: 4, role: 'مدير المالية', action: 'يصرف الدفعة', description: 'بعد موافقتك، يقوم قسم المالية بإرسال الأموال لعضو الفريق عبر صفحة المعالجة المالية.' },
         ]}
       />
 

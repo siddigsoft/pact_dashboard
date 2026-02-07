@@ -133,12 +133,20 @@ export default function DownPaymentApproval() {
         <PageInfoBanner
           title="Down-Payment Approval - Transportation Advances"
           description="This page handles TRANSPORTATION ADVANCE requests -- money given to field staff BEFORE they do their work, to cover travel costs for site visits. This is DIFFERENT from Tier 1/Tier 2 Approvals, which handle wallet withdrawals (money already earned). Advances approved here are automatically deducted later when the site visit fee is credited to the staff member's wallet, so there is no double-paying."
+          descriptionAr="تتعامل هذه الصفحة مع طلبات السلف المسبقة للنقل -- أموال تُعطى للموظفين الميدانيين قبل قيامهم بالعمل لتغطية تكاليف التنقل للزيارات الميدانية. هذه الصفحة مختلفة عن موافقات المستوى الأول والثاني التي تتعامل مع سحب المحفظة (أموال مكتسبة بالفعل). السلف المعتمدة هنا تُخصم تلقائياً لاحقاً عند إضافة أتعاب الزيارة الميدانية لمحفظة الموظف، مما يمنع الدفع المزدوج."
           workflowSteps={[
             { step: 1, role: 'Data Collector', action: 'Requests travel advance', description: 'A field staff member requests upfront money for transportation before going on a site visit.' },
             { step: 2, role: 'Supervisor', action: 'Reviews request (Tier 1)', description: 'Supervisor reviews and approves or rejects the advance request.' },
             { step: 3, role: 'Admin', action: 'Authorizes payment (Tier 2)', description: 'Admin or Finance Admin approves the advance amount and authorizes payment.' },
             { step: 4, role: 'Finance Admin', action: 'Sends advance', description: 'Finance sends the advance money to the staff member. The amount is recorded as a pending advance.' },
             { step: 5, role: 'System', action: 'Auto-deducts when work is done', description: 'When the site visit is completed and fees are credited to the wallet, the advance is automatically subtracted -- no manual action needed.' },
+          ]}
+          workflowStepsAr={[
+            { step: 1, role: 'جامع بيانات', action: 'يطلب سلفة نقل', description: 'يطلب الموظف الميداني أموالاً مقدمة لتغطية تكاليف النقل قبل القيام بزيارة ميدانية.' },
+            { step: 2, role: 'المشرف', action: 'يراجع الطلب (المستوى الأول)', description: 'يراجع المشرف طلب السلفة ويوافق عليه أو يرفضه.' },
+            { step: 3, role: 'المدير', action: 'يعتمد الصرف (المستوى الثاني)', description: 'يوافق المدير أو مدير المالية على مبلغ السلفة ويعتمد الصرف.' },
+            { step: 4, role: 'مدير المالية', action: 'يُرسل السلفة', description: 'يقوم قسم المالية بإرسال مبلغ السلفة للموظف. يُسجَّل المبلغ كسلفة معلقة.' },
+            { step: 5, role: 'النظام', action: 'يخصم تلقائياً عند إنجاز العمل', description: 'عند اكتمال الزيارة الميدانية وإضافة الأتعاب للمحفظة، تُخصم السلفة تلقائياً -- لا حاجة لأي إجراء يدوي.' },
           ]}
         />
 

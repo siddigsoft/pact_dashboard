@@ -241,12 +241,20 @@ const FinancialOperations = () => {
       <PageInfoBanner
         title="Financial Operations - Overview & Reporting"
         description="This is the CENTRAL HUB for viewing all financial activity across the organization. It brings together transportation costs, operational cost submissions, and a consolidated overview in one place. This page is for VIEWING and REPORTING only -- to submit new costs, use the Cost Submission page. To approve costs, use the Tier 1 or Tier 2 Approval pages. Use this page to track spending trends, compare costs across projects, and export reports."
+        descriptionAr="هذا هو المركز الرئيسي لعرض جميع الأنشطة المالية في المنظمة. يجمع تكاليف النقل وطلبات التكاليف التشغيلية ونظرة عامة موحدة في مكان واحد. هذه الصفحة للعرض والتقارير فقط -- لتقديم تكاليف جديدة، استخدم صفحة تقديم التكاليف. للموافقة على التكاليف، استخدم صفحات الموافقات المستوى الأول أو الثاني. استخدم هذه الصفحة لتتبع اتجاهات الإنفاق، ومقارنة التكاليف بين المشاريع، وتصدير التقارير."
         workflowSteps={[
           { step: 1, role: 'Field Staff', action: 'Submits costs', description: 'Team members submit operational expenses through the Cost Submission page, or incur transportation costs via site visits.' },
           { step: 2, role: 'Supervisor', action: 'Approves (Tier 1)', description: 'Supervisors review and approve cost submissions -- those approved costs appear in this dashboard.' },
           { step: 3, role: 'Admin', action: 'Final Approval (Tier 2)', description: 'Admin gives final sign-off. Fully approved costs are reflected in spending totals here.' },
           { step: 4, role: 'System', action: 'Credits wallet & reconciles', description: 'Approved amounts are credited to wallets. Any transportation advances are automatically deducted.' },
           { step: 5, role: 'Finance Admin', action: 'Reviews reports here', description: 'Finance uses this page to view consolidated spending, compare projects, spot trends, and export reports.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'موظف ميداني', action: 'يقدم التكاليف', description: 'يقدم أعضاء الفريق المصاريف التشغيلية عبر صفحة تقديم التكاليف، أو تُسجَّل تكاليف النقل من خلال الزيارات الميدانية.' },
+          { step: 2, role: 'المشرف', action: 'يوافق (المستوى الأول)', description: 'يراجع المشرفون طلبات التكاليف ويوافقون عليها -- تظهر التكاليف المعتمدة في لوحة المعلومات هذه.' },
+          { step: 3, role: 'المدير', action: 'الموافقة النهائية (المستوى الثاني)', description: 'يمنح المدير الاعتماد النهائي. تنعكس التكاليف المعتمدة بالكامل في إجمالي الإنفاق هنا.' },
+          { step: 4, role: 'النظام', action: 'يُضيف للمحفظة ويُسوّي', description: 'تُضاف المبالغ المعتمدة للمحافظ. تُخصم أي سلف نقل مسبقة تلقائياً.' },
+          { step: 5, role: 'مدير المالية', action: 'يراجع التقارير هنا', description: 'يستخدم قسم المالية هذه الصفحة لعرض الإنفاق الموحد، ومقارنة المشاريع، ورصد الاتجاهات، وتصدير التقارير.' },
         ]}
       />
 

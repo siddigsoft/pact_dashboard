@@ -483,11 +483,18 @@ const RetainerManagement = () => {
       <PageInfoBanner
         title="Retainer Management - Monthly Fixed Payments"
         description="This page handles RETAINER PAYMENTS -- fixed monthly amounts paid to classified team members as part of their ongoing engagement. This is DIFFERENT from cost submissions (reimbursement for expenses), wallet withdrawals (taking out earned money), and transportation advances (upfront travel money). Retainers are regular, recurring payments that go directly into team members' wallets each month. The system prevents duplicate payments for the same period."
+        descriptionAr="تتعامل هذه الصفحة مع مدفوعات المكافآت الشهرية -- مبالغ شهرية ثابتة تُدفع لأعضاء الفريق المصنفين كجزء من ارتباطهم المستمر. هذه الصفحة مختلفة عن طلبات التكاليف (استرداد المصاريف)، وسحب المحفظة (سحب الأموال المكتسبة)، والسلف المسبقة للنقل (أموال مقدمة للسفر). المكافآت الشهرية هي مدفوعات منتظمة ومتكررة تُضاف مباشرة لمحافظ أعضاء الفريق كل شهر. يمنع النظام تكرار الدفع لنفس الفترة."
         workflowSteps={[
           { step: 1, role: 'Admin', action: 'Reviews eligible members', description: 'Check which team members are classified for retainer payments and eligible this month.' },
           { step: 2, role: 'Finance Admin', action: 'Previews payment batch', description: 'Review the list of recipients and amounts before processing -- verify everything looks correct.' },
           { step: 3, role: 'Finance Admin', action: 'Processes batch payment', description: 'Execute the batch payment, which credits the retainer amount to each eligible member\'s wallet.' },
           { step: 4, role: 'System', action: 'Records & prevents duplicates', description: 'Each payment is logged with a full audit trail. The system blocks duplicate payments for the same month.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'المدير', action: 'يراجع الأعضاء المؤهلين', description: 'يتحقق من أعضاء الفريق المصنفين لاستحقاق المكافآت الشهرية والمؤهلين لهذا الشهر.' },
+          { step: 2, role: 'مدير المالية', action: 'يعاين دفعة المدفوعات', description: 'يراجع قائمة المستفيدين والمبالغ قبل المعالجة -- يتحقق من صحة كل شيء.' },
+          { step: 3, role: 'مدير المالية', action: 'يعالج الدفعة الجماعية', description: 'ينفذ الدفعة الجماعية التي تُضيف مبلغ المكافأة الشهرية لمحفظة كل عضو مؤهل.' },
+          { step: 4, role: 'النظام', action: 'يسجّل ويمنع التكرار', description: 'يُسجَّل كل دفعة مع مسار تدقيق كامل. يمنع النظام تكرار الدفع لنفس الشهر.' },
         ]}
       />
 

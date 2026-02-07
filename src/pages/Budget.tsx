@@ -328,11 +328,18 @@ const BudgetPage = () => {
       <PageInfoBanner
         title="Budget Management - Spending Limits & Tracking"
         description="This page is for setting and monitoring BUDGETS -- the spending limits for each project and MMP (Monthly Monitoring Plan). It shows how much has been allocated vs. how much has actually been spent through cost submissions and site visits. This page does NOT handle payments or approvals -- it only tracks whether spending stays within limits. When costs are submitted and approved on other pages, the spending totals update here automatically."
+        descriptionAr="هذه الصفحة مخصصة لتحديد ومراقبة الميزانيات -- حدود الإنفاق لكل مشروع وخطة المراقبة الشهرية. تعرض المبالغ المخصصة مقابل المبالغ المنفقة فعلياً من خلال طلبات التكاليف والزيارات الميدانية. هذه الصفحة لا تتعامل مع المدفوعات أو الموافقات -- إنما تتتبع فقط ما إذا كان الإنفاق ضمن الحدود المحددة. عند تقديم التكاليف واعتمادها في صفحات أخرى، تُحدَّث إجماليات الإنفاق هنا تلقائياً."
         workflowSteps={[
           { step: 1, role: 'Admin', action: 'Sets budget limits', description: 'Admin creates budget allocations for each project and MMP, defining how much can be spent.' },
           { step: 2, role: 'Field Staff', action: 'Submits costs elsewhere', description: 'As staff submit costs on the Cost Submission page and complete site visits, spending is tracked here against budgets.' },
           { step: 3, role: 'System', action: 'Monitors utilization', description: 'The system automatically calculates how much of each budget has been used and sends alerts when limits are near.' },
           { step: 4, role: 'Finance Admin', action: 'Reviews and adjusts', description: 'Finance reviews budget vs. actual spending, identifies variances, and adjusts allocations as needed.' },
+        ]}
+        workflowStepsAr={[
+          { step: 1, role: 'المدير', action: 'يحدد حدود الميزانية', description: 'ينشئ المدير مخصصات الميزانية لكل مشروع وخطة مراقبة شهرية، محدداً المبلغ المسموح بإنفاقه.' },
+          { step: 2, role: 'موظف ميداني', action: 'يقدم التكاليف في صفحات أخرى', description: 'عند تقديم الموظفين للتكاليف في صفحة تقديم التكاليف وإتمام الزيارات الميدانية، يُتتبع الإنفاق هنا مقابل الميزانيات.' },
+          { step: 3, role: 'النظام', action: 'يراقب نسبة الاستخدام', description: 'يحسب النظام تلقائياً مقدار ما تم استخدامه من كل ميزانية ويُرسل تنبيهات عند اقتراب الحدود.' },
+          { step: 4, role: 'مدير المالية', action: 'يراجع ويُعدّل', description: 'يراجع قسم المالية الميزانية مقابل الإنفاق الفعلي، ويحدد الفروقات، ويُعدّل المخصصات حسب الحاجة.' },
         ]}
       />
 
