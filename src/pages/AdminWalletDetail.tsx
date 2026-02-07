@@ -305,7 +305,7 @@ const AdminWalletDetail = () => {
     try {
       const { data: allTransactions, error: txError } = await supabase
         .from('wallet_transactions')
-        .select('id, amount, type, currency, site_visit_id, related_site_visit_id')
+        .select('id, amount, type, currency, site_visit_id, related_site_visit_id, description')
         .eq('user_id', userId);
 
       if (txError) throw txError;
@@ -324,31 +324,55 @@ const AdminWalletDetail = () => {
 
         const { data: entries } = await supabase
           .from('mmp_site_entries')
-          .select('id, enumerator_fee, transport_fee, cost')
+          .select('id, site_name, site_code, enumerator_fee, transport_fee, cost')
           .in('id', siteEntryIds);
 
-        const entryFeeMap = new Map(
+        const entryDataMap = new Map(
           (entries || []).map(e => {
-            const cost = Number(e.cost || 0);
             const enumFee = Number(e.enumerator_fee || 0);
             const transportFee = Number(e.transport_fee || 0);
-            const totalFee = cost > 0 ? cost : (enumFee + transportFee);
-            return [e.id, totalFee];
+            const storedCost = Number(e.cost || 0);
+            const calculatedTotal = enumFee + transportFee;
+            const totalFee = calculatedTotal > 0 ? calculatedTotal : (storedCost > 0 ? storedCost : 0);
+            return [e.id, { 
+              totalFee, 
+              enumFee, 
+              transportFee, 
+              siteName: e.site_name || '', 
+              siteCode: e.site_code || '' 
+            }];
           })
         );
 
         for (const tx of earningTxs) {
           const entryId = tx.site_visit_id || tx.related_site_visit_id;
           if (!entryId) continue;
-          const correctAmount = entryFeeMap.get(entryId);
-          if (correctAmount === undefined || correctAmount <= 0) continue;
+          const entryData = entryDataMap.get(entryId);
+          if (!entryData || entryData.totalFee <= 0) continue;
 
-          if (Math.abs(Number(tx.amount) - correctAmount) >= 0.01) {
+          let needsUpdate = false;
+          const updatePayload: Record<string, any> = {};
+
+          if (Math.abs(Number(tx.amount) - entryData.totalFee) >= 0.01) {
+            updatePayload.amount = entryData.totalFee;
+            needsUpdate = true;
+          }
+
+          if (entryData.siteName) {
+            const correctDesc = `Site visit completed: ${entryData.siteName}`;
+            if (tx.description !== correctDesc) {
+              updatePayload.description = correctDesc;
+              needsUpdate = true;
+            }
+          }
+
+          if (needsUpdate) {
             await supabase
               .from('wallet_transactions')
-              .update({ amount: correctAmount })
+              .update(updatePayload)
               .eq('id', tx.id);
             txUpdated++;
+            console.log(`[Recalculate] Updated tx ${tx.id}: amount ${tx.amount} → ${updatePayload.amount ?? tx.amount}, site: ${entryData.siteName}`);
           }
         }
       }

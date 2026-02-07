@@ -912,11 +912,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const storedTransportFee = Number(entry.transport_fee) || 0;
       const storedCost = Number(entry.cost) || 0;
       
-      // Use stored fees if available
-      if (storedCost > 0 || storedEnumFee > 0) {
-        amount = storedCost > 0 ? storedCost : (storedEnumFee + storedTransportFee);
-        description = `Site visit fee: ${storedEnumFee} SDG enumerator + ${storedTransportFee} SDG transport`;
-        console.log(`💰 Using stored fees for site entry ${siteVisitId}: ${amount} SDG`);
+      const calculatedFromFees = storedEnumFee + storedTransportFee;
+      if (calculatedFromFees > 0) {
+        amount = calculatedFromFees;
+        description = `Site visit completed: ${entry.site_name || 'Site'}`;
+        console.log(`💰 Using enumerator_fee (${storedEnumFee}) + transport_fee (${storedTransportFee}) = ${amount} SDG for site entry ${siteVisitId}`);
+      } else if (storedCost > 0) {
+        amount = storedCost;
+        description = `Site visit completed: ${entry.site_name || 'Site'}`;
+        console.log(`💰 Using cost field for site entry ${siteVisitId}: ${amount} SDG`);
       } else {
         // Fallback to classification-based calculation
         amount = await calculateClassificationFee(userId, complexityMultiplier);
@@ -995,8 +999,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return { success: false, message: `Fee already recorded: ${existingTx.amount} SDG (Transaction: ${existingTx.id})` };
       }
 
-      // 3. Add the fee to wallet
-      const cost = Number(entry.cost) || (Number(entry.enumerator_fee) + Number(entry.transport_fee)) || 0;
+      // 3. Add the fee to wallet - prioritize enumerator_fee + transport_fee over cost field
+      const enumFeePart = Number(entry.enumerator_fee) || 0;
+      const transportFeePart = Number(entry.transport_fee) || 0;
+      const calculatedFromParts = enumFeePart + transportFeePart;
+      const cost = calculatedFromParts > 0 ? calculatedFromParts : (Number(entry.cost) || 0);
       
       if (cost <= 0) {
         return { success: false, message: 'Site has no fee assigned (cost is 0)' };
