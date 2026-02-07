@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { toDisplayLabel } from '@/utils/roleMapping';
 import { useApproval } from '@/context/approval/ApprovalContext';
 import {
   User as UserIcon,
@@ -116,17 +117,17 @@ const Users = () => {
   };
 
   const getPrimaryRoleLabel = (user: User): string => {
-    if (!user?.id) return user?.role || 'unknown';
+    if (!user?.id) return toDisplayLabel(user?.role || 'unknown');
     const urs = getUserRolesByUserId(user.id) ?? [];
-    if (!Array.isArray(urs) || urs.length === 0) return user.role || 'unknown';
+    if (!Array.isArray(urs) || urs.length === 0) return toDisplayLabel(user.role || 'unknown');
     const sys = urs.find(ur => ur && !!ur.role);
-    if (sys?.role) return sys.role as string;
+    if (sys?.role) return toDisplayLabel(sys.role as string);
     const custom = urs.find(ur => ur && !!ur.role_id);
     if (custom?.role_id) {
       const r = allRoles.find(rr => rr.id === custom.role_id);
       return r?.display_name || r?.name || 'custom';
     }
-    return user.role || 'unknown';
+    return toDisplayLabel(user.role || 'unknown');
   };
 
   // Check if user is a Google OAuth user (no password set)
