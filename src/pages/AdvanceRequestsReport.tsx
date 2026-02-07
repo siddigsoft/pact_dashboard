@@ -36,7 +36,11 @@ import {
   MapPin,
   FolderKanban,
   Truck,
-  Banknote
+  Banknote,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -58,7 +62,7 @@ function AdvanceRequestsReportContent() {
   const [reconciledFilter, setReconciledFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 200;
+  const PAGE_SIZE = 25;
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
@@ -898,12 +902,12 @@ function AdvanceRequestsReportContent() {
           <Input
             placeholder="Search by site, user, or hub..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             className="pl-9"
             data-testid="input-search-requests"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -918,7 +922,7 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={hubFilter} onValueChange={setHubFilter}>
+        <Select value={hubFilter} onValueChange={(v) => { setHubFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-hub-filter">
             <SelectValue placeholder="Hub" />
           </SelectTrigger>
@@ -929,7 +933,7 @@ function AdvanceRequestsReportContent() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={dateFilter} onValueChange={setDateFilter}>
+        <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-date-filter">
             <SelectValue placeholder="Date Range" />
           </SelectTrigger>
@@ -940,7 +944,7 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="last3Months">Last 3 Months</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={paidFilter} onValueChange={setPaidFilter}>
+        <Select value={paidFilter} onValueChange={(v) => { setPaidFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[150px]" data-testid="select-paid-filter">
             <SelectValue placeholder="Payment Status" />
           </SelectTrigger>
@@ -950,7 +954,7 @@ function AdvanceRequestsReportContent() {
             <SelectItem value="not_paid">Not Paid</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={reconciledFilter} onValueChange={setReconciledFilter}>
+        <Select value={reconciledFilter} onValueChange={(v) => { setReconciledFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[150px]" data-testid="select-reconciled-filter">
             <SelectValue placeholder="Reconciliation" />
           </SelectTrigger>
@@ -1071,7 +1075,7 @@ function AdvanceRequestsReportContent() {
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setCurrentPage(1); }} className="space-y-4">
         <TabsList className="flex-wrap">
           <TabsTrigger value="overview" className="gap-1" data-testid="tab-overview">
             <FileSpreadsheet className="h-4 w-4" />
@@ -1128,7 +1132,7 @@ function AdvanceRequestsReportContent() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredRequests.slice(0, 50).map(req => {
+                      {paginatedRequests.map(req => {
                         const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
                         const needsReconciliation = ['approved', 'partially_paid', 'fully_paid'].includes(req.status) && remaining > 0;
                         return (
@@ -1181,10 +1185,27 @@ function AdvanceRequestsReportContent() {
               )}
             </CardContent>
           </Card>
-          {filteredRequests.length > 50 && (
-            <p className="text-sm text-muted-foreground text-center">
-              Showing first 50 of {filteredRequests.length} requests. Export to Excel to see all.
-            </p>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} of {filteredRequests.length} requests
+              </p>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} data-testid="button-first-page">
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} data-testid="button-prev-page">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm px-3 font-medium">Page {currentPage} of {totalPages}</span>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} data-testid="button-next-page">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)} data-testid="button-last-page">
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           )}
         </TabsContent>
 
@@ -1274,7 +1295,7 @@ function AdvanceRequestsReportContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequests.slice(0, 50).map(req => {
+                    {paginatedRequests.map(req => {
                       const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
                       return (
                         <TableRow key={req.id}>
@@ -1299,6 +1320,20 @@ function AdvanceRequestsReportContent() {
               </div>
             </CardContent>
           </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} of {filteredRequests.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="text-sm px-3 font-medium">Page {currentPage} / {totalPages}</span>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="byHub" className="space-y-4">
@@ -1387,7 +1422,7 @@ function AdvanceRequestsReportContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequests.slice(0, 50).map(req => {
+                    {paginatedRequests.map(req => {
                       const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
                       return (
                         <TableRow key={req.id}>
@@ -1412,6 +1447,20 @@ function AdvanceRequestsReportContent() {
               </div>
             </CardContent>
           </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} of {filteredRequests.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="text-sm px-3 font-medium">Page {currentPage} / {totalPages}</span>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="byStatus" className="space-y-4">
@@ -1495,7 +1544,7 @@ function AdvanceRequestsReportContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequests.slice(0, 50).map(req => {
+                    {paginatedRequests.map(req => {
                       const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
                       return (
                         <TableRow key={req.id}>
@@ -1520,6 +1569,20 @@ function AdvanceRequestsReportContent() {
               </div>
             </CardContent>
           </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} of {filteredRequests.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="text-sm px-3 font-medium">Page {currentPage} / {totalPages}</span>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="byState" className="space-y-4">
@@ -1609,7 +1672,7 @@ function AdvanceRequestsReportContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequests.slice(0, 50).map(req => {
+                    {paginatedRequests.map(req => {
                       const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
                       return (
                         <TableRow key={req.id}>
@@ -1635,6 +1698,20 @@ function AdvanceRequestsReportContent() {
               </div>
             </CardContent>
           </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} of {filteredRequests.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="text-sm px-3 font-medium">Page {currentPage} / {totalPages}</span>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="byProject" className="space-y-4">
@@ -1724,7 +1801,7 @@ function AdvanceRequestsReportContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRequests.slice(0, 50).map(req => {
+                    {paginatedRequests.map(req => {
                       const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
                       return (
                         <TableRow key={req.id}>
@@ -1750,6 +1827,20 @@ function AdvanceRequestsReportContent() {
               </div>
             </CardContent>
           </Card>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filteredRequests.length)} of {filteredRequests.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+                <span className="text-sm px-3 font-medium">Page {currentPage} / {totalPages}</span>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+                <Button size="icon" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
