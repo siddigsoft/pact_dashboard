@@ -131,14 +131,14 @@ export default function DownPaymentApproval() {
         </div>
 
         <PageInfoBanner
-          title="Down-Payment Approval"
-          description="Manage transportation advance (down-payment) requests. Field staff request advance payments before site visits to cover transportation costs. These advances are later deducted when the site visit fee is credited to their wallet."
+          title="Down-Payment Approval - Transportation Advances"
+          description="This page handles TRANSPORTATION ADVANCE requests -- money given to field staff BEFORE they do their work, to cover travel costs for site visits. This is DIFFERENT from Tier 1/Tier 2 Approvals, which handle wallet withdrawals (money already earned). Advances approved here are automatically deducted later when the site visit fee is credited to the staff member's wallet, so there is no double-paying."
           workflowSteps={[
-            { step: 1, role: 'Data Collector', action: 'Requests advance', description: 'A field staff member requests a transportation advance before going on a site visit.' },
+            { step: 1, role: 'Data Collector', action: 'Requests travel advance', description: 'A field staff member requests upfront money for transportation before going on a site visit.' },
             { step: 2, role: 'Supervisor', action: 'Reviews request (Tier 1)', description: 'Supervisor reviews and approves or rejects the advance request.' },
-            { step: 3, role: 'Admin', action: 'Approves payment (Tier 2)', description: 'Admin or Finance Admin approves the advance and authorizes the payment amount.' },
-            { step: 4, role: 'Finance Admin', action: 'Disburses funds', description: 'Finance processes the payment. The amount is recorded as a debit in the staff member\'s wallet.' },
-            { step: 5, role: 'System', action: 'Auto-deducts on completion', description: 'When the site visit is completed and fees are credited, the advance amount is automatically deducted.' },
+            { step: 3, role: 'Admin', action: 'Authorizes payment (Tier 2)', description: 'Admin or Finance Admin approves the advance amount and authorizes payment.' },
+            { step: 4, role: 'Finance Admin', action: 'Sends advance', description: 'Finance sends the advance money to the staff member. The amount is recorded as a pending advance.' },
+            { step: 5, role: 'System', action: 'Auto-deducts when work is done', description: 'When the site visit is completed and fees are credited to the wallet, the advance is automatically subtracted -- no manual action needed.' },
           ]}
         />
 

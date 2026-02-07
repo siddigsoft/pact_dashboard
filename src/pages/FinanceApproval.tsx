@@ -731,13 +731,13 @@ export default function FinanceApproval() {
       </div>
 
       <PageInfoBanner
-        title="Finance Processing"
-        description="This is the final step in the payment pipeline. Process withdrawal requests that have been fully approved through Tier 1 and Tier 2. Release payments to team members' bank accounts or mobile wallets."
+        title="Finance Processing - Final Payment Release"
+        description="This is the FINAL step where money actually moves. You process WALLET WITHDRAWAL requests that have already been fully approved through both Tier 1 (Supervisor) and Tier 2 (Admin). Your job is to release the payment to the team member's bank account or mobile wallet. This page does NOT handle transportation advances -- those are managed on the Down-Payment Approval page."
         workflowSteps={[
-          { step: 1, role: 'Data Collector', action: 'Requested withdrawal', description: 'A team member submitted a withdrawal request.' },
-          { step: 2, role: 'Supervisor', action: 'Approved (Tier 1)', description: 'The supervisor reviewed and approved the request.' },
-          { step: 3, role: 'Admin', action: 'Approved (Tier 2)', description: 'The admin gave final authorization.' },
-          { step: 4, role: 'Finance Admin', action: 'Releases payment (YOU ARE HERE)', description: 'You verify all approvals are in order and process the actual payment to the team member.' },
+          { step: 1, role: 'Data Collector', action: 'Requested wallet withdrawal', description: 'A team member submitted a request to withdraw earned funds from their wallet.' },
+          { step: 2, role: 'Supervisor', action: 'Approved (Tier 1)', description: 'The Supervisor reviewed and approved the request on the Tier 1 Approvals page.' },
+          { step: 3, role: 'Admin', action: 'Authorized (Tier 2)', description: 'The Admin gave final authorization on the Tier 2 Approvals page.' },
+          { step: 4, role: 'Finance Admin', action: 'Sends payment (YOU ARE HERE)', description: 'You verify everything is in order, then process the actual payment and record the transaction reference.' },
         ]}
       />
 
