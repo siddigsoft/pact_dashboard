@@ -263,6 +263,7 @@ export function useOfflineSiteVisit() {
           .from('mmp_site_entries')
           .update({
             status: 'Completed',
+            visit_date: completedAt,
             visit_completed_at: completedAt,
             visit_completed_by: userId,
             notes,

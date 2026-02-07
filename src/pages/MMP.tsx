@@ -1080,11 +1080,12 @@ const MMP = () => {
       }
 
       // Online mode - proceed with database update
-      // Update site with visit completion time and final location (but don't change status yet)
+      // Update site with visit completion time, actual visit date, and final location (but don't change status yet)
       await supabase
         .from('mmp_site_entries')
         .update({
           updated_at: now,
+          visit_date: now,
           visit_completed_at: now,
           visit_completed_by: currentUser?.id,
           additional_data: {
@@ -1493,10 +1494,11 @@ const MMP = () => {
           }
         };
 
-        // Only set visit_completed_at and visit_completed_by if they're not already set
+        // Only set visit_completed_at, visit_date, and visit_completed_by if they're not already set
         if (!currentSite?.visit_completed_at) {
           updatePayload.visit_completed_at = now;
-          console.log('📝 Setting visit_completed_at (was null)');
+          updatePayload.visit_date = now;
+          console.log('📝 Setting visit_completed_at and visit_date (was null)');
         }
         if (!currentSite?.visit_completed_by) {
           updatePayload.visit_completed_by = currentUser?.id;

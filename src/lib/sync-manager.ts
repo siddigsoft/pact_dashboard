@@ -415,6 +415,7 @@ class SyncManager {
 
           const updateData: Record<string, any> = {
             status: 'Completed',
+            visit_date: visit.completedAt,
             visit_completed_at: visit.completedAt,
           };
 
@@ -781,6 +782,7 @@ class SyncManager {
           .from('mmp_site_entries')
           .update({
             status: 'Completed',
+            visit_date: completedAt,
             visit_completed_at: completedAt,
             visit_completed_by: userId,
             notes: notes || existing?.additional_data?.notes,
