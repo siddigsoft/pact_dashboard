@@ -193,7 +193,7 @@ export function ConsolidatedFinancialTab({
     const map: Record<string, { projectName: string; transport: number; operational: number }> = {};
 
     transportRequests?.forEach(r => {
-      const pName = r.projectName || 'Unlinked';
+      const pName = r.projectName || 'PACT';
       if (!map[pName]) map[pName] = { projectName: pName, transport: 0, operational: 0 };
       map[pName].transport += r.totalPaidAmount || 0;
     });
@@ -202,7 +202,7 @@ export function ConsolidatedFinancialTab({
       const status = getOpDerivedStatus(oc);
       if (!['paid', 'reconciled'].includes(status)) return;
       const proj = projects.find(p => p.id === oc.project_id);
-      const pName = proj?.name || 'Unlinked';
+      const pName = proj?.name || 'PACT';
       if (!map[pName]) map[pName] = { projectName: pName, transport: 0, operational: 0 };
       map[pName].operational += oc.amount_cents / 100;
     });

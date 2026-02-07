@@ -20,7 +20,8 @@ import {
   BarChart3,
   FolderKanban,
   AlertTriangle,
-  Receipt
+  Receipt,
+  ChevronLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -116,7 +117,7 @@ const FinancialOperations = () => {
       const pid = oc.project_id || '__general__';
       if (!grouped[pid]) {
         const proj = projects.find(p => p.id === pid);
-        grouped[pid] = { projectId: pid, projectName: proj?.name || (pid === '__general__' ? 'General / Unlinked' : 'Unknown Project'), totalSubmitted: 0, totalApproved: 0, totalPaid: 0, count: 0, pendingCount: 0 };
+        grouped[pid] = { projectId: pid, projectName: proj?.name || (pid === '__general__' ? 'PACT (General)' : 'PACT'), totalSubmitted: 0, totalApproved: 0, totalPaid: 0, count: 0, pendingCount: 0 };
       }
       const status = getOpDerivedStatus(oc);
       grouped[pid].count++;
@@ -219,14 +220,19 @@ const FinancialOperations = () => {
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2" data-testid="text-financial-ops-title">
-            <DollarSign className="h-6 w-6 md:h-8 md:w-8 text-primary" />
-            Financial Operations
-          </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Unified dashboard for cost management and approvals
-          </p>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} data-testid="button-back">
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2" data-testid="text-financial-ops-title">
+              <DollarSign className="h-6 w-6 md:h-8 md:w-8 text-primary" />
+              Financial Operations
+            </h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              Unified dashboard for cost management and approvals
+            </p>
+          </div>
         </div>
         <Button
           size="sm"
