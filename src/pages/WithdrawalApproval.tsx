@@ -579,13 +579,13 @@ export default function WithdrawalApproval() {
       </div>
 
       <PageInfoBanner
-        title="Tier 2 Approvals"
-        description="This page is for Admin and Finance Admin to process withdrawal requests that have already been approved by Supervisors in Tier 1. You give the final approval before payment is released."
+        title="Tier 2 Approvals - Wallet Withdrawals"
+        description="This page handles the SECOND approval step for WALLET WITHDRAWAL requests -- money that team members have already earned and want to withdraw. These requests have already been approved by a Supervisor in Tier 1. This is NOT for transportation advances (those go through the Down-Payment Approval page instead). As an Admin, you give the final authorization before Finance releases the payment."
         workflowSteps={[
-          { step: 1, role: 'Data Collector', action: 'Requested withdrawal', description: 'A team member submitted a withdrawal request from their wallet.' },
-          { step: 2, role: 'Supervisor', action: 'Approved in Tier 1', description: 'The supervisor has already reviewed and approved this request.' },
-          { step: 3, role: 'Admin', action: 'Final approval (YOU ARE HERE)', description: 'You review the supervisor-approved request and give final authorization for payment.' },
-          { step: 4, role: 'Finance Admin', action: 'Processes payment', description: 'After your approval, finance releases the funds to the team member.' },
+          { step: 1, role: 'Data Collector', action: 'Requested wallet withdrawal', description: 'A team member submitted a request to withdraw earned funds from their wallet.' },
+          { step: 2, role: 'Supervisor', action: 'Approved in Tier 1', description: 'The Supervisor already reviewed and approved this request on the Tier 1 Approvals page.' },
+          { step: 3, role: 'Admin', action: 'Final authorization (YOU ARE HERE)', description: 'You review the supervisor-approved request and give final sign-off for payment.' },
+          { step: 4, role: 'Finance Admin', action: 'Releases payment', description: 'Once you approve, Finance sends the money to the team member via the Finance Processing page.' },
         ]}
       />
 
