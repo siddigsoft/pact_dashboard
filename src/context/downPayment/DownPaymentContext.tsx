@@ -70,7 +70,7 @@ function transformFromDB(data: any): DownPaymentRequest {
     siteName: data.site_name,
     stateName,
     localityName: mmpEntry?.locality || data.metadata?.locality_name || undefined,
-    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || undefined,
+    projectName: mmpEntry?.cp_name || mmpEntry?.mmp_files?.projects?.name || mmpEntry?.mmp_files?.project_name || data.metadata?.project_name || 'PACT',
     activityType: mmpEntry?.activity_type || data.metadata?.activity_type || undefined,
     requestedBy: data.requested_by,
     requestedByName: data.metadata?.requested_by_name || undefined,
