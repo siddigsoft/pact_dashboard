@@ -124,37 +124,24 @@ class _AdvanceReceiptConfirmationDialogState
         'signatureId': signatureId,
         'signatureHash': signatureHash,
         'signatureMethod': _method,
+        'signatureData': signatureData,
       };
+
+      final existingAuditLog = List<Map<String, dynamic>>.from(
+          (updatedMetadata['audit_log'] as List?) ?? []);
+      existingAuditLog.add({
+        'action': 'receipt_confirmed',
+        'performedBy': user.id,
+        'performedByName': userName,
+        'timestamp': now,
+        'notes': 'Funds receipt confirmed via $_method signature',
+      });
+      updatedMetadata['audit_log'] = existingAuditLog;
 
       await Supabase.instance.client
           .from('down_payment_requests')
           .update({'metadata': updatedMetadata})
           .eq('id', widget.requestId);
-
-      try {
-        final currentAuditLog = await Supabase.instance.client
-            .from('down_payment_requests')
-            .select('audit_log')
-            .eq('id', widget.requestId)
-            .single();
-
-        final auditLog = List<Map<String, dynamic>>.from(
-            (currentAuditLog['audit_log'] as List?) ?? []);
-        auditLog.add({
-          'action': 'receipt_confirmed',
-          'performedBy': user.id,
-          'performedByName': userName,
-          'timestamp': now,
-          'notes': 'Funds receipt confirmed via $_method signature',
-        });
-
-        await Supabase.instance.client
-            .from('down_payment_requests')
-            .update({'audit_log': auditLog})
-            .eq('id', widget.requestId);
-      } catch (e) {
-        debugPrint('Audit log update failed (non-critical): $e');
-      }
 
       if (mounted) {
         Navigator.of(context).pop();
