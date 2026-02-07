@@ -37,6 +37,7 @@ import { GradientStatCard, GRADIENT_PRESETS } from '@/components/dashboard/Gradi
 import { PageLoader } from '@/components/ui/loading-badge';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isValid } from 'date-fns';
+import { ConsolidatedFinancialTab } from '@/components/financial/ConsolidatedFinancialTab';
 
 const formatCurrency = (amount: number, currency: string = 'SDG') => {
   return new Intl.NumberFormat('en-US', {
@@ -78,7 +79,7 @@ const FinancialOperations = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { canManageFinances } = useAuthorization();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('consolidated');
 
   const { submissions: costSubmissions, isLoading: submissionsLoading } = useCostSubmissions();
   const { userClassifications, feeStructures, loading: classificationsLoading } = useClassification();
@@ -321,13 +322,24 @@ const FinancialOperations = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full grid grid-cols-5">
+        <TabsList className="w-full grid grid-cols-3 md:grid-cols-6 gap-1 h-auto p-1">
+          <TabsTrigger value="consolidated" data-testid="tab-consolidated">Consolidated</TabsTrigger>
           <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
           <TabsTrigger value="workflow" data-testid="tab-workflow">Workflow</TabsTrigger>
           <TabsTrigger value="classifications" data-testid="tab-classifications">Classifications</TabsTrigger>
           <TabsTrigger value="budget" data-testid="tab-budget">Budget</TabsTrigger>
           <TabsTrigger value="payments" data-testid="tab-payments">Payments</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="consolidated">
+          <ConsolidatedFinancialTab
+            opCosts={opCosts}
+            costSubmissions={costSubmissions || []}
+            totalPendingAmount={totalPendingAmount}
+            totalApprovedAmount={totalApprovedAmount}
+            totalPaidAmount={totalPaidAmount}
+          />
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-6 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
