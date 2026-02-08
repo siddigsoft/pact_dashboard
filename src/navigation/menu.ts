@@ -26,6 +26,7 @@ import {
   MessageSquare,
   Phone,
   Bell,
+  Eye,
 } from 'lucide-react';
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
@@ -168,6 +169,9 @@ export const getWorkflowMenuGroups = (
   }
   if (!isHidden('/permissions-management') && isSuperAdmin) {
     adminItems.push({ id: 'permissions-management', title: 'Permissions Management', url: '/permissions-management', icon: ShieldCheck, priority: 3.6, isPinned: isPinned('/permissions-management') });
+  }
+  if (!isHidden('/role-perspective') && isSuperAdmin) {
+    adminItems.push({ id: 'role-perspective', title: 'Role Perspective Viewer', url: '/role-perspective', icon: Eye, priority: 3.7, isPinned: isPinned('/role-perspective') });
   }
   if (!isHidden('/classifications') && (isAdmin || isFinancialAdmin)) {
     adminItems.push({ id: 'classifications', title: 'Classifications', url: '/classifications', icon: Award, priority: 4, isPinned: isPinned('/classifications') });
