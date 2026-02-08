@@ -60,6 +60,7 @@ type ExpenseCategory = keyof typeof EXPENSE_CATEGORIES;
 interface LineItem {
   id: string;
   expenseCategory: string;
+  otherCategoryDetail: string;
   title: string;
   amount: number;
   currency: string;
@@ -109,6 +110,7 @@ function createEmptyItem(): LineItem {
   return {
     id: uuidv4(),
     expenseCategory: '',
+    otherCategoryDetail: '',
     title: '',
     amount: 0,
     currency: 'SDG',
@@ -136,7 +138,7 @@ export default function UnifiedCostRequestForm({
   );
 
   const parseEditDescription = (desc: string | null) => {
-    if (!desc) return { fundingType: 'advance' as const, title: '', description: '', justification: '', requestTitle: '' };
+    if (!desc) return { fundingType: 'advance' as const, title: '', description: '', justification: '', requestTitle: '', otherCategoryDetail: '' };
     const fundingMatch = desc.match(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/);
     const fundingType = fundingMatch?.[1]?.toLowerCase() === 'reimbursement' ? 'reimbursement' as const : 'advance' as const;
     const withoutFunding = desc.replace(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/, '');
@@ -145,16 +147,20 @@ export default function UnifiedCostRequestForm({
     const withoutReqTitle = withoutFunding.replace(/^<<.+?>>\n*/, '');
     const parts = withoutReqTitle.split('\n\n');
     const title = parts[0] || '';
-    const justificationIdx = withoutReqTitle.indexOf('\n\nJustification: ');
+    const otherCatMatch = withoutReqTitle.match(/\n\nOther Category: (.+?)(?:\n\n|$)/);
+    const otherCategoryDetail = otherCatMatch?.[1] || '';
+    const cleanedBody = withoutReqTitle.replace(/\n\nOther Category: .+?(?=\n\n|$)/, '');
+    const justificationIdx = cleanedBody.indexOf('\n\nJustification: ');
     let description = '';
     let justification = '';
     if (justificationIdx >= 0) {
-      description = withoutReqTitle.substring(title.length + 2, justificationIdx);
-      justification = withoutReqTitle.substring(justificationIdx + '\n\nJustification: '.length);
+      description = cleanedBody.substring(title.length + 2, justificationIdx);
+      justification = cleanedBody.substring(justificationIdx + '\n\nJustification: '.length);
     } else {
-      description = parts.slice(1).join('\n\n');
+      const cleanedParts = cleanedBody.split('\n\n');
+      description = cleanedParts.slice(1).join('\n\n');
     }
-    return { fundingType, title, description, justification, requestTitle };
+    return { fundingType, title, description, justification, requestTitle, otherCategoryDetail };
   };
 
   const editDefaults = editData ? parseEditDescription(editData.description) : null;
@@ -172,6 +178,7 @@ export default function UnifiedCostRequestForm({
   const initialItem: LineItem = editData ? {
     id: uuidv4(),
     expenseCategory: editData.expense_category || '',
+    otherCategoryDetail: editDefaults?.otherCategoryDetail || '',
     title: editDefaults?.title || '',
     amount: editData.amount_cents / 100,
     currency: editData.currency || 'SDG',
@@ -262,7 +269,9 @@ export default function UnifiedCostRequestForm({
 
   const getItemSummary = (item: LineItem) => {
     const cat = item.expenseCategory ? EXPENSE_CATEGORIES[item.expenseCategory as ExpenseCategory] : null;
-    const label = cat?.label || 'No category';
+    const label = item.expenseCategory === 'other' && item.otherCategoryDetail
+      ? `Other: ${item.otherCategoryDetail}`
+      : (cat?.label || 'No category');
     const title = item.title || 'Untitled';
     return { label, title };
   };
@@ -291,6 +300,7 @@ export default function UnifiedCostRequestForm({
     for (const item of lineItems) {
       const itemErr: Record<string, string> = {};
       if (!item.expenseCategory) { itemErr.expenseCategory = 'Select a category'; hasError = true; }
+      if (item.expenseCategory === 'other' && (!item.otherCategoryDetail || item.otherCategoryDetail.trim().length < 3)) { itemErr.otherCategoryDetail = 'Please specify the expense type (min 3 chars)'; hasError = true; }
       if (!item.title || item.title.length < 3) { itemErr.title = 'Title required (min 3 chars)'; hasError = true; }
       if (!item.amount || item.amount <= 0) { itemErr.amount = 'Amount must be greater than 0'; hasError = true; }
       if (!item.description || item.description.length < 10) { itemErr.description = 'Description required (min 10 chars)'; hasError = true; }
@@ -358,7 +368,7 @@ export default function UnifiedCostRequestForm({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100),
           currency: item.currency,
-          description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}\n\n${item.description}\n\nJustification: ${item.justification}`,
+          description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}${item.expenseCategory === 'other' && item.otherCategoryDetail ? `\n\nOther Category: ${item.otherCategoryDetail.trim()}` : ''}\n\n${item.description}\n\nJustification: ${item.justification}`,
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
@@ -402,7 +412,7 @@ export default function UnifiedCostRequestForm({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100),
           currency: item.currency,
-          description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}\n\n${item.description}\n\nJustification: ${item.justification}`,
+          description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}${item.expenseCategory === 'other' && item.otherCategoryDetail ? `\n\nOther Category: ${item.otherCategoryDetail.trim()}` : ''}\n\n${item.description}\n\nJustification: ${item.justification}`,
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
@@ -658,7 +668,7 @@ export default function UnifiedCostRequestForm({
                         </span>
                         {catInfo && (
                           <Badge variant="secondary" className="text-[10px] shrink-0">
-                            {catInfo.label}
+                            {catLabel}
                           </Badge>
                         )}
                       </div>
@@ -726,6 +736,23 @@ export default function UnifiedCostRequestForm({
                         </div>
                         {itemErrors[item.id]?.expenseCategory && (
                           <p className="text-xs text-destructive mt-1.5">{itemErrors[item.id].expenseCategory}</p>
+                        )}
+                        {item.expenseCategory === 'other' && (
+                          <div className="mt-3">
+                            <Label className="text-sm font-medium">
+                              Please specify <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                              placeholder="e.g., Office rent, Insurance, Legal fees..."
+                              className={cn("mt-1", itemErrors[item.id]?.otherCategoryDetail && "border-destructive")}
+                              value={item.otherCategoryDetail}
+                              onChange={(e) => updateLineItem(item.id, 'otherCategoryDetail', e.target.value)}
+                              data-testid={`input-other-detail-${index}`}
+                            />
+                            {itemErrors[item.id]?.otherCategoryDetail && (
+                              <p className="text-xs text-destructive mt-1">{itemErrors[item.id].otherCategoryDetail}</p>
+                            )}
+                          </div>
                         )}
                       </div>
 
@@ -897,7 +924,9 @@ export default function UnifiedCostRequestForm({
                         <span />
                         <span className="font-semibold text-foreground flex items-center gap-1.5">
                           {CatIcon && <CatIcon className="h-3 w-3" />}
-                          {catInfo?.label || catKey}
+                          {catKey === 'other' && group.items[0]?.otherCategoryDetail
+                            ? `Other: ${group.items[0].otherCategoryDetail}`
+                            : (catInfo?.label || catKey)}
                         </span>
                         <span />
                         <span />
