@@ -230,6 +230,34 @@ export default function UnifiedCostRequestForm({
 
   const totalCurrency = lineItems[0]?.currency || 'SDG';
 
+  const CATEGORY_ORDER = Object.keys(EXPENSE_CATEGORIES);
+
+  const categoryGroups = useMemo(() => {
+    const groups: Record<string, { items: LineItem[]; subtotal: number; currency: string }> = {};
+    for (const item of lineItems) {
+      if (!item.expenseCategory || item.amount <= 0) continue;
+      const key = item.expenseCategory;
+      if (!groups[key]) {
+        groups[key] = { items: [], subtotal: 0, currency: item.currency };
+      }
+      groups[key].items.push(item);
+      groups[key].subtotal += item.amount;
+    }
+    return groups;
+  }, [lineItems]);
+
+  const sortedCategoryEntries = useMemo(() => {
+    return Object.entries(categoryGroups).sort(([a], [b]) => {
+      const ia = CATEGORY_ORDER.indexOf(a);
+      const ib = CATEGORY_ORDER.indexOf(b);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+  }, [categoryGroups]);
+
+  const hasMultipleCategories = Object.keys(categoryGroups).length > 1;
+  const hasDuplicateCategories = Object.values(categoryGroups).some(g => g.items.length > 1);
+  const showInvoiceSummary = lineItems.length > 1 && lineItems.some(i => i.amount > 0 && i.expenseCategory);
+
   const getItemSummary = (item: LineItem) => {
     const cat = item.expenseCategory ? EXPENSE_CATEGORIES[item.expenseCategory as ExpenseCategory] : null;
     const label = cat?.label || 'No category';
@@ -268,6 +296,12 @@ export default function UnifiedCostRequestForm({
       if (Object.keys(itemErr).length > 0) {
         errors[item.id] = itemErr;
       }
+    }
+
+    const currencies = new Set(lineItems.map(i => i.currency));
+    if (currencies.size > 1) {
+      toast({ title: "Mixed Currencies", description: "All items in a submission must use the same currency. Please update items to use a single currency.", variant: "destructive" });
+      hasError = true;
     }
 
     setItemErrors(errors);
@@ -784,6 +818,82 @@ export default function UnifiedCostRequestForm({
             )}
           </div>
 
+          {showInvoiceSummary && (
+            <div className="rounded-lg border bg-background overflow-hidden" data-testid="invoice-summary">
+              <div className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 px-4 py-3 border-b">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Receipt className="h-4 w-4" />
+                    Invoice Summary
+                  </h3>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {lineItems.length} line items
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="text-xs">
+                <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-2 border-b bg-muted/40 font-semibold text-muted-foreground">
+                  <span>#</span>
+                  <span>Description</span>
+                  <span className="text-right">Currency</span>
+                  <span className="text-right">Amount</span>
+                </div>
+
+                {sortedCategoryEntries.map(([catKey, group]) => {
+                  const catInfo = EXPENSE_CATEGORIES[catKey as ExpenseCategory];
+                  const CatIcon = catInfo?.icon;
+                  return (
+                    <div key={catKey}>
+                      {(hasMultipleCategories || hasDuplicateCategories) && (
+                        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 bg-muted/20 border-b">
+                          <span />
+                          <span className="font-semibold text-foreground flex items-center gap-1.5">
+                            {CatIcon && <CatIcon className="h-3 w-3" />}
+                            {catInfo?.label || catKey}
+                          </span>
+                          <span />
+                          <span />
+                        </div>
+                      )}
+                      {group.items.map((item, idx) => {
+                        const globalIdx = lineItems.findIndex(li => li.id === item.id);
+                        return (
+                          <div key={item.id} className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-2 border-b last:border-b-0" data-testid={`invoice-line-${globalIdx}`}>
+                            <span className="text-muted-foreground w-6 text-right">{globalIdx + 1}</span>
+                            <div className="min-w-0">
+                              <span className="truncate block">{item.title || 'Untitled'}</span>
+                              {item.vendor && (
+                                <span className="text-[10px] text-muted-foreground truncate block">{item.vendor}</span>
+                              )}
+                            </div>
+                            <span className="text-right text-muted-foreground">{item.currency}</span>
+                            <span className="text-right font-medium tabular-nums w-20">{item.amount.toLocaleString()}</span>
+                          </div>
+                        );
+                      })}
+                      {group.items.length > 1 && (
+                        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 border-b bg-muted/30">
+                          <span />
+                          <span className="text-right font-semibold text-muted-foreground pr-2">Subtotal - {catInfo?.label || catKey}</span>
+                          <span className="text-right text-muted-foreground">{group.currency}</span>
+                          <span className="text-right font-bold tabular-nums w-20">{group.subtotal.toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-t-2 border-blue-200 dark:border-blue-800">
+                  <span />
+                  <span className="text-right font-bold text-sm pr-2">Grand Total</span>
+                  <span className="text-right font-bold text-sm">{totalCurrency}</span>
+                  <span className="text-right font-bold text-sm tabular-nums w-20">{totalAmount.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-lg border bg-muted/30 p-4">
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
               <h3 className="text-sm font-medium flex items-center gap-2">
@@ -809,7 +919,8 @@ export default function UnifiedCostRequestForm({
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">
-                  {lineItems.length > 1 ? `${lineItems.length} items total` : 'Total'}
+                  {lineItems.length > 1 ? `${lineItems.length} items` : 'Total'}
+                  {hasDuplicateCategories && ` across ${Object.keys(categoryGroups).length} categories`}
                 </div>
                 <div className="font-bold text-lg">{totalCurrency} {totalAmount.toLocaleString()}</div>
               </div>
