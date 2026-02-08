@@ -366,7 +366,16 @@ export default function UnifiedCostRequestForm({
       return;
     }
     if (!validateItems()) {
-      toast({ title: "Please fix errors", description: "Some items have missing or invalid fields. Check highlighted items.", variant: "destructive" });
+      const missingFields: string[] = [];
+      for (const item of lineItems) {
+        if (!item.expenseCategory) missingFields.push('Expense Category');
+        if (!item.title || item.title.length < 3) missingFields.push('Item Title');
+        if (!item.unitCost || item.unitCost <= 0) missingFields.push('Unit Cost');
+        if (!item.description || item.description.length < 10) missingFields.push('Description (min 10 chars)');
+        if (!item.justification || item.justification.length < 10) missingFields.push('Justification (min 10 chars)');
+      }
+      const unique = [...new Set(missingFields)];
+      toast({ title: "Missing Required Fields", description: unique.length > 0 ? `Please fill in: ${unique.join(', ')}` : "Some items have invalid fields. Check highlighted items.", variant: "destructive" });
       return;
     }
 
@@ -1106,7 +1115,7 @@ export default function UnifiedCostRequestForm({
             <Button
               type="button"
               onClick={onSubmit}
-              disabled={isSubmitting || overallProgress < 100}
+              disabled={isSubmitting}
               className="gap-2"
               data-testid="button-submit-request"
             >
