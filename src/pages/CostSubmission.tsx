@@ -134,9 +134,11 @@ const CostSubmission = () => {
   // All roles can submit operational costs EXCEPT Data Collectors/Enumerators
   // Includes: FOM, Coordinator, Country Director, Admin, Super Admin, Supervisor
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser;
+  const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
   
   // Admins and supervisors can see team submissions and approval status
-  const canViewTeamSubmissions = isAdmin || isSupervisor || isCountryDirector;
+  // Country Director sees only their own submissions
+  const canViewTeamSubmissions = isAdmin || isSupervisor;
   
   const isSuperAdmin = isAdminOrSuperUser || 
     currentUser?.role === 'SuperAdmin' || currentUser?.role === 'superAdmin' || 
@@ -1173,7 +1175,7 @@ const CostSubmission = () => {
             >
               <ClipboardCheck className="h-4 w-4" />
               <span className="hidden sm:inline">
-                {isAdmin ? "All Submissions" : isSupervisor ? "Team" : isCountryDirector ? "Overview" : "My Submissions"}
+                {isAdmin ? "All Submissions" : isSupervisor ? "Team" : "My Submissions"}
               </span>
               <span className="sm:hidden">History</span>
               {submissionStats.total > 0 && activeTab !== "history" && (
@@ -1766,7 +1768,7 @@ const CostSubmission = () => {
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="h-5 w-5 text-slate-600" />
                 <CardTitle>
-                  {isAdmin ? "All Cost Submissions" : isSupervisor ? "Team Submissions" : isCountryDirector ? "Submissions Overview" : "My Submissions"}
+                  {isAdmin ? "All Cost Submissions" : isSupervisor ? "Team Submissions" : "My Submissions"}
                 </CardTitle>
               </div>
               <CardDescription>
