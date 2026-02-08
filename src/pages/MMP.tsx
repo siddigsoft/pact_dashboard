@@ -5345,7 +5345,7 @@ const MMP = () => {
             siteEntries={approvedCostedSiteEntries}
             dispatchType={dispatchType}
             onDispatched={async () => {
-              // Reload dispatched entries after dispatch
+              await refreshMMPFiles();
               if (verifiedSubTab === 'dispatched') {
                 const { data: dispatchedEntries, error: allError } = await supabase
                   .from('mmp_site_entries')
