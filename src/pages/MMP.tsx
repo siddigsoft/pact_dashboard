@@ -2918,8 +2918,12 @@ const MMP = () => {
       .map(formatSiteEntry)
       .filter(entry => {
         const status = String(entry.status || '').toLowerCase();
-        // adjust this string if your DB uses a different status value
-        return status === 'assigned';
+        if (status !== 'assigned') return false;
+        const hasAcceptedBy = entry.accepted_by;
+        if (hasAcceptedBy) return false;
+        const ad = entry.additional_data || entry.additionalData || {};
+        const hasAssignedTo = ad.assigned_to || ad.smart_assigned_to || (entry as any).assigned_to || (entry as any).smart_assigned_to;
+        return !!hasAssignedTo;
       })
       .sort((a, b) => {
         const aDate =
@@ -3033,7 +3037,9 @@ const MMP = () => {
       .map(formatSiteEntry)
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
-        return status === "accepted";
+        if (status === "accepted") return true;
+        if (status === "assigned" && entry.accepted_by) return true;
+        return false;
       })
       .sort((a, b) => {
       const aDate = (a as any).accepted_at || (a as any).updated_at || (a as any).createdAt || '';
@@ -3270,7 +3276,8 @@ const MMP = () => {
     const categorizeRow = (row: SiteVisitRow): keyof typeof result | null => {
       const status = row.status?.toLowerCase() || '';
       const acceptedBy = (row as any).accepted_by;
-      const assignedTo = (row as any).assigned_to || (row as any).smart_assigned_to;
+      const ad = (row as any).additionalData || (row as any).additional_data || {};
+      const assignedTo = ad.assigned_to || ad.smart_assigned_to || (row as any).assigned_to || (row as any).smart_assigned_to;
       
       // Check categories in order of specificity
       if (status.includes('approved') && status.includes('costed')) {
@@ -3288,9 +3295,10 @@ const MMP = () => {
       if (status === 'accepted') {
         return 'accepted';
       }
-      // Smart Assigned: only if status is 'assigned' AND there's an assigned_to field
-      // This ensures only sites actually smart-assigned show here, not manually set status
-      if (status === 'assigned' && assignedTo) {
+      if (status === 'assigned' && acceptedBy) {
+        return 'accepted';
+      }
+      if (status === 'assigned' && assignedTo && !acceptedBy) {
         return 'smartAssigned';
       }
       if (status === 'dispatched' && !acceptedBy) {
