@@ -875,6 +875,53 @@ const documentationSections: Section[] = [
           "Both tiers can add review notes",
           "Rejection requires a written reason that is shared with the submitter"
         ]
+      },
+      {
+        title: "16.11 Quantity-Based Cost Items",
+        content: [
+          "Each cost request supports multiple line items with quantity-based pricing",
+          "For each expense item, enter: Category, Title/Description, Quantity, Unit Cost",
+          "The system automatically calculates: Total = Quantity x Unit Cost",
+          "All items are grouped by category with subtotals in an invoice-style layout",
+          "Each request gets a generated request number combining date, project abbreviation, and item count",
+          "The 'Other' category requires a specification text explaining the expense type",
+          "Project, Date, and Title are mandatory fields for every cost request"
+        ]
+      },
+      {
+        title: "16.12 Excel/CSV Bulk Upload for Cost Items",
+        content: [
+          "Upload expense items in bulk from Excel or CSV files instead of entering them one by one",
+          "Click 'Upload Excel / CSV' below the expense items section",
+          "The system auto-detects column headers (Category, Title, Quantity, Unit Cost, Currency, Description, Justification, Vendor, Reference Number)",
+          "Recognizes column name variations: Qty for Quantity, Price for Unit Cost, Supplier for Vendor",
+          "Validates each row against the 9 valid expense categories",
+          "Shows clear error messages for invalid rows (e.g., 'Row 3 - Category: not a valid category')",
+          "Valid items are auto-populated into the cost request form",
+          "Click 'Download Template' to get a ready-made Excel file with correct headers, sample rows, and a categories reference sheet"
+        ]
+      },
+      {
+        title: "16.13 Digital Signatures for Approvals",
+        content: [
+          "Tier 2 final approvals require a digital signature",
+          "Two signature methods: Handwriting signature pad or UUID-based verification",
+          "Signatures are cryptographically hashed using SHA-256",
+          "PDF approval certificates are generated with the signature embedded",
+          "Full audit trail of all signature events"
+        ]
+      },
+      {
+        title: "16.14 Advance Receipt Confirmation",
+        content: [
+          "After finance processes a transportation advance payment, the staff member who requested it must confirm receipt",
+          "A 'Confirm Receipt' button appears for the requester once payment is processed",
+          "Confirmation uses digital signature (handwriting or UUID method)",
+          "Receipt confirmation is saved with signature hash, method, and timestamp",
+          "Only the original requester can confirm receipt (authorization check enforced)",
+          "The workflow timeline updates to show Paid then Confirmed steps",
+          "Available in both English and Arabic"
+        ]
       }
     ]
   },
@@ -1277,7 +1324,138 @@ const documentationSections: Section[] = [
           "RLS: Row Level Security - Database access control",
           "Haversine: Formula for calculating distances on Earth",
           "Geofencing: Location-based boundary detection",
-          "IndexedDB: Browser-based offline storage"
+          "IndexedDB: Browser-based offline storage",
+          "Retainer: Regular monthly payment for classified personnel",
+          "PageInfoBanner: Information banner showing page purpose and workflow steps",
+          "Reconciliation: Process of matching advance payments against actual receipts"
+        ]
+      }
+    ]
+  },
+  {
+    title: "29. Retainer Management",
+    content: [
+      "Comprehensive retainer payment tracking and processing for classified personnel."
+    ],
+    subsections: [
+      {
+        title: "29.1 Overview",
+        content: [
+          "Retainer Management is available at Payments & Finance > Retainer Management",
+          "Tracks and processes monthly retainer payments for personnel classified as retainer-eligible",
+          "Accessible to Super Admin, Admin, and Finance Admin roles",
+          "Uses wallet transactions with metadata type 'retainer' for tracking"
+        ]
+      },
+      {
+        title: "29.2 Available Tabs",
+        content: [
+          "Overview: KPI cards, monthly summary, and level breakdown charts",
+          "Payment History: Searchable and sortable transaction list with export capability",
+          "Tracking Grid: User by 12-month payment matrix showing payment status at a glance",
+          "Eligible Users: All retainer-classified members with their current status",
+          "Audit Trail: Full processing log of all retainer actions",
+          "Review & Process: Preview before batch payment processing to prevent errors"
+        ]
+      },
+      {
+        title: "29.3 Processing Retainer Payments",
+        content: [
+          "Navigate to the Review & Process tab",
+          "Preview which users are eligible for the current period",
+          "Review amounts and verify no duplicates exist",
+          "The system includes duplicate payment prevention",
+          "Process batch payments for all eligible users",
+          "CSV export available for all views for record keeping"
+        ]
+      }
+    ]
+  },
+  {
+    title: "30. Wallet-Advance Integration",
+    content: [
+      "Transportation advances are automatically reconciled with site visit fees when crediting wallets."
+    ],
+    subsections: [
+      {
+        title: "30.1 How It Works",
+        content: [
+          "When a collector receives an advance (down payment) before a site visit, the system tracks it",
+          "Upon completing the site visit, the advance amount is automatically deducted from the earned fee",
+          "Uses an 'advance_reconciled_at' flag in down_payment_requests metadata to prevent double-deduction",
+          "The net amount (fee minus advance) is credited to the wallet"
+        ]
+      },
+      {
+        title: "30.2 Monthly Statements",
+        content: [
+          "The Wallet page includes bank-like monthly statements",
+          "Each statement shows opening balance, all transactions, and closing balance for the month",
+          "CSV export available for each monthly statement period",
+          "Transactions are categorized by type (earnings, advances, deductions, adjustments)"
+        ]
+      }
+    ]
+  },
+  {
+    title: "31. Role Perspective Viewer",
+    content: [
+      "A Super Admin tool for viewing what any role or user can see in the system."
+    ],
+    subsections: [
+      {
+        title: "31.1 Accessing the Tool",
+        content: [
+          "Navigate to Administration > Role Perspective Viewer in the sidebar",
+          "Only available to Super Admin users",
+          "Located under the Administration section of the sidebar menu"
+        ]
+      },
+      {
+        title: "31.2 Features",
+        content: [
+          "Visible Screens: See which menu items and pages are visible for any selected role",
+          "Permission Matrix: Full resource-by-action grid showing all permissions (read, create, update, delete)",
+          "Permission Summary: Quick statistics of total permissions granted",
+          "Role Comparison: Compare two roles side by side with difference highlighting",
+          "Uses the actual permission system (getWorkflowMenuGroups and DEFAULT_ROLE_PERMISSIONS) for accurate simulation"
+        ]
+      }
+    ]
+  },
+  {
+    title: "32. Sidebar Favorites System",
+    content: [
+      "Users can customize their sidebar with favorite pages for quick access."
+    ],
+    subsections: [
+      {
+        title: "32.1 How to Use Favorites",
+        content: [
+          "Pin frequently used pages by clicking the star/pin icon next to any sidebar menu item",
+          "Pinned items appear at the top of the sidebar in a dedicated Favorites section",
+          "Drag and drop to reorder your favorite items",
+          "Favorites are saved to the database and persist across sessions and devices",
+          "Unpin items by clicking the star/pin icon again"
+        ]
+      }
+    ]
+  },
+  {
+    title: "33. Page Information Banners",
+    content: [
+      "Every financial page includes an information banner explaining its purpose and workflow."
+    ],
+    subsections: [
+      {
+        title: "33.1 What are Page Info Banners?",
+        content: [
+          "Each of the 12+ financial pages has a collapsible banner at the top",
+          "The banner explains what the page does in plain language",
+          "Shows a 'Who does what - Step by step' workflow with numbered steps",
+          "Each step shows a role-specific color-coded badge and action description",
+          "Collapsed by default to save screen space - click to expand",
+          "Helps new users understand each page's purpose without external documentation"
         ]
       }
     ]
@@ -1319,7 +1497,11 @@ const quickReferenceData = {
     { action: 'Manage wallets', roles: 'Admin, Super Admin' },
     { action: 'Submit operational costs', roles: 'FOM, Coordinator, Country Director, Admin, Supervisor' },
     { action: 'Approve operational costs (Tier 1)', roles: 'Supervisor, FOM' },
-    { action: 'Approve operational costs (Tier 2)', roles: 'Admin, Super Admin' }
+    { action: 'Approve operational costs (Tier 2)', roles: 'Admin, Super Admin' },
+    { action: 'Upload Excel cost items', roles: 'FOM, Coordinator, Admin, Supervisor' },
+    { action: 'Process retainer payments', roles: 'Super Admin, Admin, Finance Admin' },
+    { action: 'View role perspective', roles: 'Super Admin' },
+    { action: 'Confirm advance receipt', roles: 'Requester (any role)' }
   ],
   statusColors: [
     { color: 'Green', meaning: 'Complete / Online / Success' },
@@ -1377,7 +1559,7 @@ export const generateUserManualPDF = () => {
   doc.setFontSize(10);
   doc.text(`Generated: ${format(new Date(), 'PPpp')}`, pageWidth / 2, yPos, { align: 'center' });
   yPos += 6;
-  doc.text('Version 2.1 | December 2025', pageWidth / 2, yPos, { align: 'center' });
+  doc.text('Version 3.0 | February 2026', pageWidth / 2, yPos, { align: 'center' });
   yPos += 15;
 
   doc.setDrawColor(200, 200, 200);
@@ -1568,7 +1750,7 @@ export const generateUserManualDOCX = async () => {
     }),
     new Paragraph({
       children: [
-        new TextRun({ text: "Version 2.1 | December 2025", size: 20 })
+        new TextRun({ text: "Version 3.0 | February 2026", size: 20 })
       ],
       alignment: AlignmentType.CENTER,
       spacing: { after: 400 }
@@ -1838,7 +2020,7 @@ export const generateWorkflowsPDF = () => {
   doc.setFontSize(10);
   doc.text(`Generated: ${format(new Date(), 'PPpp')}`, pageWidth / 2, yPos, { align: 'center' });
   yPos += 6;
-  doc.text('Version 2.1 | December 2025', pageWidth / 2, yPos, { align: 'center' });
+  doc.text('Version 3.0 | February 2026', pageWidth / 2, yPos, { align: 'center' });
   yPos += 15;
 
   doc.setDrawColor(200, 200, 200);
@@ -1967,7 +2149,7 @@ export const generateWorkflowsDOCX = async () => {
     }),
     new Paragraph({
       children: [
-        new TextRun({ text: "Version 2.1 | December 2025", size: 20 })
+        new TextRun({ text: "Version 3.0 | February 2026", size: 20 })
       ],
       alignment: AlignmentType.CENTER,
       spacing: { after: 400 }
@@ -2322,6 +2504,53 @@ const arabicDocumentationSections: Section[] = [
           "الخطوة 4 - التسوية (للسلف فقط): بعد الإنفاق، قدم الإيصالات الفعلية",
           "الحالات: معلق، موافق المرحلة 1، مرفوض المرحلة 1، موافق المرحلة 2، مرفوض المرحلة 2، تمت التسوية، مغلق"
         ]
+      },
+      {
+        title: "6.5 عناصر التكلفة بالكمية",
+        content: [
+          "يدعم كل طلب تكلفة عناصر متعددة بتسعير قائم على الكمية",
+          "لكل عنصر مصروف، أدخل: الفئة، العنوان/الوصف، الكمية، تكلفة الوحدة",
+          "يحسب النظام تلقائياً: الإجمالي = الكمية × تكلفة الوحدة",
+          "يتم تجميع جميع العناصر حسب الفئة مع إجماليات فرعية بتصميم فاتورة",
+          "كل طلب يحصل على رقم طلب مُولّد يجمع التاريخ واختصار المشروع وعدد العناصر",
+          "فئة 'أخرى' تتطلب نصاً توضيحياً يشرح نوع المصروف",
+          "المشروع والتاريخ والعنوان حقول إلزامية لكل طلب تكلفة"
+        ]
+      },
+      {
+        title: "6.6 رفع Excel/CSV لعناصر التكلفة بالجملة",
+        content: [
+          "رفع عناصر المصاريف بالجملة من ملفات Excel أو CSV بدلاً من إدخالها واحدة تلو الأخرى",
+          "اضغط على 'رفع Excel / CSV' أسفل قسم عناصر المصاريف",
+          "يكتشف النظام تلقائياً عناوين الأعمدة (الفئة، العنوان، الكمية، تكلفة الوحدة، العملة، الوصف، المبرر، المورد، رقم المرجع)",
+          "يتعرف على أسماء أعمدة متنوعة: Qty للكمية، Price لتكلفة الوحدة، Supplier للمورد",
+          "يتحقق من كل صف مقابل فئات المصاريف التسع الصالحة",
+          "يظهر رسائل خطأ واضحة للصفوف غير الصالحة",
+          "العناصر الصالحة تُضاف تلقائياً في نموذج طلب التكلفة",
+          "اضغط 'تنزيل القالب' للحصول على ملف Excel جاهز مع العناوين الصحيحة وصفوف نموذجية وقائمة الفئات"
+        ]
+      },
+      {
+        title: "6.7 التوقيعات الرقمية للموافقات",
+        content: [
+          "موافقات المرحلة الثانية النهائية تتطلب توقيعاً رقمياً",
+          "طريقتان للتوقيع: لوحة توقيع بخط اليد أو تحقق بالمعرف الفريد",
+          "يتم تشفير التوقيعات باستخدام SHA-256",
+          "يتم إنشاء شهادات موافقة PDF مع التوقيع المضمن",
+          "سجل تدقيق كامل لجميع أحداث التوقيع"
+        ]
+      },
+      {
+        title: "6.8 تأكيد استلام السلفة",
+        content: [
+          "بعد معالجة المالية لدفعة سلفة النقل، يجب على الموظف الذي طلبها تأكيد الاستلام",
+          "يظهر زر 'تأكيد الاستلام' للمقدم بعد معالجة الدفع",
+          "التأكيد يستخدم التوقيع الرقمي (بخط اليد أو بالمعرف الفريد)",
+          "يتم حفظ تأكيد الاستلام مع تجزئة التوقيع والطريقة والطابع الزمني",
+          "فقط المقدم الأصلي يمكنه تأكيد الاستلام",
+          "يتم تحديث الجدول الزمني لسير العمل لإظهار خطوات 'مدفوع' ثم 'مؤكد'",
+          "متاح بالعربية والإنجليزية"
+        ]
       }
     ]
   },
@@ -2439,6 +2668,134 @@ const arabicDocumentationSections: Section[] = [
         ]
       }
     ]
+  },
+  {
+    title: "11. إدارة المكافآت الشهرية",
+    content: [
+      "تتبع ومعالجة شاملة لمدفوعات المكافآت الشهرية للموظفين المصنفين."
+    ],
+    subsections: [
+      {
+        title: "11.1 نظرة عامة",
+        content: [
+          "إدارة المكافآت متاحة في المدفوعات والمالية > إدارة المكافآت",
+          "تتبع ومعالجة المدفوعات الشهرية للموظفين المؤهلين للمكافآت",
+          "متاحة لأدوار المسؤول الأعلى والمسؤول والمسؤول المالي",
+          "تستخدم معاملات المحفظة مع نوع البيانات الوصفية 'retainer' للتتبع"
+        ]
+      },
+      {
+        title: "11.2 التبويبات المتاحة",
+        content: [
+          "نظرة عامة: بطاقات مؤشرات الأداء والملخص الشهري ومخططات التصنيف",
+          "سجل المدفوعات: قائمة معاملات قابلة للبحث والفرز مع إمكانية التصدير",
+          "شبكة التتبع: مصفوفة مستخدم × 12 شهراً تعرض حالة الدفع",
+          "المستخدمون المؤهلون: جميع الأعضاء المصنفين مع حالتهم الحالية",
+          "سجل التدقيق: سجل كامل لجميع إجراءات المكافآت",
+          "المراجعة والمعالجة: معاينة قبل معالجة الدفع الجماعي لمنع الأخطاء"
+        ]
+      },
+      {
+        title: "11.3 معالجة مدفوعات المكافآت",
+        content: [
+          "انتقل إلى تبويب المراجعة والمعالجة",
+          "معاينة المستخدمين المؤهلين للفترة الحالية",
+          "مراجعة المبالغ والتحقق من عدم وجود تكرارات",
+          "النظام يتضمن منع الدفع المكرر",
+          "معالجة المدفوعات الجماعية لجميع المستخدمين المؤهلين",
+          "تصدير CSV متاح لجميع العروض لحفظ السجلات"
+        ]
+      }
+    ]
+  },
+  {
+    title: "12. تكامل المحفظة والسلف",
+    content: [
+      "يتم تسوية سلف النقل تلقائياً مع رسوم زيارات المواقع عند إيداع المبالغ في المحافظ."
+    ],
+    subsections: [
+      {
+        title: "12.1 كيف يعمل",
+        content: [
+          "عندما يتلقى الجامع سلفة (دفعة مقدمة) قبل زيارة الموقع، يتتبعها النظام",
+          "عند إكمال زيارة الموقع، يتم خصم مبلغ السلفة تلقائياً من الرسوم المكتسبة",
+          "يستخدم علامة 'advance_reconciled_at' في البيانات الوصفية لمنع الخصم المزدوج",
+          "يتم إيداع المبلغ الصافي (الرسوم ناقص السلفة) في المحفظة"
+        ]
+      },
+      {
+        title: "12.2 كشوف الحساب الشهرية",
+        content: [
+          "تتضمن صفحة المحفظة كشوف حساب شهرية على غرار البنوك",
+          "كل كشف يعرض الرصيد الافتتاحي وجميع المعاملات والرصيد الختامي للشهر",
+          "تصدير CSV متاح لكل فترة كشف شهري",
+          "المعاملات مصنفة حسب النوع (أرباح، سلف، خصومات، تعديلات)"
+        ]
+      }
+    ]
+  },
+  {
+    title: "13. عارض منظور الأدوار",
+    content: [
+      "أداة للمسؤول الأعلى لعرض ما يمكن لأي دور أو مستخدم رؤيته في النظام."
+    ],
+    subsections: [
+      {
+        title: "13.1 الوصول إلى الأداة",
+        content: [
+          "انتقل إلى الإدارة > عارض منظور الأدوار في الشريط الجانبي",
+          "متاح فقط لمستخدمي المسؤول الأعلى",
+          "يقع تحت قسم الإدارة في قائمة الشريط الجانبي"
+        ]
+      },
+      {
+        title: "13.2 الميزات",
+        content: [
+          "الشاشات المرئية: عرض عناصر القائمة والصفحات المرئية لأي دور محدد",
+          "مصفوفة الصلاحيات: شبكة كاملة للموارد والإجراءات تعرض جميع الصلاحيات (قراءة، إنشاء، تحديث، حذف)",
+          "ملخص الصلاحيات: إحصائيات سريعة لإجمالي الصلاحيات الممنوحة",
+          "مقارنة الأدوار: مقارنة دورين جنباً إلى جنب مع إبراز الاختلافات",
+          "يستخدم نظام الصلاحيات الفعلي للمحاكاة الدقيقة"
+        ]
+      }
+    ]
+  },
+  {
+    title: "14. نظام المفضلة في الشريط الجانبي",
+    content: [
+      "يمكن للمستخدمين تخصيص شريطهم الجانبي بالصفحات المفضلة للوصول السريع."
+    ],
+    subsections: [
+      {
+        title: "14.1 كيفية استخدام المفضلة",
+        content: [
+          "ثبّت الصفحات المستخدمة بشكل متكرر بالنقر على أيقونة النجمة/التثبيت بجانب أي عنصر في القائمة",
+          "تظهر العناصر المثبتة في أعلى الشريط الجانبي في قسم مفضلة مخصص",
+          "اسحب وأفلت لإعادة ترتيب عناصرك المفضلة",
+          "المفضلة محفوظة في قاعدة البيانات وتبقى عبر الجلسات والأجهزة",
+          "ألغِ تثبيت العناصر بالنقر على أيقونة النجمة/التثبيت مرة أخرى"
+        ]
+      }
+    ]
+  },
+  {
+    title: "15. لافتات معلومات الصفحة",
+    content: [
+      "كل صفحة مالية تتضمن لافتة معلومات تشرح غرضها وسير العمل."
+    ],
+    subsections: [
+      {
+        title: "15.1 ما هي لافتات معلومات الصفحة؟",
+        content: [
+          "كل صفحة من الصفحات المالية الـ 12+ لديها لافتة قابلة للطي في الأعلى",
+          "تشرح اللافتة ما تفعله الصفحة بلغة بسيطة",
+          "تعرض سير العمل 'من يفعل ماذا - خطوة بخطوة' مع خطوات مرقمة",
+          "كل خطوة تعرض شارة ملونة خاصة بالدور ووصف الإجراء",
+          "مطوية بشكل افتراضي لتوفير مساحة الشاشة - انقر للتوسيع",
+          "تساعد المستخدمين الجدد على فهم غرض كل صفحة دون وثائق خارجية"
+        ]
+      }
+    ]
   }
 ];
 
@@ -2469,7 +2826,7 @@ export const generateArabicUserManualDOCX = async () => {
     }),
     new Paragraph({
       children: [
-        new TextRun({ text: "الإصدار 2.1", size: 20 })
+        new TextRun({ text: "الإصدار 3.0", size: 20 })
       ],
       alignment: AlignmentType.CENTER,
       bidirectional: true,
