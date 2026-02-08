@@ -65,7 +65,6 @@ interface LineItem {
   currency: string;
   description: string;
   justification: string;
-  expenseDate: string;
   vendor: string;
   referenceNumber: string;
 }
@@ -115,7 +114,6 @@ function createEmptyItem(): LineItem {
     currency: 'SDG',
     description: '',
     justification: '',
-    expenseDate: new Date().toISOString().split('T')[0],
     vendor: '',
     referenceNumber: '',
   };
@@ -165,6 +163,7 @@ export default function UnifiedCostRequestForm({
   );
   const [projectId, setProjectId] = useState(editData?.project_id || '');
   const [hubId, setHubId] = useState(editData?.hub_id || currentUser?.hubId || '');
+  const [requestDate, setRequestDate] = useState(editData?.expense_date || new Date().toISOString().split('T')[0]);
 
   const initialItem: LineItem = editData ? {
     id: uuidv4(),
@@ -174,7 +173,6 @@ export default function UnifiedCostRequestForm({
     currency: editData.currency || 'SDG',
     description: editDefaults?.description || '',
     justification: editDefaults?.justification || '',
-    expenseDate: editData.expense_date || new Date().toISOString().split('T')[0],
     vendor: editData.vendor || '',
     referenceNumber: editData.reference_number || '',
   } : createEmptyItem();
@@ -345,7 +343,7 @@ export default function UnifiedCostRequestForm({
           amount_cents: Math.round(item.amount * 100),
           currency: item.currency,
           description: `[${fundingType.toUpperCase()}] ${item.title}\n\n${item.description}\n\nJustification: ${item.justification}`,
-          expense_date: item.expenseDate || new Date().toISOString().split('T')[0],
+          expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
           hub_id: resolvedHubId,
@@ -389,7 +387,7 @@ export default function UnifiedCostRequestForm({
           amount_cents: Math.round(item.amount * 100),
           currency: item.currency,
           description: `[${fundingType.toUpperCase()}] ${item.title}\n\n${item.description}\n\nJustification: ${item.justification}`,
-          expense_date: item.expenseDate || new Date().toISOString().split('T')[0],
+          expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
           hub_id: resolvedHubId,
@@ -539,23 +537,38 @@ export default function UnifiedCostRequestForm({
             </AlertDescription>
           </Alert>
 
-          {projects.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {projects.length > 0 && (
+              <div>
+                <Label className="text-sm font-medium mb-1.5 block">Project (Optional)</Label>
+                <Select onValueChange={setProjectId} value={projectId}>
+                  <SelectTrigger data-testid="select-project">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
-              <Label className="text-sm font-medium mb-1.5 block">Project (Optional)</Label>
-              <Select onValueChange={setProjectId} value={projectId}>
-                <SelectTrigger data-testid="select-project">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-medium mb-1.5 block">Request Date</Label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="date"
+                  className="pl-9"
+                  value={requestDate}
+                  onChange={(e) => setRequestDate(e.target.value)}
+                  data-testid="input-request-date"
+                />
+              </div>
             </div>
-          )}
+          </div>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -727,19 +740,6 @@ export default function UnifiedCostRequestForm({
                           </Select>
                         </div>
 
-                        <div>
-                          <Label className="text-sm font-medium">Date</Label>
-                          <div className="relative mt-1">
-                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                            <Input
-                              type="date"
-                              className="pl-9"
-                              value={item.expenseDate}
-                              onChange={(e) => updateLineItem(item.id, 'expenseDate', e.target.value)}
-                              data-testid={`input-date-${index}`}
-                            />
-                          </div>
-                        </div>
                       </div>
 
                       <div>
@@ -819,8 +819,8 @@ export default function UnifiedCostRequestForm({
           </div>
 
           {showInvoiceSummary && (() => {
-            const now = new Date();
-            const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}`;
+            const reqDateObj = requestDate ? new Date(requestDate + 'T00:00:00') : new Date();
+            const dateStr = `${String(reqDateObj.getDate()).padStart(2, '0')}${String(reqDateObj.getMonth() + 1).padStart(2, '0')}${reqDateObj.getFullYear()}`;
             const selectedProject = projects.find(p => p.id === projectId);
             const projectAbbr = selectedProject ? selectedProject.name.split(/[\s-]+/).map(w => w[0]?.toUpperCase()).join('').slice(0, 4) : 'GEN';
             const requestNumber = `PR-${projectAbbr}-${dateStr}-${String(lineItems.length).padStart(3, '0')}`;
@@ -907,7 +907,7 @@ export default function UnifiedCostRequestForm({
                   </div>
                   <div>
                     <span className="text-muted-foreground">Date</span>
-                    <p className="font-medium">{now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                    <p className="font-medium">{reqDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Project</span>
