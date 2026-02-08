@@ -389,7 +389,7 @@ export default function UnifiedCostRequestForm({
         const item = lineItems[0];
         const updateData: Record<string, any> = {
           expense_category: item.expenseCategory,
-          amount_cents: Math.round(item.amount * 100),
+          amount_cents: Math.round(item.amount * 100).toString(),
           currency: item.currency,
           description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}${item.expenseCategory === 'other' && item.otherCategoryDetail ? `\n\nOther Category: ${item.otherCategoryDetail.trim()}` : ''}\n\n${item.description}\n\nJustification: ${item.justification}`,
           expense_date: requestDate || new Date().toISOString().split('T')[0],
@@ -433,7 +433,7 @@ export default function UnifiedCostRequestForm({
       } else {
         const insertRows = lineItems.map(item => ({
           expense_category: item.expenseCategory,
-          amount_cents: Math.round(item.amount * 100),
+          amount_cents: Math.round(item.amount * 100).toString(),
           currency: item.currency,
           description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}${item.expenseCategory === 'other' && item.otherCategoryDetail ? `\n\nOther Category: ${item.otherCategoryDetail.trim()}` : ''}\n\n${item.description}\n\nJustification: ${item.justification}`,
           expense_date: requestDate || new Date().toISOString().split('T')[0],
