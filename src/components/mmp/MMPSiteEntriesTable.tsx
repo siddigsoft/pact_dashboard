@@ -477,20 +477,27 @@ const MMPSiteEntriesTable = ({
                             <h3 className="font-semibold text-lg">{row.siteName || 'Unnamed Site'}</h3>
                             <p className="text-sm text-muted-foreground">{row.siteCode || '—'} • {row.state || '—'}, {row.locality || '—'}</p>
                           </div>
-                          <Badge 
-                            className={
-                              row.status?.toLowerCase() === 'verified' ? 'bg-green-100 text-green-700' :
-                              row.status?.toLowerCase() === 'rejected' ? 'bg-red-100 text-red-700' :
-                              row.status?.toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                              row.status?.toLowerCase() === 'approved' ? 'bg-blue-100 text-blue-700' :
-                              row.status?.toLowerCase() === 'accepted' ? 'bg-purple-100 text-purple-700' :
-                              row.status?.toLowerCase() === 'dispatched' ? 'bg-indigo-100 text-indigo-700' :
-                              row.status?.toLowerCase() === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                              'bg-gray-100 text-gray-700'
-                            }
-                          >
-                            {row.status || 'Pending'}
-                          </Badge>
+                          {(() => {
+                            const rawStatus = (row.status || '').toLowerCase();
+                            const acceptedBy = row.acceptedBy || (site as any).accepted_by;
+                            const displayStatus = (rawStatus === 'assigned' && acceptedBy) ? 'accepted' : rawStatus;
+                            return (
+                              <Badge 
+                                className={
+                                  displayStatus === 'verified' ? 'bg-green-100 text-green-700' :
+                                  displayStatus === 'rejected' ? 'bg-red-100 text-red-700' :
+                                  displayStatus === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                  displayStatus === 'approved' ? 'bg-blue-100 text-blue-700' :
+                                  displayStatus === 'accepted' ? 'bg-purple-100 text-purple-700' :
+                                  displayStatus === 'dispatched' ? 'bg-indigo-100 text-indigo-700' :
+                                  displayStatus === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }
+                              >
+                                {displayStatus || 'Pending'}
+                              </Badge>
+                            );
+                          })()}
                         </div>
                         
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">

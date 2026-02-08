@@ -28,15 +28,18 @@ interface MMPCategorySitesTableProps {
   maxHeightPx?: number; // limit visible rows area height; rest scrolls
 }
 
-const statusBadge = (status: string) => {
-  const base = status.toLowerCase();
+const statusBadge = (status: string, row?: any) => {
+  let base = status.toLowerCase();
+  const acceptedBy = row?.accepted_by || row?.acceptedBy;
+  if (base === 'assigned' && acceptedBy) base = 'accepted';
   let cls = 'bg-gray-100 text-gray-700';
   if (base === 'assigned') cls = 'bg-blue-100 text-blue-700';
   else if (base === 'inprogress' || base === 'accepted') cls = 'bg-indigo-100 text-indigo-700';
   else if (base === 'completed' || base === 'verified') cls = 'bg-green-100 text-green-700';
   else if (base === 'rejected' || base === 'declined') cls = 'bg-red-100 text-red-700';
   else if (base === 'pending') cls = 'bg-yellow-100 text-yellow-700';
-  return <Badge className={cls}>{status}</Badge>;
+  const displayLabel = (base === 'assigned' && acceptedBy) ? 'accepted' : base;
+  return <Badge className={cls}>{displayLabel}</Badge>;
 };
 
 export const MMPCategorySitesTable: React.FC<MMPCategorySitesTableProps> = ({ title, description, rows, emptyMessage, maxHeightPx = 520 }) => {
@@ -76,7 +79,7 @@ export const MMPCategorySitesTable: React.FC<MMPCategorySitesTableProps> = ({ ti
                       <div>{r.state || '-'}</div>
                       {r.locality && <div className="text-xs text-muted-foreground">{r.locality}</div>}
                     </td>
-                    <td className="py-2 pr-4">{statusBadge(r.status)}</td>
+                    <td className="py-2 pr-4">{statusBadge(r.status, r)}</td>
                     <td className="py-2 pr-4">
                       {r.verifiedBy ? (
                         <div>
