@@ -2579,10 +2579,9 @@ const MMP = () => {
     const localitiesByState: Record<string, Set<string>> = {};
     const statesByHub: Record<string, Set<string>> = {};
     
-    // Collect options from all site entries
     verifiedSiteEntries.forEach(entry => {
       const status = entry.status || '';
-      const hub = entry.hub || entry.hubName || '';
+      const hub = entry.hubOffice || entry.hub_office || entry.hub || entry.hubName || '';
       const state = entry.state || entry.stateName || '';
       const locality = entry.locality || entry.localityName || '';
       
@@ -2635,7 +2634,6 @@ const MMP = () => {
     return globalSiteFilterOptions.localitiesByState[siteStateFilter] || [];
   }, [siteStateFilter, globalSiteFilterOptions]);
 
-  // Apply global filters to site entries helper function
   const applyGlobalFilters = useCallback((entries: any[]) => {
     let filtered = entries;
     
@@ -2648,7 +2646,7 @@ const MMP = () => {
     
     if (siteHubFilter !== 'all') {
       filtered = filtered.filter(entry => {
-        const hub = entry.hub || entry.hubName || '';
+        const hub = entry.hubOffice || entry.hub_office || entry.hub || entry.hubName || '';
         return hub === siteHubFilter;
       });
     }
@@ -4417,7 +4415,7 @@ const MMP = () => {
                         </div>
                       )}
                       <MMPSiteEntriesTable 
-                        siteEntries={approvedCostedSiteEntries} 
+                        siteEntries={applyGlobalFilters(approvedCostedSiteEntries)} 
                         editable={true}
                         onUpdateSites={async (sites) => {
                           // Update mmp_site_entries in database
@@ -4652,10 +4650,10 @@ const MMP = () => {
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold">Accepted Site Entries</h3>
-                        <Badge variant="secondary">{acceptedSiteEntries.length} entries</Badge>
+                        <Badge variant="secondary">{applyGlobalFilters(acceptedSiteEntries).length} entries</Badge>
                       </div>
                       <MMPSiteEntriesTable 
-                        siteEntries={acceptedSiteEntries} 
+                        siteEntries={applyGlobalFilters(acceptedSiteEntries)} 
                         editable={false}
                       />
                     </div>
@@ -4680,10 +4678,10 @@ const MMP = () => {
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold">Ongoing Site Entries</h3>
-                        <Badge variant="secondary">{ongoingSiteEntries.length} entries</Badge>
+                        <Badge variant="secondary">{applyGlobalFilters(ongoingSiteEntries).length} entries</Badge>
                       </div>
                       <MMPSiteEntriesTable 
-                        siteEntries={ongoingSiteEntries} 
+                        siteEntries={applyGlobalFilters(ongoingSiteEntries)} 
                         editable={false}
                       />
                     </div>
@@ -4708,10 +4706,10 @@ const MMP = () => {
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold">Completed Site Entries</h3>
-                        <Badge variant="secondary">{completedSiteEntries.length} entries</Badge>
+                        <Badge variant="secondary">{applyGlobalFilters(completedSiteEntries).length} entries</Badge>
                       </div>
                       <MMPSiteEntriesTable 
-                        siteEntries={completedSiteEntries} 
+                        siteEntries={applyGlobalFilters(completedSiteEntries)} 
                         editable={false}
                       />
                     </div>
@@ -4736,10 +4734,10 @@ const MMP = () => {
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold">Rejected Site Entries</h3>
-                        <Badge variant="secondary">{rejectedSiteEntries.length} entries</Badge>
+                        <Badge variant="secondary">{applyGlobalFilters(rejectedSiteEntries).length} entries</Badge>
                       </div>
                       <MMPSiteEntriesTable 
-                        siteEntries={rejectedSiteEntries} 
+                        siteEntries={applyGlobalFilters(rejectedSiteEntries)} 
                         editable={false}
                       />
                     </div>
