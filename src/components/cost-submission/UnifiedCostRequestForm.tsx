@@ -818,7 +818,14 @@ export default function UnifiedCostRequestForm({
             )}
           </div>
 
-          {showInvoiceSummary && (
+          {showInvoiceSummary && (() => {
+            const now = new Date();
+            const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}`;
+            const selectedProject = projects.find(p => p.id === projectId);
+            const projectAbbr = selectedProject ? selectedProject.name.split(/[\s-]+/).map(w => w[0]?.toUpperCase()).join('').slice(0, 4) : 'GEN';
+            const requestNumber = `PR-${projectAbbr}-${dateStr}-${String(lineItems.length).padStart(3, '0')}`;
+
+            return (
             <div className="rounded-lg border bg-background overflow-hidden" data-testid="invoice-summary">
               <div className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 px-4 py-3 border-b">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -826,8 +833,8 @@ export default function UnifiedCostRequestForm({
                     <Receipt className="h-4 w-4" />
                     Payment Request Summary (PR)
                   </h3>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {lineItems.length} line items
+                  <Badge variant="secondary" className="text-[10px] font-mono">
+                    {requestNumber}
                   </Badge>
                 </div>
               </div>
@@ -835,7 +842,7 @@ export default function UnifiedCostRequestForm({
               <div className="text-xs">
                 <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-2 border-b bg-muted/40 font-semibold text-muted-foreground">
                   <span>#</span>
-                  <span>Description</span>
+                  <span>Details</span>
                   <span className="text-right">Currency</span>
                   <span className="text-right">Amount</span>
                 </div>
@@ -845,17 +852,15 @@ export default function UnifiedCostRequestForm({
                   const CatIcon = catInfo?.icon;
                   return (
                     <div key={catKey}>
-                      {(hasMultipleCategories || hasDuplicateCategories) && (
-                        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 bg-muted/20 border-b">
-                          <span />
-                          <span className="font-semibold text-foreground flex items-center gap-1.5">
-                            {CatIcon && <CatIcon className="h-3 w-3" />}
-                            {catInfo?.label || catKey}
-                          </span>
-                          <span />
-                          <span />
-                        </div>
-                      )}
+                      <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 bg-muted/20 border-b">
+                        <span />
+                        <span className="font-semibold text-foreground flex items-center gap-1.5">
+                          {CatIcon && <CatIcon className="h-3 w-3" />}
+                          {catInfo?.label || catKey}
+                        </span>
+                        <span />
+                        <span />
+                      </div>
                       {group.items.map((item, idx) => {
                         const globalIdx = lineItems.findIndex(li => li.id === item.id);
                         return (
@@ -872,14 +877,12 @@ export default function UnifiedCostRequestForm({
                           </div>
                         );
                       })}
-                      {group.items.length > 1 && (
-                        <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 border-b bg-muted/30">
-                          <span />
-                          <span className="text-right font-semibold text-muted-foreground pr-2">Subtotal - {catInfo?.label || catKey}</span>
-                          <span className="text-right text-muted-foreground">{group.currency}</span>
-                          <span className="text-right font-bold tabular-nums w-20">{group.subtotal.toLocaleString()}</span>
-                        </div>
-                      )}
+                      <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 border-b bg-muted/30">
+                        <span />
+                        <span className="text-right font-semibold text-muted-foreground pr-2">Subtotal - {catInfo?.label || catKey}</span>
+                        <span className="text-right text-muted-foreground">{group.currency}</span>
+                        <span className="text-right font-bold tabular-nums w-20">{group.subtotal.toLocaleString()}</span>
+                      </div>
                     </div>
                   );
                 })}
@@ -891,8 +894,42 @@ export default function UnifiedCostRequestForm({
                   <span className="text-right font-bold text-sm tabular-nums w-20">{totalAmount.toLocaleString()}</span>
                 </div>
               </div>
+
+              <div className="px-4 py-3 border-t bg-muted/20">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold">Request Summary</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Request No.</span>
+                    <p className="font-mono font-medium" data-testid="text-request-number">{requestNumber}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Date</span>
+                    <p className="font-medium">{now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Project</span>
+                    <p className="font-medium">{selectedProject?.name || 'General'}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Items</span>
+                    <p className="font-medium">{lineItems.length} line item{lineItems.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Categories</span>
+                    <p className="font-medium">{Object.keys(categoryGroups).length} categor{Object.keys(categoryGroups).length !== 1 ? 'ies' : 'y'}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total</span>
+                    <p className="font-bold">{totalCurrency} {totalAmount.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
+            );
+          })()}
 
           <div className="rounded-lg border bg-muted/30 p-4">
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
