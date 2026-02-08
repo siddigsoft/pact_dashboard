@@ -824,7 +824,7 @@ export default function UnifiedCostRequestForm({
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <h3 className="text-sm font-semibold flex items-center gap-2">
                     <Receipt className="h-4 w-4" />
-                    Invoice Summary
+                    Payment Request (PR)
                   </h3>
                   <Badge variant="secondary" className="text-[10px]">
                     {lineItems.length} line items
