@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { SupportingDocument } from "@/types/cost-submission";
 import CostDocumentUpload from "./CostDocumentUpload";
+import ExcelUploadParser from "./ExcelUploadParser";
 import { useAppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
@@ -288,6 +289,18 @@ export default function UnifiedCostRequestForm({
     const title = item.title || 'Untitled';
     return { label, title };
   };
+
+  const handleExcelItems = useCallback((importedItems: LineItem[]) => {
+    if (importedItems.length === 0) return;
+    const hasOnlyEmpty = lineItems.length === 1 && !lineItems[0].expenseCategory && !lineItems[0].title && lineItems[0].unitCost === 0;
+    if (hasOnlyEmpty) {
+      setLineItems(importedItems);
+      setExpandedItems(new Set([importedItems[0].id]));
+    } else {
+      setLineItems(prev => [...prev, ...importedItems]);
+      setExpandedItems(prev => new Set([...prev, importedItems[0].id]));
+    }
+  }, [lineItems]);
 
   const getItemProgress = (item: LineItem) => {
     let done = 0;
@@ -915,16 +928,26 @@ export default function UnifiedCostRequestForm({
             })}
 
             {!isEditMode && (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full gap-2 border-dashed"
-                onClick={addLineItem}
-                data-testid="button-add-item-bottom"
-              >
-                <Plus className="h-4 w-4" />
-                Add Another Expense Item
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-2 border-dashed"
+                  onClick={addLineItem}
+                  data-testid="button-add-item-bottom"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Another Expense Item
+                </Button>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 border-t border-dashed" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <div className="flex-1 border-t border-dashed" />
+                </div>
+
+                <ExcelUploadParser onItemsParsed={handleExcelItems} />
+              </div>
             )}
           </div>
 
