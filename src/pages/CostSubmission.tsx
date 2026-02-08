@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,6 +46,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+
+const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
+  permits: { label: 'Permits & Licenses', icon: Ticket },
+  incentives: { label: 'Incentives & Allowances', icon: Gift },
+  communications: { label: 'Internet & Comms', icon: Wifi },
+  training: { label: 'Training', icon: GraduationCap },
+  transport: { label: 'Transportation', icon: Car },
+  general_transport: { label: 'Transportation', icon: Car },
+  equipment: { label: 'Equipment & Supplies', icon: Package },
+  printing: { label: 'Printing & Stationery', icon: Printer },
+  meetings: { label: 'Meetings', icon: Coffee },
+  office_admin: { label: 'Office Admin', icon: Building2 },
+  other: { label: 'Other', icon: MoreHorizontal },
+};
 
 interface OperationalCostSubmission {
   id: string;
@@ -1876,19 +1890,8 @@ const CostSubmission = () => {
               <CardContent>
                 <div className="space-y-3">
                   {statusFiltered.map((oc) => {
-                    const categoryLabels: Record<string, string> = {
-                      permits: 'Permits & Licenses',
-                      incentives: 'Incentives & Allowances',
-                      communications: 'Internet & Comms',
-                      training: 'Training',
-                      transport: 'Transportation',
-                      general_transport: 'Transportation',
-                      equipment: 'Equipment & Supplies',
-                      printing: 'Printing & Stationery',
-                      meetings: 'Meetings',
-                      office_admin: 'Office Admin',
-                      other: 'Other'
-                    };
+                    const catMeta = EXPENSE_CATEGORY_MAP[oc.expense_category];
+                    const CatIcon = catMeta?.icon;
                     const statusColors: Record<string, string> = {
                       pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
                       under_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
@@ -1925,8 +1928,9 @@ const CostSubmission = () => {
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-semibold text-base truncate" data-testid={`text-title-${oc.id}`}>{title}</span>
-                                <Badge variant="outline" className="text-xs">
-                                  {categoryLabels[oc.expense_category] || oc.expense_category}
+                                <Badge variant="outline" className="text-xs flex items-center gap-1">
+                                  {CatIcon && <CatIcon className="h-3 w-3" />}
+                                  {catMeta?.label || oc.expense_category}
                                 </Badge>
                               </div>
                               <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
@@ -2629,7 +2633,10 @@ const CostSubmission = () => {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Category / الفئة</p>
-                    <p className="font-medium">{oc.expense_category}</p>
+                    <p className="font-medium flex items-center gap-1.5">
+                      {(() => { const cm = EXPENSE_CATEGORY_MAP[oc.expense_category]; const CI = cm?.icon; return CI ? <CI className="h-4 w-4 text-muted-foreground" /> : null; })()}
+                      {EXPENSE_CATEGORY_MAP[oc.expense_category]?.label || oc.expense_category}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Submitted By / مقدم من</p>
