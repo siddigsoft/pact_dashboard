@@ -48,7 +48,7 @@ import {
   CommandItem,
 } from '@/components/ui/command';
 
-const formSchema = z.object({
+const createFormSchema = (isEditing: boolean) => z.object({
   name: z.string().min(3, {
     message: 'Project name must be at least 3 characters.',
   }),
@@ -61,12 +61,7 @@ const formSchema = z.object({
   }),
   endDate: z.date({
     required_error: 'End date is required.',
-  }).refine(
-    (date) => date > new Date(),
-    {
-      message: 'End date must be in the future',
-    }
-  ),
+  }),
   budgetTotal: z.coerce.number().min(0).optional(),
   budgetCurrency: z.string(),
   country: z.string({
@@ -76,7 +71,15 @@ const formSchema = z.object({
   selectedState: z.string().optional(),
   state: z.string().optional(),
   locality: z.string().optional(),
-});
+}).refine(
+  (data) => data.endDate > data.startDate,
+  {
+    message: 'End date must be after the start date',
+    path: ['endDate'],
+  }
+);
+
+type FormSchema = z.infer<ReturnType<typeof createFormSchema>>;
 
 interface ProjectFormProps {
   onSubmit: (data: Project) => void;
@@ -113,7 +116,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
     initialData?.team?.teamComposition || []
   );
   
-  const form = useForm<z.infer<typeof formSchema>>({
+  const formSchema = createFormSchema(isEditing);
+  const form = useForm<FormSchema>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: initialData?.name || '',
@@ -135,7 +139,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
     },
   });
 
-  const handleFormSubmit = async (values: z.infer<typeof formSchema>) => {
+  const handleFormSubmit = async (values: FormSchema) => {
     try {
       const projectCode = isEditing && initialData?.projectCode
         ? initialData.projectCode
@@ -156,8 +160,10 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
           ? {
               total: values.budgetTotal,
               currency: values.budgetCurrency,
-              allocated: 0,
-              remaining: values.budgetTotal,
+              allocated: isEditing && initialData?.budget ? initialData.budget.allocated : 0,
+              remaining: isEditing && initialData?.budget 
+                ? values.budgetTotal - initialData.budget.allocated
+                : values.budgetTotal,
             }
           : undefined,
         location: {
