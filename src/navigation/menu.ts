@@ -63,6 +63,10 @@ export const getWorkflowMenuGroups = (
                 defaultRole === 'Field Operation Manager (FOM)';
   const isSupervisor = roles.includes('supervisor' as AppRole) || defaultRole === 'supervisor';
   const isProjectManager = roles.includes('projectManager' as AppRole) || defaultRole === 'projectManager';
+  const isCountryDirector = roles.includes('CountryDirector' as AppRole) || 
+                            roles.includes('countryDirector' as AppRole) || 
+                            defaultRole === 'countryDirector' || 
+                            defaultRole === 'CountryDirector';
 
   const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
   const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -70,10 +74,10 @@ export const getWorkflowMenuGroups = (
   const groups: MenuGroup[] = [];
 
   const overviewItems: MenuGroup['items'] = [];
-  if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || perms.dashboard)) {
+  if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || isCountryDirector || perms.dashboard)) {
     overviewItems.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
   }
-  if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator)) {
+  if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator || isCountryDirector)) {
     overviewItems.push({ id: 'cost-submission', title: 'Cost Submission', url: '/cost-submission', icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
   }
   if (overviewItems.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overviewItems });
@@ -95,11 +99,11 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/projects') && (isAdmin || isICT || isProjectManager || perms.projects)) {
     planningItems.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
   }
-  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isDataCollector || isFOM)) {
+  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isDataCollector || isFOM || isCountryDirector)) {
     const mmpTitle = (isDataCollector || isCoordinator) ? 'My Sites Management' : 'MMP Management';
     planningItems.push({ id: 'mmp-management', title: mmpTitle, url: '/mmp', icon: Database, priority: 2, isPinned: isPinned('/mmp') });
   }
-  if (!isHidden('/hub-operations') && (isAdmin || isSuperAdmin)) {
+  if (!isHidden('/hub-operations') && (isAdmin || isSuperAdmin || isCountryDirector)) {
     planningItems.push({ id: 'hub-operations', title: 'Hub Operations', url: '/hub-operations', icon: Building2, priority: 3, isPinned: isPinned('/hub-operations') });
   }
   if (planningItems.length) groups.push({ id: 'planning', label: 'Planning & Setup', order: 2, items: planningItems });
@@ -129,7 +133,7 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/data-visibility') && ((isAdmin || perms.dataVisibility) && !isICT)) {
     dataItems.push({ id: 'data-visibility', title: 'Data Visibility', url: '/data-visibility', icon: Link2, priority: 1, isPinned: isPinned('/data-visibility') });
   }
-  if (!isHidden('/reports') && ((isAdmin || isProjectManager || perms.reports) && !isICT)) {
+  if (!isHidden('/reports') && ((isAdmin || isProjectManager || isCountryDirector || perms.reports) && !isICT)) {
     dataItems.push({ id: 'reports', title: 'Reports', url: '/reports', icon: Calendar, priority: 2, isPinned: isPinned('/reports') });
   }
   if (!isHidden('/tracker-preparation-plan') && (isAdmin || isICT)) {
