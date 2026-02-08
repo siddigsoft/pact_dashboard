@@ -62,6 +62,8 @@ interface LineItem {
   expenseCategory: string;
   otherCategoryDetail: string;
   title: string;
+  quantity: number;
+  unitCost: number;
   amount: number;
   currency: string;
   description: string;
@@ -112,6 +114,8 @@ function createEmptyItem(): LineItem {
     expenseCategory: '',
     otherCategoryDetail: '',
     title: '',
+    quantity: 1,
+    unitCost: 0,
     amount: 0,
     currency: 'SDG',
     description: '',
@@ -180,6 +184,8 @@ export default function UnifiedCostRequestForm({
     expenseCategory: editData.expense_category || '',
     otherCategoryDetail: editDefaults?.otherCategoryDetail || '',
     title: editDefaults?.title || '',
+    quantity: 1,
+    unitCost: editData.amount_cents / 100,
     amount: editData.amount_cents / 100,
     currency: editData.currency || 'SDG',
     description: editDefaults?.description || '',
@@ -193,9 +199,16 @@ export default function UnifiedCostRequestForm({
   const [itemErrors, setItemErrors] = useState<ItemErrors>({});
 
   const updateLineItem = useCallback((itemId: string, field: keyof LineItem, value: any) => {
-    setLineItems(prev => prev.map(item => 
-      item.id === itemId ? { ...item, [field]: value } : item
-    ));
+    setLineItems(prev => prev.map(item => {
+      if (item.id !== itemId) return item;
+      const updated = { ...item, [field]: value };
+      if (field === 'quantity' || field === 'unitCost') {
+        const qty = field === 'quantity' ? (value as number) : item.quantity;
+        const cost = field === 'unitCost' ? (value as number) : item.unitCost;
+        updated.amount = Math.round((qty * cost) * 100) / 100;
+      }
+      return updated;
+    }));
     setItemErrors(prev => {
       if (!prev[itemId]?.[field]) return prev;
       const next = { ...prev };
@@ -280,7 +293,7 @@ export default function UnifiedCostRequestForm({
     let done = 0;
     if (item.expenseCategory) done++;
     if (item.title && item.title.length >= 3) done++;
-    if (item.amount > 0) done++;
+    if (item.unitCost > 0) done++;
     if (item.description && item.description.length >= 10) done++;
     if (item.justification && item.justification.length >= 10) done++;
     return done;
@@ -302,7 +315,8 @@ export default function UnifiedCostRequestForm({
       if (!item.expenseCategory) { itemErr.expenseCategory = 'Select a category'; hasError = true; }
       if (item.expenseCategory === 'other' && (!item.otherCategoryDetail || item.otherCategoryDetail.trim().length < 3)) { itemErr.otherCategoryDetail = 'Please specify the expense type (min 3 chars)'; hasError = true; }
       if (!item.title || item.title.length < 3) { itemErr.title = 'Title required (min 3 chars)'; hasError = true; }
-      if (!item.amount || item.amount <= 0) { itemErr.amount = 'Amount must be greater than 0'; hasError = true; }
+      if (!item.quantity || item.quantity <= 0) { itemErr.quantity = 'Quantity must be at least 1'; hasError = true; }
+      if (!item.unitCost || item.unitCost <= 0) { itemErr.unitCost = 'Unit cost must be greater than 0'; hasError = true; }
       if (!item.description || item.description.length < 10) { itemErr.description = 'Description required (min 10 chars)'; hasError = true; }
       if (!item.justification || item.justification.length < 10) { itemErr.justification = 'Justification required (min 10 chars)'; hasError = true; }
       if (Object.keys(itemErr).length > 0) {
@@ -674,7 +688,7 @@ export default function UnifiedCostRequestForm({
                       </div>
                       {item.amount > 0 && (
                         <span className="text-xs text-muted-foreground">
-                          {item.currency} {item.amount.toLocaleString()}
+                          {item.quantity > 1 ? `${item.quantity} x ${item.unitCost.toLocaleString()} = ` : ''}{item.currency} {item.amount.toLocaleString()}
                         </span>
                       )}
                     </div>
@@ -770,22 +784,38 @@ export default function UnifiedCostRequestForm({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div>
-                          <Label className="text-sm font-medium">Amount <span className="text-destructive">*</span></Label>
+                          <Label className="text-sm font-medium">Quantity <span className="text-destructive">*</span></Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            placeholder="1"
+                            className={cn("mt-1", itemErrors[item.id]?.quantity && "border-destructive")}
+                            value={item.quantity > 0 ? item.quantity : ''}
+                            onChange={(e) => updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 0)}
+                            data-testid={`input-quantity-${index}`}
+                          />
+                          {itemErrors[item.id]?.quantity && (
+                            <p className="text-xs text-destructive mt-1">{itemErrors[item.id].quantity}</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <Label className="text-sm font-medium">Unit Cost <span className="text-destructive">*</span></Label>
                           <div className="relative mt-1">
                             <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                               type="number"
                               placeholder="0"
-                              className={cn("pl-9", itemErrors[item.id]?.amount && "border-destructive")}
-                              value={item.amount > 0 ? item.amount : ''}
-                              onChange={(e) => updateLineItem(item.id, 'amount', parseFloat(e.target.value) || 0)}
-                              data-testid={`input-amount-${index}`}
+                              className={cn("pl-9", itemErrors[item.id]?.unitCost && "border-destructive")}
+                              value={item.unitCost > 0 ? item.unitCost : ''}
+                              onChange={(e) => updateLineItem(item.id, 'unitCost', parseFloat(e.target.value) || 0)}
+                              data-testid={`input-unitcost-${index}`}
                             />
                           </div>
-                          {itemErrors[item.id]?.amount && (
-                            <p className="text-xs text-destructive mt-1">{itemErrors[item.id].amount}</p>
+                          {itemErrors[item.id]?.unitCost && (
+                            <p className="text-xs text-destructive mt-1">{itemErrors[item.id].unitCost}</p>
                           )}
                         </div>
 
@@ -805,6 +835,12 @@ export default function UnifiedCostRequestForm({
                           </Select>
                         </div>
 
+                        <div>
+                          <Label className="text-sm font-medium">Total</Label>
+                          <div className="mt-1 flex items-center h-9 px-3 rounded-md border bg-muted/50 text-sm font-semibold tabular-nums" data-testid={`text-item-total-${index}`}>
+                            {item.currency} {item.amount.toLocaleString()}
+                          </div>
+                        </div>
                       </div>
 
                       <div>
@@ -908,11 +944,13 @@ export default function UnifiedCostRequestForm({
               </div>
 
               <div className="text-xs">
-                <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-2 border-b bg-muted/40 font-semibold text-muted-foreground">
+                <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-x-3 px-4 py-2 border-b bg-muted/40 font-semibold text-muted-foreground">
                   <span>#</span>
                   <span>Details</span>
-                  <span className="text-right">Currency</span>
-                  <span className="text-right">Amount</span>
+                  <span className="text-right">Qty</span>
+                  <span className="text-right">Unit Cost</span>
+                  <span className="text-right">Cur.</span>
+                  <span className="text-right w-20">Total</span>
                 </div>
 
                 {sortedCategoryEntries.map(([catKey, group]) => {
@@ -920,7 +958,7 @@ export default function UnifiedCostRequestForm({
                   const CatIcon = catInfo?.icon;
                   return (
                     <div key={catKey}>
-                      <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 bg-muted/20 border-b">
+                      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-x-3 px-4 py-1.5 bg-muted/20 border-b">
                         <span />
                         <span className="font-semibold text-foreground flex items-center gap-1.5">
                           {CatIcon && <CatIcon className="h-3 w-3" />}
@@ -930,11 +968,13 @@ export default function UnifiedCostRequestForm({
                         </span>
                         <span />
                         <span />
+                        <span />
+                        <span />
                       </div>
-                      {group.items.map((item, idx) => {
+                      {group.items.map((item) => {
                         const globalIdx = lineItems.findIndex(li => li.id === item.id);
                         return (
-                          <div key={item.id} className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-2 border-b last:border-b-0" data-testid={`invoice-line-${globalIdx}`}>
+                          <div key={item.id} className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-x-3 px-4 py-2 border-b last:border-b-0" data-testid={`invoice-line-${globalIdx}`}>
                             <span className="text-muted-foreground w-6 text-right">{globalIdx + 1}</span>
                             <div className="min-w-0">
                               <span className="truncate block">{item.title || 'Untitled'}</span>
@@ -942,14 +982,18 @@ export default function UnifiedCostRequestForm({
                                 <span className="text-[10px] text-muted-foreground truncate block">{item.vendor}</span>
                               )}
                             </div>
+                            <span className="text-right tabular-nums">{item.quantity}</span>
+                            <span className="text-right tabular-nums">{item.unitCost.toLocaleString()}</span>
                             <span className="text-right text-muted-foreground">{item.currency}</span>
                             <span className="text-right font-medium tabular-nums w-20">{item.amount.toLocaleString()}</span>
                           </div>
                         );
                       })}
-                      <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-1.5 border-b bg-muted/30">
+                      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-x-3 px-4 py-1.5 border-b bg-muted/30">
                         <span />
                         <span className="text-right font-semibold text-muted-foreground pr-2">Subtotal - {catInfo?.label || catKey}</span>
+                        <span />
+                        <span />
                         <span className="text-right text-muted-foreground">{group.currency}</span>
                         <span className="text-right font-bold tabular-nums w-20">{group.subtotal.toLocaleString()}</span>
                       </div>
@@ -957,9 +1001,11 @@ export default function UnifiedCostRequestForm({
                   );
                 })}
 
-                <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-3 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-t-2 border-blue-200 dark:border-blue-800">
+                <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-x-3 px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-t-2 border-blue-200 dark:border-blue-800">
                   <span />
                   <span className="text-right font-bold text-sm pr-2">Grand Total</span>
+                  <span />
+                  <span />
                   <span className="text-right font-bold text-sm">{totalCurrency}</span>
                   <span className="text-right font-bold text-sm tabular-nums w-20">{totalAmount.toLocaleString()}</span>
                 </div>
