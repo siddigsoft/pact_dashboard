@@ -136,22 +136,25 @@ export default function UnifiedCostRequestForm({
   );
 
   const parseEditDescription = (desc: string | null) => {
-    if (!desc) return { fundingType: 'advance' as const, title: '', description: '', justification: '' };
+    if (!desc) return { fundingType: 'advance' as const, title: '', description: '', justification: '', requestTitle: '' };
     const fundingMatch = desc.match(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/);
     const fundingType = fundingMatch?.[1]?.toLowerCase() === 'reimbursement' ? 'reimbursement' as const : 'advance' as const;
     const withoutFunding = desc.replace(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/, '');
-    const parts = withoutFunding.split('\n\n');
+    const requestTitleMatch = withoutFunding.match(/^<<(.+?)>>\n*/);
+    const requestTitle = requestTitleMatch?.[1] || '';
+    const withoutReqTitle = withoutFunding.replace(/^<<.+?>>\n*/, '');
+    const parts = withoutReqTitle.split('\n\n');
     const title = parts[0] || '';
-    const justificationIdx = withoutFunding.indexOf('\n\nJustification: ');
+    const justificationIdx = withoutReqTitle.indexOf('\n\nJustification: ');
     let description = '';
     let justification = '';
     if (justificationIdx >= 0) {
-      description = withoutFunding.substring(title.length + 2, justificationIdx);
-      justification = withoutFunding.substring(justificationIdx + '\n\nJustification: '.length);
+      description = withoutReqTitle.substring(title.length + 2, justificationIdx);
+      justification = withoutReqTitle.substring(justificationIdx + '\n\nJustification: '.length);
     } else {
       description = parts.slice(1).join('\n\n');
     }
-    return { fundingType, title, description, justification };
+    return { fundingType, title, description, justification, requestTitle };
   };
 
   const editDefaults = editData ? parseEditDescription(editData.description) : null;
@@ -164,6 +167,7 @@ export default function UnifiedCostRequestForm({
   const [projectId, setProjectId] = useState(editData?.project_id || '');
   const [hubId, setHubId] = useState(editData?.hub_id || currentUser?.hubId || '');
   const [requestDate, setRequestDate] = useState(editData?.expense_date || new Date().toISOString().split('T')[0]);
+  const [requestTitle, setRequestTitle] = useState(editDefaults?.requestTitle || '');
 
   const initialItem: LineItem = editData ? {
     id: uuidv4(),
@@ -321,6 +325,18 @@ export default function UnifiedCostRequestForm({
       toast({ title: "Error", description: "User session is invalid. Please log out and log back in.", variant: "destructive" });
       return;
     }
+    if (projects.length > 0 && !projectId) {
+      toast({ title: "Project Required", description: "Please select a project for this request.", variant: "destructive" });
+      return;
+    }
+    if (!requestDate) {
+      toast({ title: "Date Required", description: "Please select a date for this request.", variant: "destructive" });
+      return;
+    }
+    if (!requestTitle || requestTitle.trim().length < 3) {
+      toast({ title: "Title Required", description: "Please enter a request title (at least 3 characters).", variant: "destructive" });
+      return;
+    }
     if (fundingType === 'reimbursement' && supportingDocuments.length === 0) {
       toast({ title: "Documents Required", description: "Please upload receipts for reimbursement requests", variant: "destructive" });
       return;
@@ -342,7 +358,7 @@ export default function UnifiedCostRequestForm({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100),
           currency: item.currency,
-          description: `[${fundingType.toUpperCase()}] ${item.title}\n\n${item.description}\n\nJustification: ${item.justification}`,
+          description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}\n\n${item.description}\n\nJustification: ${item.justification}`,
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
@@ -386,7 +402,7 @@ export default function UnifiedCostRequestForm({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100),
           currency: item.currency,
-          description: `[${fundingType.toUpperCase()}] ${item.title}\n\n${item.description}\n\nJustification: ${item.justification}`,
+          description: `[${fundingType.toUpperCase()}] <<${requestTitle.trim()}>>\n${item.title}\n\n${item.description}\n\nJustification: ${item.justification}`,
           expense_date: requestDate || new Date().toISOString().split('T')[0],
           vendor: item.vendor && item.vendor.trim() !== '' ? item.vendor : null,
           reference_number: item.referenceNumber && item.referenceNumber.trim() !== '' ? item.referenceNumber : null,
@@ -432,6 +448,7 @@ export default function UnifiedCostRequestForm({
       setExpandedItems(new Set([freshItem.id]));
       setSupportingDocuments([]);
       setProjectId('');
+      setRequestTitle('');
       setItemErrors({});
       onSuccess?.();
     } catch (error: any) {
@@ -540,9 +557,11 @@ export default function UnifiedCostRequestForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {projects.length > 0 && (
               <div>
-                <Label className="text-sm font-medium mb-1.5 block">Project (Optional)</Label>
+                <Label className="text-sm font-medium mb-1.5 block">
+                  Project <span className="text-destructive">*</span>
+                </Label>
                 <Select onValueChange={setProjectId} value={projectId}>
-                  <SelectTrigger data-testid="select-project">
+                  <SelectTrigger data-testid="select-project" className={cn(!projectId && "border-destructive/50")}>
                     <SelectValue placeholder="Select project" />
                   </SelectTrigger>
                   <SelectContent>
@@ -556,18 +575,37 @@ export default function UnifiedCostRequestForm({
               </div>
             )}
             <div>
-              <Label className="text-sm font-medium mb-1.5 block">Request Date</Label>
+              <Label className="text-sm font-medium mb-1.5 block">
+                Request Date <span className="text-destructive">*</span>
+              </Label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
                   type="date"
-                  className="pl-9"
+                  className={cn("pl-9", !requestDate && "border-destructive/50")}
                   value={requestDate}
                   onChange={(e) => setRequestDate(e.target.value)}
                   data-testid="input-request-date"
                 />
               </div>
             </div>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium mb-1.5 block">
+              Request Title <span className="text-destructive">*</span>
+            </Label>
+            <div className="relative">
+              <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="e.g. March Field Operations - Khartoum Hub"
+                className={cn("pl-9", !requestTitle && "border-destructive/50")}
+                value={requestTitle}
+                onChange={(e) => setRequestTitle(e.target.value)}
+                data-testid="input-request-title"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">A brief title describing this payment request</p>
           </div>
 
           <div className="space-y-3">
@@ -837,6 +875,9 @@ export default function UnifiedCostRequestForm({
                     {requestNumber}
                   </Badge>
                 </div>
+                {requestTitle && (
+                  <p className="text-xs text-muted-foreground mt-1 font-medium">{requestTitle}</p>
+                )}
               </div>
 
               <div className="text-xs">
@@ -910,12 +951,20 @@ export default function UnifiedCostRequestForm({
                     <p className="font-medium">{reqDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                   </div>
                   <div>
+                    <span className="text-muted-foreground">Title</span>
+                    <p className="font-medium truncate">{requestTitle || '—'}</p>
+                  </div>
+                  <div>
                     <span className="text-muted-foreground">Project</span>
                     <p className="font-medium">{selectedProject?.name || 'General'}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Items</span>
                     <p className="font-medium">{lineItems.length} line item{lineItems.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Attachments</span>
+                    <p className="font-medium">{supportingDocuments.length} file{supportingDocuments.length !== 1 ? 's' : ''}</p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Categories</span>
@@ -935,10 +984,10 @@ export default function UnifiedCostRequestForm({
             <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
               <h3 className="text-sm font-medium flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                Documents {fundingType === 'reimbursement' && <Badge variant="destructive" className="text-[10px]">Required</Badge>}
+                Attachments {fundingType === 'reimbursement' && <Badge variant="destructive" className="text-[10px]">Required</Badge>}
               </h3>
               <span className="text-xs text-muted-foreground">
-                {supportingDocuments.length} file{supportingDocuments.length !== 1 ? 's' : ''} attached
+                {supportingDocuments.length} file{supportingDocuments.length !== 1 ? 's' : ''} attached — upload as many as needed
               </span>
             </div>
             <CostDocumentUpload
