@@ -475,7 +475,7 @@ export default function Documentation() {
 
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
         <div>
-          Document Version: 2.1 | Last Updated: December 2025
+          Document Version: 3.0 | Last Updated: February 2026
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={handleExportPDF} disabled={exporting} data-testid="button-footer-pdf">

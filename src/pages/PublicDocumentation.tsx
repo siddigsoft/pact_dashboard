@@ -22,7 +22,7 @@ const tableOfContents = [
   { id: 13, title: "Financial Operations", sections: ["Financial Dashboard", "Transaction Types", "Two-Tier Approval Workflow", "Finance Processing Page"] },
   { id: 14, title: "Budget Management", sections: ["Creating Budgets", "Budget Tracking", "Budget Alerts"] },
   { id: 15, title: "Wallet System", sections: ["Understanding Wallets", "Wallet Dashboard", "Earning Payments", "Payment Breakdown", "Transaction History"] },
-  { id: 16, title: "Cost Submission & Approvals", sections: ["Cost Submission Workflow", "Down Payment (Advance) System", "Final Payment (Automatic)", "Hub Supervisor Model"] },
+  { id: 16, title: "Cost Submission & Approvals", sections: ["Cost Submission Workflow", "Down Payment (Advance) System", "Final Payment (Automatic)", "Hub Supervisor Model", "Operational Cost System", "Cost Categories", "Who Can Submit", "Approval Workflow", "Submitting Requests", "Reviewing Submissions", "Quantity-Based Cost Items", "Excel/CSV Bulk Upload", "Digital Signatures", "Advance Receipt Confirmation"] },
   { id: 17, title: "Tracker Preparation Plan", sections: ["Overview", "Analysis Views", "Tracker Actions"] },
   { id: 18, title: "Reports & Analytics", sections: ["Available Reports", "Custom Reports", "Export Formats"] },
   { id: 19, title: "Communication Features", sections: ["Messaging", "Announcements"] },
@@ -34,7 +34,12 @@ const tableOfContents = [
   { id: 25, title: "Notification System", sections: ["Notification Types", "Notification Settings", "Browser Push Notifications"] },
   { id: 26, title: "Mobile Application", sections: ["Key Features", "Installation", "Permissions Required", "Offline Mode", "Capacitor Plugins"] },
   { id: 27, title: "Troubleshooting", sections: ["Login Issues", "GPS Problems", "Sync Issues", "Common Error Messages"] },
-  { id: 28, title: "Glossary", sections: ["Terms & Definitions"] }
+  { id: 28, title: "Glossary", sections: ["Terms & Definitions"] },
+  { id: 29, title: "Retainer Management", sections: ["Overview", "Available Tabs", "Processing Retainer Payments"] },
+  { id: 30, title: "Wallet-Advance Integration", sections: ["How It Works", "Monthly Statements"] },
+  { id: 31, title: "Role Perspective Viewer", sections: ["Accessing the Tool", "Features"] },
+  { id: 32, title: "Sidebar Favorites System", sections: ["How to Use Favorites"] },
+  { id: 33, title: "Page Information Banners", sections: ["What are Page Info Banners?"] }
 ];
 
 const workflowSteps = [
@@ -433,7 +438,7 @@ export default function PublicDocumentation() {
             PACT Workflow Platform - Field Operations Command Center
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Version 2.1 | December 2025
+            Version 3.0 | February 2026
           </p>
         </div>
       </div>
