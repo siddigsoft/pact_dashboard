@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, Eye, ChevronLeft, ChevronRight, Play, CalendarDays, CheckCircle, Loader2, Filter, X } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
 import { PostponementDialog } from './PostponementDialog';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
@@ -69,6 +70,11 @@ const MMPSiteEntriesTable = ({
   const [postponementOpen, setPostponementOpen] = useState(false);
   const [postponementSite, setPostponementSite] = useState<any | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [hubFilter, setHubFilter] = useState("all");
+  const [stateFilter, setStateFilter] = useState("all");
+  const [localityFilter, setLocalityFilter] = useState("all");
+  const [enumeratorFilter, setEnumeratorFilter] = useState("all");
+  const [showFilters, setShowFilters] = useState(false);
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -240,19 +246,66 @@ const MMPSiteEntriesTable = ({
     setDetailOpen(true);
   };
 
-  // Memoize filtered sites for performance
-  const filteredSites = useMemo(() => {
-    if (debouncedSearchQuery.trim() === "") {
-      return siteEntries;
+  const normalizedEntries = useMemo(() => {
+    return siteEntries.map(site => ({ raw: site, norm: normalizeSite(site) }));
+  }, [siteEntries]);
+
+  const filterOptions = useMemo(() => {
+    const hubs = new Set<string>();
+    const states = new Set<string>();
+    const localities = new Set<string>();
+    const enumerators = new Set<string>();
+    for (const { norm } of normalizedEntries) {
+      if (norm.hubOffice && norm.hubOffice !== '—') hubs.add(norm.hubOffice);
+      if (norm.state && norm.state !== '—') states.add(norm.state);
+      if (norm.locality && norm.locality !== '—') localities.add(norm.locality);
+      if (norm.monitoringBy && norm.monitoringBy !== '—') enumerators.add(norm.monitoringBy);
     }
-    const q = debouncedSearchQuery.toLowerCase();
-    return siteEntries.filter(site => {
-      const s = normalizeSite(site);
-      return [s.hubOffice, s.state, s.locality, s.mmpName, s.siteName, s.cpName, s.siteActivity, s.monitoringBy, s.surveyTool, s.visitDate, s.comments]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q));
-    });
-  }, [siteEntries, debouncedSearchQuery]);
+    return {
+      hubs: Array.from(hubs).sort((a, b) => a.localeCompare(b)),
+      states: Array.from(states).sort((a, b) => a.localeCompare(b)),
+      localities: Array.from(localities).sort((a, b) => a.localeCompare(b)),
+      enumerators: Array.from(enumerators).sort((a, b) => a.localeCompare(b)),
+    };
+  }, [normalizedEntries]);
+
+  const activeFilterCount = [hubFilter, stateFilter, localityFilter, enumeratorFilter].filter(f => f !== 'all').length;
+
+  const clearAllFilters = () => {
+    setHubFilter("all");
+    setStateFilter("all");
+    setLocalityFilter("all");
+    setEnumeratorFilter("all");
+    setCurrentPage(1);
+  };
+
+  const filteredSites = useMemo(() => {
+    let results = normalizedEntries;
+
+    if (hubFilter !== 'all') {
+      results = results.filter(({ norm }) => norm.hubOffice === hubFilter);
+    }
+    if (stateFilter !== 'all') {
+      results = results.filter(({ norm }) => norm.state === stateFilter);
+    }
+    if (localityFilter !== 'all') {
+      results = results.filter(({ norm }) => norm.locality === localityFilter);
+    }
+    if (enumeratorFilter !== 'all') {
+      results = results.filter(({ norm }) => norm.monitoringBy === enumeratorFilter);
+    }
+
+    if (debouncedSearchQuery.trim() !== "") {
+      const q = debouncedSearchQuery.toLowerCase();
+      results = results.filter(({ norm }) => {
+        return [norm.hubOffice, norm.state, norm.locality, norm.mmpName, norm.siteName, norm.cpName, norm.siteActivity, norm.monitoringBy, norm.surveyTool, norm.visitDate, norm.comments]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q));
+      });
+    }
+
+    return results.map(({ raw }) => raw);
+  }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, enumeratorFilter]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
@@ -278,12 +331,24 @@ const MMPSiteEntriesTable = ({
             <CardTitle>MMP Site Entries</CardTitle>
             <CardDescription>
               Showing {paginatedSites.length} of {filteredSites.length} sites
-              {debouncedSearchQuery && ` (filtered from ${siteEntries.length} total)`}
-              {!debouncedSearchQuery && ` (${siteEntries.length} total)`}
+              {(debouncedSearchQuery || activeFilterCount > 0) && ` (filtered from ${siteEntries.length} total)`}
+              {!debouncedSearchQuery && activeFilterCount === 0 && ` (${siteEntries.length} total)`}
             </CardDescription>
           </div>
-          <div className="w-full sm:w-auto">
-            <div className="relative">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={showFilters ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              data-testid="button-toggle-filters"
+            >
+              <Filter className="h-4 w-4 mr-1" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-1.5 bg-white/20 text-xs">{activeFilterCount}</Badge>
+              )}
+            </Button>
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
@@ -291,10 +356,111 @@ const MMPSiteEntriesTable = ({
                 className="pl-8 w-full sm:w-[300px]"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                data-testid="input-search-sites"
               />
             </div>
           </div>
         </div>
+        {showFilters && (
+          <div className="mt-4 pt-4 border-t border-border/50">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Hub</label>
+                <Select value={hubFilter} onValueChange={(val) => { setHubFilter(val); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full" data-testid="select-hub-filter">
+                    <SelectValue placeholder="All Hubs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Hubs</SelectItem>
+                    {filterOptions.hubs.map(hub => (
+                      <SelectItem key={hub} value={hub}>{hub}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">State</label>
+                <Select value={stateFilter} onValueChange={(val) => { setStateFilter(val); setLocalityFilter("all"); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full" data-testid="select-state-filter">
+                    <SelectValue placeholder="All States" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All States</SelectItem>
+                    {filterOptions.states.map(state => (
+                      <SelectItem key={state} value={state}>{state}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Locality</label>
+                <Select value={localityFilter} onValueChange={(val) => { setLocalityFilter(val); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full" data-testid="select-locality-filter">
+                    <SelectValue placeholder="All Localities" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Localities</SelectItem>
+                    {(stateFilter !== 'all'
+                      ? filterOptions.localities.filter(loc => 
+                          normalizedEntries.some(({ norm }) => norm.state === stateFilter && norm.locality === loc)
+                        )
+                      : filterOptions.localities
+                    ).map(loc => (
+                      <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Enumerator</label>
+                <Select value={enumeratorFilter} onValueChange={(val) => { setEnumeratorFilter(val); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full" data-testid="select-enumerator-filter">
+                    <SelectValue placeholder="All Enumerators" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Enumerators</SelectItem>
+                    {filterOptions.enumerators.map(name => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {activeFilterCount > 0 && (
+              <div className="flex items-center gap-2 mt-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {hubFilter !== 'all' && (
+                    <Badge variant="secondary" className="gap-1">
+                      Hub: {hubFilter}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => { setHubFilter("all"); setCurrentPage(1); }} />
+                    </Badge>
+                  )}
+                  {stateFilter !== 'all' && (
+                    <Badge variant="secondary" className="gap-1">
+                      State: {stateFilter}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => { setStateFilter("all"); setLocalityFilter("all"); setCurrentPage(1); }} />
+                    </Badge>
+                  )}
+                  {localityFilter !== 'all' && (
+                    <Badge variant="secondary" className="gap-1">
+                      Locality: {localityFilter}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => { setLocalityFilter("all"); setCurrentPage(1); }} />
+                    </Badge>
+                  )}
+                  {enumeratorFilter !== 'all' && (
+                    <Badge variant="secondary" className="gap-1">
+                      Enumerator: {enumeratorFilter}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => { setEnumeratorFilter("all"); setCurrentPage(1); }} />
+                    </Badge>
+                  )}
+                </div>
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} data-testid="button-clear-filters">
+                  Clear All
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {/* List View */}
