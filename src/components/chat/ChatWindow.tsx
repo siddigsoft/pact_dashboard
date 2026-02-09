@@ -25,12 +25,10 @@ import {
   Check,
   CheckCheck,
   MessageSquare,
-  RotateCcw,
-  Clapperboard
+  RotateCcw
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadChatAttachment, getContentTypeFromFile, formatFileSize, ChatAttachment } from '@/utils/chatUpload';
-import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
 
 interface ChatWindowProps {
   hideHeader?: boolean;
@@ -43,7 +41,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
   const [messageText, setMessageText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
-  const [showJitsiCall, setShowJitsiCall] = useState(false);
   const { currentUser, users } = useUser();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -356,17 +353,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
           <Button 
             variant="ghost"
             size="icon"
-            className="rounded-full bg-blue-500/80 hover:bg-blue-500 text-white"
-            onClick={() => setShowJitsiCall(true)}
-            disabled={!targetUser}
-            data-testid="button-jitsi"
-            title="Jitsi Video Call (Backup)"
-          >
-            <Clapperboard className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost"
-            size="icon"
             className="rounded-full bg-white/10 hover:bg-white/20 text-white"
             onClick={() => window.location.reload()}
             data-testid="button-refresh"
@@ -616,24 +602,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
         </div>
       </div>
 
-      {currentUser && targetUser && (
-        <JitsiCallModal
-          isOpen={showJitsiCall}
-          onClose={() => setShowJitsiCall(false)}
-          targetUser={{
-            id: targetUser.id,
-            name: targetUser.fullName || targetUser.name || 'User',
-            avatar: targetUser.avatar,
-            email: targetUser.email
-          }}
-          currentUser={{
-            id: currentUser.id,
-            name: currentUser.fullName || currentUser.name || 'You',
-            avatar: currentUser.avatar,
-            email: currentUser.email
-          }}
-        />
-      )}
     </div>
   );
 };

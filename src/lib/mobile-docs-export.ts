@@ -504,7 +504,7 @@ const mobileDocumentationSections: Section[] = [
         title: "10.2 Voice & Video Calls",
         content: [
           "WebRTC audio calling for voice communication",
-          "Jitsi Meet integration for video conferencing",
+          "WebRTC video calling for video conferencing",
           "Call overlay shows during active calls",
           "Enhanced call features include mute, speaker, and hold",
           "Call scheduling for planned team meetings"
@@ -1259,7 +1259,7 @@ const arabicMobileDocumentationSections: Section[] = [
         title: "10.2 المكالمات الصوتية والمرئية",
         content: [
           "مكالمات صوتية WebRTC للاتصال الصوتي",
-          "تكامل Jitsi Meet لمؤتمرات الفيديو",
+          "مكالمات فيديو WebRTC لمؤتمرات الفيديو",
           "واجهة المكالمة تظهر أثناء المكالمات النشطة",
           "ميزات مكالمات محسّنة تشمل كتم الصوت ومكبر الصوت والانتظار",
           "جدولة المكالمات للاجتماعات المخططة مع الفريق"

@@ -74,16 +74,6 @@ interface CallState {
   startTime: number | null;
 }
 
-// Jitsi incoming call state
-export interface JitsiIncomingCall {
-  callId: string;
-  callerId: string;
-  callerName: string;
-  callerAvatar?: string;
-  roomName: string;
-  isAudioOnly: boolean;
-}
-
 interface CallContextType {
   callState: CallState;
   initiateCall: (user: User) => Promise<void>;
@@ -94,10 +84,6 @@ interface CallContextType {
   toggleVideo: () => Promise<void>;
   isVideoEnabled: boolean;
   isCallActive: boolean;
-  // Jitsi call handling
-  incomingJitsiCall: JitsiIncomingCall | null;
-  acceptJitsiCall: () => void;
-  rejectJitsiCall: () => void;
 }
 
 const CallContext = createContext<CallContextType | undefined>(undefined);
@@ -116,9 +102,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const incomingCallerId = useRef<string | null>(null);
   
-  // Jitsi incoming call state
-  const [incomingJitsiCall, setIncomingJitsiCall] = useState<JitsiIncomingCall | null>(null);
-
   const playRemoteAudio = useCallback((stream: MediaStream) => {
     if (!audioRef.current) {
       audioRef.current = new Audio();
@@ -233,42 +216,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (state === 'connected') {
           setCallState(prev => ({ ...prev, status: 'connected' }));
         }
-      },
-      // Jitsi call handlers
-      onIncomingJitsiCall: (callerId, callerName, roomName, isAudioOnly, callId, callerAvatar) => {
-        console.log('[Call] Incoming Jitsi call from:', callerName, 'room:', roomName);
-        setIncomingJitsiCall({
-          callId,
-          callerId,
-          callerName,
-          callerAvatar,
-          roomName,
-          isAudioOnly,
-        });
-        toast({
-          title: 'Incoming Video Call',
-          description: `${callerName} is inviting you to a ${isAudioOnly ? 'voice' : 'video'} call`,
-        });
-        // Also save notification to database
-        if (currentUser) {
-          void NotificationTriggerService.incomingCall(currentUser.id, callerName, callerId)
-            .catch(err => console.error('Failed to send incoming call notification:', err));
-        }
-      },
-      onJitsiCallAccepted: (callId) => {
-        console.log('[Call] Jitsi call accepted:', callId);
-        toast({
-          title: 'Call Accepted',
-          description: 'The user has joined the call',
-        });
-      },
-      onJitsiCallRejected: (callId) => {
-        console.log('[Call] Jitsi call rejected:', callId);
-        toast({
-          title: 'Call Declined',
-          description: 'The user declined your call',
-          variant: 'destructive',
-        });
       },
     };
 
@@ -390,41 +337,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isCallActive = callState.status !== 'idle' && callState.status !== 'ended';
 
-  // Jitsi call accept/reject handlers
-  const acceptJitsiCall = useCallback(() => {
-    if (!incomingJitsiCall) return;
-    
-    // Send acceptance signal
-    webRTCService.acceptJitsiCall(incomingJitsiCall.callerId, incomingJitsiCall.callId);
-    
-    // The caller will handle opening the Jitsi modal
-    // The callee can get the room info from incomingJitsiCall
-    // We don't clear it here - the component consuming this will handle it
-    
-    toast({
-      title: 'Joining Call',
-      description: 'Opening video call...',
-    });
-  }, [incomingJitsiCall, toast]);
-
-  const rejectJitsiCall = useCallback(() => {
-    if (!incomingJitsiCall) return;
-    
-    // Send rejection signal
-    webRTCService.rejectJitsiCall(incomingJitsiCall.callerId, incomingJitsiCall.callId);
-    
-    // Send missed call notification
-    if (currentUser) {
-      NotificationTriggerService.missedCall(
-        incomingJitsiCall.callerId,
-        currentUser.name || currentUser.fullName || 'User',
-        currentUser.id
-      );
-    }
-    
-    setIncomingJitsiCall(null);
-  }, [incomingJitsiCall, currentUser]);
-
   return (
     <CallContext.Provider
       value={{
@@ -437,9 +349,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toggleVideo,
         isVideoEnabled,
         isCallActive,
-        incomingJitsiCall,
-        acceptJitsiCall,
-        rejectJitsiCall,
       }}
     >
       {children}

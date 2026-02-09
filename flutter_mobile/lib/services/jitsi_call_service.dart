@@ -1,5 +1,6 @@
 // lib/services/jitsi_call_service.dart
-// Compatibility layer for JitsiCallService using WebRTC
+// Legacy compatibility layer - delegates all calls to WebRTC service
+// This file can be removed once all references are updated to use WebRTCCallService directly
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -97,7 +98,7 @@ class JitsiCallService {
 
     _isInitialized = true;
     debugPrint(
-      '[JitsiCallService] Compatibility layer initialized (using WebRTC)',
+      '[CallService] Initialized (WebRTC)',
     );
   }
 

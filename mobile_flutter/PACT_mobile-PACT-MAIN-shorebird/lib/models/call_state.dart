@@ -45,7 +45,6 @@ class CallState {
   final bool isMuted;
   final bool isSpeakerOn;
   final DateTime? startTime;
-  final String? jitsiRoom;
   final bool isAudioOnly;
   
   // Enhanced call features
@@ -73,7 +72,6 @@ class CallState {
     this.isMuted = false,
     this.isSpeakerOn = false,
     this.startTime,
-    this.jitsiRoom,
     this.isAudioOnly = false,
     this.isOnHold = false,
     this.isRecording = false,
@@ -130,7 +128,6 @@ class CallState {
     bool? isMuted,
     bool? isSpeakerOn,
     DateTime? startTime,
-    String? jitsiRoom,
     bool? isAudioOnly,
     bool? isOnHold,
     bool? isRecording,
@@ -156,7 +153,6 @@ class CallState {
       isMuted: isMuted ?? this.isMuted,
       isSpeakerOn: isSpeakerOn ?? this.isSpeakerOn,
       startTime: startTime ?? this.startTime,
-      jitsiRoom: jitsiRoom ?? this.jitsiRoom,
       isAudioOnly: isAudioOnly ?? this.isAudioOnly,
       isOnHold: isOnHold ?? this.isOnHold,
       isRecording: isRecording ?? this.isRecording,

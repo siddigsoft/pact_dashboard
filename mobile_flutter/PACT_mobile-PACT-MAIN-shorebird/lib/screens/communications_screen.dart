@@ -9,12 +9,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/presence_service.dart';
 import '../services/webrtc_service.dart';
-import '../services/jitsi_meet_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/incoming_call_overlay.dart';
 import '../models/call_state.dart';
 import 'call_screen.dart';
-import 'jitsi_call_screen.dart';
 
 class CommunicationsScreen extends StatefulWidget {
   const CommunicationsScreen({super.key});
@@ -27,7 +25,6 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     with SingleTickerProviderStateMixin {
   final PresenceService _presenceService = PresenceService();
   final WebRTCService _webrtcService = WebRTCService();
-  final JitsiMeetService _jitsiService = JitsiMeetService();
   final ChatService _chatService = ChatService();
   final TextEditingController _searchController = TextEditingController();
 
@@ -538,65 +535,6 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
     }
   }
 
-  /// Initiate a Jitsi Meet call (more reliable for poor network conditions)
-  Future<void> _initiateJitsiCall(UserPresence user, {bool audioOnly = false}) async {
-    if (!_isOnline) {
-      _showOfflineMessage('Calls require an internet connection');
-      return;
-    }
-
-    // Check role-based calling restrictions
-    if (!_canCallUser(user)) {
-      _showMessage(_getCallRestrictionMessage(user), isError: true);
-      return;
-    }
-
-    // Check if target user is online
-    if (!user.isOnline) {
-      _showMessage('${user.userName} is offline. Send a message instead.', isError: true);
-      return;
-    }
-
-    HapticFeedback.mediumImpact();
-    
-    // Initialize Jitsi service if needed
-    final currentUserId = _chatService.getCurrentUserId();
-    final currentUserName = _currentUserRole ?? 'PACT User';
-    
-    if (currentUserId != null) {
-      await _jitsiService.initialize(
-        userId: currentUserId,
-        userName: currentUserName,
-      );
-    }
-    
-    // Start Jitsi call
-    final result = await _jitsiService.startCall(
-      remoteUserId: user.odId,
-      remoteUserName: user.userName,
-      remoteUserAvatar: user.userAvatar,
-      audioOnly: audioOnly,
-    );
-
-    if (result.success && mounted) {
-      // Navigate to Jitsi call screen
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => JitsiCallScreen(
-            roomName: result.roomName!,
-            serverUrl: result.serverUrl!,
-            remoteUserName: user.userName,
-            remoteUserAvatar: user.userAvatar,
-            isAudioOnly: audioOnly,
-            isOutgoing: true,
-          ),
-        ),
-      );
-    } else if (!result.success && mounted) {
-      _showMessage(result.error ?? 'Could not start Jitsi call. Please try again.', isError: true);
-    }
-  }
-
   Future<void> _initiateChat(UserPresence user) async {
     HapticFeedback.lightImpact();
     
@@ -1093,24 +1031,6 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                               ? 'User is offline'
                               : (user.isInCall ? 'User is busy' : 'Direct Call')),
                     ),
-                    // Jitsi Video Call button (more reliable)
-                    IconButton(
-                      icon: Icon(
-                        Icons.video_camera_front,
-                        color: (user.isOnline && !user.isInCall && _isOnline)
-                            ? Colors.green
-                            : Colors.grey.withOpacity(0.5),
-                      ),
-                      iconSize: 22,
-                      onPressed: (user.isOnline && !user.isInCall && _isOnline)
-                          ? () => _initiateJitsiCall(user)
-                          : null,
-                      tooltip: !_isOnline
-                          ? 'You are offline'
-                          : (!user.isOnline
-                              ? 'User is offline'
-                              : (user.isInCall ? 'User is busy' : 'Jitsi Video Call')),
-                    ),
                   ],
                 ),
               ],
@@ -1303,49 +1223,6 @@ class _CommunicationsScreenState extends State<CommunicationsScreen>
                     : null,
               ),
               
-              // Jitsi Video Call option
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: (user.isOnline && !user.isInCall && _isOnline)
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.video_camera_front,
-                    color: (user.isOnline && !user.isInCall && _isOnline)
-                        ? Colors.green
-                        : Colors.grey,
-                  ),
-                ),
-                title: Text(
-                  'Jitsi Video Call',
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w500,
-                    color: (user.isOnline && !user.isInCall && _isOnline)
-                        ? null
-                        : Colors.grey,
-                  ),
-                ),
-                subtitle: Text(
-                  !_isOnline
-                      ? 'You are offline'
-                      : (!user.isOnline
-                          ? 'User is offline - send a message instead'
-                          : (user.isInCall
-                              ? 'User is currently in a call'
-                              : 'More reliable - works on poor networks')),
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
-                ),
-                onTap: (user.isOnline && !user.isInCall && _isOnline)
-                    ? () {
-                        Navigator.pop(context);
-                        _initiateJitsiCall(user);
-                      }
-                    : null,
-              ),
               
               const SizedBox(height: 16),
             ],
