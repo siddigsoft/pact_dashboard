@@ -87,6 +87,7 @@ const HubManagement = lazy(() => import('./pages/HubManagement'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const Documentation = lazy(() => import('./pages/Documentation'));
+const MobileDocumentation = lazy(() => import('./pages/MobileDocumentation'));
 const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
 const SignaturesPage = lazy(() => import('./pages/Signatures'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
@@ -175,7 +176,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation', '/mobile-documentation'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
@@ -227,6 +228,7 @@ const AppRoutes = () => {
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/documentation" element={<Documentation />} />
+        <Route path="/mobile-documentation" element={<MobileDocumentation />} />
         <Route path="/public-documentation" element={<PublicDocumentation />} />
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />

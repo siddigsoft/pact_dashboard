@@ -336,6 +336,9 @@
     if (!isHidden('/documentation')) {
       helpItems.push({ id: 'documentation', title: "Documentation", url: "/documentation", icon: BookOpen, priority: 1, isPinned: isPinned('/documentation') });
     }
+    if (!isHidden('/mobile-documentation')) {
+      helpItems.push({ id: 'mobile-documentation', title: "Mobile User Manual", url: "/mobile-documentation", icon: Smartphone, priority: 1.5, isPinned: isPinned('/mobile-documentation') });
+    }
     if (!isHidden('/mobile-support-tickets') && (isSuperAdmin || isAdmin)) {
       helpItems.push({ id: 'mobile-support-tickets', title: "Mobile Support Tickets", url: "/mobile-support-tickets", icon: Smartphone, priority: 2, isPinned: isPinned('/mobile-support-tickets') });
     }
