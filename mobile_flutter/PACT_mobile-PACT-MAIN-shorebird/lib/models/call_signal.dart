@@ -10,27 +10,18 @@ enum CallSignalType {
   offer,
   answer,
   iceCandidate,
-  jitsiInvite,
-  jitsiAccept,
-  jitsiReject,
 }
 
 /// Normalize signal type from web (kebab-case) to mobile (camelCase) format
 /// Handles cross-platform compatibility between web and mobile apps
 CallSignalType normalizeSignalType(String type) {
-  // Map web format (kebab-case) to mobile format (camelCase)
   const typeMap = <String, CallSignalType>{
-    // Web format -> Mobile format
     'call-request': CallSignalType.callRequest,
     'call-accepted': CallSignalType.callAccept,
     'call-rejected': CallSignalType.callReject,
     'call-ended': CallSignalType.callEnd,
     'call-busy': CallSignalType.callBusy,
     'ice-candidate': CallSignalType.iceCandidate,
-    'jitsi-invite': CallSignalType.jitsiInvite,
-    'jitsi-accepted': CallSignalType.jitsiAccept,
-    'jitsi-rejected': CallSignalType.jitsiReject,
-    // Mobile format also supported (pass-through)
     'callRequest': CallSignalType.callRequest,
     'callAccept': CallSignalType.callAccept,
     'callReject': CallSignalType.callReject,
@@ -39,9 +30,6 @@ CallSignalType normalizeSignalType(String type) {
     'iceCandidate': CallSignalType.iceCandidate,
     'offer': CallSignalType.offer,
     'answer': CallSignalType.answer,
-    'jitsiInvite': CallSignalType.jitsiInvite,
-    'jitsiAccept': CallSignalType.jitsiAccept,
-    'jitsiReject': CallSignalType.jitsiReject,
   };
   
   return typeMap[type] ?? CallSignalType.callRequest;
@@ -58,7 +46,6 @@ class CallSignal {
   final String? callToken;
   final Map<String, dynamic>? payload;
   final DateTime timestamp;
-  final String? jitsiRoom;
   final bool? isAudioOnly;
 
   CallSignal({
@@ -71,7 +58,6 @@ class CallSignal {
     this.callToken,
     this.payload,
     DateTime? timestamp,
-    this.jitsiRoom,
     this.isAudioOnly,
   }) : timestamp = timestamp ?? DateTime.now();
 
@@ -86,13 +72,11 @@ class CallSignal {
       'callToken': callToken,
       'payload': payload,
       'timestamp': timestamp.toIso8601String(),
-      'jitsiRoom': jitsiRoom,
       'isAudioOnly': isAudioOnly,
     };
   }
 
   factory CallSignal.fromJson(Map<String, dynamic> json) {
-    // Use normalizer for cross-platform compatibility (web uses kebab-case, mobile uses camelCase)
     final normalizedType = normalizeSignalType(json['type'] as String? ?? 'callRequest');
     
     return CallSignal(
@@ -107,7 +91,6 @@ class CallSignal {
       timestamp: json['timestamp'] != null
           ? DateTime.parse(json['timestamp'] as String)
           : DateTime.now(),
-      jitsiRoom: json['jitsiRoom'] as String?,
       isAudioOnly: json['isAudioOnly'] as bool?,
     );
   }

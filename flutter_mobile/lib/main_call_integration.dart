@@ -7,14 +7,10 @@
 // 1. ADD DEPENDENCIES
 //    Update your pubspec.yaml with dependencies from pubspec_additions.yaml
 //
-// 2. REMOVE JITSI
-//    Remove jitsi_meet_flutter_sdk from pubspec.yaml
-//    Delete any Jitsi-related import statements and code
-//
-// 3. COPY FILES
+// 2. COPY FILES
 //    Copy all files from flutter_mobile/lib/ to your local project's lib/ folder
 //
-// 4. INITIALIZE IN MAIN.DART
+// 3. INITIALIZE IN MAIN.DART
 //    Add this to your main() function after Supabase initialization:
 
 /*

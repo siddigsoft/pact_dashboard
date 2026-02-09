@@ -29,7 +29,7 @@ const documentationSections: Section[] = [
         content: [
           "Monthly Monitoring Plans (MMPs) - Strategic planning and site targeting for field activities",
           "Site Visit Management - End-to-end coordination with GPS tracking and photo documentation",
-          "Team Coordination Center - Real-time location sharing, voice/video calling (WebRTC & Jitsi), and instant messaging",
+          "Team Coordination Center - Real-time location sharing, voice/video calling (WebRTC), and instant messaging",
           "Financial Control System - Budgets, digital wallets, cost submissions, multi-tier approvals, and Bank of Khartoum integration",
           "Role-Based Security - 12 specialized user roles with granular permission control",
           "Mobile-First Design - Native Android app with full offline capability for remote field operations",
