@@ -8,7 +8,7 @@ import {
   TrendingUp, MapPin, Bell, Search, User, X,
   LogOut, Shield, ClipboardList, ChevronRight, Building2,
   FileCheck, UserCog, PenTool, HelpCircle, Phone, Eye,
-  Globe, Lock, Database, Activity
+  Globe, Lock, Database, Activity, Smartphone
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
@@ -153,6 +153,7 @@ const menuSections: MenuSection[] = [
     items: [
       { id: 'app-settings', icon: Settings, label: 'Settings', path: '/settings', description: 'App settings' },
       { id: 'help-docs', icon: HelpCircle, label: 'Help & Docs', path: '/documentation', description: 'User guide' },
+      { id: 'mobile-manual', icon: Smartphone, label: 'Mobile Manual', path: '/mobile-documentation', description: 'Mobile user guide' },
     ]
   },
 ];
