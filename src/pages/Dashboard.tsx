@@ -6,6 +6,7 @@ import LocationPermissionPrompt from '@/components/location/LocationPermissionPr
 import { DataFreshnessBadge } from '@/components/realtime';
 import { DashboardZoneLayout, DashboardZone } from '@/components/dashboard/DashboardZoneLayout';
 import { DashboardZone as DashboardZoneType } from '@/types/user-preferences';
+import { DashboardMmpFilterProvider } from '@/context/dashboard/DashboardMmpFilterContext';
 import { Loader2 } from 'lucide-react';
 
 const OperationsZone = lazy(() => import('@/components/dashboard/zones/OperationsZone').then(m => ({ default: m.OperationsZone })));
@@ -115,26 +116,25 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Zone-based Layout with Sticky Header */}
-      <DashboardZoneLayout 
-        activeZone={activeZone} 
-        onZoneChange={setActiveZone}
-      >
-        <Suspense fallback={<ZoneLoadingFallback />}>
-          {renderZoneContent()}
-        </Suspense>
-      </DashboardZoneLayout>
+    <DashboardMmpFilterProvider>
+      <div className="min-h-screen bg-background">
+        <DashboardZoneLayout 
+          activeZone={activeZone} 
+          onZoneChange={setActiveZone}
+        >
+          <Suspense fallback={<ZoneLoadingFallback />}>
+            {renderZoneContent()}
+          </Suspense>
+        </DashboardZoneLayout>
 
-      {/* Floating components */}
-      {SiteVisitRemindersDialog}
-      <LocationPermissionPrompt />
-      
-      {/* Data freshness indicator */}
-      <div className="fixed bottom-4 right-4 z-40">
-        <DataFreshnessBadge variant="compact" />
+        {SiteVisitRemindersDialog}
+        <LocationPermissionPrompt />
+        
+        <div className="fixed bottom-4 right-4 z-40">
+          <DataFreshnessBadge variant="compact" />
+        </div>
       </div>
-    </div>
+    </DashboardMmpFilterProvider>
   );
 };
 

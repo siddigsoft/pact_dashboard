@@ -39,6 +39,7 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { supabase } from '@/integrations/supabase/client';
 import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
+import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
 
@@ -62,6 +63,7 @@ export const OperationsZone: React.FC = () => {
   const { mmpFiles: contextMmpFiles, loading: contextLoading } = useMMP();
 
   const mmpAnalytics = useZoneMmpAnalytics();
+  const { filterSiteVisitsByMmp, isFiltering: isMmpFiltering } = useDashboardMmpFilter();
 
   // Check if user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -184,8 +186,7 @@ export const OperationsZone: React.FC = () => {
     loadDispatchedSites();
   }, [isCoordinator, currentUser?.id, currentUser?.stateId]);
 
-  // Apply supervisor hub filtering or coordinator state filtering to site visits
-  const siteVisits = useMemo(() => {
+  const roleFilteredSiteVisits = useMemo(() => {
     console.log(`📊 OperationsZone: isSupervisor=${isSupervisor}, isCoordinator=${isCoordinator}, allSiteVisits=${allSiteVisits.length}`);
     console.log(`📊 OperationsZone: supervisorHubName=${supervisorHubName}, coordinatorStateName=${coordinatorStateName}`);
     
@@ -280,6 +281,10 @@ export const OperationsZone: React.FC = () => {
     // Admin/other roles: show all
     return allSiteVisits;
   }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.stateId, contextMmpFiles, contextLoading, userProjectIds, isAdminOrSuperUser, dispatchedSitesFromDB]);
+
+  const siteVisits = useMemo(() => {
+    return filterSiteVisitsByMmp(roleFilteredSiteVisits);
+  }, [roleFilteredSiteVisits, filterSiteVisitsByMmp]);
 
   const upcomingVisits = siteVisits
     .filter(v => {

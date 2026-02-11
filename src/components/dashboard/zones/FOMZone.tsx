@@ -55,6 +55,7 @@ import { DashboardCalendar } from '../DashboardCalendar';
 import { ZoneMmpAnalyticsTab } from '../shared/ZoneMmpAnalyticsTab';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
+import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
 
 interface MMPFile {
   id: string;
@@ -80,10 +81,15 @@ interface Filters {
 
 export const FOMZone: React.FC = () => {
   const { currentUser } = useAppContext();
-  const { siteVisits } = useSiteVisitContext();
+  const { siteVisits: allSiteVisits } = useSiteVisitContext();
   const navigate = useNavigate();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const mmpAnalytics = useZoneMmpAnalytics();
+  const { filterSiteVisitsByMmp } = useDashboardMmpFilter();
+
+  const siteVisits = useMemo(() => {
+    return filterSiteVisitsByMmp(allSiteVisits);
+  }, [allSiteVisits, filterSiteVisitsByMmp]);
   const [activeTab, setActiveTab] = useState('overview');
   const [filters, setFilters] = useState<Filters>({
     hub: '',

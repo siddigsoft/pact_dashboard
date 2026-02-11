@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TrendingUp, Trophy, Activity, DollarSign, FileText, BarChart3 } from 'lucide-react';
 import { AchievementTracker } from '../AchievementTracker';
@@ -9,12 +9,15 @@ import { Badge } from '@/components/ui/badge';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
+import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
 import { startOfMonth } from 'date-fns';
 
 export const PerformanceZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('achievements');
   const { roles } = useAppContext();
-  const { siteVisits } = useSiteVisitContext();
+  const { siteVisits: allSiteVisits } = useSiteVisitContext();
+  const { filterSiteVisitsByMmp } = useDashboardMmpFilter();
+  const siteVisits = useMemo(() => filterSiteVisitsByMmp(allSiteVisits || []), [allSiteVisits, filterSiteVisitsByMmp]);
   const mmpAnalytics = useZoneMmpAnalytics();
 
   const isFinanceOrAdmin = roles?.some(r => r.toLowerCase() === 'admin' || r.toLowerCase() === 'financialadmin');

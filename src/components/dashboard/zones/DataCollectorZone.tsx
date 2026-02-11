@@ -54,6 +54,7 @@ import { useWallet } from '@/context/wallet/WalletContext';
 import { useNavigate } from 'react-router-dom';
 import { DashboardCalendar } from '../DashboardCalendar';
 import { useToast } from '@/hooks/use-toast';
+import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
 
 interface Filters {
   status: string;
@@ -63,7 +64,9 @@ interface Filters {
 
 export const DataCollectorZone: React.FC = () => {
   const { currentUser, updateUserLocation } = useAppContext();
-  const { siteVisits, startSiteVisit } = useSiteVisitContext();
+  const { siteVisits: allSiteVisits, startSiteVisit } = useSiteVisitContext();
+  const { filterSiteVisitsByMmp } = useDashboardMmpFilter();
+  const siteVisits = useMemo(() => filterSiteVisitsByMmp(allSiteVisits || []), [allSiteVisits, filterSiteVisitsByMmp]);
   const { wallet, transactions, stats, getBalance } = useWallet();
   const navigate = useNavigate();
   const { toast } = useToast();

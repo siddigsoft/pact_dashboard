@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
+import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
 import { 
   DashboardFilters, 
   defaultFilterState,
@@ -27,9 +28,11 @@ import type { MMPFile, MMPClassification } from '@/types';
 export const PlanningZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('calendar');
   const [showMap, setShowMap] = useState(true);
-  const { siteVisits } = useSiteVisitContext();
+  const { siteVisits: allSiteVisits } = useSiteVisitContext();
   const { users, roles } = useAppContext();
   const { mmpFiles } = useMMP();
+  const { filterSiteVisitsByMmp, selectedMmpIds } = useDashboardMmpFilter();
+  const siteVisits = useMemo(() => filterSiteVisitsByMmp(allSiteVisits || []), [allSiteVisits, filterSiteVisitsByMmp]);
   
   const [filters, setFilters] = useState<DashboardFilterState>(defaultFilterState);
   const [selectedMmpId, setSelectedMmpId] = useState<string | null>(null);

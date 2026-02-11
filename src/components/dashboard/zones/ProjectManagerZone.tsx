@@ -62,6 +62,7 @@ import { useUserProjects } from '@/hooks/useUserProjects';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
 
 interface ProjectData {
   id: string;
@@ -110,7 +111,9 @@ const formatCurrency = (amount: number) => {
 
 export const ProjectManagerZone: React.FC = () => {
   const { currentUser, hasGranularPermission } = useAppContext();
-  const { siteVisits } = useSiteVisitContext();
+  const { siteVisits: allSiteVisits } = useSiteVisitContext();
+  const { filterSiteVisitsByMmp } = useDashboardMmpFilter();
+  const siteVisits = useMemo(() => filterSiteVisitsByMmp(allSiteVisits || []), [allSiteVisits, filterSiteVisitsByMmp]);
   const { mmpFiles } = useMMP();
   const { userProjects, userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { projectBudgets, stats: budgetStats } = useBudget();
