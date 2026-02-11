@@ -16,6 +16,7 @@ import { useAppContext } from '@/context/AppContext';
 import { DashboardCommandBar } from './DashboardCommandBar';
 import { ConnectionStatus } from './ConnectionStatus';
 import { useLiveDashboard } from '@/hooks/useLiveDashboard';
+import { MmpGlobalFilter } from './filters/MmpGlobalFilter';
 
 export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom' | 'data-collector' | 'financial' | 'ict' | 'project-manager';
 
@@ -203,9 +204,11 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
           })}
           </div>
           
-          {/* Connection Status - Right side, mobile only */}
-          <div className="flex-shrink-0 sm:hidden">
-            <ConnectionStatus isConnected={isConnected} />
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <MmpGlobalFilter />
+            <div className="sm:hidden">
+              <ConnectionStatus isConnected={isConnected} />
+            </div>
           </div>
         </div>
       </nav>

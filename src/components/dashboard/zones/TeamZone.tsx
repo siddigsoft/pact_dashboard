@@ -18,6 +18,7 @@ import { fetchHubs } from '@/services/mmpActions';
 import { useCall } from '@/context/communications/CallContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useZoneMmpAnalytics } from '@/hooks/use-zone-mmp-analytics';
+import { useDashboardMmpFilter } from '@/context/dashboard/DashboardMmpFilterContext';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -27,7 +28,9 @@ export const TeamZone: React.FC = () => {
   
   const navigate = useNavigate();
   const { users } = useUser();
-  const { siteVisits } = useSiteVisitContext();
+  const { siteVisits: allSiteVisits } = useSiteVisitContext();
+  const { filterSiteVisitsByMmp } = useDashboardMmpFilter();
+  const siteVisits = useMemo(() => filterSiteVisitsByMmp(allSiteVisits || []), [allSiteVisits, filterSiteVisitsByMmp]);
   const { currentUser, roles } = useAppContext();
   const { initiateCall } = useCall();
   const { openChatForEntity } = useCommunication();
