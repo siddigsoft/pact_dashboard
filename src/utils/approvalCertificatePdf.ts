@@ -100,7 +100,7 @@ async function loadLogoAsDataUrl(): Promise<string | null> {
   }
 }
 
-export async function generateApprovalCertificatePdf(data: ApprovalCertificateData) {
+async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promise<{ doc: any; refNumber: string }> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pw = doc.internal.pageSize.width;
   const ph = doc.internal.pageSize.height;
@@ -400,5 +400,16 @@ export async function generateApprovalCertificatePdf(data: ApprovalCertificateDa
   doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy HH:mm:ss')}`, pw / 2, footerY, { align: 'center' });
   doc.text('PACT Command Center', pw - mr, footerY, { align: 'right' });
 
+  return { doc, refNumber };
+}
+
+export async function generateApprovalCertificatePdf(data: ApprovalCertificateData) {
+  const { doc, refNumber } = await buildApprovalCertificateDoc(data);
   doc.save(`Approval-Confirmation-${refNumber}.pdf`);
+}
+
+export async function generateApprovalCertificateBase64(data: ApprovalCertificateData): Promise<{ base64: string; filename: string }> {
+  const { doc, refNumber } = await buildApprovalCertificateDoc(data);
+  const base64String = doc.output('datauristring').split(',')[1];
+  return { base64: base64String, filename: `Approval-Confirmation-${refNumber}.pdf` };
 }

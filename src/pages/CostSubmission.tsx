@@ -31,7 +31,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { SignatureConfirmationModal } from "@/components/signatures/SignatureConfirmationModal";
 import type { SignatureMethod } from "@/types/signature";
-import { generateApprovalCertificatePdf } from "@/utils/approvalCertificatePdf";
+import { generateApprovalCertificatePdf, generateApprovalCertificateBase64 } from "@/utils/approvalCertificatePdf";
 import {
   exportSubmissionsToExcel,
   exportSubmissionsToPDF,
@@ -877,9 +877,84 @@ const CostSubmission = () => {
       const submitterName = (submitterProfile as any)?.fullName || (submitterProfile as any)?.full_name || (submitterProfile as any)?.name || (oc as any).submitted_by || 'Unknown';
       const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Approver';
       const approverEmail = currentUser.email || '';
-      const projectName = allProjects?.find(p => p.id === (oc as any).project_id)?.name || (oc as any).project_id || 'N/A';
+      const project = (oc as any).project_id ? allProjects?.find(p => p.id === (oc as any).project_id) : null;
+      const projectName = project?.name || (oc as any).project_id || 'N/A';
       const totalAmount = (oc as any).total_amount || (oc as any).amount || (oc as any).amount_cents || 0;
       const requestId = oc.id?.slice(0, 8)?.toUpperCase() || 'N/A';
+
+      let pdfAttachment: { base64: string; filename: string } | undefined;
+      try {
+        const tier1Approver = (oc as any).tier1_approved_by ? users?.find(u => u.id === (oc as any).tier1_approved_by) : null;
+        const tier2Approver = (oc as any).tier2_approved_by ? users?.find(u => u.id === (oc as any).tier2_approved_by) : null;
+
+        let signatureImageData: string | null = null;
+        if ((oc as any).tier2_notes) {
+          const sigMatch = ((oc as any).tier2_notes as string).match(/ID:\s*(\S+?)(?:\s*\||$)/);
+          if (sigMatch?.[1]) {
+            try {
+              const { data: sigRow } = await supabase
+                .from('document_signatures')
+                .select('signature_data, signer_id')
+                .eq('id', sigMatch[1])
+                .single();
+              if (sigRow?.signature_data && typeof sigRow.signature_data === 'string' && sigRow.signature_data.startsWith('data:')) {
+                signatureImageData = sigRow.signature_data;
+              }
+              if (!signatureImageData && sigRow?.signer_id) {
+                const { data: savedSigs } = await supabase
+                  .from('handwriting_signatures')
+                  .select('signature_image')
+                  .eq('user_id', sigRow.signer_id)
+                  .eq('is_active', true)
+                  .order('is_default', { ascending: false })
+                  .limit(1);
+                if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+                  signatureImageData = savedSigs[0].signature_image;
+                }
+              }
+            } catch { /* continue without signature */ }
+          }
+        }
+
+        pdfAttachment = await generateApprovalCertificateBase64({
+          submission: {
+            id: oc.id,
+            expense_category: (oc as any).expense_category || 'general',
+            amount_cents: (oc as any).amount_cents || 0,
+            currency: (oc as any).currency || 'SDG',
+            description: oc.description,
+            expense_date: (oc as any).expense_date,
+            vendor: (oc as any).vendor,
+            reference_number: (oc as any).reference_number,
+            submitted_at: (oc as any).submitted_at,
+            created_at: (oc as any).created_at,
+            supporting_documents: (oc as any).supporting_documents,
+          },
+          submitter: {
+            name: (submitterProfile as any)?.name || (submitterProfile as any)?.email || 'Unknown',
+            email: (submitterProfile as any)?.email || '',
+            role: (oc as any).submitter_role,
+          },
+          project: project ? { name: project.name } : null,
+          tier1: {
+            approverName: (tier1Approver as any)?.name || (tier1Approver as any)?.email || 'Unknown',
+            approverEmail: (tier1Approver as any)?.email,
+            status: (oc as any).tier1_status || 'approved',
+            approvedAt: (oc as any).tier1_approved_at || '',
+            notes: (oc as any).tier1_notes,
+          },
+          tier2: {
+            approverName: (tier2Approver as any)?.name || (tier2Approver as any)?.email || 'Unknown',
+            approverEmail: (tier2Approver as any)?.email,
+            status: (oc as any).tier2_status || 'approved',
+            approvedAt: (oc as any).tier2_approved_at || '',
+            notes: (oc as any).tier2_notes,
+            signatureImageData,
+          },
+        });
+      } catch (pdfErr) {
+        console.warn('[Payment Request] Failed to generate PDF attachment, sending without it:', pdfErr);
+      }
 
       const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
         selectedRecipients,
@@ -894,7 +969,8 @@ const CostSubmission = () => {
         projectName,
         (oc as any).currency || 'SDG',
         '',
-        '/cost-submission'
+        '/cost-submission',
+        pdfAttachment
       );
 
       if (result.success) {
