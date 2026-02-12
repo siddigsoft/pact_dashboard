@@ -247,21 +247,38 @@ const CostSubmission = () => {
       const isAdminDirect = userRole === 'admin' || userRole === 'administrator' || userRole === 'ict';
       const shouldFetchAll = canViewTeamSubmissions || isSuperAdmin || isSuperAdminDirect || isAdminDirect || isAdminOrSuperUser;
 
-      let query = supabase
-        .from('operational_cost_submissions')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let data: OperationalCostSubmission[] | null = null;
+      let error: any = null;
 
-      if (!shouldFetchAll) {
-        query = query.eq('submitted_by', currentUser.id);
+      if (shouldFetchAll) {
+        const rpcResult = await supabase.rpc('get_all_operational_cost_submissions');
+        if (!rpcResult.error) {
+          data = rpcResult.data as OperationalCostSubmission[];
+          console.log(`[CostSubmission] RPC fetched ${(data || []).length} operational costs (role: ${currentUser.role})`);
+        } else {
+          console.warn('[CostSubmission] RPC not available, falling back to direct query:', rpcResult.error.message);
+          const directResult = await supabase
+            .from('operational_cost_submissions')
+            .select('*')
+            .order('created_at', { ascending: false });
+          data = directResult.data as OperationalCostSubmission[];
+          error = directResult.error;
+        }
+      } else {
+        const result = await supabase
+          .from('operational_cost_submissions')
+          .select('*')
+          .eq('submitted_by', currentUser.id)
+          .order('created_at', { ascending: false });
+        data = result.data as OperationalCostSubmission[];
+        error = result.error;
       }
 
-      const { data, error } = await query;
       if (error) {
         console.error('Error fetching operational costs:', error);
         setOperationalCosts([]);
       } else {
-        console.log(`[CostSubmission] Fetched ${(data || []).length} operational costs (fetchAll: ${shouldFetchAll}, role: ${currentUser.role})`);
+        console.log(`[CostSubmission] Total operational costs loaded: ${(data || []).length} (fetchAll: ${shouldFetchAll}, role: ${currentUser.role})`);
         setOperationalCosts((data as OperationalCostSubmission[]) || []);
       }
     } catch (err) {
