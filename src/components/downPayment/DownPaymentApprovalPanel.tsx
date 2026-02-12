@@ -64,6 +64,11 @@ import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPay
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
+import { supabase } from '@/integrations/supabase/client';
+import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64 } from '@/utils/transportAdvanceCertificatePdf';
+import { EmailNotificationService } from '@/services/email-notification.service';
+import { useToast } from '@/hooks/use-toast';
+import { Mail, Wallet } from 'lucide-react';
 
 interface DownPaymentApprovalPanelProps {
   userRole: 'supervisor' | 'admin';
@@ -80,8 +85,9 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
 ];
 
 export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
-  const { currentUser } = useUser();
+  const { currentUser, users } = useUser();
   const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt } = useDownPayment();
+  const { toast } = useToast();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
   const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
@@ -100,6 +106,16 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [revertTarget, setRevertTarget] = useState<'pending_supervisor' | 'pending_admin' | 'approved'>('pending_supervisor');
 
   const [filters, setFilters] = useState<DownPaymentFilter>({});
+
+  const [paymentRequestDialog, setPaymentRequestDialog] = useState<{
+    open: boolean;
+    request: DownPaymentRequest | null;
+    availableRecipients: Array<{ id: string; email: string; name: string; role: string }>;
+    selectedRecipientIds: string[];
+    loading: boolean;
+    sending: boolean;
+  }>({ open: false, request: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
+  const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
 
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))], [requests]);
   const uniqueStates = useMemo(() => [...new Set(requests.map(r => r.stateName).filter(Boolean))], [requests]);
@@ -324,6 +340,224 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       });
     }
   };
+
+  const getSignatureImageData = async (req: DownPaymentRequest): Promise<string | null> => {
+    let signatureImageData: string | null = null;
+    if (req.adminNotes) {
+      const sigMatch = req.adminNotes.match(/ID:\s*(\S+?)(?:\s*\||$)/);
+      if (sigMatch?.[1]) {
+        try {
+          const { data: sigRow } = await supabase
+            .from('document_signatures')
+            .select('signature_data, signature_method, signer_id')
+            .eq('id', sigMatch[1])
+            .single();
+          if (sigRow?.signature_data && typeof sigRow.signature_data === 'string' && sigRow.signature_data.startsWith('data:')) {
+            signatureImageData = sigRow.signature_data;
+          }
+          if (!signatureImageData && sigRow?.signer_id) {
+            try {
+              const { data: savedSigs } = await supabase
+                .from('handwriting_signatures')
+                .select('signature_image')
+                .eq('user_id', sigRow.signer_id)
+                .eq('is_active', true)
+                .order('is_default', { ascending: false })
+                .order('created_at', { ascending: false })
+                .limit(1);
+              if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+                signatureImageData = savedSigs[0].signature_image;
+              }
+            } catch { /* continue */ }
+          }
+        } catch { /* signature fetch failed */ }
+      }
+    }
+    if (!signatureImageData && req.adminProcessedBy) {
+      try {
+        const { data: savedSigs } = await supabase
+          .from('handwriting_signatures')
+          .select('signature_image')
+          .eq('user_id', req.adminProcessedBy)
+          .eq('is_active', true)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+          signatureImageData = savedSigs[0].signature_image;
+        }
+      } catch { /* no saved signature */ }
+    }
+    return signatureImageData;
+  };
+
+  const buildCertData = (req: DownPaymentRequest, signatureImageData: string | null) => {
+    const requester = users?.find(u => u.id === req.requestedBy);
+    const supervisorApprover = req.supervisorApprovedBy ? users?.find(u => u.id === req.supervisorApprovedBy) : null;
+    const adminApproverUser = req.adminProcessedBy ? users?.find(u => u.id === req.adminProcessedBy) : null;
+    const getName = (u: any) => u?.fullName || u?.full_name || u?.name || u?.email || 'Unknown';
+
+    return {
+      request: {
+        id: req.id,
+        siteName: req.siteName,
+        stateName: req.stateName,
+        localityName: req.localityName,
+        projectName: req.projectName,
+        hubName: req.hubName,
+        activityType: req.activityType,
+        requestedAmount: req.requestedAmount,
+        approvedAmount: req.approvedAmount || req.adminApprovedAmount || req.supervisorApprovedAmount,
+        totalPaidAmount: req.totalPaidAmount || 0,
+        remainingAmount: req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0)),
+        justification: req.justification,
+        requestedAt: req.requestedAt,
+        status: req.status,
+        paymentType: req.paymentType,
+        approvalType: req.approvalType,
+        approvalPercentage: req.approvalPercentage,
+      },
+      requester: {
+        name: getName(requester),
+        email: requester?.email || '',
+        role: req.requesterRole || null,
+      },
+      tier1: {
+        approverName: getName(supervisorApprover) || 'N/A',
+        status: req.supervisorStatus || 'approved',
+        approvedAt: req.supervisorApprovedAt || '',
+        notes: req.supervisorNotes || null,
+      },
+      tier2: {
+        approverName: getName(adminApproverUser) || 'N/A',
+        status: req.adminStatus || 'approved',
+        approvedAt: req.adminProcessedAt || '',
+        notes: req.adminNotes || null,
+        signatureImageData,
+      },
+    };
+  };
+
+  const handleDownloadCertificate = async (req: DownPaymentRequest) => {
+    const signatureImageData = await getSignatureImageData(req);
+    await generateTransportAdvanceCertificatePdf(buildCertData(req, signatureImageData));
+    toast({
+      title: 'Certificate Downloaded / تم تحميل الشهادة',
+      description: 'The approval certificate PDF has been saved. / تم حفظ شهادة الموافقة.',
+    });
+  };
+
+  const openPaymentRequestDialog = async (req: DownPaymentRequest) => {
+    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, loading: true, selectedRecipientIds: [], availableRecipients: [] }));
+    try {
+      const { data: financeUsers } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role')
+        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+        .eq('status', 'approved');
+
+      const recipients = (financeUsers || [])
+        .filter((u: any) => u.email)
+        .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+
+      setPaymentRequestDialog(prev => ({
+        ...prev,
+        availableRecipients: recipients,
+        selectedRecipientIds: recipients.map((r: any) => r.id),
+        loading: false,
+      }));
+    } catch {
+      setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+      toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+    }
+  };
+
+  const handleSendPaymentRequest = async () => {
+    const { request: req, selectedRecipientIds, availableRecipients } = paymentRequestDialog;
+    if (!req || !currentUser?.id || selectedRecipientIds.length === 0) return;
+
+    setPaymentRequestDialog(prev => ({ ...prev, sending: true }));
+    try {
+      const selectedRecipients = availableRecipients
+        .filter(r => selectedRecipientIds.includes(r.id))
+        .map(r => ({ email: r.email, name: r.name }));
+
+      const requester = users?.find(u => u.id === req.requestedBy);
+      const requesterName = (requester as any)?.fullName || (requester as any)?.full_name || requester?.email || 'Unknown';
+      const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Approver';
+      const approverEmail = currentUser.email || '';
+      const requestId = req.id?.slice(0, 8)?.toUpperCase() || 'N/A';
+
+      let pdfAttachment: { base64: string; filename: string } | undefined;
+      try {
+        const signatureImageData = await getSignatureImageData(req);
+        pdfAttachment = await generateTransportAdvanceCertificateBase64(buildCertData(req, signatureImageData));
+      } catch { /* continue without PDF */ }
+
+      const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
+        selectedRecipients,
+        approverName,
+        approverEmail,
+        requesterName,
+        `Transport Advance - ${req.siteName}`,
+        requestId,
+        'Transportation Advance',
+        req.approvedAmount || req.requestedAmount,
+        'advance',
+        req.projectName || 'N/A',
+        'SDG',
+        '',
+        '/down-payment-approval',
+        pdfAttachment
+      );
+
+      if (result.success) {
+        toast({
+          title: "Payment Request Sent / تم إرسال طلب الدفع",
+          description: `Email sent to ${selectedRecipients.length} recipient(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين).`,
+        });
+      } else {
+        toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
+    } finally {
+      setPaymentRequestDialog({ open: false, request: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
+    }
+  };
+
+  const handleMarkAsPaid = async (req: DownPaymentRequest) => {
+    if (!currentUser?.id) return;
+    setMarkPaidProcessing(true);
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update({
+          status: 'fully_paid',
+          total_paid_amount: req.approvedAmount || req.requestedAmount,
+          remaining_amount: 0,
+          updated_at: now,
+        } as any)
+        .eq('id', req.id);
+
+      if (error) {
+        toast({ title: "Failed / فشل", description: error.message, variant: "destructive" });
+      } else {
+        toast({
+          title: "Marked as Paid / تم التحديد كمدفوع",
+          description: "The advance has been marked as fully paid. / تم تحديد السلفة كمدفوعة بالكامل.",
+        });
+        refreshRequests();
+      }
+    } catch {
+      toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
+    } finally {
+      setMarkPaidProcessing(false);
+    }
+  };
+
+  const isApprovedOrPaid = (status: string) => ['approved', 'partially_paid', 'fully_paid'].includes(status);
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; color?: string }> = {
@@ -617,6 +851,43 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               >
                 <History className="h-4 w-4 mr-1" />
                 Audit ({request.auditLog.length})
+              </Button>
+            )}
+
+            {isApprovedOrPaid(request.status) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleDownloadCertificate(request)}
+                data-testid={`button-download-cert-${request.id}`}
+              >
+                <Download className="h-4 w-4 mr-1" />
+                PDF
+              </Button>
+            )}
+
+            {userRole === 'admin' && isApprovedOrPaid(request.status) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openPaymentRequestDialog(request)}
+                data-testid={`button-request-payment-${request.id}`}
+              >
+                <Mail className="h-4 w-4 mr-1" />
+                Request Payment
+              </Button>
+            )}
+
+            {userRole === 'admin' && request.status === 'approved' && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => handleMarkAsPaid(request)}
+                disabled={markPaidProcessing}
+                data-testid={`button-mark-paid-${request.id}`}
+              >
+                <Wallet className="h-4 w-4 mr-1" />
+                Mark Paid
               </Button>
             )}
           </div>
@@ -1437,6 +1708,98 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           onCancel={() => setSignatureRequest(null)}
         />
       )}
+
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false }); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Payment / طلب دفع</DialogTitle>
+            <DialogDescription>
+              Send payment request email to finance team with the approval certificate attached.
+            </DialogDescription>
+          </DialogHeader>
+          {paymentRequestDialog.loading ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {paymentRequestDialog.request && (
+                <div className="bg-muted/50 p-3 rounded-md text-sm space-y-1">
+                  <p><strong>Site:</strong> {paymentRequestDialog.request.siteName}</p>
+                  <p><strong>Amount:</strong> SDG {(paymentRequestDialog.request.approvedAmount || paymentRequestDialog.request.requestedAmount).toLocaleString()}</p>
+                </div>
+              )}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Recipients</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setPaymentRequestDialog(prev => ({
+                        ...prev,
+                        selectedRecipientIds: prev.selectedRecipientIds.length === prev.availableRecipients.length
+                          ? [] : prev.availableRecipients.map(r => r.id),
+                      }));
+                    }}
+                    data-testid="button-toggle-all-recipients"
+                  >
+                    {paymentRequestDialog.selectedRecipientIds.length === paymentRequestDialog.availableRecipients.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                </div>
+                <ScrollArea className="h-[200px]">
+                  <div className="space-y-2">
+                    {paymentRequestDialog.availableRecipients.map(r => (
+                      <div key={r.id} className="flex items-center gap-2 p-2 rounded-md hover-elevate">
+                        <Checkbox
+                          checked={paymentRequestDialog.selectedRecipientIds.includes(r.id)}
+                          onCheckedChange={() => {
+                            setPaymentRequestDialog(prev => ({
+                              ...prev,
+                              selectedRecipientIds: prev.selectedRecipientIds.includes(r.id)
+                                ? prev.selectedRecipientIds.filter(id => id !== r.id)
+                                : [...prev.selectedRecipientIds, r.id],
+                            }));
+                          }}
+                          data-testid={`checkbox-recipient-${r.id}`}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{r.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{r.email}</p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">{r.role}</Badge>
+                      </div>
+                    ))}
+                    {paymentRequestDialog.availableRecipients.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No finance recipients found.</p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPaymentRequestDialog({ open: false, request: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false })}
+              data-testid="button-cancel-payment-request"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendPaymentRequest}
+              disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+              data-testid="button-send-payment-request"
+            >
+              {paymentRequestDialog.sending ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
+              ) : (
+                <><Mail className="h-4 w-4 mr-1" /> Send Request</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
