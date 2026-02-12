@@ -18,6 +18,10 @@ interface RequestDownPaymentButtonProps {
     hubName?: string;
     hub_office?: string;
     hubOffice?: string;
+    state?: string;
+    state_name?: string;
+    locality?: string;
+    locality_name?: string;
     status?: string;
   };
   variant?: 'default' | 'outline' | 'ghost' | 'secondary';
@@ -38,6 +42,8 @@ export function RequestDownPaymentButton({
   const transportBudget = site.transport_fee || site.transportFee || 0;
   const hubId = site.hub_id || site.hubId;
   const hubName = site.hub_name || site.hubName || site.hub_office || site.hubOffice;
+  const stateName = site.state || site.state_name;
+  const localityName = site.locality || site.locality_name;
 
   const existingRequest = requests.find(
     r => r.mmpSiteEntryId === site.id || r.siteVisitId === site.id
@@ -89,6 +95,8 @@ export function RequestDownPaymentButton({
         transportationBudget={transportBudget}
         hubId={hubId}
         hubName={hubName}
+        stateName={stateName}
+        localityName={localityName}
       />
     </>
   );

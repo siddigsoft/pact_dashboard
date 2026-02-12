@@ -19,6 +19,8 @@ interface DownPaymentRequestDialogProps {
   transportationBudget: number;
   hubId?: string;
   hubName?: string;
+  stateName?: string;
+  localityName?: string;
 }
 
 export function DownPaymentRequestDialog({
@@ -30,6 +32,8 @@ export function DownPaymentRequestDialog({
   transportationBudget,
   hubId,
   hubName,
+  stateName,
+  localityName,
 }: DownPaymentRequestDialogProps) {
   const { currentUser } = useUser();
   const { createRequest } = useDownPayment();
@@ -97,6 +101,8 @@ export function DownPaymentRequestDialog({
       paymentType,
       installmentPlan: paymentType === 'installments' ? installments : [],
       justification,
+      stateName,
+      localityName,
     });
 
     setSubmitting(false);
