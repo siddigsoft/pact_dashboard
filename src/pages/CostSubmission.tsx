@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,6 +46,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { EmailNotificationService } from '@/services/email-notification.service';
 
 const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
   permits: { label: 'Permits & Licenses', icon: Ticket },
@@ -798,6 +799,62 @@ const CostSubmission = () => {
       }
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to mark as paid. / فشل في التحديد كمدفوع.", variant: "destructive" });
+    } finally {
+      setActionProcessing(false);
+    }
+  };
+
+  const canRequestPayment = (oc: OperationalCostSubmission): boolean => {
+    const derivedStatus = getOperationalDerivedStatus(oc);
+    if (derivedStatus !== 'approved') return false;
+    return isSuperAdmin || isAdmin || isFinanceAdmin;
+  };
+
+  const handleRequestPayment = async (oc: OperationalCostSubmission) => {
+    if (!currentUser?.id) return;
+    setActionProcessing(true);
+    try {
+      const submitterProfile = users?.find(u => u.id === oc.submitted_by);
+      const submitterName = submitterProfile?.full_name || oc.submitted_by || 'Unknown';
+      const approverName = currentUser.full_name || currentUser.email || 'Approver';
+      const approverEmail = currentUser.email || '';
+      const projectName = allProjects?.find(p => p.id === oc.project_id)?.name || oc.project_id || 'N/A';
+      const totalAmount = (oc as any).total_amount || (oc as any).amount || 0;
+      const requestId = oc.id?.slice(0, 8)?.toUpperCase() || 'N/A';
+
+      const result = await EmailNotificationService.sendPaymentRequestToFinance(
+        approverName,
+        approverEmail,
+        submitterName,
+        oc.title || oc.description || 'Operational Cost',
+        requestId,
+        oc.category || 'general',
+        totalAmount,
+        oc.funding_type || 'advance',
+        projectName,
+        oc.currency || 'SDG',
+        '',
+        '/cost-submission'
+      );
+
+      if (result.success) {
+        toast({
+          title: "Payment Request Sent / تم إرسال طلب الدفع",
+          description: "The finance team has been notified to process this payment. / تم إخطار فريق المالية لمعالجة هذا الدفع.",
+        });
+      } else {
+        toast({
+          title: "Email Failed / فشل الإرسال",
+          description: result.error || "Could not send payment request email. / تعذر إرسال بريد طلب الدفع.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error / خطأ",
+        description: "Failed to send payment request. / فشل في إرسال طلب الدفع.",
+        variant: "destructive",
+      });
     } finally {
       setActionProcessing(false);
     }
@@ -2313,11 +2370,22 @@ const CostSubmission = () => {
                                 PDF
                               </Button>
                             )}
+                            {canRequestPayment(oc) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRequestPayment(oc)}
+                                disabled={actionProcessing}
+                                data-testid={`button-request-payment-${oc.id}`}
+                              >
+                                <Mail className="h-3.5 w-3.5 mr-1" />
+                                Request Payment
+                              </Button>
+                            )}
                             {canMarkAsPaid(oc) && (
                               <Button
                                 size="sm"
                                 variant="default"
-                                className="bg-purple-600 hover:bg-purple-700"
                                 onClick={() => handleMarkAsPaid(oc)}
                                 disabled={actionProcessing}
                                 data-testid={`button-mark-paid-${oc.id}`}

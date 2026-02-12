@@ -1494,6 +1494,83 @@ PACT Command Center | مركز قيادة باكت`;
   },
 
   // ============================================
+  // TEMPLATE 16C: Payment Request to Finance Team
+  // ============================================
+  async sendPaymentRequestToFinance(
+    approverName: string,
+    approverEmail: string,
+    submitterName: string,
+    requestTitle: string,
+    requestId: string,
+    category: string,
+    totalAmount: number,
+    fundingType: string,
+    projectName: string,
+    currency: string = 'SDG',
+    approvalNotes: string = '',
+    costSubmissionUrl: string = '/cost-submission'
+  ): Promise<EmailNotificationResult> {
+    try {
+      const { data: financeUsers } = await supabase
+        .from('profiles')
+        .select('email, full_name, role')
+        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+        .eq('status', 'approved');
+
+      if (!financeUsers || financeUsers.length === 0) {
+        console.log('[EMAIL] No finance/admin users found for payment request notification');
+        return { success: false, error: 'No finance team members found' };
+      }
+
+      const fundingLabel = fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
+      const fundingLabelAr = fundingType === 'advance' ? 'طلب سلفة' : 'طلب تعويض';
+
+      const recipients = financeUsers
+        .filter(u => u.email)
+        .map(u => ({ email: u.email!, name: u.full_name || u.role || 'Finance Team' }));
+
+      if (recipients.length === 0) {
+        return { success: false, error: 'No valid finance team email addresses' };
+      }
+
+      const options: NotificationEmailOptions = {
+        title: `Payment Request: ${requestTitle} - ${fundingLabel}`,
+        titleAr: `طلب دفع: ${requestTitle} - ${fundingLabelAr}`,
+        message: `A cost submission has been fully approved and is ready for payment processing. ${approverName} is requesting the finance team to process the payment.\n\nPlease review and process this payment at your earliest convenience.`,
+        messageAr: `تمت الموافقة الكاملة على طلب تكلفة تشغيلية وهو جاهز لمعالجة الدفع. يطلب ${approverName} من فريق المالية معالجة الدفع.\n\nيرجى مراجعة هذا الدفع ومعالجته في أقرب وقت.`,
+        type: 'warning',
+        actionUrl: costSubmissionUrl,
+        actionLabel: 'Process Payment / معالجة الدفع',
+        details: [
+          { label: 'Request ID / رقم الطلب', value: requestId },
+          { label: 'Request Title / عنوان الطلب', value: requestTitle },
+          { label: 'Submitted By / مقدم من', value: submitterName },
+          { label: 'Type / النوع', value: `${fundingLabel} / ${fundingLabelAr}` },
+          { label: 'Category / الفئة', value: category },
+          { label: 'Total Amount / المبلغ الإجمالي', value: `${currency} ${totalAmount.toLocaleString()}` },
+          { label: 'Project / المشروع', value: projectName || 'N/A' },
+          { label: 'Approved By / تمت الموافقة من', value: approverName },
+          { label: 'Status / الحالة', value: 'Approved - Ready for Payment / تمت الموافقة - جاهز للدفع' },
+          ...(approvalNotes ? [{ label: 'Approval Notes / ملاحظات', value: approvalNotes }] : []),
+        ],
+        cc: approverEmail ? [approverEmail] : [],
+      };
+
+      const result = await this.sendBulk(recipients, options);
+      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} finance/admin users`);
+
+      return {
+        success: result.successful > 0,
+        messageId: result.successful > 0 ? `payment-request-${Date.now()}` : undefined,
+        error: result.failed > 0 ? `${result.failed} emails failed` : undefined,
+      };
+    } catch (err: any) {
+      console.error('[EMAIL] Error in sendPaymentRequestToFinance:', err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  // ============================================
   // TEMPLATE 17: Budget Alert (80%)
   // ============================================
   async sendBudgetAlert(
