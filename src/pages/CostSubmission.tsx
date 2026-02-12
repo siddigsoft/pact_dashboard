@@ -242,12 +242,17 @@ const CostSubmission = () => {
     if (!currentUser?.id) return;
     setOperationalCostsLoading(true);
     try {
+      const userRole = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+      const isSuperAdminDirect = userRole === 'superadmin' || userRole === 'superadministrator';
+      const isAdminDirect = userRole === 'admin' || userRole === 'administrator' || userRole === 'ict';
+      const shouldFetchAll = canViewTeamSubmissions || isSuperAdmin || isSuperAdminDirect || isAdminDirect || isAdminOrSuperUser;
+
       let query = supabase
         .from('operational_cost_submissions')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!canViewTeamSubmissions) {
+      if (!shouldFetchAll) {
         query = query.eq('submitted_by', currentUser.id);
       }
 
@@ -256,6 +261,7 @@ const CostSubmission = () => {
         console.error('Error fetching operational costs:', error);
         setOperationalCosts([]);
       } else {
+        console.log(`[CostSubmission] Fetched ${(data || []).length} operational costs (fetchAll: ${shouldFetchAll}, role: ${currentUser.role})`);
         setOperationalCosts((data as OperationalCostSubmission[]) || []);
       }
     } catch (err) {
@@ -264,7 +270,7 @@ const CostSubmission = () => {
     } finally {
       setOperationalCostsLoading(false);
     }
-  }, [currentUser?.id, canViewTeamSubmissions]);
+  }, [currentUser?.id, currentUser?.role, canViewTeamSubmissions, isSuperAdmin, isAdminOrSuperUser]);
 
   useEffect(() => {
     fetchOperationalCosts();
@@ -304,7 +310,7 @@ const CostSubmission = () => {
   
   // Filter submissions for supervisors to show only their team's submissions
   const filterSubmissionsForSupervisor = (allSubs: typeof allSubmissionsQuery.submissions) => {
-    if (isAdmin) return allSubs; // Admins see all
+    if (isAdmin || isSuperAdmin || isAdminOrSuperUser) return allSubs; // Admins & Super Admins see all
     if (isSupervisor && teamMemberIds.length > 0) {
       return allSubs?.filter(s => teamMemberIds.includes(s.submittedBy)) || [];
     }
@@ -324,16 +330,16 @@ const CostSubmission = () => {
   // Filter submissions to only show those from projects the user belongs to
   // Non-admin users with no project assignments see nothing (empty array)
   const submissions = useMemo(() => {
-    if (isAdminOrSuperUser) return supervisorFilteredSubmissions;
+    if (isAdminOrSuperUser || isSuperAdmin) return supervisorFilteredSubmissions;
     if (userProjectIds.length === 0) return []; // No project memberships = no data
     return supervisorFilteredSubmissions.filter(s => 
       !s.projectId || userProjectIds.includes(s.projectId)
     );
-  }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser]);
+  }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser, isSuperAdmin]);
 
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
-    if (!isAdminOrSuperUser) {
+    if (!isAdminOrSuperUser && !isSuperAdmin) {
       if (isSupervisor && teamMemberIds.length > 0) {
         filtered = filtered.filter(o => teamMemberIds.includes(o.submitted_by) || o.submitted_by === currentUser?.id);
       } else if (!canViewTeamSubmissions) {
@@ -344,7 +350,7 @@ const CostSubmission = () => {
       }
     }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
 
   const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {
     if (oc.status === 'reconciled') return 'reconciled';
