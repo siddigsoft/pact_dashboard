@@ -49,11 +49,11 @@ const C = {
   navyMid: [22, 48, 90] as [number, number, number],
   blue: [41, 98, 255] as [number, number, number],
   blueLight: [232, 240, 255] as [number, number, number],
-  dark: [25, 25, 35] as [number, number, number],
-  body: [50, 50, 65] as [number, number, number],
-  label: [100, 105, 120] as [number, number, number],
-  muted: [140, 145, 160] as [number, number, number],
-  border: [210, 215, 225] as [number, number, number],
+  dark: [20, 20, 30] as [number, number, number],
+  body: [45, 45, 60] as [number, number, number],
+  label: [90, 95, 110] as [number, number, number],
+  muted: [120, 125, 140] as [number, number, number],
+  border: [200, 205, 215] as [number, number, number],
   bgLight: [245, 247, 252] as [number, number, number],
   green: [16, 120, 60] as [number, number, number],
   greenLight: [228, 245, 235] as [number, number, number],
@@ -142,7 +142,6 @@ const ARABIC_MAP: Record<string, string> = {
   'TOTAL AMOUNT': 'المبلغ الإجمالي',
   'CATEGORY': 'الفئة',
   'STATUS': 'الحالة',
-  'APPROVED': 'تمت الموافقة',
   'REQUEST DETAILS': 'تفاصيل الطلب',
   'SUBMITTED BY': 'مقدم من',
   'PROJECT': 'المشروع',
@@ -155,14 +154,6 @@ const ARABIC_MAP: Record<string, string> = {
   'DESCRIPTION': 'الوصف',
   'HUB': 'المحور',
   'APPROVAL WORKFLOW': 'مسار الموافقة',
-  'APPROVER': 'المعتمد',
-  'DATE & TIME': 'التاريخ والوقت',
-  'NOTES': 'ملاحظات',
-  'DIGITAL SIGNATURE VERIFICATION': 'التحقق من التوقيع الرقمي',
-  'Advance Request': 'طلب سلفة',
-  'Reimbursement': 'تعويض',
-  'Standard': 'عادي',
-  'Not specified': 'غير محدد',
   'Supervisor / FOM Review': 'مراجعة المشرف',
   'Admin / Super Admin Final Approval': 'الموافقة النهائية للمسؤول',
 };
@@ -171,7 +162,7 @@ function rr(doc: any, x: number, y: number, w: number, h: number, r: number, fil
   if (fill) doc.setFillColor(...fill);
   if (stroke) {
     doc.setDrawColor(...stroke);
-    doc.setLineWidth(0.25);
+    doc.setLineWidth(0.3);
   }
   const mode = fill && stroke ? 'FD' : fill ? 'F' : 'S';
   doc.roundedRect(x, y, w, h, r, r, mode);
@@ -188,12 +179,9 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   let y = 0;
 
   const refNumber = `PACT-OC-${data.submission.id.substring(0, 8).toUpperCase()}`;
-
   const hasArabic = await loadArabicFont(doc);
 
-  const ar = (key: string): string => {
-    return ARABIC_MAP[key] || '';
-  };
+  const ar = (key: string): string => ARABIC_MAP[key] || '';
 
   const arText = (text: string, x: number, yPos: number, opts?: any) => {
     if (!hasArabic) return;
@@ -235,153 +223,155 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   ]);
 
   doc.setFillColor(...C.navy);
-  doc.rect(0, 0, pw, 32, 'F');
-
+  doc.rect(0, 0, pw, 34, 'F');
   doc.setFillColor(...C.navyMid);
-  doc.rect(0, 30, pw, 2, 'F');
+  doc.rect(0, 32, pw, 2, 'F');
 
   if (logoDataUrl) {
-    try { doc.addImage(logoDataUrl, 'PNG', ml + 1, 5, 20, 20); } catch {}
+    try { doc.addImage(logoDataUrl, 'PNG', ml + 1, 5, 22, 22); } catch {}
   }
 
-  doc.setFontSize(16);
+  doc.setFontSize(18);
   doc.setTextColor(...C.white);
   doc.setFont('helvetica', 'bold');
-  doc.text('PACT', ml + 24, 15);
+  doc.text('PACT', ml + 27, 16);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Command Center  |  Field Operations', ml + 27, 22);
+  if (hasArabic) {
+    doc.setFontSize(8);
+    doc.setTextColor(190, 205, 225);
+    arText('مركز قيادة باكت', ml + 27, 28);
+  }
+
+  doc.setFontSize(8);
+  doc.setTextColor(190, 205, 225);
+  doc.setFont('helvetica', 'bold');
+  doc.text(refNumber, pw - mr, 13, { align: 'right' });
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
-  doc.text('Command Center  |  Field Operations', ml + 24, 21);
+  doc.setTextColor(170, 185, 210);
+  doc.text(format(new Date(), 'MMM d, yyyy | HH:mm'), pw - mr, 19, { align: 'right' });
 
-  if (hasArabic) {
-    doc.setFontSize(7);
-    doc.setTextColor(190, 205, 225);
-    arText('مركز قيادة باكت', ml + 24, 26);
-  }
+  y = 38;
 
-  doc.setFontSize(7);
-  doc.setTextColor(180, 195, 220);
-  doc.setFont('helvetica', 'normal');
-  doc.text(refNumber, pw - mr, 12, { align: 'right' });
-  doc.text(format(new Date(), 'MMM d, yyyy | HH:mm'), pw - mr, 17, { align: 'right' });
-
-  y = 36;
-
-  rr(doc, ml, y, cw, 10, 1.5, C.greenLight, C.green);
-  doc.setFontSize(9);
+  rr(doc, ml, y, cw, 12, 2, C.greenLight, C.green);
+  doc.setFontSize(11);
   doc.setTextColor(...C.green);
   doc.setFont('helvetica', 'bold');
-  doc.text('OPERATIONAL COST  -  APPROVAL CONFIRMATION', pw / 2, y + 5.5, { align: 'center' });
-
+  doc.text('OPERATIONAL COST  —  APPROVAL CONFIRMATION', pw / 2, y + 6, { align: 'center' });
   if (hasArabic) {
-    doc.setFontSize(7);
-    doc.setTextColor(...C.green);
-    arText(ar('OPERATIONAL COST - APPROVAL CONFIRMATION'), pw / 2, y + 9, { align: 'center' });
+    doc.setFontSize(8);
+    arText(ar('OPERATIONAL COST - APPROVAL CONFIRMATION'), pw / 2, y + 10.5, { align: 'center' });
   }
 
-  y += 14;
+  y += 16;
 
-  const cardGap = 2;
+  const cardGap = 3;
   const cardW = (cw - cardGap * 2) / 3;
-  const cardH = 18;
+  const cardH = 22;
 
-  rr(doc, ml, y, cardW, cardH, 1.5, C.bgLight, C.border);
-  doc.setFontSize(5.5);
+  rr(doc, ml, y, cardW, cardH, 2, C.bgLight, C.border);
+  doc.setFontSize(7);
   doc.setTextColor(...C.muted);
-  doc.setFont('helvetica', 'normal');
-  doc.text('TOTAL AMOUNT', ml + cardW / 2, y + 5, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL AMOUNT', ml + cardW / 2, y + 6, { align: 'center' });
   if (hasArabic) {
-    doc.setFontSize(5);
-    arText(ar('TOTAL AMOUNT'), ml + cardW / 2, y + 8, { align: 'center' });
+    doc.setFontSize(6);
+    doc.setTextColor(...C.label);
+    arText(ar('TOTAL AMOUNT'), ml + cardW / 2, y + 9.5, { align: 'center' });
   }
-  doc.setFontSize(11);
+  doc.setFontSize(13);
   doc.setTextColor(...C.dark);
   doc.setFont('helvetica', 'bold');
-  doc.text(fmtCurrency(data.submission.amount_cents, data.submission.currency), ml + cardW / 2, y + 14, { align: 'center' });
+  doc.text(fmtCurrency(data.submission.amount_cents, data.submission.currency), ml + cardW / 2, y + 17, { align: 'center' });
 
   const c2x = ml + cardW + cardGap;
-  rr(doc, c2x, y, cardW, cardH, 1.5, C.bgLight, C.border);
-  doc.setFontSize(5.5);
+  rr(doc, c2x, y, cardW, cardH, 2, C.bgLight, C.border);
+  doc.setFontSize(7);
   doc.setTextColor(...C.muted);
-  doc.setFont('helvetica', 'normal');
-  doc.text('EXPENSE CATEGORY', c2x + cardW / 2, y + 5, { align: 'center' });
-  if (hasArabic) {
-    doc.setFontSize(5);
-    arText(ar('CATEGORY'), c2x + cardW / 2, y + 8, { align: 'center' });
-  }
-  doc.setFontSize(9);
-  doc.setTextColor(...C.body);
   doc.setFont('helvetica', 'bold');
-  doc.text(fmtCategory(data.submission.expense_category), c2x + cardW / 2, y + 14, { align: 'center' });
-
-  const c3x = ml + (cardW + cardGap) * 2;
-  rr(doc, c3x, y, cardW, cardH, 1.5, C.greenLight, [180, 220, 190] as [number, number, number]);
-  doc.setFontSize(5.5);
-  doc.setTextColor(...C.green);
-  doc.setFont('helvetica', 'normal');
-  doc.text('STATUS', c3x + cardW / 2, y + 5, { align: 'center' });
+  doc.text('EXPENSE CATEGORY', c2x + cardW / 2, y + 6, { align: 'center' });
   if (hasArabic) {
-    doc.setFontSize(5);
-    arText(ar('STATUS'), c3x + cardW / 2, y + 8, { align: 'center' });
+    doc.setFontSize(6);
+    doc.setTextColor(...C.label);
+    arText(ar('CATEGORY'), c2x + cardW / 2, y + 9.5, { align: 'center' });
   }
   doc.setFontSize(11);
+  doc.setTextColor(...C.body);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtCategory(data.submission.expense_category), c2x + cardW / 2, y + 17, { align: 'center' });
+
+  const c3x = ml + (cardW + cardGap) * 2;
+  rr(doc, c3x, y, cardW, cardH, 2, C.greenLight, [170, 215, 185] as [number, number, number]);
+  doc.setFontSize(7);
   doc.setTextColor(...C.green);
   doc.setFont('helvetica', 'bold');
-  doc.text('APPROVED', c3x + cardW / 2, y + 14, { align: 'center' });
+  doc.text('STATUS', c3x + cardW / 2, y + 6, { align: 'center' });
+  if (hasArabic) {
+    doc.setFontSize(6);
+    arText(ar('STATUS'), c3x + cardW / 2, y + 9.5, { align: 'center' });
+  }
+  doc.setFontSize(13);
+  doc.setTextColor(...C.green);
+  doc.setFont('helvetica', 'bold');
+  doc.text('APPROVED', c3x + cardW / 2, y + 17, { align: 'center' });
 
   y += cardH + 5;
 
   const sectionBar = (enTitle: string, arKey: string) => {
     doc.setFillColor(...C.navy);
-    rr(doc, ml, y, cw, 7, 1, C.navy);
-    doc.setFontSize(7);
+    rr(doc, ml, y, cw, 8, 1.5, C.navy);
+    doc.setFontSize(8.5);
     doc.setTextColor(...C.white);
     doc.setFont('helvetica', 'bold');
-    doc.text(enTitle, ml + 4, y + 4.8);
+    doc.text(enTitle, ml + 5, y + 5.5);
     if (hasArabic && ar(arKey)) {
-      doc.setFontSize(6);
-      arText(ar(arKey), pw - mr - 4, y + 4.8, { align: 'right' });
+      doc.setFontSize(7);
+      arText(ar(arKey), pw - mr - 5, y + 5.5, { align: 'right' });
     }
-    y += 9;
+    y += 11;
   };
 
   const drawLabel = (enLabel: string, arLabel: string | undefined, x: number) => {
-    doc.setFontSize(5.5);
-    doc.setTextColor(...C.muted);
-    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...C.label);
+    doc.setFont('helvetica', 'bold');
     const enText = enLabel.toUpperCase();
     doc.text(enText, x, y);
     if (hasArabic && arLabel) {
-      const enWidth = doc.getTextWidth(enText);
+      const enW = doc.getTextWidth(enText);
       doc.setFont('helvetica', 'normal');
-      doc.text(' / ', x + enWidth, y);
-      const slashWidth = doc.getTextWidth(' / ');
+      doc.text(' / ', x + enW, y);
+      const slW = doc.getTextWidth(' / ');
       doc.setFont('Amiri', 'normal');
-      doc.text(arLabel, x + enWidth + slashWidth, y);
+      doc.setFontSize(6.5);
+      doc.text(arLabel, x + enW + slW, y);
       doc.setFont('helvetica', 'normal');
     }
   };
 
   const fieldPair = (l1: string, v1: string, l2: string, v2: string, arL1?: string, arL2?: string) => {
-    const halfW = cw / 2 - 2;
-    const col2X = ml + cw / 2 + 2;
+    const halfW = cw / 2 - 3;
+    const col2X = ml + cw / 2 + 3;
 
-    drawLabel(l1, arL1, ml + 3);
-    doc.setFontSize(7.5);
+    drawLabel(l1, arL1, ml + 4);
+    doc.setFontSize(9);
     doc.setTextColor(...C.dark);
     doc.setFont('helvetica', 'normal');
     const lines1 = doc.splitTextToSize(v1 || 'N/A', halfW - 6);
-    doc.text(lines1[0], ml + 3, y + 3.5);
+    doc.text(lines1[0], ml + 4, y + 4.5);
 
     if (l2) {
       drawLabel(l2, arL2, col2X);
-      doc.setFontSize(7.5);
+      doc.setFontSize(9);
       doc.setTextColor(...C.dark);
       doc.setFont('helvetica', 'normal');
-      const lines2 = doc.splitTextToSize(v2 || 'N/A', halfW - 2);
-      doc.text(lines2[0], col2X, y + 3.5);
+      const lines2 = doc.splitTextToSize(v2 || 'N/A', halfW - 3);
+      doc.text(lines2[0], col2X, y + 4.5);
     }
 
-    y += 8;
+    y += 9;
   };
 
   sectionBar('REQUEST DETAILS', 'REQUEST DETAILS');
@@ -396,13 +386,13 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   if (data.submission.description) {
     const cleanDesc = data.submission.description.replace(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/i, '');
     if (cleanDesc.trim()) {
-      drawLabel('Description', ar('DESCRIPTION'), ml + 3);
-      doc.setFontSize(7.5);
+      drawLabel('Description', ar('DESCRIPTION'), ml + 4);
+      doc.setFontSize(9);
       doc.setTextColor(...C.dark);
       doc.setFont('helvetica', 'normal');
-      const descLines = doc.splitTextToSize(cleanDesc, cw - 8);
-      doc.text(descLines.slice(0, 2).join('\n'), ml + 3, y + 3.5);
-      y += 4 + Math.min(descLines.length, 2) * 3.5;
+      const descLines = doc.splitTextToSize(cleanDesc, cw - 10);
+      doc.text(descLines[0], ml + 4, y + 4.5);
+      y += 9;
     }
   }
 
@@ -425,129 +415,123 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     const cleanNotes = getCleanNotes(tierData.notes);
     const hasNotes = cleanNotes.length > 0;
 
-    let ch = 20;
-    if (hasNotes) ch += 5;
-    if (hasSigBlock) ch += 10;
+    let ch = 22;
+    if (hasNotes) ch += 6;
+    if (hasSigBlock) ch += 12;
 
-    const isApproved = tierData.status === 'approved';
     const tierColor = tierNum === 1 ? C.green : C.blue;
     const tierBg = tierNum === 1 ? C.greenLight : C.blueLight;
+    const isApproved = tierData.status === 'approved';
 
-    rr(doc, ml, y, cw, ch, 1.5, C.white, C.border);
+    rr(doc, ml, y, cw, ch, 2, C.white, C.border);
 
     doc.setFillColor(...tierBg);
-    doc.rect(ml + 0.2, y + 0.2, cw - 0.4, 7, 'F');
+    doc.rect(ml + 0.3, y + 0.3, cw - 0.6, 8.5, 'F');
 
     doc.setDrawColor(...tierColor);
-    doc.setLineWidth(1.8);
-    doc.line(ml + 0.1, y + 0.2, ml + 0.1, y + ch - 0.2);
+    doc.setLineWidth(2);
+    doc.line(ml + 0.15, y + 0.3, ml + 0.15, y + ch - 0.3);
     doc.setLineWidth(0.2);
 
-    doc.setFontSize(7);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...tierColor);
-    doc.text(`TIER ${tierNum}`, ml + 5, y + 5);
-    doc.setFontSize(6);
-    doc.setFont('helvetica', 'normal');
+    doc.text(`TIER ${tierNum}`, ml + 6, y + 6);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
     doc.setTextColor(...C.body);
-    doc.text(tierLabel, ml + 19, y + 5);
+    doc.text(tierLabel, ml + 22, y + 6);
 
     if (hasArabic) {
       const arLabel = tierNum === 1 ? ar('Supervisor / FOM Review') : ar('Admin / Super Admin Final Approval');
-      doc.setFontSize(5.5);
-      arText(arLabel, pw - mr - 4, y + 5, { align: 'right' });
+      doc.setFontSize(6.5);
+      arText(arLabel, pw - mr - 5, y + 6, { align: 'right' });
     }
 
     if (isApproved) {
       const badgeText = 'APPROVED';
-      const bw = doc.getTextWidth(badgeText) * 1.1 + 6;
-      const bx = pw - mr - bw - 3;
-      rr(doc, bx, y + 1.5, bw, 4.5, 1, C.greenBadge as [number, number, number]);
-      doc.setFontSize(5.5);
-      doc.setTextColor(...C.white);
+      doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
-      doc.text(badgeText, bx + bw / 2, y + 4.5, { align: 'center' });
+      const bw = doc.getTextWidth(badgeText) + 7;
+      const bx = pw - mr - bw - 4;
+      rr(doc, bx, y + 1.5, bw, 5.5, 1.5, C.greenBadge as [number, number, number]);
+      doc.setTextColor(...C.white);
+      doc.text(badgeText, bx + bw / 2, y + 5.2, { align: 'center' });
     }
 
-    let iy = y + 10;
+    let iy = y + 12;
 
-    doc.setFontSize(5.5);
-    doc.setTextColor(...C.muted);
-    doc.setFont('helvetica', 'normal');
-    doc.text('APPROVER', ml + 5, iy);
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
+    doc.setTextColor(...C.label);
+    doc.setFont('helvetica', 'bold');
+    doc.text('APPROVER', ml + 6, iy);
+    doc.setFontSize(9);
     doc.setTextColor(...C.dark);
     doc.setFont('helvetica', 'bold');
-    doc.text(tierData.approverName, ml + 5, iy + 3.5);
+    doc.text(tierData.approverName, ml + 6, iy + 4.5);
 
     const dateX = ml + cw * 0.45;
-    doc.setFontSize(5.5);
-    doc.setTextColor(...C.muted);
-    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...C.label);
+    doc.setFont('helvetica', 'bold');
     doc.text('DATE & TIME', dateX, iy);
-    doc.setFontSize(7.5);
+    doc.setFontSize(9);
     doc.setTextColor(...C.dark);
     doc.setFont('helvetica', 'normal');
-    doc.text(fmtDate(tierData.approvedAt, true), dateX, iy + 3.5);
+    doc.text(fmtDate(tierData.approvedAt, true), dateX, iy + 4.5);
 
-    iy += 8;
+    iy += 9;
 
     if (hasNotes) {
-      doc.setFontSize(5.5);
-      doc.setTextColor(...C.muted);
-      doc.setFont('helvetica', 'normal');
-      doc.text('NOTES', ml + 5, iy);
-      doc.setFontSize(6.5);
+      doc.setFontSize(7);
+      doc.setTextColor(...C.label);
+      doc.setFont('helvetica', 'bold');
+      doc.text('NOTES', ml + 6, iy);
+      doc.setFontSize(8);
       doc.setTextColor(...C.body);
       doc.setFont('helvetica', 'italic');
-      const notesTrunc = cleanNotes.length > 90 ? cleanNotes.substring(0, 90) + '...' : cleanNotes;
-      doc.text(`"${notesTrunc}"`, ml + 5, iy + 3.5);
-      iy += 5;
+      const notesTrunc = cleanNotes.length > 85 ? cleanNotes.substring(0, 85) + '...' : cleanNotes;
+      doc.text(`"${notesTrunc}"`, ml + 6, iy + 4);
+      iy += 6;
     }
 
     if (hasSigBlock) {
       doc.setDrawColor(...C.border);
-      doc.setLineWidth(0.15);
-      doc.line(ml + 3, iy, pw - mr - 3, iy);
-      iy += 2;
+      doc.setLineWidth(0.2);
+      doc.line(ml + 4, iy, pw - mr - 4, iy);
+      iy += 2.5;
 
       if (sig) {
-        doc.setFontSize(5);
+        doc.setFontSize(6.5);
         doc.setTextColor(...C.blue);
         doc.setFont('helvetica', 'bold');
-        doc.text('DIGITAL SIGNATURE', ml + 5, iy + 2);
+        doc.text('DIGITAL SIGNATURE', ml + 6, iy + 2.5);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(...C.label);
-        doc.setFontSize(5);
-        doc.text(`${sig.method} | Hash: ${sig.hash}... | ID: ${sig.id}`, ml + 32, iy + 2);
+        doc.setFontSize(6);
+        doc.text(`${sig.method}  |  Hash: ${sig.hash}...  |  ID: ${sig.id}`, ml + 36, iy + 2.5);
       }
 
+      const sbW = 34;
+      const sbH = 10;
+      const sbX = pw - mr - sbW - 4;
+      doc.setDrawColor(...C.blue);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(sbX, iy - 0.5, sbW, sbH, 1.5, 1.5, 'S');
+      doc.setLineWidth(0.2);
+
       if (sigImage) {
-        const sbW = 30;
-        const sbH = 9;
-        const sbX = pw - mr - sbW - 3;
-        doc.setDrawColor(...C.blue);
-        doc.setLineWidth(0.3);
-        doc.roundedRect(sbX, iy - 1, sbW, sbH, 1, 1, 'S');
-        doc.setLineWidth(0.2);
-        try { doc.addImage(sigImage, 'PNG', sbX + 1, iy, sbW - 2, sbH - 2); } catch {}
+        try { doc.addImage(sigImage, 'PNG', sbX + 1.5, iy + 0.5, sbW - 3, sbH - 2); } catch {}
       } else if (sig) {
-        const sbW = 30;
-        const sbH = 9;
-        const sbX = pw - mr - sbW - 3;
-        doc.setDrawColor(...C.blue);
-        doc.setLineWidth(0.3);
-        doc.roundedRect(sbX, iy - 1, sbW, sbH, 1, 1, 'S');
-        doc.setLineWidth(0.2);
-        doc.setFontSize(8);
+        doc.setFontSize(9);
         doc.setTextColor(...C.blue);
         doc.setFont('helvetica', 'bolditalic');
         const sn = tierData.approverName.length > 16 ? tierData.approverName.substring(0, 16) : tierData.approverName;
-        doc.text(sn, sbX + sbW / 2, iy + sbH / 2, { align: 'center' });
+        doc.text(sn, sbX + sbW / 2, iy + sbH / 2 + 1, { align: 'center' });
       }
     }
 
-    y += ch + 3;
+    y += ch + 4;
   };
 
   drawTierCard(1, 'Supervisor / FOM Review', data.tier1);
@@ -555,71 +539,68 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
 
   y += 1;
 
-  const qrSize = 22;
-  const disclaimerH = Math.max(qrSize + 4, 18);
+  const qrSize = 24;
+  const disclaimerH = qrSize + 6;
 
-  rr(doc, ml, y, cw, disclaimerH, 1.5, C.bgLight, C.border);
+  rr(doc, ml, y, cw, disclaimerH, 2, C.bgLight, C.border);
 
   if (qrDataUrl) {
-    try {
-      doc.addImage(qrDataUrl, 'PNG', ml + 3, y + 2, qrSize, qrSize);
-    } catch {}
+    try { doc.addImage(qrDataUrl, 'PNG', ml + 4, y + 3, qrSize, qrSize); } catch {}
   }
 
-  const textX = ml + qrSize + 8;
-  const textW = cw - qrSize - 12;
+  const textX = ml + qrSize + 10;
+  const textW = cw - qrSize - 16;
 
-  doc.setFontSize(6);
+  doc.setFontSize(8);
   doc.setTextColor(...C.dark);
   doc.setFont('helvetica', 'bold');
-  doc.text('VERIFICATION', textX, y + 5);
+  doc.text('VERIFICATION', textX, y + 6);
   if (hasArabic) {
     const vw = doc.getTextWidth('VERIFICATION');
     doc.setFont('helvetica', 'normal');
-    doc.text(' / ', textX + vw, y + 5);
+    doc.text(' / ', textX + vw, y + 6);
     const sw = doc.getTextWidth(' / ');
     doc.setFont('Amiri', 'normal');
-    doc.text('التحقق', textX + vw + sw, y + 5);
+    doc.setFontSize(7.5);
+    doc.text('التحقق', textX + vw + sw, y + 6);
     doc.setFont('helvetica', 'normal');
   }
 
-  doc.setFontSize(5.5);
+  doc.setFontSize(7);
   doc.setTextColor(...C.label);
   doc.setFont('helvetica', 'normal');
   const disclaimEn = doc.splitTextToSize(
-    'This document confirms the operational cost submission has been reviewed and approved through the PACT multi-tier approval workflow. Scan the QR code to verify authenticity. This document is system-generated and valid without physical signature.',
+    'This document confirms the operational cost submission has been reviewed and approved through the PACT multi-tier approval workflow. Scan the QR code to verify. System-generated, valid without physical signature.',
     textW
   );
-  doc.text(disclaimEn.slice(0, 3), textX, y + 9);
+  doc.text(disclaimEn.slice(0, 3), textX, y + 11);
 
   if (hasArabic) {
-    doc.setFontSize(5.5);
+    doc.setFontSize(7);
     doc.setTextColor(...C.label);
-    arText('يؤكد هذا المستند أن التكلفة التشغيلية قد تمت مراجعتها والموافقة عليها. امسح رمز الاستجابة السريعة للتحقق.', textX, y + disclaimerH - 3);
+    arText('يؤكد هذا المستند أن التكلفة التشغيلية قد تمت مراجعتها والموافقة عليها. امسح رمز الاستجابة السريعة للتحقق.', textX, y + disclaimerH - 4);
   }
 
-  y += disclaimerH + 2;
-
-  const footerH = 12;
+  const footerH = 14;
   const footerY = ph - footerH;
 
   doc.setFillColor(...C.navy);
   doc.rect(0, footerY, pw, footerH, 'F');
 
-  doc.setFontSize(6);
+  doc.setFontSize(7);
   doc.setTextColor(180, 195, 220);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Document Reference: ${refNumber}`, ml, footerY + 5);
-  doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm:ss')}`, pw / 2, footerY + 5, { align: 'center' });
+  doc.text(`Document Reference: ${refNumber}`, ml, footerY + 5.5);
+  doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm:ss')}`, pw / 2, footerY + 5.5, { align: 'center' });
 
   doc.setTextColor(...C.white);
   doc.setFont('helvetica', 'bold');
-  doc.text('PACT Command Center', pw - mr, footerY + 5, { align: 'right' });
+  doc.text('PACT Command Center', pw - mr, footerY + 5.5, { align: 'right' });
 
-  doc.setFontSize(5);
+  doc.setFontSize(6);
   doc.setTextColor(140, 155, 180);
   doc.setFont('helvetica', 'normal');
-  doc.text('Financial Operations  |  Field Operations Platform', pw / 2, footerY + 9, { align: 'center' });
+  doc.text('Financial Operations  |  Field Operations Platform', pw / 2, footerY + 10, { align: 'center' });
 
   return { doc, refNumber };
 }
