@@ -24,6 +24,21 @@ interface RevertToPendingData {
   targetStatus: 'pending_supervisor' | 'pending_admin' | 'approved';
 }
 
+interface EditDownPaymentData {
+  requestId: string;
+  editedBy: string;
+  editedByName?: string;
+  editedByRole?: string;
+  reason: string;
+  changes: {
+    requestedAmount?: number;
+    approvedAmount?: number;
+    justification?: string;
+    siteName?: string;
+    hubName?: string;
+  };
+}
+
 interface DownPaymentContextType {
   requests: DownPaymentRequest[];
   loading: boolean;
@@ -40,6 +55,7 @@ interface DownPaymentContextType {
   addAuditEntry: (requestId: string, entry: Omit<ApprovalAuditEntry, 'id' | 'timestamp'>) => Promise<boolean>;
   revertToPending: (data: RevertToPendingData) => Promise<boolean>;
   confirmReceipt: (data: { requestId: string; userId: string; userName: string; signatureId: string; signatureHash: string; signatureMethod: string; signedAt: string }) => Promise<boolean>;
+  editRequest: (data: EditDownPaymentData) => Promise<boolean>;
 }
 
 const DownPaymentContext = createContext<DownPaymentContextType | undefined>(undefined);
@@ -1078,6 +1094,105 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const editRequest = async (data: EditDownPaymentData): Promise<boolean> => {
+    try {
+      const request = requests.find(r => r.id === data.requestId);
+      if (!request) throw new Error('Request not found');
+
+      const previousValues: Record<string, any> = {};
+      const newValues: Record<string, any> = {};
+      const dbUpdate: Record<string, any> = { updated_at: new Date().toISOString() };
+
+      if (data.changes.requestedAmount !== undefined && data.changes.requestedAmount !== request.requestedAmount) {
+        if (data.changes.requestedAmount <= 0) throw new Error('Requested amount must be greater than zero');
+        if (data.changes.requestedAmount < request.totalPaidAmount) throw new Error('Requested amount cannot be less than already paid amount');
+        previousValues.requestedAmount = request.requestedAmount;
+        newValues.requestedAmount = data.changes.requestedAmount;
+        dbUpdate.requested_amount = data.changes.requestedAmount;
+      }
+      if (data.changes.approvedAmount !== undefined && data.changes.approvedAmount !== request.approvedAmount) {
+        const finalRequestedAmt = data.changes.requestedAmount ?? request.requestedAmount;
+        if (data.changes.approvedAmount <= 0) throw new Error('Approved amount must be greater than zero');
+        if (data.changes.approvedAmount > finalRequestedAmt) throw new Error('Approved amount cannot exceed requested amount');
+        if (data.changes.approvedAmount < request.totalPaidAmount) throw new Error('Approved amount cannot be less than already paid amount');
+        previousValues.approvedAmount = request.approvedAmount;
+        newValues.approvedAmount = data.changes.approvedAmount;
+      }
+      if (data.changes.justification !== undefined && data.changes.justification !== request.justification) {
+        previousValues.justification = request.justification;
+        newValues.justification = data.changes.justification;
+        dbUpdate.justification = data.changes.justification;
+      }
+      if (data.changes.siteName !== undefined && data.changes.siteName !== request.siteName) {
+        previousValues.siteName = request.siteName;
+        newValues.siteName = data.changes.siteName;
+        dbUpdate.site_name = data.changes.siteName;
+      }
+      if (data.changes.hubName !== undefined && data.changes.hubName !== request.hubName) {
+        previousValues.hubName = request.hubName;
+        newValues.hubName = data.changes.hubName;
+        dbUpdate.hub_name = data.changes.hubName;
+      }
+
+      if (Object.keys(newValues).length === 0) {
+        toast({ title: 'No Changes', description: 'No fields were modified.' });
+        return false;
+      }
+
+      const auditEntry: ApprovalAuditEntry = {
+        id: crypto.randomUUID(),
+        action: 'request_edited',
+        performedBy: data.editedBy,
+        performedByName: data.editedByName,
+        performedByRole: data.editedByRole,
+        timestamp: new Date().toISOString(),
+        previousValue: previousValues,
+        newValue: newValues,
+        notes: data.reason,
+      };
+
+      const finalApprovedAmt = data.changes.approvedAmount ?? request.approvedAmount ?? request.requestedAmount;
+      if (newValues.requestedAmount !== undefined || newValues.approvedAmount !== undefined) {
+        dbUpdate.remaining_amount = Math.max(0, finalApprovedAmt - request.totalPaidAmount);
+      }
+
+      const updatedAuditLog = [...(request.auditLog || []), auditEntry];
+      const updatedMetadata = {
+        ...request.metadata,
+        audit_log: updatedAuditLog,
+        ...(data.changes.approvedAmount !== undefined ? { approved_amount: data.changes.approvedAmount } : {}),
+        last_edited_by: data.editedByName || data.editedBy,
+        last_edited_at: new Date().toISOString(),
+        last_edit_reason: data.reason,
+      };
+
+      dbUpdate.metadata = updatedMetadata;
+
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .update(dbUpdate)
+        .eq('id', data.requestId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Request Updated / تم تحديث الطلب',
+        description: `${Object.keys(newValues).length} field(s) updated with audit trail. / تم تحديث ${Object.keys(newValues).length} حقل(حقول) مع سجل التدقيق.`,
+      });
+
+      await refreshRequests();
+      return true;
+    } catch (error: any) {
+      console.error('Failed to edit request:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to edit request',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const value: DownPaymentContextType = {
     requests,
     loading,
@@ -1094,6 +1209,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     addAuditEntry,
     revertToPending,
     confirmReceipt,
+    editRequest,
   };
 
   return <DownPaymentContext.Provider value={value}>{children}</DownPaymentContext.Provider>;
