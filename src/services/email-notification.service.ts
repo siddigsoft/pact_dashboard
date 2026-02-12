@@ -1528,8 +1528,8 @@ PACT Command Center | مركز قيادة باكت`;
       const options: NotificationEmailOptions = {
         title: `Payment Request: ${requestTitle} - ${fundingLabel}`,
         titleAr: `طلب دفع: ${requestTitle} - ${fundingLabelAr}`,
-        message: `A cost submission has been fully approved and is ready for payment processing. ${approverName} is requesting the finance team to process the payment.\n\nPlease review and process this payment at your earliest convenience.`,
-        messageAr: `تمت الموافقة الكاملة على طلب تكلفة تشغيلية وهو جاهز لمعالجة الدفع. يطلب ${approverName} من فريق المالية معالجة الدفع.\n\nيرجى مراجعة هذا الدفع ومعالجته في أقرب وقت.`,
+        message: `A cost submission has been fully approved and is ready for payment processing. ${approverName} is requesting the finance team to process the payment.\n\nPlease review and process this payment at your earliest convenience.${fundingType === 'advance' ? '\n\nIMPORTANT - RECONCILIATION REQUIRED: This advance payment must be reconciled after the field activity is completed. The recipient must submit receipts/supporting documents and return any unused funds within the reconciliation period. Please ensure reconciliation is tracked.' : ''}`,
+        messageAr: `تمت الموافقة الكاملة على طلب تكلفة تشغيلية وهو جاهز لمعالجة الدفع. يطلب ${approverName} من فريق المالية معالجة الدفع.\n\nيرجى مراجعة هذا الدفع ومعالجته في أقرب وقت.${fundingType === 'advance' ? '\n\nهام - التسوية مطلوبة: يجب تسوية هذه السلفة بعد اكتمال النشاط الميداني. يجب على المستلم تقديم الإيصالات/المستندات الداعمة وإعادة أي أموال غير مستخدمة خلال فترة التسوية.' : ''}`,
         type: 'warning',
         actionUrl: costSubmissionUrl,
         actionLabel: 'Process Payment / معالجة الدفع',
@@ -1543,6 +1543,7 @@ PACT Command Center | مركز قيادة باكت`;
           { label: 'Project / المشروع', value: projectName || 'N/A' },
           { label: 'Approved By / تمت الموافقة من', value: approverName },
           { label: 'Status / الحالة', value: 'Approved - Ready for Payment / تمت الموافقة - جاهز للدفع' },
+          ...(fundingType === 'advance' ? [{ label: 'Reconciliation / التسوية', value: 'REQUIRED - Must reconcile after activity completion / مطلوبة - يجب التسوية بعد اكتمال النشاط' }] : []),
           ...(approvalNotes ? [{ label: 'Approval Notes / ملاحظات', value: approvalNotes }] : []),
         ],
         cc: approverEmail ? [approverEmail] : [],

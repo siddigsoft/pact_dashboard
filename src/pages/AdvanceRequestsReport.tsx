@@ -79,11 +79,15 @@ function AdvanceRequestsReportContent() {
   const [paymentRequestDialog, setPaymentRequestDialog] = useState<{
     open: boolean;
     request: DownPaymentRequest | null;
+    isBulk: boolean;
+    bulkRequests: DownPaymentRequest[];
+    bulkGroupBy: string;
+    bulkGroupValue: string;
     availableRecipients: Array<{ id: string; email: string; name: string; role: string }>;
     selectedRecipientIds: string[];
     loading: boolean;
     sending: boolean;
-  }>({ open: false, request: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
+  }>({ open: false, request: null, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
@@ -276,8 +280,45 @@ function AdvanceRequestsReportContent() {
     };
   };
 
+  const approvedForPayment = useMemo(() => {
+    return requests.filter(r => {
+      const s = r.status?.toLowerCase();
+      return s === 'approved' || s === 'admin_approved';
+    });
+  }, [requests]);
+
+  const bulkUniqueStates = useMemo(() => [...new Set(approvedForPayment.map(r => r.stateName).filter(Boolean))], [approvedForPayment]);
+  const bulkUniqueHubs = useMemo(() => [...new Set(approvedForPayment.map(r => r.hubName).filter(Boolean))], [approvedForPayment]);
+  const bulkUniqueLocalities = useMemo(() => [...new Set(approvedForPayment.map(r => r.localityName).filter(Boolean))], [approvedForPayment]);
+  const bulkUniqueSites = useMemo(() => [...new Set(approvedForPayment.map(r => r.siteName).filter(Boolean))], [approvedForPayment]);
+  const bulkUniqueSupervisors = useMemo(() => {
+    const map = new Map<string, string>();
+    approvedForPayment.forEach(r => {
+      if (r.supervisorApprovedBy) {
+        map.set(r.supervisorApprovedBy, getProfileName(r.supervisorApprovedBy));
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [approvedForPayment, getProfileName]);
+
+  const openBulkPaymentRequestDialog = async (bulkReqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
+    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, bulkRequests: bulkReqs, bulkGroupBy: groupBy, bulkGroupValue: groupValue, loading: true, selectedRecipientIds: [], availableRecipients: [] }));
+    try {
+      const { data: financeUsers } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role')
+        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+        .eq('status', 'approved');
+      const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+      setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+    } catch {
+      setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+      toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+    }
+  };
+
   const openPaymentRequestDialog = async (req: DownPaymentRequest) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, loading: true, selectedRecipientIds: [], availableRecipients: [] }));
+    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', loading: true, selectedRecipientIds: [], availableRecipients: [] }));
     try {
       const { data: financeUsers } = await supabase
         .from('profiles')
@@ -293,38 +334,65 @@ function AdvanceRequestsReportContent() {
   };
 
   const handleSendPaymentRequest = async () => {
-    const { request: req, selectedRecipientIds, availableRecipients } = paymentRequestDialog;
-    if (!req || !currentUser?.id || selectedRecipientIds.length === 0) return;
+    const { request: req, selectedRecipientIds, availableRecipients, isBulk, bulkRequests, bulkGroupBy, bulkGroupValue } = paymentRequestDialog;
+    if ((!req && !isBulk) || !currentUser?.id || selectedRecipientIds.length === 0) return;
+    if (isBulk && bulkRequests.length === 0) return;
     setPaymentRequestDialog(prev => ({ ...prev, sending: true }));
     try {
       const selectedRecipients = availableRecipients.filter(r => selectedRecipientIds.includes(r.id)).map(r => ({ email: r.email, name: r.name }));
-      const requester = users.find(u => u.id === req.requestedBy);
-      const requesterName = (requester as any)?.fullName || (requester as any)?.full_name || requester?.email || 'Unknown';
       const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Approver';
       const approverEmail = currentUser.email || '';
-      const requestId = req.id?.slice(0, 8)?.toUpperCase() || 'N/A';
 
-      let pdfAttachment: { base64: string; filename: string } | undefined;
-      try {
-        const sig = await getSignatureAndCertData(req);
-        pdfAttachment = await generateTransportAdvanceCertificateBase64(buildCertData(req, sig));
-      } catch { /* continue without PDF */ }
+      if (isBulk) {
+        const totalAmount = bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+        const requestDetails = bulkRequests.map(r => {
+          const requester = users.find(u => u.id === r.requestedBy);
+          const rName = (requester as any)?.fullName || (requester as any)?.full_name || requester?.email || 'Unknown';
+          return `${r.siteName} - ${rName}: SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()}`;
+        }).join('\n');
 
-      const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
-        selectedRecipients, approverName, approverEmail, requesterName,
-        `Transport Advance - ${req.siteName}`, requestId, 'Transportation Advance',
-        req.approvedAmount || req.requestedAmount, 'advance', req.projectName || 'N/A', 'SDG', '', '/down-payment-approval', pdfAttachment
-      );
+        const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : 'All Approved';
+        const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
+          selectedRecipients, approverName, approverEmail, `${bulkRequests.length} staff members`,
+          `Bulk Transport Advance Payment - ${groupLabel} (${bulkRequests.length} requests)`,
+          `BULK-${Date.now().toString(36).toUpperCase()}`, 'Transportation Advance (Bulk)',
+          totalAmount, 'advance', bulkRequests[0]?.projectName || 'N/A', 'SDG',
+          `\n\n--- BULK REQUEST DETAILS ---\nGroup: ${groupLabel}\nTotal Requests: ${bulkRequests.length}\nTotal Amount: SDG ${totalAmount.toLocaleString()}\n\n${requestDetails}\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.`,
+          '/advance-requests-report', undefined
+        );
 
-      if (result.success) {
-        toast({ title: "Payment Request Sent / تم إرسال طلب الدفع", description: `Email sent to ${selectedRecipients.length} recipient(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين).` });
-      } else {
-        toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
+        if (result.success) {
+          toast({ title: "Bulk Payment Request Sent / تم إرسال طلب الدفع الجماعي", description: `Email sent to ${selectedRecipients.length} recipient(s) for ${bulkRequests.length} advance(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين) لـ ${bulkRequests.length} سلفة.` });
+        } else {
+          toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
+        }
+      } else if (req) {
+        const requester = users.find(u => u.id === req.requestedBy);
+        const requesterName = (requester as any)?.fullName || (requester as any)?.full_name || requester?.email || 'Unknown';
+        const requestId = req.id?.slice(0, 8)?.toUpperCase() || 'N/A';
+
+        let pdfAttachment: { base64: string; filename: string } | undefined;
+        try {
+          const sig = await getSignatureAndCertData(req);
+          pdfAttachment = await generateTransportAdvanceCertificateBase64(buildCertData(req, sig));
+        } catch { /* continue without PDF */ }
+
+        const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
+          selectedRecipients, approverName, approverEmail, requesterName,
+          `Transport Advance - ${req.siteName}`, requestId, 'Transportation Advance',
+          req.approvedAmount || req.requestedAmount, 'advance', req.projectName || 'N/A', 'SDG', '', '/down-payment-approval', pdfAttachment
+        );
+
+        if (result.success) {
+          toast({ title: "Payment Request Sent / تم إرسال طلب الدفع", description: `Email sent to ${selectedRecipients.length} recipient(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين).` });
+        } else {
+          toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
+        }
       }
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
-      setPaymentRequestDialog({ open: false, request: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
+      setPaymentRequestDialog({ open: false, request: null, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
     }
   };
 
@@ -1381,6 +1449,103 @@ function AdvanceRequestsReportContent() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
+          {isAdmin && approvedForPayment.length > 0 && (
+            <Card>
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Bulk Payment Request / طلب دفع جماعي
+                </CardTitle>
+                <CardDescription className="text-xs">Send payment request for multiple approved advances grouped by category.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  {bulkUniqueStates.length > 0 && (
+                    <Select onValueChange={(val) => {
+                      const reqs = approvedForPayment.filter(r => r.stateName === val);
+                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'State', val);
+                    }}>
+                      <SelectTrigger data-testid="select-report-bulk-state"><SelectValue placeholder="By State" /></SelectTrigger>
+                      <SelectContent>
+                        {bulkUniqueStates.map(s => {
+                          const count = approvedForPayment.filter(r => r.stateName === s).length;
+                          return <SelectItem key={s} value={s!}>{s} ({count})</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {bulkUniqueHubs.length > 0 && (
+                    <Select onValueChange={(val) => {
+                      const reqs = approvedForPayment.filter(r => r.hubName === val);
+                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Hub', val);
+                    }}>
+                      <SelectTrigger data-testid="select-report-bulk-hub"><SelectValue placeholder="By Hub" /></SelectTrigger>
+                      <SelectContent>
+                        {bulkUniqueHubs.map(h => {
+                          const count = approvedForPayment.filter(r => r.hubName === h).length;
+                          return <SelectItem key={h} value={h!}>{h} ({count})</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {bulkUniqueLocalities.length > 0 && (
+                    <Select onValueChange={(val) => {
+                      const reqs = approvedForPayment.filter(r => r.localityName === val);
+                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Locality', val);
+                    }}>
+                      <SelectTrigger data-testid="select-report-bulk-locality"><SelectValue placeholder="By Locality" /></SelectTrigger>
+                      <SelectContent>
+                        {bulkUniqueLocalities.map(l => {
+                          const count = approvedForPayment.filter(r => r.localityName === l).length;
+                          return <SelectItem key={l} value={l!}>{l} ({count})</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {bulkUniqueSupervisors.length > 0 && (
+                    <Select onValueChange={(val) => {
+                      const reqs = approvedForPayment.filter(r => r.supervisorApprovedBy === val);
+                      if (reqs.length > 0) {
+                        const sup = bulkUniqueSupervisors.find(s => s.id === val);
+                        openBulkPaymentRequestDialog(reqs, 'Supervisor', sup?.name || val);
+                      }
+                    }}>
+                      <SelectTrigger data-testid="select-report-bulk-supervisor"><SelectValue placeholder="By Supervisor" /></SelectTrigger>
+                      <SelectContent>
+                        {bulkUniqueSupervisors.map(s => {
+                          const count = approvedForPayment.filter(r => r.supervisorApprovedBy === s.id).length;
+                          return <SelectItem key={s.id} value={s.id}>{s.name} ({count})</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {bulkUniqueSites.length > 0 && (
+                    <Select onValueChange={(val) => {
+                      const reqs = approvedForPayment.filter(r => r.siteName === val);
+                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Site', val);
+                    }}>
+                      <SelectTrigger data-testid="select-report-bulk-site"><SelectValue placeholder="By Site" /></SelectTrigger>
+                      <SelectContent>
+                        {bulkUniqueSites.map(s => {
+                          const count = approvedForPayment.filter(r => r.siteName === s).length;
+                          return <SelectItem key={s} value={s!}>{s} ({count})</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={() => openBulkPaymentRequestDialog(approvedForPayment, '', 'All Approved')} data-testid="button-report-bulk-request-all">
+                    <Mail className="h-3.5 w-3.5 mr-1" />
+                    Request All ({approvedForPayment.length})
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Total: SDG {approvedForPayment.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardContent className="p-0">
               {loading ? (
@@ -2219,12 +2384,14 @@ function AdvanceRequestsReportContent() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false }); }}>
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false }); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Request Payment / طلب دفع</DialogTitle>
+            <DialogTitle>{paymentRequestDialog.isBulk ? 'Bulk Payment Request / طلب دفع جماعي' : 'Request Payment / طلب دفع'}</DialogTitle>
             <DialogDescription>
-              Send payment request email to finance team with the approval certificate attached.
+              {paymentRequestDialog.isBulk
+                ? `Send bulk payment request for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team.`
+                : 'Send payment request email to finance team with the approval certificate attached.'}
             </DialogDescription>
           </DialogHeader>
           {paymentRequestDialog.loading ? (
@@ -2233,11 +2400,36 @@ function AdvanceRequestsReportContent() {
             </div>
           ) : (
             <div className="space-y-4">
-              {paymentRequestDialog.request && (
+              {paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length > 0 && (
+                <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
+                  {paymentRequestDialog.bulkGroupBy && (
+                    <p><strong>{paymentRequestDialog.bulkGroupBy}:</strong> {paymentRequestDialog.bulkGroupValue}</p>
+                  )}
+                  <p><strong>Requests:</strong> {paymentRequestDialog.bulkRequests.length} approved advance(s)</p>
+                  <p><strong>Total Amount:</strong> SDG {paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</p>
+                  <ScrollArea className="max-h-[100px]">
+                    <div className="space-y-1 mt-1">
+                      {paymentRequestDialog.bulkRequests.map(r => (
+                        <div key={r.id} className="flex items-center justify-between text-xs">
+                          <span className="truncate max-w-[180px]">{r.siteName}</span>
+                          <span className="font-mono">SDG {(r.approvedAmount || r.requestedAmount).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                  <div className="mt-2 p-2 bg-destructive/10 rounded text-xs text-destructive">
+                    Reconciliation notice will be included in the email.
+                  </div>
+                </div>
+              )}
+              {!paymentRequestDialog.isBulk && paymentRequestDialog.request && (
                 <div className="bg-muted/50 p-3 rounded-md text-sm space-y-1">
                   <p><strong>Site:</strong> {paymentRequestDialog.request.siteName}</p>
                   <p><strong>Amount:</strong> SDG {(paymentRequestDialog.request.approvedAmount || paymentRequestDialog.request.requestedAmount).toLocaleString()}</p>
                   <p><strong>Requester:</strong> {getProfileName(paymentRequestDialog.request.requestedBy)}</p>
+                  <div className="mt-1 p-2 bg-destructive/10 rounded text-xs text-destructive">
+                    Reconciliation notice will be included in the email.
+                  </div>
                 </div>
               )}
               <div className="space-y-2">
@@ -2292,7 +2484,7 @@ function AdvanceRequestsReportContent() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setPaymentRequestDialog({ open: false, request: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false })}
+              onClick={() => setPaymentRequestDialog({ open: false, request: null, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false })}
               data-testid="button-cancel-payment-request"
             >
               Cancel

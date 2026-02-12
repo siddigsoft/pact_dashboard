@@ -160,6 +160,10 @@ const ARABIC_MAP: Record<string, string> = {
   'FINANCIAL SUMMARY': 'الملخص المالي',
   'TOTAL PAID': 'إجمالي المدفوع',
   'REMAINING': 'المتبقي',
+  'RECONCILIATION NOTICE': 'إشعار التسوية',
+  'APPROVAL PERCENTAGE': 'نسبة الموافقة',
+  'APPROVER EMAIL': 'بريد الموافق',
+  'REQUESTER ROLE': 'دور مقدم الطلب',
 };
 
 function rr(doc: any, x: number, y: number, w: number, h: number, r: number, fill?: [number, number, number], stroke?: [number, number, number]) {
@@ -387,6 +391,12 @@ async function buildTransportCertificateDoc(data: TransportAdvanceCertificateDat
   fieldPair('State', data.request.stateName || 'N/A', 'Locality', data.request.localityName || 'N/A', ar('STATE'), ar('LOCALITY'));
   fieldPair('Request Date', fmtDate(data.request.requestedAt, true), 'Activity Type', data.request.activityType || 'N/A', ar('REQUEST DATE'), ar('ACTIVITY TYPE'));
   fieldPair('Payment Type', paymentLabel, 'Request ID', refNumber, ar('PAYMENT TYPE'));
+  if (data.requester.role) {
+    fieldPair('Requester Role', data.requester.role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), 'Email', data.requester.email || 'N/A', ar('REQUESTER ROLE'), ar('APPROVER EMAIL'));
+  }
+  if (data.request.approvalPercentage && data.request.approvalPercentage < 100) {
+    fieldPair('Approval Percentage', `${data.request.approvalPercentage}%`, '', '', ar('APPROVAL PERCENTAGE'));
+  }
 
   if (data.request.justification) {
     const cleanJust = data.request.justification.trim();
@@ -540,35 +550,67 @@ async function buildTransportCertificateDoc(data: TransportAdvanceCertificateDat
 
   y += 1;
 
-  const hasPaidData = data.request.totalPaidAmount > 0;
-  if (hasPaidData) {
-    const finH = 14;
-    rr(doc, ml, y, cw, finH, 2, C.amberLight, C.amber as [number, number, number]);
-    doc.setFontSize(8.5);
-    doc.setTextColor(...C.amber);
-    doc.setFont('helvetica', 'bold');
-    doc.text('FINANCIAL SUMMARY', ml + 5, y + 5.5);
-    if (hasArabic) {
-      doc.setFontSize(9);
-      arText(ar('FINANCIAL SUMMARY'), pw - mr - 5, y + 5.5, { align: 'right' });
-    }
-    const col1 = ml + 5;
-    const col2 = ml + cw * 0.35;
-    const col3 = ml + cw * 0.7;
-    doc.setFontSize(7);
-    doc.setTextColor(...C.label);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TOTAL PAID', col1, y + 10);
-    doc.text('REMAINING', col2, y + 10);
-    doc.text('APPROVED', col3, y + 10);
+  const approvedAmt = data.request.approvedAmount || data.request.requestedAmount;
+  const paidAmt = data.request.totalPaidAmount || 0;
+  const remainAmt = data.request.remainingAmount || (approvedAmt - paidAmt);
+
+  const finH = 14;
+  rr(doc, ml, y, cw, finH, 2, C.amberLight, C.amber as [number, number, number]);
+  doc.setFontSize(8.5);
+  doc.setTextColor(...C.amber);
+  doc.setFont('helvetica', 'bold');
+  doc.text('FINANCIAL SUMMARY', ml + 5, y + 5.5);
+  if (hasArabic) {
     doc.setFontSize(9);
-    doc.setTextColor(...C.dark);
-    doc.setFont('helvetica', 'bold');
-    doc.text(fmtCurrency(data.request.totalPaidAmount), col1, y + 13.5);
-    doc.text(fmtCurrency(data.request.remainingAmount), col2, y + 13.5);
-    doc.text(fmtCurrency(data.request.approvedAmount || data.request.requestedAmount), col3, y + 13.5);
-    y += finH + 3;
+    arText(ar('FINANCIAL SUMMARY'), pw - mr - 5, y + 5.5, { align: 'right' });
   }
+  const col1 = ml + 5;
+  const col2 = ml + cw * 0.25;
+  const col3 = ml + cw * 0.5;
+  const col4 = ml + cw * 0.75;
+  doc.setFontSize(7);
+  doc.setTextColor(...C.label);
+  doc.setFont('helvetica', 'bold');
+  doc.text('REQUESTED', col1, y + 10);
+  doc.text('APPROVED', col2, y + 10);
+  doc.text('TOTAL PAID', col3, y + 10);
+  doc.text('REMAINING', col4, y + 10);
+  doc.setFontSize(9);
+  doc.setTextColor(...C.dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtCurrency(data.request.requestedAmount), col1, y + 13.5);
+  doc.text(fmtCurrency(approvedAmt), col2, y + 13.5);
+  const paidColor = paidAmt > 0 ? C.green : C.dark;
+  doc.setTextColor(paidColor[0], paidColor[1], paidColor[2]);
+  doc.text(fmtCurrency(paidAmt), col3, y + 13.5);
+  const remColor = remainAmt > 0 ? C.amber : C.green;
+  doc.setTextColor(remColor[0], remColor[1], remColor[2]);
+  doc.text(fmtCurrency(remainAmt), col4, y + 13.5);
+  y += finH + 3;
+
+  const reconH = 16;
+  const red: [number, number, number] = [180, 40, 40];
+  const redLight: [number, number, number] = [255, 240, 240];
+  rr(doc, ml, y, cw, reconH, 2, redLight, red);
+  doc.setFontSize(8);
+  doc.setTextColor(...red);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RECONCILIATION NOTICE', ml + 5, y + 5.5);
+  if (hasArabic) {
+    doc.setFontSize(9);
+    arText(ar('RECONCILIATION NOTICE'), pw - mr - 5, y + 5.5, { align: 'right' });
+  }
+  doc.setFontSize(7.5);
+  doc.setTextColor(...C.body);
+  doc.setFont('helvetica', 'normal');
+  const reconText = 'This transportation advance must be reconciled after the field activity is completed. The recipient must submit receipts and return any unused funds within the reconciliation period.';
+  const reconLines = doc.splitTextToSize(reconText, cw - 12);
+  doc.text(reconLines.slice(0, 2), ml + 5, y + 10);
+  if (hasArabic) {
+    doc.setFontSize(8);
+    arText('يجب تسوية هذه السلفة بعد اكتمال النشاط الميداني. يجب على المستلم تقديم الإيصالات وإعادة أي أموال غير مستخدمة.', ml + 5, y + 15);
+  }
+  y += reconH + 3;
 
   const qrSize = 24;
   const disclaimerH = qrSize + 6;
