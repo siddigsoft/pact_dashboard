@@ -64,6 +64,7 @@ import {
   Shield,
   Eye,
   Banknote,
+  Pencil,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -97,7 +98,7 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
 export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
-  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt, deleteRequest } = useDownPayment();
+  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt, deleteRequest, editRequest } = useDownPayment();
   const { toast } = useToast();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
@@ -134,6 +135,17 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [bulkPaymentIds, setBulkPaymentIds] = useState<Set<string>>(new Set());
+
+  const [editDialog, setEditDialog] = useState<{
+    open: boolean;
+    request: DownPaymentRequest | null;
+    requestedAmount: number;
+    approvedAmount: number;
+    justification: string;
+    siteName: string;
+    reason: string;
+    processing: boolean;
+  }>({ open: false, request: null, requestedAmount: 0, approvedAmount: 0, justification: '', siteName: '', reason: '', processing: false });
 
   const uniqueHubs = useMemo(() => [...new Set(requests.map(r => r.hubName).filter(Boolean))], [requests]);
   const uniqueStates = useMemo(() => [...new Set(requests.map(r => r.stateName).filter(Boolean))], [requests]);
@@ -582,6 +594,47 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
+  const openEditDialog = (req: DownPaymentRequest) => {
+    setEditDialog({
+      open: true,
+      request: req,
+      requestedAmount: req.requestedAmount,
+      approvedAmount: req.approvedAmount || req.requestedAmount,
+      justification: req.justification || '',
+      siteName: req.siteName || '',
+      reason: '',
+      processing: false,
+    });
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editDialog.request || !currentUser) return;
+    if (!editDialog.reason.trim()) {
+      toast({ title: 'Reason Required / السبب مطلوب', description: 'Please provide a reason for the edit. / يرجى تقديم سبب للتعديل.', variant: 'destructive' });
+      return;
+    }
+    setEditDialog(prev => ({ ...prev, processing: true }));
+    const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Unknown';
+    const success = await editRequest({
+      requestId: editDialog.request.id,
+      editedBy: currentUser.id,
+      editedByName: approverName,
+      editedByRole: currentUser.role || undefined,
+      reason: editDialog.reason,
+      changes: {
+        requestedAmount: editDialog.requestedAmount,
+        approvedAmount: editDialog.approvedAmount,
+        justification: editDialog.justification,
+        siteName: editDialog.siteName,
+      },
+    });
+    if (success) {
+      setEditDialog({ open: false, request: null, requestedAmount: 0, approvedAmount: 0, justification: '', siteName: '', reason: '', processing: false });
+    } else {
+      setEditDialog(prev => ({ ...prev, processing: false }));
+    }
+  };
+
   const loadFinanceRecipients = async (): Promise<Array<{ id: string; email: string; name: string; role: string }>> => {
     const { data: financeUsers } = await supabase
       .from('profiles')
@@ -1006,6 +1059,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         entry.action.includes('approved') ? 'bg-emerald-500' :
                         entry.action.includes('payment') ? 'bg-blue-500' :
                         entry.action.includes('receipt') ? 'bg-purple-500' :
+                        entry.action.includes('edited') ? 'bg-amber-500' :
                         'bg-muted-foreground/50'
                       }`} />
                       <div className="flex-1 min-w-0">
@@ -1023,6 +1077,18 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         </div>
                         {entry.notes && (
                           <div className="mt-0.5 italic text-muted-foreground">{entry.notes}</div>
+                        )}
+                        {entry.action === 'request_edited' && entry.previousValue && entry.newValue && (
+                          <div className="mt-1 space-y-0.5 text-[10px] bg-muted/50 p-1.5 rounded">
+                            {Object.keys(entry.newValue).map(key => (
+                              <div key={key} className="flex items-center gap-1 flex-wrap">
+                                <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}:</span>
+                                <span className="text-red-500 line-through">{typeof entry.previousValue[key] === 'number' ? entry.previousValue[key]?.toLocaleString() : entry.previousValue[key]}</span>
+                                <span className="text-muted-foreground">&rarr;</span>
+                                <span className="text-emerald-600 dark:text-emerald-400">{typeof entry.newValue[key] === 'number' ? entry.newValue[key]?.toLocaleString() : entry.newValue[key]}</span>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1163,6 +1229,18 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               >
                 <Download className="h-4 w-4 mr-1" />
                 PDF
+              </Button>
+            )}
+
+            {(userRole === 'admin' || isSuperAdmin) && request.status !== 'pending_supervisor' && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openEditDialog(request)}
+                data-testid={`button-edit-${request.id}`}
+              >
+                <Pencil className="h-4 w-4 mr-1" />
+                Edit
               </Button>
             )}
 
@@ -2407,6 +2485,105 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Deleting...</>
               ) : (
                 <><Trash2 className="h-4 w-4 mr-1" /> Delete Permanently</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editDialog.open} onOpenChange={(open) => { if (!open) setEditDialog(prev => ({ ...prev, open: false })); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Edit Request / تعديل الطلب
+            </DialogTitle>
+            <DialogDescription>
+              Modify request details. All changes are tracked with timestamps in the audit trail.
+              {' / '}
+              تعديل تفاصيل الطلب. يتم تتبع جميع التغييرات بالطوابع الزمنية في سجل التدقيق.
+            </DialogDescription>
+          </DialogHeader>
+          {editDialog.request && (
+            <div className="space-y-4">
+              <div className="bg-muted/50 p-3 rounded-md text-sm space-y-1">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-medium">{editDialog.request.siteName}</span>
+                  <Badge variant="secondary">{editDialog.request.status}</Badge>
+                </div>
+                <div className="text-muted-foreground text-xs">
+                  ID: {editDialog.request.id.substring(0, 8).toUpperCase()} | Requester: {editDialog.request.requestedByName || 'Unknown'}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs">Site Name / اسم الموقع</Label>
+                  <Input
+                    value={editDialog.siteName}
+                    onChange={e => setEditDialog(prev => ({ ...prev, siteName: e.target.value }))}
+                    data-testid="input-edit-site-name"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Requested Amount (SDG) / المبلغ المطلوب</Label>
+                    <Input
+                      type="number"
+                      value={editDialog.requestedAmount}
+                      onChange={e => setEditDialog(prev => ({ ...prev, requestedAmount: parseFloat(e.target.value) || 0 }))}
+                      data-testid="input-edit-requested-amount"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Approved Amount (SDG) / المبلغ الموافق عليه</Label>
+                    <Input
+                      type="number"
+                      value={editDialog.approvedAmount}
+                      onChange={e => setEditDialog(prev => ({ ...prev, approvedAmount: parseFloat(e.target.value) || 0 }))}
+                      data-testid="input-edit-approved-amount"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Justification / المبرر</Label>
+                  <Textarea
+                    value={editDialog.justification}
+                    onChange={e => setEditDialog(prev => ({ ...prev, justification: e.target.value }))}
+                    className="min-h-[60px]"
+                    data-testid="input-edit-justification"
+                  />
+                </div>
+                <Separator />
+                <div>
+                  <Label className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="h-3 w-3 inline mr-1" />
+                    Reason for Edit (Required) / سبب التعديل (مطلوب)
+                  </Label>
+                  <Textarea
+                    value={editDialog.reason}
+                    onChange={e => setEditDialog(prev => ({ ...prev, reason: e.target.value }))}
+                    placeholder="Explain why this edit is needed... / اشرح سبب الحاجة لهذا التعديل..."
+                    className="min-h-[60px]"
+                    data-testid="input-edit-reason"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialog(prev => ({ ...prev, open: false }))} disabled={editDialog.processing} data-testid="button-cancel-edit">
+              Cancel / إلغاء
+            </Button>
+            <Button
+              onClick={handleEditSubmit}
+              disabled={editDialog.processing || !editDialog.reason.trim()}
+              data-testid="button-confirm-edit"
+            >
+              {editDialog.processing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Saving...</>
+              ) : (
+                <><Pencil className="h-4 w-4 mr-1" /> Save Changes / حفظ التغييرات</>
               )}
             </Button>
           </DialogFooter>
