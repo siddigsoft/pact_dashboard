@@ -269,7 +269,34 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
       
       console.log('[DownPayment] Fetched requests:', data?.length || 0);
-      setRequests((data || []).map(transformFromDB));
+      const transformed = (data || []).map(transformFromDB);
+      
+      const needsEnrichment = transformed.filter(r => (!r.stateName || !r.localityName) && r.mmpSiteEntryId);
+      if (needsEnrichment.length > 0) {
+        const entryIds = [...new Set(needsEnrichment.map(r => r.mmpSiteEntryId).filter(Boolean))];
+        try {
+          const { data: entries } = await supabase
+            .from('mmp_site_entries')
+            .select('id, state, locality')
+            .in('id', entryIds as string[]);
+          
+          if (entries && entries.length > 0) {
+            const entryMap = new Map(entries.map(e => [e.id, e]));
+            transformed.forEach(r => {
+              if (r.mmpSiteEntryId && entryMap.has(r.mmpSiteEntryId)) {
+                const entry = entryMap.get(r.mmpSiteEntryId)!;
+                if (!r.stateName && entry.state) r.stateName = entry.state;
+                if (!r.localityName && entry.locality) r.localityName = entry.locality;
+              }
+            });
+            console.log('[DownPayment] Enriched state/locality for', entries.length, 'entries');
+          }
+        } catch (enrichErr) {
+          console.warn('[DownPayment] State/locality enrichment failed:', enrichErr);
+        }
+      }
+      
+      setRequests(transformed);
     } catch (error: any) {
       // Only log and show error for unexpected errors, not permission issues
       const isPermissionError = error.code === '42501' || 
@@ -392,6 +419,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         supporting_documents: request.supportingDocuments || [],
         status: 'pending_supervisor',
         supervisor_status: 'pending',
+        metadata: {
+          requested_by_name: currentUser?.fullName || currentUser?.email || '',
+          ...(request.stateName ? { state_name: request.stateName } : {}),
+          ...(request.localityName ? { locality_name: request.localityName } : {}),
+        },
       });
 
       if (error) throw error;

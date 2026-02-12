@@ -157,6 +157,7 @@ export interface CreateDownPaymentRequest {
   installmentPlan?: InstallmentPlan[];
   justification: string;
   supportingDocuments?: SupportingDocument[];
+  stateName?: string;
   localityName?: string;
   activityType?: string;
 }
