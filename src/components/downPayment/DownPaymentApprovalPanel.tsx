@@ -59,6 +59,7 @@ import {
   PenLine,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -138,7 +139,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const filteredRequests = useMemo(() => filterDownPayments(requests, filters), [requests, filters]);
 
   const approvedForPayment = useMemo(() =>
-    filteredRequests.filter(r => r.status === 'approved' || r.status === 'admin_approved'),
+    filteredRequests.filter(r => r.status === 'approved'),
     [filteredRequests]
   );
   const stats = useMemo(() => getDownPaymentStats(filteredRequests), [filteredRequests]);
@@ -534,6 +535,18 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         }))].join(', ');
         const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : '';
 
+        const pdfAttachments: Array<{ base64: string; filename: string }> = [];
+        for (const bReq of bulkRequests) {
+          try {
+            const sig = await getSignatureImageData(bReq);
+            const pdf = await generateTransportAdvanceCertificateBase64(buildCertData(bReq, sig));
+            if (pdf) pdfAttachments.push(pdf);
+          } catch { /* skip individual PDF errors */ }
+        }
+
+        const firstPdf = pdfAttachments.length > 0 ? pdfAttachments[0] : undefined;
+        const additionalPdfs = pdfAttachments.length > 1 ? pdfAttachments.slice(1) : undefined;
+
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients,
           approverName,
@@ -548,13 +561,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           'SDG',
           `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.`,
           '/down-payment-approval',
-          undefined
+          firstPdf,
+          additionalPdfs
         );
 
         if (result.success) {
           toast({
             title: "Bulk Payment Request Sent / تم إرسال طلبات الدفع الجماعية",
-            description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s). / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين).`,
+            description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with ${pdfAttachments.length} PDF(s) attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين) مع ${pdfAttachments.length} مرفق(ات).`,
           });
         } else {
           toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
@@ -1889,12 +1903,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       )}
 
       <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' }); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
           <DialogHeader>
             <DialogTitle>{paymentRequestDialog.isBulk ? 'Bulk Payment Request / طلب دفع جماعي' : 'Request Payment / طلب دفع'}</DialogTitle>
             <DialogDescription>
               {paymentRequestDialog.isBulk
-                ? `Send bulk payment request for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team. Reconciliation notice will be included.`
+                ? `Send bulk payment request for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team. PDF certificates will be attached.`
                 : 'Send payment request email to finance team with the approval certificate attached.'}
             </DialogDescription>
           </DialogHeader>
@@ -1905,36 +1919,103 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           ) : (
             <div className="space-y-4">
               {paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length > 0 && (
-                <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
-                  {paymentRequestDialog.bulkGroupBy && (
-                    <p><strong>{paymentRequestDialog.bulkGroupBy}:</strong> {paymentRequestDialog.bulkGroupValue}</p>
-                  )}
-                  <p><strong>Requests:</strong> {paymentRequestDialog.bulkRequests.length} approved advance(s)</p>
-                  <p><strong>Total Amount:</strong> SDG {paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</p>
-                  <ScrollArea className="max-h-[100px]">
-                    <div className="space-y-1 mt-1">
-                      {paymentRequestDialog.bulkRequests.map(r => (
-                        <div key={r.id} className="flex items-center justify-between text-xs">
-                          <span className="truncate max-w-[180px]">{r.siteName}</span>
-                          <span className="font-mono">SDG {(r.approvedAmount || r.requestedAmount).toLocaleString()}</span>
-                        </div>
-                      ))}
+                <div className="space-y-3">
+                  <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
+                    {paymentRequestDialog.bulkGroupBy && (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">{paymentRequestDialog.bulkGroupBy}</Badge>
+                        <span className="font-medium">{paymentRequestDialog.bulkGroupValue}</span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Total Requests</p>
+                        <p className="font-semibold">{paymentRequestDialog.bulkRequests.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Total Amount</p>
+                        <p className="font-semibold">SDG {paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</p>
+                      </div>
                     </div>
+                  </div>
+                  <ScrollArea className="h-[200px] border rounded-md">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs py-1.5">Requester</TableHead>
+                          <TableHead className="text-xs py-1.5">Site</TableHead>
+                          <TableHead className="text-xs py-1.5">Hub</TableHead>
+                          <TableHead className="text-xs py-1.5">State</TableHead>
+                          <TableHead className="text-xs py-1.5 text-right">Requested</TableHead>
+                          <TableHead className="text-xs py-1.5 text-right">Approved</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paymentRequestDialog.bulkRequests.map(r => {
+                          const requester = users?.find(u => u.id === r.requestedBy);
+                          const rName = (requester as any)?.fullName || (requester as any)?.full_name || requester?.email || 'Unknown';
+                          return (
+                            <TableRow key={r.id} className="text-xs">
+                              <TableCell className="py-1.5 max-w-[120px] truncate">{rName}</TableCell>
+                              <TableCell className="py-1.5 max-w-[100px] truncate">{r.siteName}</TableCell>
+                              <TableCell className="py-1.5 max-w-[80px] truncate">{r.hubName || '-'}</TableCell>
+                              <TableCell className="py-1.5 max-w-[80px] truncate">{r.stateName || '-'}</TableCell>
+                              <TableCell className="py-1.5 text-right font-mono">SDG {r.requestedAmount.toLocaleString()}</TableCell>
+                              <TableCell className="py-1.5 text-right font-mono font-semibold">SDG {(r.approvedAmount || r.requestedAmount).toLocaleString()}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
                   </ScrollArea>
-                  <div className="mt-2 p-2 bg-destructive/10 rounded text-xs text-destructive">
-                    Reconciliation notice will be included in the email.
+                  <div className="p-2 bg-destructive/10 rounded text-xs text-destructive flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium">Reconciliation Required / التسوية مطلوبة</p>
+                      <p>Recipients must submit receipts and return unused funds within 5 working days.</p>
+                      <p>يجب على المستلمين تقديم الإيصالات وإرجاع الأموال غير المستخدمة خلال 5 أيام عمل.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <FileText className="h-3.5 w-3.5" />
+                    <span>Individual PDF approval certificates will be generated and attached to the email.</span>
                   </div>
                 </div>
               )}
-              {!paymentRequestDialog.isBulk && paymentRequestDialog.request && (
-                <div className="bg-muted/50 p-3 rounded-md text-sm space-y-1">
-                  <p><strong>Site:</strong> {paymentRequestDialog.request.siteName}</p>
-                  <p><strong>Amount:</strong> SDG {(paymentRequestDialog.request.approvedAmount || paymentRequestDialog.request.requestedAmount).toLocaleString()}</p>
-                  <div className="mt-1 p-2 bg-destructive/10 rounded text-xs text-destructive">
-                    Reconciliation notice will be included in the email.
+              {!paymentRequestDialog.isBulk && paymentRequestDialog.request && (() => {
+                const req = paymentRequestDialog.request!;
+                const requester = users?.find(u => u.id === req.requestedBy);
+                const rName = (requester as any)?.fullName || (requester as any)?.full_name || requester?.email || 'Unknown';
+                return (
+                  <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                      <div><p className="text-xs text-muted-foreground">Requester / مقدم الطلب</p><p className="font-medium text-sm">{rName}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Role / الدور</p><p className="font-medium text-sm">{req.requesterRole || 'N/A'}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Site / الموقع</p><p className="font-medium text-sm">{req.siteName}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Hub / المركز</p><p className="font-medium text-sm">{req.hubName || 'N/A'}</p></div>
+                      <div><p className="text-xs text-muted-foreground">State / الولاية</p><p className="font-medium text-sm">{req.stateName || 'N/A'}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Locality / المحلية</p><p className="font-medium text-sm">{req.localityName || 'N/A'}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Requested Amount / المبلغ المطلوب</p><p className="font-medium text-sm">SDG {req.requestedAmount.toLocaleString()}</p></div>
+                      <div><p className="text-xs text-muted-foreground">Approved Amount / المبلغ المعتمد</p><p className="font-semibold text-sm text-green-600">SDG {(req.approvedAmount || req.requestedAmount).toLocaleString()}</p></div>
+                      {req.approvalPercentage && (
+                        <div><p className="text-xs text-muted-foreground">Approval % / نسبة الموافقة</p><p className="font-medium text-sm">{req.approvalPercentage}%</p></div>
+                      )}
+                      <div><p className="text-xs text-muted-foreground">Project / المشروع</p><p className="font-medium text-sm">{req.projectName || 'N/A'}</p></div>
+                    </div>
+                    <div className="mt-2 p-2 bg-destructive/10 rounded text-xs text-destructive flex items-start gap-2">
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium">Reconciliation Required / التسوية مطلوبة</p>
+                        <p>Recipient must submit receipts and return unused funds.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                      <FileText className="h-3.5 w-3.5" />
+                      <span>PDF approval certificate will be attached to the email.</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">Recipients</Label>
