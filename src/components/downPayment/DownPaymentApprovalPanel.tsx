@@ -75,7 +75,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
 import { supabase } from '@/integrations/supabase/client';
-import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64 } from '@/utils/transportAdvanceCertificatePdf';
+import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdf } from '@/utils/transportAdvanceCertificatePdf';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Wallet } from 'lucide-react';
@@ -558,6 +558,28 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       title: 'Certificate Downloaded / تم تحميل الشهادة',
       description: 'The approval certificate PDF has been saved. / تم حفظ شهادة الموافقة.',
     });
+  };
+
+  const handleDownloadBulkPdf = async (reqs: DownPaymentRequest[], groupLabel?: string) => {
+    try {
+      const certDataList = await Promise.all(
+        reqs.map(async (req) => {
+          const sig = await getSignatureImageData(req);
+          return buildCertData(req, sig);
+        })
+      );
+      await generateBulkPaymentPdf(certDataList, groupLabel);
+      toast({
+        title: 'Bulk PDF Downloaded / تم تحميل ملف PDF الجماعي',
+        description: `${reqs.length} request(s) exported to a single PDF. / تم تصدير ${reqs.length} طلب(ات) في ملف PDF واحد.`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Export Error / خطأ في التصدير',
+        description: 'Failed to generate bulk PDF. / فشل في إنشاء ملف PDF الجماعي.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const loadFinanceRecipients = async (): Promise<Array<{ id: string; email: string; name: string; role: string }>> => {
@@ -1607,7 +1629,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <Button
                     size="sm"
                     variant="outline"
@@ -1616,6 +1638,15 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   >
                     <Mail className="h-3.5 w-3.5 mr-1" />
                     Request All ({approvedForPayment.length})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDownloadBulkPdf(approvedForPayment, 'All Approved')}
+                    data-testid="button-bulk-pdf-all"
+                  >
+                    <FileText className="h-3.5 w-3.5 mr-1" />
+                    Bulk PDF ({approvedForPayment.length})
                   </Button>
                   <span className="text-xs text-muted-foreground">
                     Total: SDG {approvedForPayment.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}
