@@ -153,7 +153,8 @@ const OperationalCostForm = ({ hubs = [], projects = [], onSuccess }: Operationa
         supporting_documents: supportingDocuments,
         status: 'pending',
         tier1_status: 'pending',
-        tier2_status: 'pending'
+        tier2_status: 'pending',
+        ...(((currentUser.role || '').toLowerCase().includes('coordinator')) ? { tier3_status: 'pending' } : {})
       }));
 
       const { error } = await supabase

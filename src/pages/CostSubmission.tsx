@@ -86,6 +86,10 @@ interface OperationalCostSubmission {
   tier2_approved_by: string | null;
   tier2_approved_at: string | null;
   tier2_notes: string | null;
+  tier3_status: string | null;
+  tier3_approved_by: string | null;
+  tier3_approved_at: string | null;
+  tier3_notes: string | null;
   rejection_reason: string | null;
   paid_at: string | null;
   paid_by: string | null;
@@ -153,7 +157,7 @@ const CostSubmission = () => {
   const [approvalDialog, setApprovalDialog] = useState<{
     open: boolean;
     action: 'approve' | 'reject';
-    tier: 1 | 2;
+    tier: 1 | 2 | 3;
     submission: OperationalCostSubmission | null;
   }>({ open: false, action: 'approve', tier: 1, submission: null });
   const [approvalNotes, setApprovalNotes] = useState('');
@@ -162,7 +166,7 @@ const CostSubmission = () => {
   const [signatureModal, setSignatureModal] = useState<{
     open: boolean;
     submission: OperationalCostSubmission | null;
-    tier: 1 | 2;
+    tier: 1 | 2 | 3;
     notes: string;
   }>({ open: false, submission: null, tier: 2, notes: '' });
 
@@ -369,47 +373,88 @@ const CostSubmission = () => {
     return filtered;
   }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
 
+  const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
+    const role = (oc.submitter_role || '').toLowerCase();
+    return role.includes('coordinator');
+  };
+
+  const isSupervisorSubmission = (oc: OperationalCostSubmission): boolean => {
+    const role = (oc.submitter_role || '').toLowerCase();
+    return role.includes('supervisor') || role.includes('hubsupervisor');
+  };
+
+  const hasThreeTiers = (oc: OperationalCostSubmission): boolean => {
+    return isCoordinatorSubmission(oc) || oc.tier3_status !== null;
+  };
+
   const getOperationalDerivedStatus = (oc: OperationalCostSubmission): string => {
     if (oc.status === 'reconciled') return 'reconciled';
     if (oc.status === 'paid') return 'paid';
-    if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.status === 'rejected') return 'rejected';
-    if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
-    if (oc.tier1_status === 'approved' && oc.tier2_status === 'pending') return 'under_review';
+    if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.status === 'rejected') return 'rejected';
+    if (hasThreeTiers(oc)) {
+      if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved') return 'approved';
+      if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending')) return 'under_review';
+    } else {
+      if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
+      if (oc.tier1_status === 'approved' && oc.tier2_status === 'pending') return 'under_review';
+    }
     if (oc.status === 'under_review') return 'under_review';
     return 'pending';
   };
 
   const canTier1Approve = (oc: OperationalCostSubmission): boolean => {
     if (oc.tier1_status !== 'pending') return false;
-    if (isSuperAdmin) return true;
+    if (isSuperAdmin || isAdmin) return true;
     if (oc.submitted_by === currentUser?.id) return false;
-    return isSupervisor || isFOM || isAdmin;
+    if (isSupervisorSubmission(oc)) {
+      return isFOM || isCountryDirector;
+    }
+    if (isCoordinatorSubmission(oc)) {
+      return isSupervisor;
+    }
+    return isFOM || isCountryDirector;
   };
 
   const canTier2Approve = (oc: OperationalCostSubmission): boolean => {
     if (oc.tier1_status !== 'approved' || oc.tier2_status !== 'pending') return false;
+    if (isSuperAdmin || isAdmin) return true;
+    if (oc.submitted_by === currentUser?.id) return false;
+    if (isCoordinatorSubmission(oc)) {
+      return isFOM || isCountryDirector;
+    }
+    return false;
+  };
+
+  const canTier3Approve = (oc: OperationalCostSubmission): boolean => {
+    if (!hasThreeTiers(oc)) return false;
+    if (oc.tier2_status !== 'approved' || oc.tier3_status !== 'pending') return false;
     if (isSuperAdmin) return true;
     return isAdmin;
   };
 
-  const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2) => {
+  const openApprovalDialog = (oc: OperationalCostSubmission, action: 'approve' | 'reject', tier: 1 | 2 | 3) => {
     setApprovalDialog({ open: true, action, tier, submission: oc });
     setApprovalNotes('');
+  };
+
+  const isFinalTier = (oc: OperationalCostSubmission, tier: 1 | 2 | 3): boolean => {
+    if (hasThreeTiers(oc)) return tier === 3;
+    return tier === 2;
   };
 
   const handleApprovalAction = async () => {
     const { action, tier, submission } = approvalDialog;
     if (!submission || !currentUser?.id) return;
     
-    if (tier === 2 && action === 'approve') {
+    if (isFinalTier(submission, tier) && action === 'approve') {
       setApprovalProcessing(true);
       setSignatureModal({
         open: true,
         submission,
-        tier: 2,
+        tier,
         notes: approvalNotes,
       });
-      setApprovalDialog({ open: false, action: 'approve', tier: 2, submission: null });
+      setApprovalDialog({ open: false, action: 'approve', tier, submission: null });
       return;
     }
     
@@ -418,7 +463,7 @@ const CostSubmission = () => {
 
   const processApproval = async (
     action: 'approve' | 'reject',
-    tier: 1 | 2,
+    tier: 1 | 2 | 3,
     submission: OperationalCostSubmission,
     notes: string,
     signatureData?: { signatureId: string; signatureHash: string; method: SignatureMethod; signedAt: string }
@@ -428,6 +473,7 @@ const CostSubmission = () => {
     setApprovalProcessing(true);
     try {
       const updates: Record<string, any> = {};
+      const isFinal = isFinalTier(submission, tier);
       
       if (tier === 1) {
         updates.tier1_status = action === 'approve' ? 'approved' : 'rejected';
@@ -440,19 +486,37 @@ const CostSubmission = () => {
           updates.status = 'rejected';
           updates.rejection_reason = notes || 'Rejected at Tier 1 / تم الرفض في المرحلة الأولى';
         }
-      } else {
+      } else if (tier === 2) {
         updates.tier2_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier2_approved_by = currentUser.id;
         updates.tier2_approved_at = new Date().toISOString();
         updates.tier2_notes = notes || null;
         if (action === 'approve') {
-          updates.status = 'approved';
-          if (signatureData) {
-            updates.tier2_notes = `${notes || ''}\n[Signed: ${signatureData.method.toUpperCase()} | Hash: ${signatureData.signatureHash.substring(0, 12)}... | ID: ${signatureData.signatureId} | ${signatureData.signedAt}]`;
+          if (isFinal) {
+            updates.status = 'approved';
+            if (signatureData) {
+              updates.tier2_notes = `${notes || ''}\n[Signed: ${signatureData.method.toUpperCase()} | Hash: ${signatureData.signatureHash.substring(0, 12)}... | ID: ${signatureData.signatureId} | ${signatureData.signedAt}]`;
+            }
+          } else {
+            updates.status = 'under_review';
           }
         } else {
           updates.status = 'rejected';
           updates.rejection_reason = notes || 'Rejected at Tier 2 / تم الرفض في المرحلة الثانية';
+        }
+      } else if (tier === 3) {
+        updates.tier3_status = action === 'approve' ? 'approved' : 'rejected';
+        updates.tier3_approved_by = currentUser.id;
+        updates.tier3_approved_at = new Date().toISOString();
+        updates.tier3_notes = notes || null;
+        if (action === 'approve') {
+          updates.status = 'approved';
+          if (signatureData) {
+            updates.tier3_notes = `${notes || ''}\n[Signed: ${signatureData.method.toUpperCase()} | Hash: ${signatureData.signatureHash.substring(0, 12)}... | ID: ${signatureData.signatureId} | ${signatureData.signedAt}]`;
+          }
+        } else {
+          updates.status = 'rejected';
+          updates.rejection_reason = notes || 'Rejected at Tier 3 / تم الرفض في المرحلة الثالثة';
         }
       }
 
@@ -495,32 +559,35 @@ const CostSubmission = () => {
         });
         fetchOperationalCosts();
       } else {
-        const tierAr = tier === 1 ? 'الأولى' : 'الثانية';
+        const tierArMap: Record<number, string> = { 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' };
+        const tierAr = tierArMap[tier] || '';
         const submitterName = users.find(u => u.id === submission.submitted_by)?.name || 'the submitter';
         const refNum = submission.reference_number || submission.id.substring(0, 8).toUpperCase();
         const amountStr = `${submission.currency} ${(submission.amount_cents / 100).toLocaleString()}`;
+        const isFinal = isFinalTier(submission, tier);
 
         if (action === 'reject') {
           toast({
             title: `Rejected (Tier ${tier}) / تم الرفض (المرحلة ${tierAr})`,
             description: tier === 1
               ? `Submission "${refNum}" (${amountStr}) by ${submitterName} has been rejected and returned to the submitter. Reason: "${notes}". They can edit and resubmit. / تم رفض الطلب "${refNum}" (${amountStr}) من ${submitterName} وإعادته إلى مقدم الطلب. السبب: "${notes}". يمكنه التعديل وإعادة التقديم.`
-              : `Submission "${refNum}" (${amountStr}) by ${submitterName} has been rejected at final review. Reason: "${notes}". The submitter and Tier 1 approver have been notified. / تم رفض الطلب "${refNum}" (${amountStr}) من ${submitterName} في المراجعة النهائية. السبب: "${notes}". تم إخطار مقدم الطلب والمراجع في المرحلة الأولى.`,
+              : `Submission "${refNum}" (${amountStr}) by ${submitterName} has been rejected at Tier ${tier} review. Reason: "${notes}". / تم رفض الطلب "${refNum}" (${amountStr}) من ${submitterName} في المرحلة ${tierAr}. السبب: "${notes}".`,
             variant: "destructive",
             duration: 10000,
           });
-        } else if (tier === 2 && signatureData) {
+        } else if (isFinal && signatureData) {
           toast({
             title: "Approved & Signed / تمت الموافقة والتوقيع",
             description: `Final approval completed for "${refNum}" (${amountStr}) by ${submitterName} with digital signature (${signatureData.method}). Cleared for payment. / تمت الموافقة النهائية على "${refNum}" (${amountStr}) من ${submitterName} بالتوقيع الرقمي. تمت الموافقة للدفع.`,
             duration: 8000,
           });
         } else {
+          const nextTier = tier + 1;
           toast({
             title: `Approved (Tier ${tier}) / تمت الموافقة (المرحلة ${tierAr})`,
-            description: tier === 1
-              ? `Submission "${refNum}" (${amountStr}) by ${submitterName} approved. Moves to Tier 2 (Admin) for final review. / تمت الموافقة على طلب "${refNum}" (${amountStr}) من ${submitterName}. ينتقل إلى المرحلة الثانية للمراجعة النهائية.`
-              : `Submission "${refNum}" (${amountStr}) by ${submitterName} fully approved and cleared for payment. / تمت الموافقة الكاملة على طلب "${refNum}" (${amountStr}) من ${submitterName} وتمت الموافقة للدفع.`,
+            description: isFinal
+              ? `Submission "${refNum}" (${amountStr}) by ${submitterName} fully approved and cleared for payment. / تمت الموافقة الكاملة على طلب "${refNum}" (${amountStr}) من ${submitterName} وتمت الموافقة للدفع.`
+              : `Submission "${refNum}" (${amountStr}) by ${submitterName} approved. Moves to Tier ${nextTier} for next review. / تمت الموافقة على طلب "${refNum}" (${amountStr}) من ${submitterName}. ينتقل إلى المرحلة ${tierArMap[nextTier] || nextTier} للمراجعة.`,
             duration: 8000,
           });
         }
@@ -547,9 +614,9 @@ const CostSubmission = () => {
     method: SignatureMethod;
     signedAt: string;
   }) => {
-    const { submission, notes } = signatureModal;
+    const { submission, notes, tier } = signatureModal;
     if (!submission) return;
-    processApproval('approve', 2, submission, notes, signatureData);
+    processApproval('approve', tier, submission, notes, signatureData);
   };
 
   const handleDownloadCertificate = async (oc: OperationalCostSubmission) => {
@@ -1067,47 +1134,62 @@ const CostSubmission = () => {
             </div>
 
             <div>
-              <h4 className="font-semibold text-sm mb-3 text-blue-800 dark:text-blue-200">Two-Tier Approval Process</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <h4 className="font-semibold text-sm mb-3 text-blue-800 dark:text-blue-200">Multi-Tier Approval Process</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
                 <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">1</div>
                     <h4 className="font-semibold text-sm">Submit Request</h4>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Choose Advance (get funds first) or Reimbursement (already paid). Select expense category, enter amount, attach documents, and submit.
+                    Choose Advance or Reimbursement. Select expense category, enter amount, attach documents, and submit.
                   </p>
                 </div>
                 
                 <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-7 h-7 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs font-bold">2</div>
-                    <h4 className="font-semibold text-sm">Tier 1: Supervisor Review</h4>
+                    <h4 className="font-semibold text-sm">Tier 1 Review</h4>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Hub Supervisor or FOM reviews the submission, verifies details and documents. They can approve, reject, or request changes.
+                    <strong>Coordinator submits:</strong> Supervisor reviews.<br/>
+                    <strong>Supervisor submits:</strong> FOM/Country Director reviews.
                   </p>
                   <p dir="rtl" className="text-xs text-muted-foreground mt-1 border-t pt-1">
-                    المرحلة الأولى: مراجعة المشرف - يقوم مشرف المركز أو مدير العمليات الميدانية بمراجعة الطلب والتحقق من التفاصيل والمستندات.
+                    المرحلة الأولى: المنسق → المشرف | المشرف → مدير العمليات الميدانية
                   </p>
                 </div>
                 
                 <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">3</div>
-                    <h4 className="font-semibold text-sm">Tier 2: Admin Approval</h4>
+                    <div className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold">3</div>
+                    <h4 className="font-semibold text-sm">Tier 2 Review</h4>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Admin or Super Admin performs final approval and authorizes payment. Both tiers must approve before payment proceeds.
+                    <strong>Coordinator:</strong> FOM/Country Director reviews.<br/>
+                    <strong>Supervisor:</strong> Admin final approval (with signature).
                   </p>
                   <p dir="rtl" className="text-xs text-muted-foreground mt-1 border-t pt-1">
-                    المرحلة الثانية: موافقة المسؤول - يقوم المسؤول أو المسؤول الأعلى بالموافقة النهائية وتفويض الدفع. يجب موافقة المرحلتين قبل الدفع.
+                    المرحلة الثانية: المنسق → مدير العمليات | المشرف → المسؤول (موافقة نهائية مع التوقيع)
+                  </p>
+                </div>
+
+                <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">4</div>
+                    <h4 className="font-semibold text-sm">Tier 3 (Coordinators Only)</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Admin/Super Admin gives final approval with digital signature. Only applies to Coordinator submissions (3-tier workflow).
+                  </p>
+                  <p dir="rtl" className="text-xs text-muted-foreground mt-1 border-t pt-1">
+                    المرحلة الثالثة (للمنسقين فقط): المسؤول يوافق نهائياً بالتوقيع الرقمي.
                   </p>
                 </div>
                 
                 <div className="flex flex-col p-3 rounded-lg bg-white dark:bg-slate-800 border">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">4</div>
+                    <div className="w-7 h-7 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">5</div>
                     <h4 className="font-semibold text-sm">Reconciliation</h4>
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -1123,7 +1205,7 @@ const CostSubmission = () => {
                 هذه الصفحة مخصصة لتقديم <strong>التكاليف التشغيلية الميدانية</strong> مثل التصاريح، التدريب، الاتصالات، المعدات، والاجتماعات. هذه الصفحة <strong>ليست</strong> لتكاليف النقل الخاصة بزيارات المواقع أو رسوم العدادين.
               </p>
               <p className="text-xs text-muted-foreground mb-1"><strong>من يمكنه الاستخدام:</strong> مدير العمليات الميدانية، المنسق، المدير القطري، المشرف، المسؤول</p>
-              <p className="text-xs text-muted-foreground mb-1"><strong>عملية الموافقة:</strong> المرحلة الأولى (المشرف) ← المرحلة الثانية (المسؤول) ← الدفع</p>
+              <p className="text-xs text-muted-foreground mb-1"><strong>عملية الموافقة:</strong> المنسق: المشرف ← مدير العمليات ← المسؤول | المشرف: مدير العمليات ← المسؤول</p>
               <p className="text-xs text-muted-foreground"><strong>نوع الطلب:</strong> سلفة (استلام الأموال مقدماً ثم التسوية) أو استرداد (بعد الدفع من أموالك)</p>
             </div>
           </CardContent>
@@ -1985,43 +2067,42 @@ const CostSubmission = () => {
 
                           <div className="flex items-center gap-2" data-testid={`status-progress-${oc.id}`}>
                             <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                              <div
-                                data-testid={`status-tier1-${oc.id}`}
-                                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
-                                oc.tier1_status === 'approved'
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-                                  : oc.tier1_status === 'rejected'
-                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
-                                    : 'bg-muted text-muted-foreground'
-                              }`}>
-                                {oc.tier1_status === 'approved' ? (
-                                  <CheckCircle className="h-3 w-3" />
-                                ) : oc.tier1_status === 'rejected' ? (
-                                  <XCircle className="h-3 w-3" />
-                                ) : (
-                                  <Clock className="h-3 w-3" />
-                                )}
-                                <span>T1</span>
-                              </div>
-                              <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                              <div
-                                data-testid={`status-tier2-${oc.id}`}
-                                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
-                                oc.tier2_status === 'approved'
-                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
-                                  : oc.tier2_status === 'rejected'
-                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
-                                    : 'bg-muted text-muted-foreground'
-                              }`}>
-                                {oc.tier2_status === 'approved' ? (
-                                  <CheckCircle className="h-3 w-3" />
-                                ) : oc.tier2_status === 'rejected' ? (
-                                  <XCircle className="h-3 w-3" />
-                                ) : (
-                                  <Clock className="h-3 w-3" />
-                                )}
-                                <span>T2</span>
-                              </div>
+                              {(() => {
+                                const tierStatusBadge = (status: string | null, label: string, testId: string) => (
+                                  <div
+                                    data-testid={testId}
+                                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
+                                    status === 'approved'
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+                                      : status === 'rejected'
+                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'
+                                        : 'bg-muted text-muted-foreground'
+                                  }`}>
+                                    {status === 'approved' ? (
+                                      <CheckCircle className="h-3 w-3" />
+                                    ) : status === 'rejected' ? (
+                                      <XCircle className="h-3 w-3" />
+                                    ) : (
+                                      <Clock className="h-3 w-3" />
+                                    )}
+                                    <span>{label}</span>
+                                  </div>
+                                );
+                                const threeTier = hasThreeTiers(oc);
+                                return (
+                                  <>
+                                    {tierStatusBadge(oc.tier1_status, threeTier ? 'T1 Sup' : 'T1', `status-tier1-${oc.id}`)}
+                                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                    {tierStatusBadge(oc.tier2_status, threeTier ? 'T2 FOM' : 'T2', `status-tier2-${oc.id}`)}
+                                    {threeTier && (
+                                      <>
+                                        <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                        {tierStatusBadge(oc.tier3_status, 'T3 Admin', `status-tier3-${oc.id}`)}
+                                      </>
+                                    )}
+                                  </>
+                                );
+                              })()}
                               {hasSig && (
                                 <>
                                   <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -2162,7 +2243,7 @@ const CostSubmission = () => {
                                   data-testid={`button-tier2-approve-${oc.id}`}
                                 >
                                   <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-                                  Final Approve
+                                  {hasThreeTiers(oc) ? 'Approve T2' : 'Final Approve'}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -2175,7 +2256,29 @@ const CostSubmission = () => {
                                 </Button>
                               </>
                             )}
-                            {oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && (
+                            {canTier3Approve(oc) && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => openApprovalDialog(oc, 'approve', 3)}
+                                  data-testid={`button-tier3-approve-${oc.id}`}
+                                >
+                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" />
+                                  Final Approve T3
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => openApprovalDialog(oc, 'reject', 3)}
+                                  data-testid={`button-tier3-reject-${oc.id}`}
+                                >
+                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" />
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                            {getOperationalDerivedStatus(oc) === 'approved' && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -2317,19 +2420,21 @@ const CostSubmission = () => {
                 : `Tier ${approvalDialog.tier} Rejection`}
               <span dir="rtl" className="block text-sm font-normal text-muted-foreground mt-0.5">
                 {approvalDialog.action === 'approve'
-                  ? `الموافقة - المرحلة ${approvalDialog.tier === 1 ? 'الأولى' : 'الثانية'}`
-                  : `الرفض - المرحلة ${approvalDialog.tier === 1 ? 'الأولى' : 'الثانية'}`}
+                  ? `الموافقة - المرحلة ${{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier]}`
+                  : `الرفض - المرحلة ${{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier]}`}
               </span>
             </DialogTitle>
             <DialogDescription>
               {approvalDialog.action === 'approve'
-                ? `You are about to approve this submission${approvalDialog.tier === 2 ? ' (final approval - clears for payment)' : ' (moves to Tier 2 Admin review)'}.`
+                ? approvalDialog.submission && isFinalTier(approvalDialog.submission, approvalDialog.tier)
+                  ? 'You are about to give final approval (clears for payment). Digital signature required.'
+                  : `You are about to approve this submission (moves to Tier ${approvalDialog.tier + 1} review).`
                 : 'You are about to reject this submission. Please provide a reason.'}
               <span dir="rtl" className="block text-xs mt-1">
                 {approvalDialog.action === 'approve'
-                  ? approvalDialog.tier === 2
-                    ? 'أنت على وشك الموافقة على هذا الطلب (الموافقة النهائية - تمهيد للدفع).'
-                    : 'أنت على وشك الموافقة على هذا الطلب (ينتقل إلى المرحلة الثانية لمراجعة المسؤول).'
+                  ? approvalDialog.submission && isFinalTier(approvalDialog.submission, approvalDialog.tier)
+                    ? 'أنت على وشك الموافقة النهائية على هذا الطلب (تمهيد للدفع). التوقيع الرقمي مطلوب.'
+                    : `أنت على وشك الموافقة على هذا الطلب (ينتقل إلى المرحلة ${{ 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier + 1] || ''} للمراجعة).`
                   : 'أنت على وشك رفض هذا الطلب. يرجى تقديم سبب الرفض.'}
               </span>
             </DialogDescription>
@@ -2464,7 +2569,7 @@ const CostSubmission = () => {
                             {approvalDialog.action === 'approve' ? 'في انتظار موافقتك' : 'في انتظار قرارك'}
                           </span>
                         </span>
-                        <span className="text-muted-foreground ml-1">(Tier {approvalDialog.tier} / المرحلة {approvalDialog.tier === 1 ? 'الأولى' : 'الثانية'})</span>
+                        <span className="text-muted-foreground ml-1">(Tier {approvalDialog.tier} / المرحلة {{ 1: 'الأولى', 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier]})</span>
                         <p className="text-muted-foreground">{format(new Date(), 'MMM d, yyyy h:mm a')}</p>
                       </div>
                     </div>
@@ -2477,22 +2582,28 @@ const CostSubmission = () => {
                     <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">Next Step After This Action <span dir="rtl" className="font-normal text-[10px]">/ الخطوة التالية</span></span>
                   </div>
                   <p className="text-xs text-blue-700 dark:text-blue-300">
-                    {approvalDialog.action === 'approve'
-                      ? approvalDialog.tier === 1
-                        ? 'This submission will move to Tier 2 (Admin/Super Admin) for final approval before payment can be processed.'
-                        : 'This submission will be marked as fully approved and cleared for payment processing. Your digital signature will be required to finalize.'
-                      : approvalDialog.tier === 1
-                        ? 'This submission will be rejected and sent back to the submitter. They will see your rejection reason and can resubmit if needed.'
-                        : 'This submission will be rejected at the final stage. The submitter and Tier 1 approver will be notified of the rejection.'}
+                    {(() => {
+                      const sub = approvalDialog.submission;
+                      const isFinal = sub ? isFinalTier(sub, approvalDialog.tier) : false;
+                      if (approvalDialog.action === 'approve') {
+                        if (isFinal) return 'This submission will be marked as fully approved and cleared for payment processing. Your digital signature will be required to finalize.';
+                        return `This submission will move to Tier ${approvalDialog.tier + 1} for the next level of review.`;
+                      }
+                      if (approvalDialog.tier === 1) return 'This submission will be rejected and sent back to the submitter. They will see your rejection reason and can resubmit if needed.';
+                      return 'This submission will be rejected. The submitter and previous approvers will be notified.';
+                    })()}
                   </p>
                   <p dir="rtl" className="text-xs text-blue-700 dark:text-blue-300 mt-1.5 border-t border-blue-200 dark:border-blue-800 pt-1.5">
-                    {approvalDialog.action === 'approve'
-                      ? approvalDialog.tier === 1
-                        ? 'سينتقل هذا الطلب إلى المرحلة الثانية (المسؤول / المسؤول الأعلى) للموافقة النهائية قبل معالجة الدفع.'
-                        : 'سيتم اعتماد هذا الطلب بشكل نهائي وتمهيده للدفع. سيتطلب توقيعك الرقمي لإتمام العملية.'
-                      : approvalDialog.tier === 1
-                        ? 'سيتم رفض هذا الطلب وإعادته إلى مقدم الطلب. سيرى سبب الرفض ويمكنه إعادة التقديم.'
-                        : 'سيتم رفض هذا الطلب في المرحلة النهائية. سيتم إخطار مقدم الطلب والمراجع في المرحلة الأولى.'}
+                    {(() => {
+                      const sub = approvalDialog.submission;
+                      const isFinal = sub ? isFinalTier(sub, approvalDialog.tier) : false;
+                      if (approvalDialog.action === 'approve') {
+                        if (isFinal) return 'سيتم اعتماد هذا الطلب بشكل نهائي وتمهيده للدفع. سيتطلب توقيعك الرقمي لإتمام العملية.';
+                        return `سينتقل هذا الطلب إلى المرحلة التالية للمراجعة.`;
+                      }
+                      if (approvalDialog.tier === 1) return 'سيتم رفض هذا الطلب وإعادته إلى مقدم الطلب. سيرى سبب الرفض ويمكنه إعادة التقديم.';
+                      return 'سيتم رفض هذا الطلب. سيتم إخطار مقدم الطلب والمراجعين السابقين.';
+                    })()}
                   </p>
                 </div>
 
@@ -2536,7 +2647,7 @@ const CostSubmission = () => {
               data-testid="button-approval-confirm"
             >
               {approvalProcessing ? 'Processing... / جارٍ المعالجة...' : approvalDialog.action === 'approve' 
-                ? (approvalDialog.tier === 2 ? 'Sign & Approve / توقيع وموافقة' : 'Confirm Approval / تأكيد الموافقة') 
+                ? (approvalDialog.submission && isFinalTier(approvalDialog.submission, approvalDialog.tier) ? 'Sign & Approve / توقيع وموافقة' : 'Confirm Approval / تأكيد الموافقة') 
                 : 'Confirm Rejection / تأكيد الرفض'}
             </Button>
           </DialogFooter>
@@ -2823,14 +2934,14 @@ const CostSubmission = () => {
               setApprovalProcessing(false);
               if (sub) {
                 setApprovalNotes(notes);
-                setApprovalDialog({ open: true, action: 'approve', tier: 2, submission: sub });
+                setApprovalDialog({ open: true, action: 'approve', tier: signatureModal.tier, submission: sub });
               }
             }
           }}
           transaction={{
             id: signatureModal.submission.id,
             type: 'cost_submission',
-            title: `Tier 2 Final Approval / الموافقة النهائية المرحلة ٢ - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
+            title: `Tier ${signatureModal.tier} Final Approval / الموافقة النهائية المرحلة ${signatureModal.tier} - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
             description: signatureModal.submission.description || undefined,
             amount: signatureModal.submission.amount_cents / 100,
             currency: signatureModal.submission.currency || 'SDG',
