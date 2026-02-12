@@ -1494,9 +1494,10 @@ PACT Command Center | مركز قيادة باكت`;
   },
 
   // ============================================
-  // TEMPLATE 16C: Payment Request to Finance Team
+  // TEMPLATE 16C: Payment Request to Finance Team (with recipient selection)
   // ============================================
-  async sendPaymentRequestToFinance(
+  async sendPaymentRequestToFinanceWithRecipients(
+    recipients: Array<{ email: string; name: string }>,
     approverName: string,
     approverEmail: string,
     submitterName: string,
@@ -1511,27 +1512,12 @@ PACT Command Center | مركز قيادة باكت`;
     costSubmissionUrl: string = '/cost-submission'
   ): Promise<EmailNotificationResult> {
     try {
-      const { data: financeUsers } = await supabase
-        .from('profiles')
-        .select('email, full_name, role')
-        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved');
-
-      if (!financeUsers || financeUsers.length === 0) {
-        console.log('[EMAIL] No finance/admin users found for payment request notification');
-        return { success: false, error: 'No finance team members found' };
+      if (!recipients || recipients.length === 0) {
+        return { success: false, error: 'No recipients selected' };
       }
 
       const fundingLabel = fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
       const fundingLabelAr = fundingType === 'advance' ? 'طلب سلفة' : 'طلب تعويض';
-
-      const recipients = financeUsers
-        .filter(u => u.email)
-        .map(u => ({ email: u.email!, name: u.full_name || u.role || 'Finance Team' }));
-
-      if (recipients.length === 0) {
-        return { success: false, error: 'No valid finance team email addresses' };
-      }
 
       const options: NotificationEmailOptions = {
         title: `Payment Request: ${requestTitle} - ${fundingLabel}`,
@@ -1557,7 +1543,7 @@ PACT Command Center | مركز قيادة باكت`;
       };
 
       const result = await this.sendBulk(recipients, options);
-      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} finance/admin users`);
+      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients`);
 
       return {
         success: result.successful > 0,
@@ -1565,7 +1551,7 @@ PACT Command Center | مركز قيادة باكت`;
         error: result.failed > 0 ? `${result.failed} emails failed` : undefined,
       };
     } catch (err: any) {
-      console.error('[EMAIL] Error in sendPaymentRequestToFinance:', err);
+      console.error('[EMAIL] Error in sendPaymentRequestToFinanceWithRecipients:', err);
       return { success: false, error: err.message };
     }
   },

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
@@ -170,6 +171,15 @@ const CostSubmission = () => {
     tier: 1 | 2 | 3;
     notes: string;
   }>({ open: false, submission: null, tier: 2, notes: '' });
+
+  const [paymentRequestDialog, setPaymentRequestDialog] = useState<{
+    open: boolean;
+    submission: OperationalCostSubmission | null;
+    availableRecipients: Array<{ id: string; email: string; name: string; role: string }>;
+    selectedRecipientIds: string[];
+    loading: boolean;
+    sending: boolean;
+  }>({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
 
   const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -810,29 +820,79 @@ const CostSubmission = () => {
     return isSuperAdmin || isAdmin || isFinanceAdmin;
   };
 
-  const handleRequestPayment = async (oc: OperationalCostSubmission) => {
-    if (!currentUser?.id) return;
-    setActionProcessing(true);
+  const openPaymentRequestDialog = async (oc: OperationalCostSubmission) => {
+    setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: true, selectedRecipientIds: [], availableRecipients: [] }));
     try {
-      const submitterProfile = users?.find(u => u.id === oc.submitted_by);
-      const submitterName = submitterProfile?.full_name || oc.submitted_by || 'Unknown';
-      const approverName = currentUser.full_name || currentUser.email || 'Approver';
+      const { data: financeUsers } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role')
+        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+        .eq('status', 'approved');
+
+      const recipients = (financeUsers || [])
+        .filter((u: any) => u.email)
+        .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+
+      setPaymentRequestDialog(prev => ({
+        ...prev,
+        availableRecipients: recipients,
+        selectedRecipientIds: recipients.map((r: any) => r.id),
+        loading: false,
+      }));
+    } catch {
+      setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+      toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+    }
+  };
+
+  const togglePaymentRecipient = (id: string) => {
+    setPaymentRequestDialog(prev => ({
+      ...prev,
+      selectedRecipientIds: prev.selectedRecipientIds.includes(id)
+        ? prev.selectedRecipientIds.filter(r => r !== id)
+        : [...prev.selectedRecipientIds, id],
+    }));
+  };
+
+  const toggleAllPaymentRecipients = () => {
+    setPaymentRequestDialog(prev => ({
+      ...prev,
+      selectedRecipientIds: prev.selectedRecipientIds.length === prev.availableRecipients.length
+        ? []
+        : prev.availableRecipients.map(r => r.id),
+    }));
+  };
+
+  const handleSendPaymentRequest = async () => {
+    const { submission: oc, selectedRecipientIds, availableRecipients } = paymentRequestDialog;
+    if (!oc || !currentUser?.id || selectedRecipientIds.length === 0) return;
+
+    setPaymentRequestDialog(prev => ({ ...prev, sending: true }));
+    try {
+      const selectedRecipients = availableRecipients
+        .filter(r => selectedRecipientIds.includes(r.id))
+        .map(r => ({ email: r.email, name: r.name }));
+
+      const submitterProfile = users?.find(u => u.id === (oc as any).submitted_by);
+      const submitterName = (submitterProfile as any)?.fullName || (submitterProfile as any)?.full_name || (submitterProfile as any)?.name || (oc as any).submitted_by || 'Unknown';
+      const approverName = (currentUser as any).fullName || (currentUser as any).full_name || currentUser.email || 'Approver';
       const approverEmail = currentUser.email || '';
-      const projectName = allProjects?.find(p => p.id === oc.project_id)?.name || oc.project_id || 'N/A';
-      const totalAmount = (oc as any).total_amount || (oc as any).amount || 0;
+      const projectName = allProjects?.find(p => p.id === (oc as any).project_id)?.name || (oc as any).project_id || 'N/A';
+      const totalAmount = (oc as any).total_amount || (oc as any).amount || (oc as any).amount_cents || 0;
       const requestId = oc.id?.slice(0, 8)?.toUpperCase() || 'N/A';
 
-      const result = await EmailNotificationService.sendPaymentRequestToFinance(
+      const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
+        selectedRecipients,
         approverName,
         approverEmail,
         submitterName,
-        oc.title || oc.description || 'Operational Cost',
+        (oc as any).title || oc.description || 'Operational Cost',
         requestId,
-        oc.category || 'general',
+        (oc as any).expense_category || (oc as any).category || 'general',
         totalAmount,
-        oc.funding_type || 'advance',
+        (oc as any).funding_type || 'advance',
         projectName,
-        oc.currency || 'SDG',
+        (oc as any).currency || 'SDG',
         '',
         '/cost-submission'
       );
@@ -840,7 +900,7 @@ const CostSubmission = () => {
       if (result.success) {
         toast({
           title: "Payment Request Sent / تم إرسال طلب الدفع",
-          description: "The finance team has been notified to process this payment. / تم إخطار فريق المالية لمعالجة هذا الدفع.",
+          description: `Email sent to ${selectedRecipients.length} recipient(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين).`,
         });
       } else {
         toast({
@@ -856,7 +916,7 @@ const CostSubmission = () => {
         variant: "destructive",
       });
     } finally {
-      setActionProcessing(false);
+      setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
     }
   };
 
@@ -2374,7 +2434,7 @@ const CostSubmission = () => {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleRequestPayment(oc)}
+                                onClick={() => openPaymentRequestDialog(oc)}
                                 disabled={actionProcessing}
                                 data-testid={`button-request-payment-${oc.id}`}
                               >
@@ -2816,6 +2876,90 @@ const CostSubmission = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => {
+        if (!open && !paymentRequestDialog.sending) {
+          setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
+        }
+      }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" data-testid="dialog-payment-request-title">
+              <Mail className="h-5 w-5" />
+              Request Payment
+              <span dir="rtl" className="text-sm font-normal text-muted-foreground">/ طلب دفع</span>
+            </DialogTitle>
+            <DialogDescription>
+              Select who should receive the payment request email.
+              <span dir="rtl" className="block text-xs mt-1">اختر من سيستلم بريد طلب الدفع.</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          {paymentRequestDialog.loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Skeleton className="h-6 w-48" />
+            </div>
+          ) : paymentRequestDialog.availableRecipients.length === 0 ? (
+            <div className="py-6 text-center text-muted-foreground text-sm">
+              No finance/admin users found.
+              <span dir="rtl" className="block text-xs mt-1">لم يتم العثور على مستخدمين في المالية/الإدارة.</span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <Checkbox
+                  id="select-all-recipients"
+                  checked={paymentRequestDialog.selectedRecipientIds.length === paymentRequestDialog.availableRecipients.length}
+                  onCheckedChange={toggleAllPaymentRecipients}
+                  data-testid="checkbox-select-all-recipients"
+                />
+                <Label htmlFor="select-all-recipients" className="text-sm font-medium cursor-pointer">
+                  Select All ({paymentRequestDialog.availableRecipients.length})
+                  <span dir="rtl" className="text-xs text-muted-foreground mr-2"> / تحديد الكل</span>
+                </Label>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {paymentRequestDialog.availableRecipients.map(recipient => (
+                  <div key={recipient.id} className="flex items-center gap-2 py-1.5 px-2 rounded-md hover-elevate">
+                    <Checkbox
+                      id={`recipient-${recipient.id}`}
+                      checked={paymentRequestDialog.selectedRecipientIds.includes(recipient.id)}
+                      onCheckedChange={() => togglePaymentRecipient(recipient.id)}
+                      data-testid={`checkbox-recipient-${recipient.id}`}
+                    />
+                    <Label htmlFor={`recipient-${recipient.id}`} className="flex-1 cursor-pointer">
+                      <div className="text-sm font-medium">{recipient.name}</div>
+                      <div className="text-xs text-muted-foreground">{recipient.email}</div>
+                    </Label>
+                    <Badge variant="secondary" className="text-xs">{recipient.role}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false })}
+              disabled={paymentRequestDialog.sending}
+              data-testid="button-payment-request-cancel"
+            >
+              Cancel / إلغاء
+            </Button>
+            <Button
+              onClick={handleSendPaymentRequest}
+              disabled={paymentRequestDialog.sending || paymentRequestDialog.selectedRecipientIds.length === 0}
+              data-testid="button-payment-request-send"
+            >
+              <Mail className="h-3.5 w-3.5 mr-1" />
+              {paymentRequestDialog.sending
+                ? 'Sending... / جارٍ الإرسال...'
+                : `Send to ${paymentRequestDialog.selectedRecipientIds.length} Recipient(s) / إرسال`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!viewAdvanceDetails} onOpenChange={(open) => !open && setViewAdvanceDetails(null)}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
