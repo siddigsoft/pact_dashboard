@@ -1423,6 +1423,77 @@ PACT Command Center | مركز قيادة باكت`;
   },
 
   // ============================================
+  // TEMPLATE 16B: Cost Submission Notification to Super Admins
+  // ============================================
+  async sendCostSubmissionToSuperAdmins(
+    submitterName: string,
+    submitterEmail: string,
+    requestTitle: string,
+    category: string,
+    totalAmount: number,
+    itemCount: number,
+    fundingType: string,
+    projectName: string,
+    currency: string = 'SDG'
+  ): Promise<EmailNotificationResult> {
+    try {
+      const { data: admins } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .in('role', ['superAdmin', 'SuperAdmin', 'super_admin'])
+        .eq('status', 'approved');
+
+      if (!admins || admins.length === 0) {
+        console.log('[EMAIL] No super admins found to notify about cost submission');
+        return { success: true, messageId: 'no-admins' };
+      }
+
+      const fundingLabel = fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
+      const fundingLabelAr = fundingType === 'advance' ? 'طلب سلفة' : 'طلب تعويض';
+
+      const recipients = admins
+        .filter(a => a.email)
+        .map(a => ({ email: a.email!, name: a.full_name || 'Super Admin' }));
+
+      if (recipients.length === 0) {
+        return { success: true, messageId: 'no-admin-emails' };
+      }
+
+      const options: NotificationEmailOptions = {
+        title: `New Operational Cost Submission - ${fundingLabel}`,
+        titleAr: `طلب تكلفة تشغيلية جديد - ${fundingLabelAr}`,
+        message: `${submitterName} (${submitterEmail}) has submitted a new ${fundingLabel.toLowerCase()} request titled "${requestTitle}" for your review and approval.`,
+        messageAr: `قام ${submitterName} (${submitterEmail}) بتقديم ${fundingLabelAr} جديد بعنوان "${requestTitle}" لمراجعتك والموافقة عليه.`,
+        type: 'warning',
+        actionUrl: '/costs',
+        actionLabel: 'Review Submission',
+        details: [
+          { label: 'Submitted By / مقدم من', value: submitterName },
+          { label: 'Request Title / عنوان الطلب', value: requestTitle },
+          { label: 'Type / النوع', value: `${fundingLabel} / ${fundingLabelAr}` },
+          { label: 'Category / الفئة', value: category },
+          { label: 'Total Amount / المبلغ الإجمالي', value: `${currency} ${totalAmount.toLocaleString()}` },
+          ...(itemCount > 1 ? [{ label: 'Items / العناصر', value: `${itemCount} items` }] : []),
+          { label: 'Project / المشروع', value: projectName },
+          { label: 'Status / الحالة', value: 'Pending Approval / في انتظار الموافقة' },
+        ],
+      };
+
+      const result = await this.sendBulk(recipients, options);
+      console.log(`[EMAIL] Cost submission notification: sent to ${result.successful}/${result.total} super admins`);
+
+      return {
+        success: result.successful > 0,
+        messageId: result.successful > 0 ? `cost-submission-bulk-${Date.now()}` : undefined,
+        error: result.failed > 0 ? `${result.failed} emails failed` : undefined,
+      };
+    } catch (err: any) {
+      console.error('[EMAIL] Error in sendCostSubmissionToSuperAdmins:', err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  // ============================================
   // TEMPLATE 17: Budget Alert (80%)
   // ============================================
   async sendBudgetAlert(
