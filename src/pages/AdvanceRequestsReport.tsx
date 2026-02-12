@@ -297,6 +297,15 @@ function AdvanceRequestsReportContent() {
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [approvedForPayment, getProfileName]);
+  const bulkUniqueEnumerators = useMemo(() => {
+    const map = new Map<string, string>();
+    approvedForPayment.forEach(r => {
+      if (r.requestedBy) {
+        map.set(r.requestedBy, r.requestedByName || getProfileName(r.requestedBy));
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [approvedForPayment, getProfileName]);
 
   const openBulkPaymentRequestDialog = async (bulkReqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
     setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, bulkRequests: bulkReqs, bulkGroupBy: groupBy, bulkGroupValue: groupValue, loading: true, selectedRecipientIds: [], availableRecipients: [] }));
@@ -1469,7 +1478,7 @@ function AdvanceRequestsReportContent() {
                 <CardDescription className="text-xs">Send payment request for multiple approved advances grouped by category.</CardDescription>
               </CardHeader>
               <CardContent className="p-3 pt-0">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                   {bulkUniqueStates.length > 0 && (
                     <Select onValueChange={(val) => {
                       const reqs = approvedForPayment.filter(r => r.stateName === val);
@@ -1525,6 +1534,23 @@ function AdvanceRequestsReportContent() {
                         {bulkUniqueSupervisors.map(s => {
                           const count = approvedForPayment.filter(r => r.supervisorApprovedBy === s.id).length;
                           return <SelectItem key={s.id} value={s.id}>{s.name} ({count})</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {bulkUniqueEnumerators.length > 0 && (
+                    <Select onValueChange={(val) => {
+                      const reqs = approvedForPayment.filter(r => r.requestedBy === val);
+                      if (reqs.length > 0) {
+                        const en = bulkUniqueEnumerators.find(e => e.id === val);
+                        openBulkPaymentRequestDialog(reqs, 'Enumerator', en?.name || val);
+                      }
+                    }}>
+                      <SelectTrigger data-testid="select-report-bulk-enumerator"><SelectValue placeholder="By Enumerator" /></SelectTrigger>
+                      <SelectContent>
+                        {bulkUniqueEnumerators.map(e => {
+                          const count = approvedForPayment.filter(r => r.requestedBy === e.id).length;
+                          return count > 0 ? <SelectItem key={e.id} value={e.id}>{e.name} ({count})</SelectItem> : null;
                         })}
                       </SelectContent>
                     </Select>
