@@ -131,21 +131,17 @@ const CostSubmission = () => {
                           currentUser?.role === 'Enumerator' ||
                           currentUser?.role === 'enumerator';
   
-  // All roles can submit operational costs EXCEPT Data Collectors/Enumerators
-  // Includes: FOM, Coordinator, Country Director, Admin, Super Admin, Supervisor
-  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser;
-  const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
-  
-  // Admins and supervisors can see team submissions and approval status
-  // Country Director sees only their own submissions
-  const canViewTeamSubmissions = isAdmin || isSupervisor;
-  
   const isSuperAdmin = isAdminOrSuperUser || 
     currentUser?.role === 'SuperAdmin' || currentUser?.role === 'superAdmin' || 
     currentUser?.role === 'super_admin' || currentUser?.role === 'Super Admin';
   
   const isFinanceAdmin = roles?.includes('finance_admin' as AppRole) || 
     currentUser?.role === 'finance_admin' || currentUser?.role === 'Finance Admin';
+
+  const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser;
+  const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
+  
+  const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser;
 
   // Default to Submit Request tab for all users
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
@@ -820,13 +816,13 @@ const CostSubmission = () => {
             <div>
               <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
                 {canViewTeamSubmissions ? "Cost Approval & Tracking" : "Cost Submission"}
-                {isAdmin && (
+                {(isAdmin || isSuperAdmin) && (
                   <Badge variant="outline" className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-300">
                     <Shield className="h-3 w-3 mr-1" />
-                    Admin View
+                    {isSuperAdmin ? 'Super Admin View' : 'Admin View'}
                   </Badge>
                 )}
-                {isSupervisor && !isAdmin && (
+                {isSupervisor && !isAdmin && !isSuperAdmin && (
                   <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-300">
                     <Users className="h-3 w-3 mr-1" />
                     Supervisor View
@@ -834,7 +830,7 @@ const CostSubmission = () => {
                 )}
               </h1>
               <p className="text-muted-foreground mt-1">
-                {isAdmin 
+                {isAdmin || isSuperAdmin
                   ? "Review, approve, and track cost submissions from all team members"
                   : isSupervisor
                     ? "Review and approve cost submissions from your team members"
@@ -1175,7 +1171,7 @@ const CostSubmission = () => {
             >
               <ClipboardCheck className="h-4 w-4" />
               <span className="hidden sm:inline">
-                {isAdmin ? "All Submissions" : isSupervisor ? "Team" : "My Submissions"}
+                {(isAdmin || isSuperAdmin) ? "All Submissions" : isSupervisor ? "Team" : "My Submissions"}
               </span>
               <span className="sm:hidden">History</span>
               {submissionStats.total > 0 && activeTab !== "history" && (
@@ -1768,11 +1764,11 @@ const CostSubmission = () => {
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="h-5 w-5 text-slate-600" />
                 <CardTitle>
-                  {isAdmin ? "All Cost Submissions" : isSupervisor ? "Team Submissions" : "My Submissions"}
+                  {(isAdmin || isSuperAdmin) ? "All Cost Submissions" : isSupervisor ? "Team Submissions" : "My Submissions"}
                 </CardTitle>
               </div>
               <CardDescription>
-                {isAdmin 
+                {(isAdmin || isSuperAdmin)
                   ? "Review and manage all cost submissions across the organization. Approve, reject, or request more information."
                   : isSupervisor
                     ? "Review cost submissions from your team members. Verify and forward for admin approval."
