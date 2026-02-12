@@ -47,12 +47,17 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
+import { supabase } from '@/integrations/supabase/client';
+import { generateTransportAdvanceCertificatePdf } from '@/utils/transportAdvanceCertificatePdf';
+import { useToast } from '@/hooks/use-toast';
+import type { DownPaymentRequest } from '@/types/down-payment';
 
 function AdvanceRequestsReportContent() {
   const { requests, loading, refreshRequests } = useDownPayment();
   const { currentUser, users } = useUser();
   const { isSuperAdmin } = useSuperAdmin();
   const navigate = useNavigate();
+  const { toast } = useToast();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -83,6 +88,105 @@ function AdvanceRequestsReportContent() {
   const getProfileName = useCallback((userId: string) => {
     return userMap.get(userId) || 'Unknown User';
   }, [userMap]);
+
+  const handleDownloadCertificate = async (req: DownPaymentRequest) => {
+    const requester = users.find(u => u.id === req.requestedBy);
+    const supervisorApprover = req.supervisorApprovedBy ? users.find(u => u.id === req.supervisorApprovedBy) : null;
+    const adminApprover = req.adminProcessedBy ? users.find(u => u.id === req.adminProcessedBy) : null;
+
+    let signatureImageData: string | null = null;
+    if (req.adminNotes) {
+      const sigMatch = req.adminNotes.match(/ID:\s*(\S+?)(?:\s*\||$)/);
+      if (sigMatch?.[1]) {
+        try {
+          const { data: sigRow } = await supabase
+            .from('document_signatures')
+            .select('signature_data, signature_method, signer_id')
+            .eq('id', sigMatch[1])
+            .single();
+          if (sigRow?.signature_data && typeof sigRow.signature_data === 'string' && sigRow.signature_data.startsWith('data:')) {
+            signatureImageData = sigRow.signature_data;
+          }
+          if (!signatureImageData && sigRow?.signer_id) {
+            try {
+              const { data: savedSigs } = await supabase
+                .from('handwriting_signatures')
+                .select('signature_image')
+                .eq('user_id', sigRow.signer_id)
+                .eq('is_active', true)
+                .order('is_default', { ascending: false })
+                .order('created_at', { ascending: false })
+                .limit(1);
+              if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+                signatureImageData = savedSigs[0].signature_image;
+              }
+            } catch { /* continue */ }
+          }
+        } catch { /* signature fetch failed */ }
+      }
+    }
+
+    if (!signatureImageData && req.adminProcessedBy) {
+      try {
+        const { data: savedSigs } = await supabase
+          .from('handwriting_signatures')
+          .select('signature_image')
+          .eq('user_id', req.adminProcessedBy)
+          .eq('is_active', true)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (savedSigs?.[0]?.signature_image && typeof savedSigs[0].signature_image === 'string' && savedSigs[0].signature_image.startsWith('data:')) {
+          signatureImageData = savedSigs[0].signature_image;
+        }
+      } catch { /* no saved signature */ }
+    }
+
+    await generateTransportAdvanceCertificatePdf({
+      request: {
+        id: req.id,
+        siteName: req.siteName,
+        stateName: req.stateName,
+        localityName: req.localityName,
+        projectName: req.projectName,
+        hubName: req.hubName,
+        activityType: req.activityType,
+        requestedAmount: req.requestedAmount,
+        approvedAmount: req.approvedAmount || req.adminApprovedAmount || req.supervisorApprovedAmount,
+        totalPaidAmount: req.totalPaidAmount || 0,
+        remainingAmount: req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0)),
+        justification: req.justification,
+        requestedAt: req.requestedAt,
+        status: req.status,
+        paymentType: req.paymentType,
+        approvalType: req.approvalType,
+        approvalPercentage: req.approvalPercentage,
+      },
+      requester: {
+        name: requester?.fullName || requester?.email || getProfileName(req.requestedBy),
+        email: requester?.email || '',
+        role: req.requesterRole || null,
+      },
+      tier1: {
+        approverName: supervisorApprover?.fullName || supervisorApprover?.email || getProfileName(req.supervisorApprovedBy || '') || 'N/A',
+        status: req.supervisorStatus || 'approved',
+        approvedAt: req.supervisorApprovedAt || '',
+        notes: req.supervisorNotes || null,
+      },
+      tier2: {
+        approverName: adminApprover?.fullName || adminApprover?.email || getProfileName(req.adminProcessedBy || '') || 'N/A',
+        status: req.adminStatus || 'approved',
+        approvedAt: req.adminProcessedAt || '',
+        notes: req.adminNotes || null,
+        signatureImageData,
+      },
+    });
+
+    toast({
+      title: 'Certificate Downloaded / تم تحميل الشهادة',
+      description: 'The approval certificate PDF has been saved. / تم حفظ شهادة الموافقة.',
+    });
+  };
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', label: string, className: string }> = {
@@ -1169,6 +1273,18 @@ function AdvanceRequestsReportContent() {
                                   >
                                     <Receipt className="h-3 w-3" />
                                     Reconcile
+                                  </Button>
+                                )}
+                                {['approved', 'partially_paid', 'fully_paid'].includes(req.status) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs gap-1"
+                                    onClick={() => handleDownloadCertificate(req)}
+                                    data-testid={`button-download-cert-${req.id}`}
+                                  >
+                                    <Download className="h-3 w-3" />
+                                    PDF
                                   </Button>
                                 )}
                                 <Button
