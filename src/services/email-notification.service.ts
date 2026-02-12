@@ -1515,7 +1515,8 @@ PACT Command Center | مركز قيادة باكت`;
     currency: string = 'SDG',
     approvalNotes: string = '',
     costSubmissionUrl: string = '/cost-submission',
-    pdfAttachment?: { base64: string; filename: string }
+    pdfAttachment?: { base64: string; filename: string },
+    additionalAttachments?: Array<{ base64: string; filename: string }>
   ): Promise<EmailNotificationResult> {
     try {
       if (!recipients || recipients.length === 0) {
@@ -1524,6 +1525,16 @@ PACT Command Center | مركز قيادة باكت`;
 
       const fundingLabel = fundingType === 'advance' ? 'Advance Request' : 'Reimbursement';
       const fundingLabelAr = fundingType === 'advance' ? 'طلب سلفة' : 'طلب تعويض';
+
+      const allAttachments: Array<{ filename: string; content: string; type: string }> = [];
+      if (pdfAttachment) {
+        allAttachments.push({ filename: pdfAttachment.filename, content: pdfAttachment.base64, type: 'application/pdf' });
+      }
+      if (additionalAttachments?.length) {
+        additionalAttachments.forEach(att => {
+          allAttachments.push({ filename: att.filename, content: att.base64, type: 'application/pdf' });
+        });
+      }
 
       const options: NotificationEmailOptions = {
         title: `Payment Request: ${requestTitle} - ${fundingLabel}`,
@@ -1547,15 +1558,11 @@ PACT Command Center | مركز قيادة باكت`;
           ...(approvalNotes ? [{ label: 'Approval Notes / ملاحظات', value: approvalNotes }] : []),
         ],
         cc: approverEmail ? [approverEmail] : [],
-        attachments: pdfAttachment ? [{
-          filename: pdfAttachment.filename,
-          content: pdfAttachment.base64,
-          type: 'application/pdf',
-        }] : undefined,
+        attachments: allAttachments.length > 0 ? allAttachments : undefined,
       };
 
       const result = await this.sendBulk(recipients, options);
-      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients${pdfAttachment ? ' (with PDF attachment)' : ''}`);
+      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients${allAttachments.length > 0 ? ` (with ${allAttachments.length} PDF attachment(s))` : ''}`);
 
       return {
         success: result.successful > 0,
