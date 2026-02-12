@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -442,11 +442,16 @@ const CostSubmission = () => {
     return tier === 2;
   };
 
+  const shouldRequireSignature = (_oc: OperationalCostSubmission, _tier: 1 | 2 | 3): boolean => {
+    if (isSuperAdmin || isAdmin) return true;
+    return isFinalTier(_oc, _tier);
+  };
+
   const handleApprovalAction = async () => {
     const { action, tier, submission } = approvalDialog;
     if (!submission || !currentUser?.id) return;
     
-    if (isFinalTier(submission, tier) && action === 'approve') {
+    if (shouldRequireSignature(submission, tier) && action === 'approve') {
       setApprovalProcessing(true);
       setSignatureModal({
         open: true,
@@ -475,11 +480,15 @@ const CostSubmission = () => {
       const updates: Record<string, any> = {};
       const isFinal = isFinalTier(submission, tier);
       
+      const sigSuffix = signatureData
+        ? `\n[Signed: ${signatureData.method.toUpperCase()} | Hash: ${signatureData.signatureHash.substring(0, 12)}... | ID: ${signatureData.signatureId} | ${signatureData.signedAt}]`
+        : '';
+
       if (tier === 1) {
         updates.tier1_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier1_approved_by = currentUser.id;
         updates.tier1_approved_at = new Date().toISOString();
-        updates.tier1_notes = notes || null;
+        updates.tier1_notes = (notes || '') + sigSuffix || null;
         if (action === 'approve') {
           updates.status = 'under_review';
         } else {
@@ -490,13 +499,10 @@ const CostSubmission = () => {
         updates.tier2_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier2_approved_by = currentUser.id;
         updates.tier2_approved_at = new Date().toISOString();
-        updates.tier2_notes = notes || null;
+        updates.tier2_notes = (notes || '') + sigSuffix || null;
         if (action === 'approve') {
           if (isFinal) {
             updates.status = 'approved';
-            if (signatureData) {
-              updates.tier2_notes = `${notes || ''}\n[Signed: ${signatureData.method.toUpperCase()} | Hash: ${signatureData.signatureHash.substring(0, 12)}... | ID: ${signatureData.signatureId} | ${signatureData.signedAt}]`;
-            }
           } else {
             updates.status = 'under_review';
           }
@@ -508,12 +514,9 @@ const CostSubmission = () => {
         updates.tier3_status = action === 'approve' ? 'approved' : 'rejected';
         updates.tier3_approved_by = currentUser.id;
         updates.tier3_approved_at = new Date().toISOString();
-        updates.tier3_notes = notes || null;
+        updates.tier3_notes = (notes || '') + sigSuffix || null;
         if (action === 'approve') {
           updates.status = 'approved';
-          if (signatureData) {
-            updates.tier3_notes = `${notes || ''}\n[Signed: ${signatureData.method.toUpperCase()} | Hash: ${signatureData.signatureHash.substring(0, 12)}... | ID: ${signatureData.signatureId} | ${signatureData.signedAt}]`;
-          }
         } else {
           updates.status = 'rejected';
           updates.rejection_reason = notes || 'Rejected at Tier 3 / تم الرفض في المرحلة الثالثة';
@@ -2004,9 +2007,10 @@ const CostSubmission = () => {
                       reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
                     };
                     const derivedStatus = getOperationalDerivedStatus(oc);
+                    const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : hasThreeTiers(oc) && oc.tier3_status === 'pending' ? '3' : '?';
                     const statusLabels: Record<string, string> = {
-                      pending: 'Pending (Tier 1) / معلق (المرحلة ١)',
-                      under_review: 'Under Review (Tier 2) / قيد المراجعة (المرحلة ٢)',
+                      pending: `Pending (Tier ${pendingTierLabel}) / معلق (المرحلة ${pendingTierLabel})`,
+                      under_review: `In Review (Tier ${pendingTierLabel}) / قيد المراجعة (المرحلة ${pendingTierLabel})`,
                       approved: 'Approved / تمت الموافقة',
                       rejected: 'Rejected / مرفوض',
                       paid: 'Paid / تم الدفع',
@@ -2014,12 +2018,16 @@ const CostSubmission = () => {
                     };
                     const submitterName = users.find(u => u.id === oc.submitted_by)?.name || 'Unknown';
                     const title = oc.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '') || 'Untitled';
+                    const linkedProjectName = oc.project_id ? allProjects.find(p => p.id === oc.project_id)?.name : null;
+                    const requestId = oc.reference_number || oc.id.substring(0, 8).toUpperCase();
 
                     const cleanTier1Notes = oc.tier1_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
                     const cleanTier2Notes = oc.tier2_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
+                    const cleanTier3Notes = (oc as any).tier3_notes?.replace(/\n?\[Signed:.*?\]/g, '').trim() || '';
                     const tier1Approver = oc.tier1_approved_by ? users.find(u => u.id === oc.tier1_approved_by) : null;
                     const tier2Approver = oc.tier2_approved_by ? users.find(u => u.id === oc.tier2_approved_by) : null;
-                    const hasSig = oc.tier2_notes?.includes('[Signed:');
+                    const tier3Approver = oc.tier3_approved_by ? users.find(u => u.id === oc.tier3_approved_by) : null;
+                    const hasSig = oc.tier2_notes?.includes('[Signed:') || (oc as any).tier3_notes?.includes('[Signed:') || oc.tier1_notes?.includes('[Signed:');
 
                     return (
                       <div
@@ -2037,6 +2045,16 @@ const CostSubmission = () => {
                                 </Badge>
                               </div>
                               <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                                <span className="flex items-center gap-1 font-medium">
+                                  <FileText className="h-3 w-3" />
+                                  ID: {requestId}
+                                </span>
+                                {linkedProjectName && (
+                                  <span className="flex items-center gap-1">
+                                    <Briefcase className="h-3 w-3" />
+                                    {linkedProjectName}
+                                  </span>
+                                )}
                                 {canViewTeamSubmissions && (
                                   <span className="flex items-center gap-1">
                                     <Users className="h-3 w-3" />
@@ -2428,13 +2446,17 @@ const CostSubmission = () => {
               {approvalDialog.action === 'approve'
                 ? approvalDialog.submission && isFinalTier(approvalDialog.submission, approvalDialog.tier)
                   ? 'You are about to give final approval (clears for payment). Digital signature required.'
-                  : `You are about to approve this submission (moves to Tier ${approvalDialog.tier + 1} review).`
+                  : (isSuperAdmin || isAdmin)
+                    ? `You are about to approve this submission at Tier ${approvalDialog.tier}. Digital signature required.`
+                    : `You are about to approve this submission (moves to Tier ${approvalDialog.tier + 1} review).`
                 : 'You are about to reject this submission. Please provide a reason.'}
               <span dir="rtl" className="block text-xs mt-1">
                 {approvalDialog.action === 'approve'
                   ? approvalDialog.submission && isFinalTier(approvalDialog.submission, approvalDialog.tier)
                     ? 'أنت على وشك الموافقة النهائية على هذا الطلب (تمهيد للدفع). التوقيع الرقمي مطلوب.'
-                    : `أنت على وشك الموافقة على هذا الطلب (ينتقل إلى المرحلة ${{ 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier + 1] || ''} للمراجعة).`
+                    : (isSuperAdmin || isAdmin)
+                      ? `أنت على وشك الموافقة على هذا الطلب في المرحلة ${approvalDialog.tier}. التوقيع الرقمي مطلوب.`
+                      : `أنت على وشك الموافقة على هذا الطلب (ينتقل إلى المرحلة ${{ 2: 'الثانية', 3: 'الثالثة' }[approvalDialog.tier + 1] || ''} للمراجعة).`
                   : 'أنت على وشك رفض هذا الطلب. يرجى تقديم سبب الرفض.'}
               </span>
             </DialogDescription>
@@ -2647,7 +2669,7 @@ const CostSubmission = () => {
               data-testid="button-approval-confirm"
             >
               {approvalProcessing ? 'Processing... / جارٍ المعالجة...' : approvalDialog.action === 'approve' 
-                ? (approvalDialog.submission && isFinalTier(approvalDialog.submission, approvalDialog.tier) ? 'Sign & Approve / توقيع وموافقة' : 'Confirm Approval / تأكيد الموافقة') 
+                ? (approvalDialog.submission && shouldRequireSignature(approvalDialog.submission, approvalDialog.tier) ? 'Sign & Approve / توقيع وموافقة' : 'Confirm Approval / تأكيد الموافقة') 
                 : 'Confirm Rejection / تأكيد الرفض'}
             </Button>
           </DialogFooter>
