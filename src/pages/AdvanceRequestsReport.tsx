@@ -317,13 +317,15 @@ function AdvanceRequestsReportContent() {
     const doc = new jsPDF();
     let yPos = 20;
 
-    doc.setFontSize(10);
+    doc.setFontSize(12);
     doc.setTextColor(100);
+    doc.setFont('helvetica', 'bold');
     doc.text('PACT Field Operations System', 14, yPos);
-    doc.text(`Generated: ${format(new Date(), 'PPP')}`, 140, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${format(new Date(), 'PPP')}`, 135, yPos);
     
     yPos += 15;
-    doc.setFontSize(20);
+    doc.setFontSize(22);
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
     doc.text('Transportation Advance Cost Report', 14, yPos);
@@ -333,7 +335,7 @@ function AdvanceRequestsReportContent() {
     doc.line(14, yPos, 196, yPos);
     yPos += 10;
 
-    doc.setFontSize(14);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Summary', 14, yPos);
     yPos += 8;
@@ -350,12 +352,13 @@ function AdvanceRequestsReportContent() {
         ['Total Paid (SDG)', stats.totalPaid.toLocaleString()],
       ],
       theme: 'striped',
-      headStyles: { fillColor: [59, 130, 246] },
+      headStyles: { fillColor: [59, 130, 246], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10 },
     });
 
     yPos = (doc as any).lastAutoTable.finalY + 15;
 
-    doc.setFontSize(14);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Advance Requests', 14, yPos);
     yPos += 8;
@@ -375,8 +378,8 @@ function AdvanceRequestsReportContent() {
       head: [['Date', 'Requested By', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
       body: tableData,
       theme: 'striped',
-      headStyles: { fillColor: [59, 130, 246], fontSize: 8 },
-      bodyStyles: { fontSize: 7 },
+      headStyles: { fillColor: [59, 130, 246], fontSize: 10, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 9 },
       columnStyles: {
         0: { cellWidth: 22 },
         1: { cellWidth: 30 },
@@ -391,31 +394,30 @@ function AdvanceRequestsReportContent() {
     doc.save(`transportation_advance_cost_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
-  // Helper function to add PACT header to PDF
   const addPdfHeader = (doc: jsPDF, title: string) => {
     let yPos = 15;
     doc.setFillColor(245, 247, 250);
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setFontSize(18);
+    doc.rect(0, 0, 210, 42, 'F');
+    doc.setFontSize(20);
     doc.setTextColor(30, 64, 175);
     doc.setFont('helvetica', 'bold');
     doc.text('PACT', 14, yPos + 5);
-    doc.setFontSize(8);
-    doc.setTextColor(100);
+    doc.setFontSize(10);
+    doc.setTextColor(80);
     doc.setFont('helvetica', 'normal');
-    doc.text('Field Operations Command Center', 14, yPos + 12);
-    doc.setFontSize(8);
-    doc.text(`Generated: ${format(new Date(), 'PPP p')}`, 150, yPos + 5);
-    yPos += 30;
+    doc.text('Field Operations Command Center', 14, yPos + 13);
+    doc.setFontSize(9);
+    doc.text(`Generated: ${format(new Date(), 'PPP p')}`, 140, yPos + 5);
+    yPos += 32;
     doc.setDrawColor(30, 64, 175);
     doc.setLineWidth(0.5);
     doc.line(14, yPos, 196, yPos);
     yPos += 10;
-    doc.setFontSize(16);
+    doc.setFontSize(18);
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
     doc.text(title, 14, yPos);
-    return yPos + 10;
+    return yPos + 12;
   };
 
   // Export By Team Member
@@ -471,15 +473,15 @@ function AdvanceRequestsReportContent() {
       body: byTeamMember.map(m => [m.name, m.requests, m.totalRequested.toLocaleString(), m.totalApproved.toLocaleString(), m.pending]),
       foot: [['SUBTOTAL', teamTotals.requests.toString(), teamTotals.totalRequested.toLocaleString(), teamTotals.totalApproved.toLocaleString(), teamTotals.pending.toString()]],
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
-      bodyStyles: { fontSize: 8 },
-      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 11 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('Detailed Requests', 14, yPos);
-    yPos += 5;
+    yPos += 6;
     autoTable(doc, {
       startY: yPos,
       head: [['Date', 'Team Member', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
@@ -493,8 +495,8 @@ function AdvanceRequestsReportContent() {
         (r.totalPaidAmount || 0).toLocaleString()
       ]),
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
-      bodyStyles: { fontSize: 6 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
     });
     doc.save(`advance_by_team_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
@@ -552,15 +554,15 @@ function AdvanceRequestsReportContent() {
       body: byHub.map(h => [h.name, h.requests, h.totalRequested.toLocaleString(), h.totalApproved.toLocaleString(), h.pending]),
       foot: [['SUBTOTAL', hubTotals.requests.toString(), hubTotals.totalRequested.toLocaleString(), hubTotals.totalApproved.toLocaleString(), hubTotals.pending.toString()]],
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
-      bodyStyles: { fontSize: 8 },
-      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 11 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('Detailed Requests', 14, yPos);
-    yPos += 5;
+    yPos += 6;
     autoTable(doc, {
       startY: yPos,
       head: [['Date', 'Hub', 'Team Member', 'Site', 'Amount', 'Status', 'Paid']],
@@ -574,8 +576,8 @@ function AdvanceRequestsReportContent() {
         (r.totalPaidAmount || 0).toLocaleString()
       ]),
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
-      bodyStyles: { fontSize: 6 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
     });
     doc.save(`advance_by_hub_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
@@ -629,15 +631,15 @@ function AdvanceRequestsReportContent() {
       body: byStatus.map(s => [s.name, s.requests, s.totalRequested.toLocaleString(), s.totalApproved.toLocaleString()]),
       foot: [['SUBTOTAL', statusTotals.requests.toString(), statusTotals.totalRequested.toLocaleString(), statusTotals.totalApproved.toLocaleString()]],
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
-      bodyStyles: { fontSize: 8 },
-      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 11 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('Detailed Requests', 14, yPos);
-    yPos += 5;
+    yPos += 6;
     autoTable(doc, {
       startY: yPos,
       head: [['Date', 'Status', 'Team Member', 'Site', 'Amount', 'Paid']],
@@ -650,8 +652,8 @@ function AdvanceRequestsReportContent() {
         (r.totalPaidAmount || 0).toLocaleString()
       ]),
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
-      bodyStyles: { fontSize: 6 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
     });
     doc.save(`advance_by_status_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
@@ -710,15 +712,15 @@ function AdvanceRequestsReportContent() {
       body: byState.map(s => [s.name, s.requests, s.totalRequested.toLocaleString(), s.totalApproved.toLocaleString(), s.pending]),
       foot: [['SUBTOTAL', stateTotals.requests.toString(), stateTotals.totalRequested.toLocaleString(), stateTotals.totalApproved.toLocaleString(), stateTotals.pending.toString()]],
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
-      bodyStyles: { fontSize: 8 },
-      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 11 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('Detailed Requests', 14, yPos);
-    yPos += 5;
+    yPos += 6;
     autoTable(doc, {
       startY: yPos,
       head: [['Date', 'State', 'Team Member', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
@@ -733,8 +735,8 @@ function AdvanceRequestsReportContent() {
         (r.totalPaidAmount || 0).toLocaleString()
       ]),
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
-      bodyStyles: { fontSize: 6 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
     });
     doc.save(`advance_by_state_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
@@ -793,15 +795,15 @@ function AdvanceRequestsReportContent() {
       body: byProject.map(p => [p.name, p.requests, p.totalRequested.toLocaleString(), p.totalApproved.toLocaleString(), p.pending]),
       foot: [['SUBTOTAL', projectTotals.requests.toString(), projectTotals.totalRequested.toLocaleString(), projectTotals.totalApproved.toLocaleString(), projectTotals.pending.toString()]],
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 9 },
-      bodyStyles: { fontSize: 8 },
-      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10 },
+      footStyles: { fillColor: [230, 235, 245], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 11 },
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('Detailed Requests', 14, yPos);
-    yPos += 5;
+    yPos += 6;
     autoTable(doc, {
       startY: yPos,
       head: [['Date', 'Project', 'Team Member', 'Site', 'Hub', 'Amount', 'Status', 'Paid']],
@@ -816,8 +818,8 @@ function AdvanceRequestsReportContent() {
         (r.totalPaidAmount || 0).toLocaleString()
       ]),
       theme: 'striped',
-      headStyles: { fillColor: [30, 64, 175], fontSize: 7 },
-      bodyStyles: { fontSize: 6 },
+      headStyles: { fillColor: [30, 64, 175], fontSize: 9, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
     });
     doc.save(`advance_by_project_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
