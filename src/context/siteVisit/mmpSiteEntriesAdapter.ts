@@ -152,6 +152,7 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
     arrivalRecorded: entry.additional_data?.arrival_recorded || false,
     region: entry.state,
     site_code: entry.site_code,
+    mmpFileId: entry.mmp_file_id,
     // Add workflow data
     coordinatorVerifiedAt: workflow?.coordinatorVerifiedAt,
   } as SiteVisit;
