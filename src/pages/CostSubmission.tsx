@@ -611,6 +611,8 @@ const CostSubmission = () => {
     }
   };
 
+  const signatureCompletedRef = useRef(false);
+
   const handleSignatureComplete = (signatureData: {
     signatureId: string;
     signatureHash: string;
@@ -619,7 +621,11 @@ const CostSubmission = () => {
   }) => {
     const { submission, notes, tier } = signatureModal;
     if (!submission) return;
+    signatureCompletedRef.current = true;
     processApproval('approve', tier, submission, notes, signatureData);
+    setTimeout(() => {
+      setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
+    }, 100);
   };
 
   const handleDownloadCertificate = async (oc: OperationalCostSubmission) => {
@@ -2951,19 +2957,23 @@ const CostSubmission = () => {
           open={signatureModal.open}
           onOpenChange={(open) => {
             if (!open) {
-              const { submission: sub, notes } = signatureModal;
+              if (signatureCompletedRef.current) {
+                signatureCompletedRef.current = false;
+                return;
+              }
+              const { submission: sub, notes, tier: modalTier } = signatureModal;
               setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
               setApprovalProcessing(false);
               if (sub) {
                 setApprovalNotes(notes);
-                setApprovalDialog({ open: true, action: 'approve', tier: signatureModal.tier, submission: sub });
+                setApprovalDialog({ open: true, action: 'approve', tier: modalTier, submission: sub });
               }
             }
           }}
           transaction={{
             id: signatureModal.submission.id,
             type: 'cost_submission',
-            title: `Tier ${signatureModal.tier} Final Approval / الموافقة النهائية المرحلة ${signatureModal.tier} - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
+            title: `Tier ${signatureModal.tier} Approval / الموافقة المرحلة ${signatureModal.tier} - ${signatureModal.submission.expense_category.replace(/_/g, ' ')}`,
             description: signatureModal.submission.description || undefined,
             amount: signatureModal.submission.amount_cents / 100,
             currency: signatureModal.submission.currency || 'SDG',
@@ -2978,12 +2988,12 @@ const CostSubmission = () => {
           allowedMethods={['uuid', 'handwriting']}
           onSignatureComplete={handleSignatureComplete}
           onCancel={() => {
-            const { submission: sub, notes } = signatureModal;
+            const { submission: sub, notes, tier: modalTier } = signatureModal;
             setSignatureModal({ open: false, submission: null, tier: 2, notes: '' });
             setApprovalProcessing(false);
             if (sub) {
               setApprovalNotes(notes);
-              setApprovalDialog({ open: true, action: 'approve', tier: 2, submission: sub });
+              setApprovalDialog({ open: true, action: 'approve', tier: modalTier, submission: sub });
             }
           }}
         />
