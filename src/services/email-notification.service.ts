@@ -39,7 +39,8 @@ export interface NotificationEmailOptions {
   actionLabel?: string;
   details?: Array<{ label: string; value: string }>;
   recipientRole?: { en: string; ar: string };
-  cc?: string[]; // CC recipients for email
+  cc?: string[];
+  attachments?: Array<{ filename: string; content: string; type: string }>;
 }
 
 /**
@@ -1509,7 +1510,8 @@ PACT Command Center | مركز قيادة باكت`;
     projectName: string,
     currency: string = 'SDG',
     approvalNotes: string = '',
-    costSubmissionUrl: string = '/cost-submission'
+    costSubmissionUrl: string = '/cost-submission',
+    pdfAttachment?: { base64: string; filename: string }
   ): Promise<EmailNotificationResult> {
     try {
       if (!recipients || recipients.length === 0) {
@@ -1540,10 +1542,15 @@ PACT Command Center | مركز قيادة باكت`;
           ...(approvalNotes ? [{ label: 'Approval Notes / ملاحظات', value: approvalNotes }] : []),
         ],
         cc: approverEmail ? [approverEmail] : [],
+        attachments: pdfAttachment ? [{
+          filename: pdfAttachment.filename,
+          content: pdfAttachment.base64,
+          type: 'application/pdf',
+        }] : undefined,
       };
 
       const result = await this.sendBulk(recipients, options);
-      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients`);
+      console.log(`[EMAIL] Payment request notification: sent to ${result.successful}/${result.total} selected recipients${pdfAttachment ? ' (with PDF attachment)' : ''}`);
 
       return {
         success: result.successful > 0,
@@ -2019,21 +2026,25 @@ PACT Workflow Platform`;
                             options.type === 'warning' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
       const subject = priorityPrefix + options.title;
       
+      const emailBody: Record<string, unknown> = {
+        to: primaryRecipient.email,
+        subject,
+        type: 'notification',
+        recipientName: primaryRecipient.name,
+        title_en: options.title,
+        title_ar: options.titleAr || options.title,
+        message_en: options.message,
+        message_ar: options.messageAr || options.message,
+        actionUrl: options.actionUrl,
+        priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
+        details: options.details,
+        cc: ccRecipients,
+      };
+      if (options.attachments?.length) {
+        emailBody.attachments = options.attachments;
+      }
       const { data, error } = await supabase.functions.invoke('send-email', {
-        body: {
-          to: primaryRecipient.email,
-          subject,
-          type: 'notification',
-          recipientName: primaryRecipient.name,
-          title_en: options.title,
-          title_ar: options.titleAr || options.title,
-          message_en: options.message,
-          message_ar: options.messageAr || options.message,
-          actionUrl: options.actionUrl,
-          priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
-          details: options.details,
-          cc: ccRecipients,
-        },
+        body: emailBody,
       });
 
       if (error) {
