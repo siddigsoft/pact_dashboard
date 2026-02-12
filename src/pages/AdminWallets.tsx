@@ -268,7 +268,7 @@ const AdminWallets: React.FC = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <GradientStatCard
-          title="Total Platform Earnings"
+          title="Total Sites Cost"
           value={fmt(filtered.reduce((a,b)=>a+(Number(b.totalEarned)||0)*100,0), currency)}
           subtitle={`${filtered.length} active wallets`}
           icon={TrendingUp}
