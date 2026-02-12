@@ -48,6 +48,7 @@ import {
   History,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Search,
   RefreshCw,
   CheckSquare,
@@ -59,6 +60,9 @@ import {
   Undo2,
   PenLine,
   Trash2,
+  Hash,
+  Shield,
+  Eye,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -654,23 +658,23 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const isApprovedOrPaid = (status: string) => ['approved', 'partially_paid', 'fully_paid'].includes(status);
 
   const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; color?: string }> = {
-      pending_supervisor: { variant: 'secondary', icon: Clock },
-      pending_admin: { variant: 'outline', icon: Clock },
-      approved: { variant: 'default', icon: CheckCircle2 },
-      rejected: { variant: 'destructive', icon: XCircle },
-      partially_paid: { variant: 'outline', icon: DollarSign },
-      fully_paid: { variant: 'default', icon: CheckCircle2 },
-      cancelled: { variant: 'secondary', icon: X },
+    const statusMap: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: any; label: string; labelAr: string }> = {
+      pending_supervisor: { variant: 'secondary', icon: Clock, label: 'Pending Supervisor', labelAr: 'بانتظار المشرف' },
+      pending_admin: { variant: 'outline', icon: Clock, label: 'Pending Admin', labelAr: 'بانتظار الإدارة' },
+      approved: { variant: 'default', icon: CheckCircle2, label: 'Approved', labelAr: 'تمت الموافقة' },
+      rejected: { variant: 'destructive', icon: XCircle, label: 'Rejected', labelAr: 'مرفوض' },
+      partially_paid: { variant: 'outline', icon: DollarSign, label: 'Partially Paid', labelAr: 'مدفوع جزئياً' },
+      fully_paid: { variant: 'default', icon: CheckCircle2, label: 'Fully Paid', labelAr: 'مدفوع بالكامل' },
+      cancelled: { variant: 'secondary', icon: X, label: 'Cancelled', labelAr: 'ملغي' },
     };
 
-    const config = statusMap[status] || { variant: 'secondary' as const, icon: Clock };
+    const config = statusMap[status] || { variant: 'secondary' as const, icon: Clock, label: status.replace(/_/g, ' '), labelAr: '' };
     const Icon = config.icon;
 
     return (
       <Badge variant={config.variant} className="gap-1">
         <Icon className="h-3 w-3" />
-        {status.replace(/_/g, ' ').toUpperCase()}
+        {config.label} / {config.labelAr}
       </Badge>
     );
   };
@@ -684,9 +688,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     const isRejected = status === 'rejected';
     
     const steps = [
-      { key: 'submitted', label: 'Submitted', done: true },
-      { key: 'supervisor', label: 'Supervisor', done: supervisorPassed && !isRejected },
-      { key: 'admin', label: 'Admin', done: adminPassed },
+      { key: 'submitted', label: 'T1', done: true },
+      { key: 'supervisor', label: 'T2', done: supervisorPassed && !isRejected },
+      { key: 'admin', label: 'Signed', done: adminPassed },
       { key: 'paid', label: 'Paid', done: isPaid },
       { key: 'confirmed', label: 'Confirmed', done: receiptConfirmed },
     ];
@@ -701,10 +705,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     const rejectedStep = getRejectedStep();
     
     return (
-      <div className="flex items-center gap-1 text-xs" data-testid={`timeline-${request.id}`}>
+      <div className="flex items-center gap-1 text-xs flex-wrap" data-testid={`timeline-${request.id}`}>
         {steps.map((step, idx) => (
-          <div key={step.key} className="flex items-center">
-            <div className={`w-2 h-2 rounded-full ${
+          <div key={step.key} className="flex items-center gap-0.5">
+            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
               rejectedStep === idx 
                 ? 'bg-red-500' 
                 : isRejected && idx > rejectedStep
@@ -713,29 +717,27 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     ? 'bg-emerald-500' 
                     : 'bg-muted-foreground/30'
             }`} />
+            <span className={`text-xs ${
+              rejectedStep === idx
+                ? 'text-red-500 font-medium'
+                : step.done 
+                  ? 'text-emerald-600 dark:text-emerald-400 font-medium' 
+                  : 'text-muted-foreground'
+            }`}>{step.label}</span>
             {idx < steps.length - 1 && (
-              <div className={`w-4 h-0.5 ${
-                step.done && steps[idx + 1]?.done 
-                  ? 'bg-emerald-500' 
-                  : 'bg-muted-foreground/30'
-              }`} />
+              <span className="text-muted-foreground/50 mx-0.5">&rarr;</span>
             )}
           </div>
         ))}
-        <span className="ml-1 text-muted-foreground">{
-          status === 'rejected' ? 'Rejected' :
-          receiptConfirmed ? 'Receipt Confirmed' :
-          status === 'fully_paid' ? 'Awaiting Confirmation' :
-          status === 'partially_paid' ? 'Partial Payment' :
-          status === 'approved' ? 'Approved' :
-          status === 'pending_admin' ? 'With Admin' :
-          'Pending Supervisor'
-        }</span>
       </div>
     );
   };
 
-  const RequestCard = ({ request, showCheckbox = false }: { request: DownPaymentRequest; showCheckbox?: boolean }) => (
+  const RequestCard = ({ request, showCheckbox = false }: { request: DownPaymentRequest; showCheckbox?: boolean }) => {
+    const [showAuditDetails, setShowAuditDetails] = useState(false);
+    const shortId = request.id.substring(0, 8).toUpperCase();
+
+    return (
     <Card key={request.id} className="hover-elevate" data-testid={`card-request-${request.id}`}>
       <CardContent className="p-4">
         <div className="space-y-3">
@@ -749,37 +751,105 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   data-testid={`checkbox-select-${request.id}`}
                 />
               )}
-              <div>
-                <h4 className="font-medium flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
+              <div className="space-y-1">
+                <h4 className="font-semibold flex items-center gap-2 flex-wrap">
+                  <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   {request.siteName}
+                  {request.projectName && (
+                    <span className="text-xs text-muted-foreground font-normal">{request.projectName}</span>
+                  )}
                 </h4>
-                <div className="text-sm text-muted-foreground space-y-0.5 mt-1">
-                  <p className="flex items-center gap-1">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                  <span className="flex items-center gap-1 font-mono" data-testid={`text-request-id-${request.id}`}>
+                    <Hash className="h-3 w-3" />
+                    ID: {shortId}
+                  </span>
+                  <span className="flex items-center gap-1">
                     <User className="h-3 w-3" />
-                    {request.requestedByName || 'Unknown'} - {format(new Date(request.requestedAt), 'MMM d, yyyy')}
-                  </p>
+                    {request.requestedByName || 'Unknown'}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {format(new Date(request.requestedAt), 'MMM d, yyyy')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   {request.hubName && (
-                    <p className="flex items-center gap-1">
+                    <span className="flex items-center gap-1">
                       <Building className="h-3 w-3" />
                       {request.hubName}
-                    </p>
+                    </span>
                   )}
                   {request.stateName && (
-                    <p className="flex items-center gap-1">
+                    <span className="flex items-center gap-1">
                       <Globe className="h-3 w-3" />
                       {request.stateName}{request.localityName ? ` / ${request.localityName}` : ''}
-                    </p>
+                    </span>
                   )}
                 </div>
               </div>
             </div>
-            {getStatusBadge(request.status)}
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <span className="text-lg font-bold" data-testid={`text-amount-${request.id}`}>
+                SDG {(request.approvedAmount || request.requestedAmount).toLocaleString()}
+              </span>
+              {getStatusBadge(request.status)}
+            </div>
           </div>
 
           <div className="mt-2">
             <WorkflowTimeline request={request} />
           </div>
+
+          {(request.supervisorApprovedBy || request.adminProcessedBy) && (
+            <div className="space-y-1 text-xs border-l-2 border-muted-foreground/20 pl-3">
+              {request.supervisorApprovedBy && (
+                <div className="flex items-start gap-1.5" data-testid={`text-t1-details-${request.id}`}>
+                  <span className="font-semibold text-muted-foreground min-w-[22px]">T1:</span>
+                  <span>
+                    {request.supervisorStatus === 'rejected' ? (
+                      <span className="text-destructive">Rejected</span>
+                    ) : (
+                      <span className="text-emerald-600 dark:text-emerald-400">Approved</span>
+                    )}
+                    {request.supervisorNotes && <> &mdash; {request.supervisorNotes}</>}
+                    {request.supervisorRejectionReason && <> &mdash; <span className="text-destructive italic">{request.supervisorRejectionReason}</span></>}
+                    <span className="text-muted-foreground"> &mdash; {request.supervisorApprovedByName || 'Unknown'}</span>
+                    {request.supervisorApprovedAt && (
+                      <span className="text-muted-foreground"> ({format(new Date(request.supervisorApprovedAt), 'MMM d, yyyy h:mm a')})</span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {request.adminProcessedBy && (
+                <div className="flex items-start gap-1.5" data-testid={`text-t2-details-${request.id}`}>
+                  <span className="font-semibold text-muted-foreground min-w-[22px]">T2:</span>
+                  <span>
+                    {request.adminStatus === 'rejected' ? (
+                      <span className="text-destructive">Rejected</span>
+                    ) : (
+                      <span className="text-emerald-600 dark:text-emerald-400">Approved</span>
+                    )}
+                    {request.adminNotes && <> &mdash; {request.adminNotes}</>}
+                    {request.adminRejectionReason && <> &mdash; <span className="text-destructive italic">{request.adminRejectionReason}</span></>}
+                    <span className="text-muted-foreground"> &mdash; {request.adminProcessedByName || 'Unknown'}</span>
+                    {request.adminProcessedAt && (
+                      <span className="text-muted-foreground"> ({format(new Date(request.adminProcessedAt), 'MMM d, yyyy h:mm a')})</span>
+                    )}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {request.status === 'rejected' && (
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                {request.adminRejectionReason || request.supervisorRejectionReason || 'No rejection reason provided.'}
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div>
@@ -811,6 +881,56 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 Justification
               </Label>
               <p className="text-sm line-clamp-2">{request.justification}</p>
+            </div>
+          )}
+
+          {request.auditLog && request.auditLog.length > 0 && (
+            <div className="border rounded-md overflow-hidden">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground"
+                onClick={() => setShowAuditDetails(!showAuditDetails)}
+                data-testid={`button-toggle-audit-${request.id}`}
+              >
+                <span className="flex items-center gap-1">
+                  <History className="h-3.5 w-3.5" />
+                  Audit Trail ({request.auditLog.length} events) &mdash; Request ID: {shortId}
+                </span>
+                {showAuditDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </Button>
+              {showAuditDetails && (
+                <div className="border-t bg-muted/30 p-2 space-y-1.5 max-h-60 overflow-y-auto">
+                  {request.auditLog.map((entry, idx) => (
+                    <div key={entry.id || idx} className="flex items-start gap-2 text-xs p-1.5 rounded bg-background" data-testid={`audit-entry-${request.id}-${idx}`}>
+                      <div className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
+                        entry.action.includes('rejected') ? 'bg-red-500' :
+                        entry.action.includes('approved') ? 'bg-emerald-500' :
+                        entry.action.includes('payment') ? 'bg-blue-500' :
+                        entry.action.includes('receipt') ? 'bg-purple-500' :
+                        'bg-muted-foreground/50'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">
+                            {entry.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                          </span>
+                          <span className="text-muted-foreground">by {entry.performedByName || 'System'}</span>
+                          {entry.performedByRole && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0">{entry.performedByRole}</Badge>
+                          )}
+                        </div>
+                        <div className="text-muted-foreground mt-0.5">
+                          {format(new Date(entry.timestamp), 'MMM d, yyyy h:mm:ss a')}
+                        </div>
+                        {entry.notes && (
+                          <div className="mt-0.5 italic text-muted-foreground">{entry.notes}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -936,18 +1056,6 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </Badge>
             )}
 
-            {request.auditLog && request.auditLog.length > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openActionDialog(request, 'view_audit')}
-                data-testid={`button-view-audit-${request.id}`}
-              >
-                <History className="h-4 w-4 mr-1" />
-                Audit ({request.auditLog.length})
-              </Button>
-            )}
-
             {isApprovedOrPaid(request.status) && (
               <Button
                 size="sm"
@@ -1001,7 +1109,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         </div>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   const StatsCards = () => (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4" data-testid="stats-cards-container">

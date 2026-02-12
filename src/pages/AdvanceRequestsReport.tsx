@@ -39,8 +39,10 @@ import {
   Banknote,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  History,
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -74,6 +76,7 @@ function AdvanceRequestsReportContent() {
   const [activeTab, setActiveTab] = useState('overview');
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  const [expandedRequestRow, setExpandedRequestRow] = useState<string | null>(null);
   const PAGE_SIZE = 25;
 
   const [paymentRequestDialog, setPaymentRequestDialog] = useState<{
@@ -443,17 +446,17 @@ function AdvanceRequestsReportContent() {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', label: string, className: string }> = {
-      'pending_supervisor': { variant: 'outline', label: 'Pending Supervisor', className: 'border-amber-500 text-amber-600' },
-      'pending_admin': { variant: 'outline', label: 'Pending Admin', className: 'border-blue-500 text-blue-600' },
-      'approved': { variant: 'default', label: 'Approved', className: 'bg-green-500' },
-      'rejected': { variant: 'destructive', label: 'Rejected', className: '' },
-      'partially_paid': { variant: 'secondary', label: 'Partially Paid', className: 'bg-purple-100 text-purple-700' },
-      'fully_paid': { variant: 'default', label: 'Fully Paid', className: 'bg-emerald-500' },
-      'cancelled': { variant: 'secondary', label: 'Cancelled', className: 'bg-gray-100 text-gray-600' },
+    const statusConfig: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline', label: string, labelAr: string, className: string }> = {
+      'pending_supervisor': { variant: 'outline', label: 'Pending Supervisor', labelAr: 'بانتظار المشرف', className: 'border-amber-500 text-amber-600' },
+      'pending_admin': { variant: 'outline', label: 'Pending Admin', labelAr: 'بانتظار الإدارة', className: 'border-blue-500 text-blue-600' },
+      'approved': { variant: 'default', label: 'Approved', labelAr: 'تمت الموافقة', className: 'bg-green-500' },
+      'rejected': { variant: 'destructive', label: 'Rejected', labelAr: 'مرفوض', className: '' },
+      'partially_paid': { variant: 'secondary', label: 'Partially Paid', labelAr: 'مدفوع جزئياً', className: 'bg-purple-100 text-purple-700' },
+      'fully_paid': { variant: 'default', label: 'Fully Paid', labelAr: 'مدفوع بالكامل', className: 'bg-emerald-500' },
+      'cancelled': { variant: 'secondary', label: 'Cancelled', labelAr: 'ملغي', className: 'bg-gray-100 text-gray-600' },
     };
-    const config = statusConfig[status] || { variant: 'outline' as const, label: status, className: '' };
-    return <Badge variant={config.variant} className={config.className}>{config.label}</Badge>;
+    const config = statusConfig[status] || { variant: 'outline' as const, label: status, labelAr: '', className: '' };
+    return <Badge variant={config.variant} className={config.className}>{config.label} / {config.labelAr}</Badge>;
   };
 
   const dateRanges = useMemo(() => {
@@ -1586,6 +1589,8 @@ function AdvanceRequestsReportContent() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[30px]"></TableHead>
+                        <TableHead>ID</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Requested By</TableHead>
                         <TableHead>Site</TableHead>
@@ -1601,8 +1606,15 @@ function AdvanceRequestsReportContent() {
                       {paginatedRequests.map(req => {
                         const remaining = req.remainingAmount || (req.requestedAmount - (req.totalPaidAmount || 0));
                         const needsReconciliation = ['approved', 'partially_paid', 'fully_paid'].includes(req.status) && remaining > 0;
+                        const isExpanded = expandedRequestRow === req.id;
+                        const shortId = req.id.substring(0, 8).toUpperCase();
                         return (
-                          <TableRow key={req.id} data-testid={`row-request-${req.id}`}>
+                          <>
+                          <TableRow key={req.id} data-testid={`row-request-${req.id}`} className="cursor-pointer" onClick={() => setExpandedRequestRow(isExpanded ? null : req.id)}>
+                            <TableCell className="p-1 text-center">
+                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs" data-testid={`text-report-id-${req.id}`}>{shortId}</TableCell>
                             <TableCell className="text-sm">{format(parseISO(req.requestedAt), 'MMM dd, yyyy')}</TableCell>
                             <TableCell className="font-medium">{getProfileName(req.requestedBy)}</TableCell>
                             <TableCell className="max-w-[200px] truncate">{req.siteName}</TableCell>
@@ -1617,7 +1629,7 @@ function AdvanceRequestsReportContent() {
                                 <span className="text-muted-foreground">0</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-center gap-1">
                                 {needsReconciliation && (
                                   <Button
@@ -1680,6 +1692,99 @@ function AdvanceRequestsReportContent() {
                               </div>
                             </TableCell>
                           </TableRow>
+                          {isExpanded && (
+                            <TableRow key={`${req.id}-details`} className="bg-muted/30">
+                              <TableCell colSpan={11} className="p-3">
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                                    <span className="font-mono">Request ID: {shortId}</span>
+                                    <span>Created: {format(parseISO(req.createdAt || req.requestedAt), 'MMM dd, yyyy h:mm a')}</span>
+                                    {req.stateName && <span>State: {req.stateName}</span>}
+                                    {req.localityName && <span>Locality: {req.localityName}</span>}
+                                    {req.projectName && <span>Project: {req.projectName}</span>}
+                                  </div>
+
+                                  {(req.supervisorApprovedBy || req.adminProcessedBy) && (
+                                    <div className="space-y-1 text-xs border-l-2 border-muted-foreground/20 pl-3">
+                                      {req.supervisorApprovedBy && (
+                                        <div className="flex items-start gap-1.5" data-testid={`text-report-t1-${req.id}`}>
+                                          <span className="font-semibold text-muted-foreground min-w-[22px]">T1:</span>
+                                          <span>
+                                            {req.supervisorStatus === 'rejected' ? (
+                                              <span className="text-destructive font-medium">Rejected</span>
+                                            ) : (
+                                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Approved</span>
+                                            )}
+                                            {req.supervisorNotes && <> &mdash; {req.supervisorNotes}</>}
+                                            {req.supervisorRejectionReason && <> &mdash; <span className="text-destructive italic">{req.supervisorRejectionReason}</span></>}
+                                            <span className="text-muted-foreground"> &mdash; {req.supervisorApprovedByName || getProfileName(req.supervisorApprovedBy)}</span>
+                                            {req.supervisorApprovedAt && (
+                                              <span className="text-muted-foreground"> ({format(parseISO(req.supervisorApprovedAt), 'MMM d, yyyy h:mm a')})</span>
+                                            )}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {req.adminProcessedBy && (
+                                        <div className="flex items-start gap-1.5" data-testid={`text-report-t2-${req.id}`}>
+                                          <span className="font-semibold text-muted-foreground min-w-[22px]">T2:</span>
+                                          <span>
+                                            {req.adminStatus === 'rejected' ? (
+                                              <span className="text-destructive font-medium">Rejected</span>
+                                            ) : (
+                                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Approved</span>
+                                            )}
+                                            {req.adminNotes && <> &mdash; {req.adminNotes}</>}
+                                            {req.adminRejectionReason && <> &mdash; <span className="text-destructive italic">{req.adminRejectionReason}</span></>}
+                                            <span className="text-muted-foreground"> &mdash; {req.adminProcessedByName || getProfileName(req.adminProcessedBy)}</span>
+                                            {req.adminProcessedAt && (
+                                              <span className="text-muted-foreground"> ({format(parseISO(req.adminProcessedAt), 'MMM d, yyyy h:mm a')})</span>
+                                            )}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {req.status === 'rejected' && (req.adminRejectionReason || req.supervisorRejectionReason) && (
+                                    <div className="bg-destructive/10 border border-destructive/20 rounded-md p-2 text-xs text-destructive">
+                                      <span className="font-medium">Rejection Reason:</span> {req.adminRejectionReason || req.supervisorRejectionReason}
+                                    </div>
+                                  )}
+
+                                  {req.auditLog && req.auditLog.length > 0 && (
+                                    <div className="space-y-1">
+                                      <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                                        <History className="h-3 w-3" />
+                                        Audit Trail ({req.auditLog.length} events)
+                                      </div>
+                                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                                        {req.auditLog.map((entry: any, idx: number) => (
+                                          <div key={entry.id || idx} className="flex items-center gap-2 text-xs p-1.5 rounded bg-background" data-testid={`report-audit-${req.id}-${idx}`}>
+                                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                              entry.action?.includes('rejected') ? 'bg-red-500' :
+                                              entry.action?.includes('approved') ? 'bg-emerald-500' :
+                                              entry.action?.includes('payment') ? 'bg-blue-500' :
+                                              'bg-muted-foreground/50'
+                                            }`} />
+                                            <span className="font-medium">{(entry.action || '').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</span>
+                                            <span className="text-muted-foreground">by {entry.performedByName || 'System'}</span>
+                                            <span className="text-muted-foreground ml-auto">{format(parseISO(entry.timestamp), 'MMM d h:mm a')}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {req.justification && (
+                                    <div className="text-xs">
+                                      <span className="font-medium text-muted-foreground">Justification:</span> {req.justification}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          </>
                         );
                       })}
                     </TableBody>
