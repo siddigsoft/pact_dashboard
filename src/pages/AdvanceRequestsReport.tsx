@@ -54,6 +54,8 @@ import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertifi
 import { useToast } from '@/hooks/use-toast';
 import type { DownPaymentRequest } from '@/types/down-payment';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
+import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -1185,6 +1187,72 @@ function AdvanceRequestsReportContent() {
     doc.save(`advance_by_project_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
+  const STATUS_AR_MAP: Record<string, string> = {
+    pending_supervisor: 'بانتظار المشرف',
+    pending_admin: 'بانتظار المدير',
+    approved: 'تمت الموافقة',
+    rejected: 'مرفوض',
+    partially_paid: 'مدفوع جزئياً',
+    fully_paid: 'مدفوع بالكامل',
+    cancelled: 'ملغي',
+    all: 'الكل',
+  };
+
+  const mapRequestToStatementRow = (req: DownPaymentRequest): StatementRow => ({
+    refId: `PACT-TA-${req.id.substring(0, 8).toUpperCase()}`,
+    date: req.requestedAt,
+    description: req.justification || req.siteName,
+    requester: getProfileName(req.requestedBy),
+    site: req.siteName,
+    hub: req.hubName || '',
+    state: req.stateName || '',
+    status: req.status,
+    statusAr: STATUS_AR_MAP[req.status] || '',
+    requestedAmount: req.requestedAmount,
+    approvedAmount: req.approvedAmount || req.requestedAmount,
+    paidAmount: req.totalPaidAmount || 0,
+    t1Approver: req.supervisorApprovedByName || (req.supervisorApprovedBy ? getProfileName(req.supervisorApprovedBy) : undefined),
+    t1Date: req.supervisorApprovedAt || undefined,
+    t1Status: req.supervisorStatus || undefined,
+    t2Approver: req.adminProcessedByName || (req.adminProcessedBy ? getProfileName(req.adminProcessedBy) : undefined),
+    t2Date: req.adminProcessedAt || undefined,
+    t2Status: req.adminStatus || undefined,
+    rejectionReason: req.supervisorRejectionReason || req.adminRejectionReason || undefined,
+    notes: req.supervisorNotes || req.adminNotes || undefined,
+  });
+
+  const handleStatementExport = async (exportFormat: 'pdf' | 'excel') => {
+    const dataToExport = filteredRequests;
+    if (dataToExport.length === 0) {
+      toast({ title: 'No Data', description: 'No requests match the current filters.', variant: 'destructive' });
+      return;
+    }
+
+    const statementRows: StatementRow[] = dataToExport.map(mapRequestToStatementRow);
+    const statusLabel = statusFilter === 'all' ? 'All Statuses' : statusFilter;
+    const config: StatementConfig = {
+      title: 'Transportation Advance',
+      titleAr: 'سلفة النقل',
+      statementType: 'transport_advance',
+      statusFilter: statusLabel,
+      statusFilterAr: STATUS_AR_MAP[statusFilter] || statusLabel,
+      currency: 'SDG',
+    };
+
+    try {
+      if (exportFormat === 'pdf') {
+        await generateFinancialStatementPdf(statementRows, config);
+        toast({ title: 'Statement Downloaded / تم تحميل الكشف', description: `PDF statement for ${statusLabel} exported successfully.` });
+      } else {
+        generateFinancialStatementExcel(statementRows, config);
+        toast({ title: 'Statement Downloaded / تم تحميل الكشف', description: `Excel statement for ${statusLabel} exported successfully.` });
+      }
+    } catch (err) {
+      console.error('Statement export error:', err);
+      toast({ title: 'Export Failed', description: 'Could not generate statement. Please try again.', variant: 'destructive' });
+    }
+  };
+
   if (!isAdmin && !isSupervisor && !isFOM) {
     return (
       <div className="p-6">
@@ -1573,6 +1641,48 @@ function AdvanceRequestsReportContent() {
               </CardContent>
             </Card>
           )}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-muted-foreground">
+                Bank Statement / كشف مالي:
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleStatementExport('pdf')}
+                disabled={filteredRequests.length === 0}
+                data-testid="button-statement-pdf"
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                Statement PDF
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleStatementExport('excel')}
+                disabled={filteredRequests.length === 0}
+                data-testid="button-statement-excel"
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Statement Excel
+              </Button>
+              <Badge variant="outline" className="text-xs">
+                {statusFilter === 'all' ? 'All Statuses / كل الحالات' : `${statusFilter.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} / ${STATUS_AR_MAP[statusFilter] || ''}`}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {filteredRequests.length} records
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={exportToPDF} data-testid="button-overview-pdf">
+                <FileText className="h-4 w-4 mr-1" />
+                Report PDF
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportToExcel} data-testid="button-overview-excel">
+                <Download className="h-4 w-4 mr-1" />
+                Report Excel
+              </Button>
+            </div>
+          </div>
           <Card>
             <CardContent className="p-0">
               {loading ? (
