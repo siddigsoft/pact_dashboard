@@ -43,6 +43,7 @@ import ExcelUploadParser from "./ExcelUploadParser";
 import { useAppContext } from "@/context/AppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
+import { EmailNotificationService } from "@/services/email-notification.service";
 
 const EXPENSE_CATEGORIES = {
   permits: { label: "Permits & Licenses", icon: Ticket, color: "from-purple-500 to-purple-600" },
@@ -443,6 +444,32 @@ export default function UnifiedCostRequestForm({
             ? `Your request has been updated and resubmitted for approval.`
             : `Your request has been updated.`,
         });
+
+        if (isResubmit) {
+          const selectedProject = projects.find(p => p.id === resolvedProjectId);
+          const projectLabel = selectedProject?.name || 'N/A';
+          const resubmitAmt = lineItems.reduce((s, i) => s + i.amount, 0);
+          const catKey = lineItems[0]?.expenseCategory as keyof typeof EXPENSE_CATEGORIES;
+          const catLabel = EXPENSE_CATEGORIES[catKey]?.label || lineItems[0]?.expenseCategory || 'N/A';
+
+          EmailNotificationService.sendCostSubmissionToSuperAdmins(
+            currentUser.fullName || currentUser.email || 'Unknown User',
+            currentUser.email || '',
+            `[Resubmitted] ${requestTitle.trim() || 'Untitled Request'}`,
+            catLabel,
+            resubmitAmt,
+            lineItems.length,
+            fundingType,
+            projectLabel,
+            lineItems[0]?.currency || 'SDG'
+          ).then(result => {
+            if (result.success) {
+              console.log('[COST] Email notification sent to super admins for resubmitted cost');
+            }
+          }).catch(err => {
+            console.error('[COST] Error sending resubmit email notification:', err);
+          });
+        }
       } else {
         const insertRows = lineItems.map(item => ({
           expense_category: item.expenseCategory,
@@ -486,6 +513,37 @@ export default function UnifiedCostRequestForm({
           description: lineItems.length === 1
             ? `Your request for ${lineItems[0].currency} ${lineItems[0].amount.toLocaleString()} has been submitted.`
             : `${lineItems.length} items totalling ${totalCurrency} ${totalAmt.toLocaleString()} have been submitted.`,
+        });
+
+        const selectedProject = projects.find(p => p.id === resolvedProjectId);
+        const projectLabel = selectedProject?.name || 'N/A';
+        const categoryLabels = lineItems.map(i => {
+          const catKey = i.expenseCategory as keyof typeof EXPENSE_CATEGORIES;
+          return EXPENSE_CATEGORIES[catKey]?.label || i.expenseCategory;
+        }).join(', ');
+
+        EmailNotificationService.sendCostSubmissionToSuperAdmins(
+          currentUser.fullName || currentUser.email || 'Unknown User',
+          currentUser.email || '',
+          requestTitle.trim() || 'Untitled Request',
+          categoryLabels,
+          totalAmt,
+          lineItems.length,
+          fundingType,
+          projectLabel,
+          totalCurrency
+        ).then(result => {
+          if (result.success) {
+            console.log('[COST] Email notification sent to super admins for cost submission');
+            toast({
+              title: "Notification Sent",
+              description: "Super Admin has been notified about your submission via email.",
+            });
+          } else {
+            console.warn('[COST] Failed to send email notification to super admins:', result.error);
+          }
+        }).catch(err => {
+          console.error('[COST] Error sending email notification:', err);
         });
       }
 
