@@ -58,10 +58,9 @@ function transformFromDB(data: any): DownPaymentRequest {
   // For state, try multiple sources in order of preference:
   // 1. MMP site entry state
   // 2. Metadata state_name  
-  // 3. Hub name as fallback (hubs are often named after their primary state/region)
+  // Do NOT fall back to hub_name - hubs and states are separate geographic levels
   const stateName = mmpEntry?.state || 
                     data.metadata?.state_name || 
-                    data.hub_name || 
                     undefined;
   
   return {

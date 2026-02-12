@@ -135,6 +135,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       return { id: id!, name: (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown' };
     });
   }, [requests, users]);
+  const uniqueEnumerators = useMemo(() => {
+    const approvedReqs = requests.filter(r => ['approved', 'partially_paid', 'fully_paid'].includes(r.status));
+    const enumeratorIds = [...new Set(approvedReqs.map(r => r.requestedBy).filter(Boolean))];
+    return enumeratorIds.map(id => {
+      const u = users?.find(u => u.id === id);
+      return { id: id!, name: (u as any)?.fullName || (u as any)?.full_name || u?.email || 'Unknown' };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [requests, users]);
 
   const filteredRequests = useMemo(() => filterDownPayments(requests, filters), [requests, filters]);
 
@@ -1282,8 +1290,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-3 pt-0">
-                <p className="text-xs text-muted-foreground mb-3">Send payment request for multiple approved advances grouped by State, Hub, Locality, Supervisor, or Site.</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                <p className="text-xs text-muted-foreground mb-3">Send payment request for multiple approved advances grouped by State, Hub, Locality, Supervisor, Enumerator, or Site.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                   {uniqueStates.length > 0 && (
                     <Select onValueChange={(val) => {
                       const reqs = approvedForPayment.filter(r => r.stateName === val);
@@ -1347,6 +1355,25 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                         {uniqueSupervisors.map(s => {
                           const count = approvedForPayment.filter(r => r.supervisorApprovedBy === s.id).length;
                           return count > 0 ? <SelectItem key={s.id} value={s.id}>{s.name} ({count})</SelectItem> : null;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {uniqueEnumerators.length > 0 && (
+                    <Select onValueChange={(val) => {
+                      const reqs = approvedForPayment.filter(r => r.requestedBy === val);
+                      if (reqs.length > 0) {
+                        const en = uniqueEnumerators.find(e => e.id === val);
+                        openBulkPaymentRequestDialog(reqs, 'Enumerator', en?.name || val);
+                      }
+                    }}>
+                      <SelectTrigger data-testid="select-bulk-enumerator">
+                        <SelectValue placeholder="By Enumerator" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {uniqueEnumerators.map(e => {
+                          const count = approvedForPayment.filter(r => r.requestedBy === e.id).length;
+                          return count > 0 ? <SelectItem key={e.id} value={e.id}>{e.name} ({count})</SelectItem> : null;
                         })}
                       </SelectContent>
                     </Select>
