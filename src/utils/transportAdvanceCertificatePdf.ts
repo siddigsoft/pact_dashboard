@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';
 
@@ -574,11 +575,45 @@ async function buildTransportCertificateDoc(data: TransportAdvanceCertificateDat
 
   y += 1;
 
+  const footerH = 14;
+  const maxY = ph - footerH - 4;
+
+  const checkPage = (needed: number) => {
+    if (y + needed > maxY) {
+      doc.addPage();
+      y = 15;
+    }
+  };
+
+  const drawFooter = () => {
+    const totalPages = doc.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      const footerY = ph - footerH;
+      doc.setFillColor(...C.navy);
+      doc.rect(0, footerY, pw, footerH, 'F');
+      doc.setFontSize(7);
+      doc.setTextColor(180, 195, 220);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Document Reference: ${refNumber}`, ml, footerY + 5.5);
+      doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm:ss')}`, pw / 2, footerY + 5.5, { align: 'center' });
+      doc.setTextColor(...C.white);
+      doc.setFont('helvetica', 'bold');
+      doc.text('PACT Command Center', pw - mr, footerY + 5.5, { align: 'right' });
+      doc.setFontSize(6);
+      doc.setTextColor(140, 155, 180);
+      doc.setFont('helvetica', 'normal');
+      const pageLabel = totalPages > 1 ? `Financial Operations  |  Field Operations Platform  |  Page ${p} of ${totalPages}` : 'Financial Operations  |  Field Operations Platform';
+      doc.text(pageLabel, pw / 2, footerY + 10, { align: 'center' });
+    }
+  };
+
   const approvedAmt = data.request.approvedAmount || data.request.requestedAmount;
   const paidAmt = data.request.totalPaidAmount || 0;
   const remainAmt = data.request.remainingAmount || (approvedAmt - paidAmt);
 
   const finH = 18;
+  checkPage(finH + 4);
   rr(doc, ml, y, cw, finH, 2, C.amberLight, C.amber as [number, number, number]);
   doc.setFontSize(8.5);
   doc.setTextColor(...C.amber);
@@ -612,9 +647,10 @@ async function buildTransportCertificateDoc(data: TransportAdvanceCertificateDat
   doc.text(fmtCurrency(remainAmt), col4, y + 15);
   y += finH + 4;
 
-  const reconH = hasArabic ? 22 : 16;
+  const reconH = hasArabic ? 24 : 18;
   const red: [number, number, number] = [180, 40, 40];
   const redLight: [number, number, number] = [255, 240, 240];
+  checkPage(reconH + 4);
   rr(doc, ml, y, cw, reconH, 2, redLight, red);
   doc.setFontSize(8);
   doc.setTextColor(...red);
@@ -632,17 +668,18 @@ async function buildTransportCertificateDoc(data: TransportAdvanceCertificateDat
   doc.text(reconLines.slice(0, 2), ml + 5, y + 10);
   if (hasArabic) {
     doc.setFont('Amiri', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     doc.setTextColor(...C.body);
     const arReconText = 'يجب تسوية هذه السلفة بعد اكتمال النشاط الميداني. يجب على المستلم تقديم الإيصالات وإعادة أي أموال غير مستخدمة خلال فترة التسوية.';
     const arReconLines = doc.splitTextToSize(arReconText, cw - 12);
-    doc.text(arReconLines.slice(0, 2), pw - mr - 5, y + 18, { align: 'right' });
+    doc.text(arReconLines.slice(0, 2), pw - mr - 5, y + 16, { align: 'right' });
     doc.setFont('helvetica', 'normal');
   }
   y += reconH + 4;
 
   const qrSize = 24;
   const disclaimerH = qrSize + 6;
+  checkPage(disclaimerH + 4);
 
   rr(doc, ml, y, cw, disclaimerH, 2, C.bgLight, C.border);
 
@@ -687,26 +724,7 @@ async function buildTransportCertificateDoc(data: TransportAdvanceCertificateDat
     doc.setFont('helvetica', 'normal');
   }
 
-  const footerH = 14;
-  const footerY = ph - footerH;
-
-  doc.setFillColor(...C.navy);
-  doc.rect(0, footerY, pw, footerH, 'F');
-
-  doc.setFontSize(7);
-  doc.setTextColor(180, 195, 220);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Document Reference: ${refNumber}`, ml, footerY + 5.5);
-  doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm:ss')}`, pw / 2, footerY + 5.5, { align: 'center' });
-
-  doc.setTextColor(...C.white);
-  doc.setFont('helvetica', 'bold');
-  doc.text('PACT Command Center', pw - mr, footerY + 5.5, { align: 'right' });
-
-  doc.setFontSize(6);
-  doc.setTextColor(140, 155, 180);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Financial Operations  |  Field Operations Platform', pw / 2, footerY + 10, { align: 'center' });
+  drawFooter();
 
   return { doc, refNumber };
 }
@@ -720,4 +738,305 @@ export async function generateTransportAdvanceCertificateBase64(data: TransportA
   const { doc, refNumber } = await buildTransportCertificateDoc(data);
   const base64String = doc.output('datauristring').split(',')[1];
   return { base64: base64String, filename: `Transport-Advance-Confirmation-${refNumber}.pdf` };
+}
+
+export type { TransportAdvanceCertificateData };
+
+export async function generateBulkPaymentPdf(
+  requests: TransportAdvanceCertificateData[],
+  groupLabel?: string
+): Promise<void> {
+  if (requests.length === 0) return;
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+  const ml = 14;
+  const mr = 14;
+  const cw = pw - ml - mr;
+  const footerH = 14;
+  const maxY = ph - footerH - 4;
+  const batchRef = `PACT-BULK-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+
+  let hasArabic = false;
+  try {
+    hasArabic = await loadArabicFont(doc);
+  } catch {}
+
+  const logoDataUrl = await loadLogoAsDataUrl();
+
+  const arText = (text: string, x: number, yPos: number, opts?: any) => {
+    if (!hasArabic) return;
+    doc.setFont('Amiri', 'normal');
+    doc.text(text, x, yPos, opts);
+    doc.setFont('helvetica', 'normal');
+  };
+
+  doc.setFillColor(...C.navy);
+  doc.rect(0, 0, pw, 34, 'F');
+  doc.setFillColor(...C.navyMid);
+  doc.rect(0, 32, pw, 2, 'F');
+
+  if (logoDataUrl) {
+    try { doc.addImage(logoDataUrl, 'PNG', ml + 1, 5, 22, 22); } catch {}
+  }
+
+  doc.setFontSize(18);
+  doc.setTextColor(...C.white);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PACT', ml + 27, 16);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(180, 195, 220);
+  doc.text('Command Center | Field Operations', ml + 27, 22);
+  if (hasArabic) {
+    doc.setFont('Amiri', 'normal');
+    doc.setFontSize(10);
+    doc.text('مركز قيادة باكت', ml + 27, 28);
+    doc.setFont('helvetica', 'normal');
+  }
+
+  doc.setFontSize(7);
+  doc.setTextColor(180, 195, 220);
+  doc.text(batchRef, pw - mr, 8, { align: 'right' });
+  doc.text(`${format(new Date(), 'MMM d, yyyy | HH:mm')}`, pw - mr, 13, { align: 'right' });
+
+  let y = 42;
+
+  rr(doc, ml, y, cw, 14, 2, C.blueLight, C.blue as [number, number, number]);
+  doc.setFontSize(12);
+  doc.setTextColor(...C.blue);
+  doc.setFont('helvetica', 'bold');
+  doc.text('BULK PAYMENT REQUEST', ml + 5, y + 8);
+  if (hasArabic) {
+    doc.setFontSize(11);
+    arText('طلب دفع جماعي', pw - mr - 5, y + 8, { align: 'right' });
+  }
+  y += 18;
+
+  if (groupLabel) {
+    doc.setFontSize(9);
+    doc.setTextColor(...C.body);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Group: ${groupLabel}`, ml + 2, y + 3);
+    y += 7;
+  }
+
+  const totalRequested = requests.reduce((s, r) => s + r.request.requestedAmount, 0);
+  const totalApproved = requests.reduce((s, r) => s + (r.request.approvedAmount || r.request.requestedAmount), 0);
+
+  const summH = 22;
+  rr(doc, ml, y, cw, summH, 2, C.bgLight, C.border);
+  doc.setFontSize(8);
+  doc.setTextColor(...C.label);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL REQUESTS', ml + 5, y + 6);
+  doc.text('TOTAL REQUESTED', ml + cw * 0.3, y + 6);
+  doc.text('TOTAL APPROVED', ml + cw * 0.6, y + 6);
+  doc.setFontSize(14);
+  doc.setTextColor(...C.dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${requests.length}`, ml + 5, y + 16);
+  doc.setFontSize(11);
+  doc.text(fmtCurrency(totalRequested), ml + cw * 0.3, y + 16);
+  doc.setTextColor(...C.green);
+  doc.text(fmtCurrency(totalApproved), ml + cw * 0.6, y + 16);
+  y += summH + 6;
+
+  doc.setFontSize(9);
+  doc.setTextColor(...C.dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text('REQUEST DETAILS', ml + 2, y);
+  if (hasArabic) {
+    doc.setFontSize(9);
+    arText('تفاصيل الطلبات', pw - mr - 2, y, { align: 'right' });
+  }
+  y += 5;
+
+  const tableHead = [['#', 'Ref / المرجع', 'Requester / مقدم الطلب', 'Site / الموقع', 'Hub', 'Requested', 'Approved', 'Status']];
+  const tableBody = requests.map((r, i) => [
+    `${i + 1}`,
+    `PACT-TA-${r.request.id.substring(0, 8).toUpperCase()}`,
+    r.requester.name,
+    r.request.siteName || 'N/A',
+    r.request.hubName || 'N/A',
+    fmtCurrency(r.request.requestedAmount),
+    fmtCurrency(r.request.approvedAmount || r.request.requestedAmount),
+    fmtStatus(r.request.status),
+  ]);
+
+  autoTable(doc, {
+    startY: y,
+    head: tableHead,
+    body: tableBody,
+    margin: { left: ml, right: mr, bottom: footerH + 6 },
+    styles: {
+      fontSize: 7,
+      cellPadding: 2,
+      lineColor: C.border,
+      lineWidth: 0.2,
+      textColor: C.body,
+    },
+    headStyles: {
+      fillColor: C.navy,
+      textColor: C.white,
+      fontStyle: 'bold',
+      fontSize: 6.5,
+    },
+    alternateRowStyles: {
+      fillColor: [248, 249, 252],
+    },
+    columnStyles: {
+      0: { cellWidth: 8, halign: 'center' },
+      5: { halign: 'right' },
+      6: { halign: 'right' },
+      7: { halign: 'center', fontStyle: 'bold' },
+    },
+    didParseCell: (data: any) => {
+      if (data.section === 'body' && data.column.index === 7) {
+        const val = data.cell.raw?.toString().toLowerCase() || '';
+        if (val.includes('approved')) {
+          data.cell.styles.textColor = C.green;
+        } else if (val.includes('rejected')) {
+          data.cell.styles.textColor = [180, 40, 40];
+        } else if (val.includes('pending')) {
+          data.cell.styles.textColor = C.amber;
+        }
+      }
+    },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 6;
+
+  const checkPage = (needed: number) => {
+    if (y + needed > maxY) {
+      doc.addPage();
+      y = 15;
+    }
+  };
+
+  checkPage(20);
+  const totH = 16;
+  rr(doc, ml, y, cw, totH, 2, C.amberLight, C.amber as [number, number, number]);
+  doc.setFontSize(8);
+  doc.setTextColor(...C.amber);
+  doc.setFont('helvetica', 'bold');
+  doc.text('GRAND TOTAL', ml + 5, y + 6);
+  if (hasArabic) arText('الإجمالي الكلي', pw - mr - 5, y + 6, { align: 'right' });
+  doc.setFontSize(7);
+  doc.setTextColor(...C.label);
+  doc.text('TOTAL REQUESTED', ml + 5, y + 10);
+  doc.text('TOTAL APPROVED', ml + cw * 0.5, y + 10);
+  doc.setFontSize(11);
+  doc.setTextColor(...C.dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text(fmtCurrency(totalRequested), ml + 5, y + 15);
+  doc.setTextColor(...C.green);
+  doc.text(fmtCurrency(totalApproved), ml + cw * 0.5, y + 15);
+  y += totH + 6;
+
+  checkPage(22);
+  const reconH2 = hasArabic ? 22 : 16;
+  const red: [number, number, number] = [180, 40, 40];
+  const redLight: [number, number, number] = [255, 240, 240];
+  rr(doc, ml, y, cw, reconH2, 2, redLight, red);
+  doc.setFontSize(8);
+  doc.setTextColor(...red);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RECONCILIATION NOTICE', ml + 5, y + 5.5);
+  if (hasArabic) {
+    doc.setFontSize(9);
+    arText('إشعار التسوية', pw - mr - 5, y + 5.5, { align: 'right' });
+  }
+  doc.setFontSize(7);
+  doc.setTextColor(...C.body);
+  doc.setFont('helvetica', 'normal');
+  const reconText = 'All transportation advances listed must be reconciled after field activities are completed. Recipients must submit receipts and return unused funds within the reconciliation period.';
+  const reconLines = doc.splitTextToSize(reconText, cw - 12);
+  doc.text(reconLines.slice(0, 2), ml + 5, y + 10);
+  if (hasArabic) {
+    doc.setFont('Amiri', 'normal');
+    doc.setFontSize(8);
+    const arRecon = 'يجب تسوية جميع سلف النقل المدرجة بعد اكتمال الأنشطة الميدانية. يجب على المستلمين تقديم الإيصالات وإعادة الأموال غير المستخدمة.';
+    const arLines = doc.splitTextToSize(arRecon, cw - 12);
+    doc.text(arLines.slice(0, 2), pw - mr - 5, y + 16, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+  }
+  y += reconH2 + 4;
+
+  let qrDataUrl: string | null = null;
+  try {
+    const qrContent = [
+      `PACT BULK PAYMENT REQUEST`,
+      `Ref: ${batchRef}`,
+      `Date: ${format(new Date(), 'MMM d, yyyy HH:mm')}`,
+      `Total Requests: ${requests.length}`,
+      `Total Approved: ${fmtCurrency(totalApproved)}`,
+      groupLabel ? `Group: ${groupLabel}` : '',
+      `Verified: YES`,
+    ].filter(Boolean).join('\n');
+    qrDataUrl = await generateQRDataUrl(qrContent);
+  } catch {}
+
+  const qrSize = 22;
+  const verifyH = qrSize + 6;
+  checkPage(verifyH + 4);
+  rr(doc, ml, y, cw, verifyH, 2, C.bgLight, C.border);
+  if (qrDataUrl) {
+    try { doc.addImage(qrDataUrl, 'PNG', ml + 4, y + 3, qrSize, qrSize); } catch {}
+  }
+  const textX = ml + qrSize + 10;
+  const textW = cw - qrSize - 16;
+  doc.setFontSize(8);
+  doc.setTextColor(...C.dark);
+  doc.setFont('helvetica', 'bold');
+  doc.text('VERIFICATION', textX, y + 6);
+  if (hasArabic) {
+    const vw = doc.getTextWidth('VERIFICATION');
+    doc.setFont('helvetica', 'normal');
+    doc.text(' / ', textX + vw, y + 6);
+    const sw = doc.getTextWidth(' / ');
+    doc.setFont('Amiri', 'normal');
+    doc.setFontSize(9);
+    doc.text('التحقق', textX + vw + sw, y + 6);
+    doc.setFont('helvetica', 'normal');
+  }
+  doc.setFontSize(7);
+  doc.setTextColor(...C.label);
+  doc.setFont('helvetica', 'normal');
+  const verifyText = doc.splitTextToSize(
+    `This document confirms ${requests.length} transportation advance request(s) have been reviewed and approved through the PACT multi-tier workflow. Scan the QR code to verify. System-generated, valid without physical signature.`,
+    textW
+  );
+  doc.text(verifyText.slice(0, 3), textX, y + 11);
+  if (hasArabic) {
+    doc.setFont('Amiri', 'normal');
+    doc.setFontSize(8);
+    const arV = `يؤكد هذا المستند أن ${requests.length} طلب(ات) سلفة نقل قد تمت مراجعتها والموافقة عليها. امسح رمز الاستجابة السريعة للتحقق.`;
+    const arVL = doc.splitTextToSize(arV, textW);
+    doc.text(arVL.slice(0, 2), pw - mr - 4, y + verifyH - 6, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+  }
+
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    const footerY = ph - footerH;
+    doc.setFillColor(...C.navy);
+    doc.rect(0, footerY, pw, footerH, 'F');
+    doc.setFontSize(7);
+    doc.setTextColor(180, 195, 220);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Batch Reference: ${batchRef}`, ml, footerY + 5.5);
+    doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy | HH:mm:ss')}`, pw / 2, footerY + 5.5, { align: 'center' });
+    doc.setTextColor(...C.white);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PACT Command Center', pw - mr, footerY + 5.5, { align: 'right' });
+    doc.setFontSize(6);
+    doc.setTextColor(140, 155, 180);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Financial Operations  |  Bulk Payment  |  Page ${p} of ${totalPages}`, pw / 2, footerY + 10, { align: 'center' });
+  }
+
+  doc.save(`Bulk-Payment-Request-${batchRef}.pdf`);
 }
