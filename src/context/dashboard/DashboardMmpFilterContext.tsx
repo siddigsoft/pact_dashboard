@@ -51,11 +51,17 @@ export function DashboardMmpFilterProvider({ children }: { children: React.React
 
   const filterSiteVisitsByMmp = useCallback(<T extends { mmpDetails?: { mmpId?: string }; mmpFileId?: string }>(visits: T[]): T[] => {
     if (selectedMmpIds.length === 0) return visits;
+    const selectedMmpIdSet = new Set(selectedMmpIds);
+    const selectedMmpNames = new Set(availableMmps.filter(m => selectedMmpIdSet.has(m.id)).map(m => m.mmpId).filter(Boolean));
     return visits.filter(visit => {
-      const mmpId = visit.mmpDetails?.mmpId || visit.mmpFileId;
-      return mmpId ? selectedMmpIds.includes(mmpId) : false;
+      const fileId = (visit as any).mmpFileId;
+      if (fileId && selectedMmpIdSet.has(fileId)) return true;
+      const mmpId = visit.mmpDetails?.mmpId;
+      if (mmpId && selectedMmpIdSet.has(mmpId)) return true;
+      if (mmpId && selectedMmpNames.has(mmpId)) return true;
+      return false;
     });
-  }, [selectedMmpIds]);
+  }, [selectedMmpIds, availableMmps]);
 
   const value = useMemo(() => ({
     selectedMmpIds,
