@@ -239,7 +239,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   doc.setFont('helvetica', 'normal');
   doc.text('Command Center  |  Field Operations', ml + 27, 22);
   if (hasArabic) {
-    doc.setFontSize(8);
+    doc.setFontSize(9);
     doc.setTextColor(190, 205, 225);
     arText('مركز قيادة باكت', ml + 27, 28);
   }
@@ -261,7 +261,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   doc.setFont('helvetica', 'bold');
   doc.text('OPERATIONAL COST  —  APPROVAL CONFIRMATION', pw / 2, y + 6, { align: 'center' });
   if (hasArabic) {
-    doc.setFontSize(8);
+    doc.setFontSize(9.5);
     arText(ar('OPERATIONAL COST - APPROVAL CONFIRMATION'), pw / 2, y + 10.5, { align: 'center' });
   }
 
@@ -277,7 +277,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   doc.setFont('helvetica', 'bold');
   doc.text('TOTAL AMOUNT', ml + cardW / 2, y + 6, { align: 'center' });
   if (hasArabic) {
-    doc.setFontSize(6);
+    doc.setFontSize(7);
     doc.setTextColor(...C.label);
     arText(ar('TOTAL AMOUNT'), ml + cardW / 2, y + 9.5, { align: 'center' });
   }
@@ -293,7 +293,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   doc.setFont('helvetica', 'bold');
   doc.text('EXPENSE CATEGORY', c2x + cardW / 2, y + 6, { align: 'center' });
   if (hasArabic) {
-    doc.setFontSize(6);
+    doc.setFontSize(7);
     doc.setTextColor(...C.label);
     arText(ar('CATEGORY'), c2x + cardW / 2, y + 9.5, { align: 'center' });
   }
@@ -309,7 +309,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   doc.setFont('helvetica', 'bold');
   doc.text('STATUS', c3x + cardW / 2, y + 6, { align: 'center' });
   if (hasArabic) {
-    doc.setFontSize(6);
+    doc.setFontSize(7);
     arText(ar('STATUS'), c3x + cardW / 2, y + 9.5, { align: 'center' });
   }
   doc.setFontSize(13);
@@ -327,7 +327,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     doc.setFont('helvetica', 'bold');
     doc.text(enTitle, ml + 5, y + 5.5);
     if (hasArabic && ar(arKey)) {
-      doc.setFontSize(7);
+      doc.setFontSize(8);
       arText(ar(arKey), pw - mr - 5, y + 5.5, { align: 'right' });
     }
     y += 11;
@@ -345,7 +345,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
       doc.text(' / ', x + enW, y);
       const slW = doc.getTextWidth(' / ');
       doc.setFont('Amiri', 'normal');
-      doc.setFontSize(6.5);
+      doc.setFontSize(7);
       doc.text(arLabel, x + enW + slW, y);
       doc.setFont('helvetica', 'normal');
     }
@@ -444,7 +444,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
 
     if (hasArabic) {
       const arLabel = tierNum === 1 ? ar('Supervisor / FOM Review') : ar('Admin / Super Admin Final Approval');
-      doc.setFontSize(6.5);
+      doc.setFontSize(7.5);
       arText(arLabel, pw - mr - 5, y + 6, { align: 'right' });
     }
 
@@ -561,7 +561,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     doc.text(' / ', textX + vw, y + 6);
     const sw = doc.getTextWidth(' / ');
     doc.setFont('Amiri', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(8);
     doc.text('التحقق', textX + vw + sw, y + 6);
     doc.setFont('helvetica', 'normal');
   }
@@ -576,7 +576,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   doc.text(disclaimEn.slice(0, 3), textX, y + 11);
 
   if (hasArabic) {
-    doc.setFontSize(7);
+    doc.setFontSize(8);
     doc.setTextColor(...C.label);
     arText('يؤكد هذا المستند أن التكلفة التشغيلية قد تمت مراجعتها والموافقة عليها. امسح رمز الاستجابة السريعة للتحقق.', textX, y + disclaimerH - 4);
   }
