@@ -330,21 +330,25 @@ export const EmailNotificationService = {
       
       console.log(`[EMAIL] Sending notification to ${email}: ${subject} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
 
+      const emailBody: Record<string, unknown> = {
+        to: email,
+        subject,
+        type: 'notification',
+        recipientName: recipientName || 'User',
+        title_en: options.title,
+        title_ar: options.titleAr || options.title,
+        message_en: options.message,
+        message_ar: options.messageAr || options.message,
+        actionUrl: options.actionUrl,
+        priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
+        details: options.details,
+        cc: retryCount === 0 ? (options as any).cc : undefined,
+      };
+      if (options.attachments?.length) {
+        emailBody.attachments = options.attachments;
+      }
       const { data, error } = await supabase.functions.invoke('send-email', {
-        body: {
-          to: email,
-          subject,
-          type: 'notification',
-          recipientName: recipientName || 'User',
-          title_en: options.title,
-          title_ar: options.titleAr || options.title,
-          message_en: options.message,
-          message_ar: options.messageAr || options.message,
-          actionUrl: options.actionUrl,
-          priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
-          details: options.details,
-          cc: retryCount === 0 ? (options as any).cc : undefined, // Only include CC on first attempt
-        },
+        body: emailBody,
       });
 
       if (error) {

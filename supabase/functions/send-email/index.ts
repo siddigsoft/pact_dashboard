@@ -47,6 +47,12 @@ async function logEmailToAudit(
   }
 }
 
+interface EmailAttachment {
+  filename: string
+  content: string
+  type: string
+}
+
 interface EmailRequest {
   to: string
   subject: string
@@ -65,6 +71,7 @@ interface EmailRequest {
   message_en?: string
   message_ar?: string
   details?: { label: string; value: string }[]
+  attachments?: EmailAttachment[]
 }
 
 function generateCompactTemplate(
@@ -207,7 +214,7 @@ serve(async (req) => {
     }
 
     const body: EmailRequest = await req.json()
-    const { to, subject, html, text, type, otp, recipientName, actionUrl, priority, cc, title_en, title_ar, message_en, message_ar, details } = body
+    const { to, subject, html, text, type, otp, recipientName, actionUrl, priority, cc, title_en, title_ar, message_en, message_ar, details, attachments } = body
     
     emailTo = to || ''
     emailSubject = subject || ''
@@ -329,6 +336,16 @@ serve(async (req) => {
         'X-MSMail-Priority': 'High',
         'Importance': 'high'
       }
+    }
+
+    if (attachments?.length) {
+      mailOptions.attachments = attachments.map((att: EmailAttachment) => ({
+        filename: att.filename,
+        content: att.content,
+        encoding: 'base64',
+        contentType: att.type || 'application/pdf',
+      }))
+      console.log(`[${requestId}] Including ${attachments.length} attachment(s): ${attachments.map(a => a.filename).join(', ')}`)
     }
 
     console.log(`[${requestId}] Sending email to ${to}...`)
