@@ -35,6 +35,7 @@ interface DownPaymentContextType {
   adminReject: (data: RejectDownPaymentRequest) => Promise<boolean>;
   processPayment: (data: ProcessPayment) => Promise<boolean>;
   cancelRequest: (requestId: string) => Promise<boolean>;
+  deleteRequest: (requestId: string) => Promise<boolean>;
   bulkApprove: (data: BulkApprovalRequest) => Promise<{ success: number; failed: number }>;
   addAuditEntry: (requestId: string, entry: Omit<ApprovalAuditEntry, 'id' | 'timestamp'>) => Promise<boolean>;
   revertToPending: (data: RevertToPendingData) => Promise<boolean>;
@@ -768,6 +769,33 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const deleteRequest = async (requestId: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('down_payment_requests')
+        .delete()
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Request Deleted / تم حذف الطلب',
+        description: 'The request has been permanently removed. A new request must be submitted if needed.',
+      });
+
+      await refreshRequests();
+      return true;
+    } catch (error: any) {
+      console.error('Failed to delete request:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete request',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const calculateApprovedAmount = (
     requestedAmount: number,
     approvalType: ApprovalType,
@@ -1061,6 +1089,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
     adminReject,
     processPayment,
     cancelRequest,
+    deleteRequest,
     bulkApprove,
     addAuditEntry,
     revertToPending,

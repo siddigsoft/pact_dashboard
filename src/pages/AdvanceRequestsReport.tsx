@@ -1479,96 +1479,84 @@ function AdvanceRequestsReportContent() {
               </CardHeader>
               <CardContent className="p-3 pt-0">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                  {bulkUniqueStates.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.stateName === val);
-                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'State', val);
-                    }}>
-                      <SelectTrigger data-testid="select-report-bulk-state"><SelectValue placeholder="By State" /></SelectTrigger>
-                      <SelectContent>
-                        {bulkUniqueStates.map(s => {
-                          const count = approvedForPayment.filter(r => r.stateName === s).length;
-                          return <SelectItem key={s} value={s!}>{s} ({count})</SelectItem>;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {bulkUniqueHubs.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.hubName === val);
-                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Hub', val);
-                    }}>
-                      <SelectTrigger data-testid="select-report-bulk-hub"><SelectValue placeholder="By Hub" /></SelectTrigger>
-                      <SelectContent>
-                        {bulkUniqueHubs.map(h => {
-                          const count = approvedForPayment.filter(r => r.hubName === h).length;
-                          return <SelectItem key={h} value={h!}>{h} ({count})</SelectItem>;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {bulkUniqueLocalities.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.localityName === val);
-                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Locality', val);
-                    }}>
-                      <SelectTrigger data-testid="select-report-bulk-locality"><SelectValue placeholder="By Locality" /></SelectTrigger>
-                      <SelectContent>
-                        {bulkUniqueLocalities.map(l => {
-                          const count = approvedForPayment.filter(r => r.localityName === l).length;
-                          return <SelectItem key={l} value={l!}>{l} ({count})</SelectItem>;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {bulkUniqueSupervisors.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.supervisorApprovedBy === val);
-                      if (reqs.length > 0) {
-                        const sup = bulkUniqueSupervisors.find(s => s.id === val);
-                        openBulkPaymentRequestDialog(reqs, 'Supervisor', sup?.name || val);
-                      }
-                    }}>
-                      <SelectTrigger data-testid="select-report-bulk-supervisor"><SelectValue placeholder="By Supervisor" /></SelectTrigger>
-                      <SelectContent>
-                        {bulkUniqueSupervisors.map(s => {
-                          const count = approvedForPayment.filter(r => r.supervisorApprovedBy === s.id).length;
-                          return <SelectItem key={s.id} value={s.id}>{s.name} ({count})</SelectItem>;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {bulkUniqueEnumerators.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.requestedBy === val);
-                      if (reqs.length > 0) {
-                        const en = bulkUniqueEnumerators.find(e => e.id === val);
-                        openBulkPaymentRequestDialog(reqs, 'Enumerator', en?.name || val);
-                      }
-                    }}>
-                      <SelectTrigger data-testid="select-report-bulk-enumerator"><SelectValue placeholder="By Enumerator" /></SelectTrigger>
-                      <SelectContent>
-                        {bulkUniqueEnumerators.map(e => {
-                          const count = approvedForPayment.filter(r => r.requestedBy === e.id).length;
-                          return count > 0 ? <SelectItem key={e.id} value={e.id}>{e.name} ({count})</SelectItem> : null;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {bulkUniqueSites.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.siteName === val);
-                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Site', val);
-                    }}>
-                      <SelectTrigger data-testid="select-report-bulk-site"><SelectValue placeholder="By Site" /></SelectTrigger>
-                      <SelectContent>
-                        {bulkUniqueSites.map(s => {
-                          const count = approvedForPayment.filter(r => r.siteName === s).length;
-                          return <SelectItem key={s} value={s!}>{s} ({count})</SelectItem>;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.stateName === val);
+                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'State', val);
+                  }} disabled={bulkUniqueStates.length === 0}>
+                    <SelectTrigger data-testid="select-report-bulk-state"><SelectValue placeholder="By State" /></SelectTrigger>
+                    <SelectContent>
+                      {bulkUniqueStates.map(s => {
+                        const count = approvedForPayment.filter(r => r.stateName === s).length;
+                        return <SelectItem key={s} value={s!}>{s} ({count})</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.hubName === val);
+                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Hub', val);
+                  }} disabled={bulkUniqueHubs.length === 0}>
+                    <SelectTrigger data-testid="select-report-bulk-hub"><SelectValue placeholder="By Hub" /></SelectTrigger>
+                    <SelectContent>
+                      {bulkUniqueHubs.map(h => {
+                        const count = approvedForPayment.filter(r => r.hubName === h).length;
+                        return <SelectItem key={h} value={h!}>{h} ({count})</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.localityName === val);
+                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Locality', val);
+                  }} disabled={bulkUniqueLocalities.length === 0}>
+                    <SelectTrigger data-testid="select-report-bulk-locality"><SelectValue placeholder="By Locality" /></SelectTrigger>
+                    <SelectContent>
+                      {bulkUniqueLocalities.map(l => {
+                        const count = approvedForPayment.filter(r => r.localityName === l).length;
+                        return <SelectItem key={l} value={l!}>{l} ({count})</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.supervisorApprovedBy === val);
+                    if (reqs.length > 0) {
+                      const sup = bulkUniqueSupervisors.find(s => s.id === val);
+                      openBulkPaymentRequestDialog(reqs, 'Supervisor', sup?.name || val);
+                    }
+                  }} disabled={bulkUniqueSupervisors.length === 0}>
+                    <SelectTrigger data-testid="select-report-bulk-supervisor"><SelectValue placeholder="By Supervisor" /></SelectTrigger>
+                    <SelectContent>
+                      {bulkUniqueSupervisors.map(s => {
+                        const count = approvedForPayment.filter(r => r.supervisorApprovedBy === s.id).length;
+                        return <SelectItem key={s.id} value={s.id}>{s.name} ({count})</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.requestedBy === val);
+                    if (reqs.length > 0) {
+                      const en = bulkUniqueEnumerators.find(e => e.id === val);
+                      openBulkPaymentRequestDialog(reqs, 'Enumerator', en?.name || val);
+                    }
+                  }} disabled={bulkUniqueEnumerators.length === 0}>
+                    <SelectTrigger data-testid="select-report-bulk-enumerator"><SelectValue placeholder="By Enumerator" /></SelectTrigger>
+                    <SelectContent>
+                      {bulkUniqueEnumerators.map(e => {
+                        const count = approvedForPayment.filter(r => r.requestedBy === e.id).length;
+                        return count > 0 ? <SelectItem key={e.id} value={e.id}>{e.name} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.siteName === val);
+                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Site', val);
+                  }} disabled={bulkUniqueSites.length === 0}>
+                    <SelectTrigger data-testid="select-report-bulk-site"><SelectValue placeholder="By Site" /></SelectTrigger>
+                    <SelectContent>
+                      {bulkUniqueSites.map(s => {
+                        const count = approvedForPayment.filter(r => r.siteName === s).length;
+                        return <SelectItem key={s} value={s!}>{s} ({count})</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="mt-2 flex items-center gap-2">
                   <Button size="sm" variant="outline" onClick={() => openBulkPaymentRequestDialog(approvedForPayment, '', 'All Approved')} data-testid="button-report-bulk-request-all">

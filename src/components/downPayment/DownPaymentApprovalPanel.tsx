@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/popover';
 import { useDownPayment } from '@/context/downPayment/DownPaymentContext';
 import { useUser } from '@/context/user/UserContext';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { DownPaymentRequest, DownPaymentFilter, ApprovalType, DownPaymentStatus } from '@/types/down-payment';
 import {
   CheckCircle2,
@@ -57,6 +58,7 @@ import {
   Activity,
   Undo2,
   PenLine,
+  Trash2,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -87,11 +89,14 @@ const STATUS_OPTIONS: { value: DownPaymentStatus; label: string }[] = [
 
 export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelProps) {
   const { currentUser, users } = useUser();
-  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt } = useDownPayment();
+  const { isSuperAdmin } = useSuperAdmin();
+  const { requests, loading, refreshRequests, supervisorApprove, supervisorReject, adminApprove, adminReject, processPayment, bulkApprove, revertToPending, confirmReceipt, deleteRequest } = useDownPayment();
   const { toast } = useToast();
 
   const [selectedRequest, setSelectedRequest] = useState<DownPaymentRequest | null>(null);
   const [action, setAction] = useState<'approve' | 'reject' | 'pay' | 'view_audit' | 'revert' | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<DownPaymentRequest | null>(null);
+  const [deleteProcessing, setDeleteProcessing] = useState(false);
   const [signatureRequest, setSignatureRequest] = useState<DownPaymentRequest | null>(null);
   const [notes, setNotes] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
@@ -955,6 +960,19 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </Button>
             )}
 
+            {isSuperAdmin && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive border-destructive/30"
+                onClick={() => setDeleteConfirm(request)}
+                data-testid={`button-delete-${request.id}`}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+            )}
+
             {userRole === 'admin' && isApprovedOrPaid(request.status) && (
               <Button
                 size="sm"
@@ -1292,108 +1310,96 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               <CardContent className="p-3 pt-0">
                 <p className="text-xs text-muted-foreground mb-3">Send payment request for multiple approved advances grouped by State, Hub, Locality, Supervisor, Enumerator, or Site.</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                  {uniqueStates.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.stateName === val);
-                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'State', val);
-                    }}>
-                      <SelectTrigger data-testid="select-bulk-state">
-                        <SelectValue placeholder="By State" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uniqueStates.map(s => {
-                          const count = approvedForPayment.filter(r => r.stateName === s).length;
-                          return count > 0 ? <SelectItem key={s} value={s!}>{s} ({count})</SelectItem> : null;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {uniqueHubs.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.hubName === val);
-                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Hub', val);
-                    }}>
-                      <SelectTrigger data-testid="select-bulk-hub">
-                        <SelectValue placeholder="By Hub" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uniqueHubs.map(h => {
-                          const count = approvedForPayment.filter(r => r.hubName === h).length;
-                          return count > 0 ? <SelectItem key={h} value={h!}>{h} ({count})</SelectItem> : null;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {uniqueLocalities.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.localityName === val);
-                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Locality', val);
-                    }}>
-                      <SelectTrigger data-testid="select-bulk-locality">
-                        <SelectValue placeholder="By Locality" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uniqueLocalities.map(l => {
-                          const count = approvedForPayment.filter(r => r.localityName === l).length;
-                          return count > 0 ? <SelectItem key={l} value={l!}>{l} ({count})</SelectItem> : null;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {uniqueSupervisors.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.supervisorApprovedBy === val);
-                      if (reqs.length > 0) {
-                        const sup = uniqueSupervisors.find(s => s.id === val);
-                        openBulkPaymentRequestDialog(reqs, 'Supervisor', sup?.name || val);
-                      }
-                    }}>
-                      <SelectTrigger data-testid="select-bulk-supervisor">
-                        <SelectValue placeholder="By Supervisor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uniqueSupervisors.map(s => {
-                          const count = approvedForPayment.filter(r => r.supervisorApprovedBy === s.id).length;
-                          return count > 0 ? <SelectItem key={s.id} value={s.id}>{s.name} ({count})</SelectItem> : null;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {uniqueEnumerators.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.requestedBy === val);
-                      if (reqs.length > 0) {
-                        const en = uniqueEnumerators.find(e => e.id === val);
-                        openBulkPaymentRequestDialog(reqs, 'Enumerator', en?.name || val);
-                      }
-                    }}>
-                      <SelectTrigger data-testid="select-bulk-enumerator">
-                        <SelectValue placeholder="By Enumerator" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uniqueEnumerators.map(e => {
-                          const count = approvedForPayment.filter(r => r.requestedBy === e.id).length;
-                          return count > 0 ? <SelectItem key={e.id} value={e.id}>{e.name} ({count})</SelectItem> : null;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {uniqueSites.length > 0 && (
-                    <Select onValueChange={(val) => {
-                      const reqs = approvedForPayment.filter(r => r.siteName === val);
-                      if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Site', val);
-                    }}>
-                      <SelectTrigger data-testid="select-bulk-site">
-                        <SelectValue placeholder="By Site" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uniqueSites.map(s => {
-                          const count = approvedForPayment.filter(r => r.siteName === s).length;
-                          return count > 0 ? <SelectItem key={s} value={s!}>{s} ({count})</SelectItem> : null;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.stateName === val);
+                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'State', val);
+                  }} disabled={uniqueStates.length === 0}>
+                    <SelectTrigger data-testid="select-bulk-state">
+                      <SelectValue placeholder="By State" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueStates.map(s => {
+                        const count = approvedForPayment.filter(r => r.stateName === s).length;
+                        return count > 0 ? <SelectItem key={s} value={s!}>{s} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.hubName === val);
+                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Hub', val);
+                  }} disabled={uniqueHubs.length === 0}>
+                    <SelectTrigger data-testid="select-bulk-hub">
+                      <SelectValue placeholder="By Hub" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueHubs.map(h => {
+                        const count = approvedForPayment.filter(r => r.hubName === h).length;
+                        return count > 0 ? <SelectItem key={h} value={h!}>{h} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.localityName === val);
+                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Locality', val);
+                  }} disabled={uniqueLocalities.length === 0}>
+                    <SelectTrigger data-testid="select-bulk-locality">
+                      <SelectValue placeholder="By Locality" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueLocalities.map(l => {
+                        const count = approvedForPayment.filter(r => r.localityName === l).length;
+                        return count > 0 ? <SelectItem key={l} value={l!}>{l} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.supervisorApprovedBy === val);
+                    if (reqs.length > 0) {
+                      const sup = uniqueSupervisors.find(s => s.id === val);
+                      openBulkPaymentRequestDialog(reqs, 'Supervisor', sup?.name || val);
+                    }
+                  }} disabled={uniqueSupervisors.length === 0}>
+                    <SelectTrigger data-testid="select-bulk-supervisor">
+                      <SelectValue placeholder="By Supervisor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueSupervisors.map(s => {
+                        const count = approvedForPayment.filter(r => r.supervisorApprovedBy === s.id).length;
+                        return count > 0 ? <SelectItem key={s.id} value={s.id}>{s.name} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.requestedBy === val);
+                    if (reqs.length > 0) {
+                      const en = uniqueEnumerators.find(e => e.id === val);
+                      openBulkPaymentRequestDialog(reqs, 'Enumerator', en?.name || val);
+                    }
+                  }} disabled={uniqueEnumerators.length === 0}>
+                    <SelectTrigger data-testid="select-bulk-enumerator">
+                      <SelectValue placeholder="By Enumerator" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueEnumerators.map(e => {
+                        const count = approvedForPayment.filter(r => r.requestedBy === e.id).length;
+                        return count > 0 ? <SelectItem key={e.id} value={e.id}>{e.name} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Select onValueChange={(val) => {
+                    const reqs = approvedForPayment.filter(r => r.siteName === val);
+                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Site', val);
+                  }} disabled={uniqueSites.length === 0}>
+                    <SelectTrigger data-testid="select-bulk-site">
+                      <SelectValue placeholder="By Site" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueSites.map(s => {
+                        const count = approvedForPayment.filter(r => r.siteName === s).length;
+                        return count > 0 ? <SelectItem key={s} value={s!}>{s} ({count})</SelectItem> : null;
+                      })}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="mt-2 flex items-center gap-2">
                   <Button
@@ -2109,6 +2115,61 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Sending...</>
               ) : (
                 <><Mail className="h-4 w-4 mr-1" /> Send Request</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Delete Request Permanently / حذف الطلب نهائياً
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. The request will be permanently removed from the system.
+              If the person needs an advance again, they must submit a new request.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteConfirm && (
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-medium">{deleteConfirm.siteName}</span>
+                <Badge variant="secondary">{deleteConfirm.status}</Badge>
+              </div>
+              <div className="text-muted-foreground">
+                Requester: {deleteConfirm.requestedByName || 'Unknown'} | Amount: SDG {deleteConfirm.requestedAmount.toLocaleString()}
+              </div>
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  This will permanently delete this request and all its approval history. Are you sure?
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={deleteProcessing} data-testid="button-cancel-delete">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteProcessing}
+              onClick={async () => {
+                if (!deleteConfirm) return;
+                setDeleteProcessing(true);
+                const success = await deleteRequest(deleteConfirm.id);
+                setDeleteProcessing(false);
+                if (success) setDeleteConfirm(null);
+              }}
+              data-testid="button-confirm-delete"
+            >
+              {deleteProcessing ? (
+                <><RefreshCw className="h-4 w-4 mr-1 animate-spin" /> Deleting...</>
+              ) : (
+                <><Trash2 className="h-4 w-4 mr-1" /> Delete Permanently</>
               )}
             </Button>
           </DialogFooter>
