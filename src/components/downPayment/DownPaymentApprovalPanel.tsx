@@ -63,11 +63,14 @@ import {
   Hash,
   Shield,
   Eye,
+  Banknote,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { filterDownPayments, exportToCSV, exportToExcel, exportToPDF, getDownPaymentStats } from '@/utils/downPaymentExport';
+import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
+import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
@@ -375,6 +378,79 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         includeSignature: false,
         reportTitle: 'Down-Payment Requests Report',
       });
+    }
+  };
+
+  const STATUS_AR_MAP: Record<string, string> = {
+    pending_supervisor: 'بانتظار المشرف',
+    pending_admin: 'بانتظار المدير',
+    approved: 'تمت الموافقة',
+    rejected: 'مرفوض',
+    partially_paid: 'مدفوع جزئياً',
+    fully_paid: 'مدفوع بالكامل',
+    cancelled: 'ملغي',
+    all: 'الكل',
+  };
+
+  const getName = (u: any) => u?.fullName || u?.full_name || u?.name || u?.email || 'Unknown';
+
+  const mapRequestToStatementRow = (req: DownPaymentRequest): StatementRow => {
+    const reqUser = users?.find(u => u.id === req.requestedBy);
+    const t1User = req.supervisorApprovedBy ? users?.find(u => u.id === req.supervisorApprovedBy) : null;
+    const t2User = req.adminProcessedBy ? users?.find(u => u.id === req.adminProcessedBy) : null;
+    return {
+      refId: `PACT-TA-${req.id.substring(0, 8).toUpperCase()}`,
+      date: req.requestedAt,
+      description: req.justification || req.siteName,
+      requester: req.requestedByName || getName(reqUser),
+      site: req.siteName,
+      hub: req.hubName || '',
+      state: req.stateName || '',
+      status: req.status,
+      statusAr: STATUS_AR_MAP[req.status] || '',
+      requestedAmount: req.requestedAmount,
+      approvedAmount: req.approvedAmount || req.requestedAmount,
+      paidAmount: req.totalPaidAmount || 0,
+      t1Approver: req.supervisorApprovedByName || (t1User ? getName(t1User) : undefined),
+      t1Date: req.supervisorApprovedAt || undefined,
+      t1Status: req.supervisorStatus || undefined,
+      t2Approver: req.adminProcessedByName || (t2User ? getName(t2User) : undefined),
+      t2Date: req.adminProcessedAt || undefined,
+      t2Status: req.adminStatus || undefined,
+      rejectionReason: req.supervisorRejectionReason || req.adminRejectionReason || undefined,
+      notes: req.supervisorNotes || req.adminNotes || undefined,
+    };
+  };
+
+  const handleStatementExport = async (exportFormat: 'pdf' | 'excel') => {
+    const dataToExport = filteredRequests;
+    if (dataToExport.length === 0) {
+      toast({ title: 'No Data', description: 'No requests match the current filters.', variant: 'destructive' });
+      return;
+    }
+
+    const statementRows: StatementRow[] = dataToExport.map(mapRequestToStatementRow);
+    const currentStatusFilter = (filters.status && filters.status.length > 0) ? filters.status.join(', ') : 'All Statuses';
+    const config: StatementConfig = {
+      title: 'Transportation Advance',
+      titleAr: 'سلفة النقل',
+      statementType: 'transport_advance',
+      statusFilter: currentStatusFilter,
+      statusFilterAr: (filters.status && filters.status.length === 1) ? (STATUS_AR_MAP[filters.status[0]] || currentStatusFilter) : 'الكل',
+      currency: 'SDG',
+    };
+
+    try {
+      if (exportFormat === 'pdf') {
+        await generateFinancialStatementPdf(statementRows, config);
+        toast({ title: 'Statement Downloaded / تم تحميل الكشف', description: `PDF statement exported successfully.` });
+      } else {
+        generateFinancialStatementExcel(statementRows, config);
+        toast({ title: 'Statement Downloaded / تم تحميل الكشف', description: `Excel statement exported successfully.` });
+      }
+    } catch (err) {
+      console.error('Statement export error:', err);
+      toast({ title: 'Export Failed', description: 'Could not generate statement. Please try again.', variant: 'destructive' });
     }
   };
 
@@ -1322,6 +1398,27 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </Button>
             </PopoverContent>
           </Popover>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Bank Statement / كشف مالي:</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleStatementExport('pdf')}
+            disabled={filteredRequests.length === 0}
+            data-testid="button-statement-pdf"
+          >
+            <Banknote className="h-4 w-4 mr-1" />
+            PDF
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleStatementExport('excel')}
+            disabled={filteredRequests.length === 0}
+            data-testid="button-statement-excel"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            Excel
+          </Button>
         </div>
       </div>
 

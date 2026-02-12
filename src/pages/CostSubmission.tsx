@@ -48,6 +48,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
+import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
 
 const EXPENSE_CATEGORY_MAP: Record<string, { label: string; icon: any }> = {
   permits: { label: 'Permits & Licenses', icon: Ticket },
@@ -1058,6 +1060,73 @@ const CostSubmission = () => {
     } finally {
       setActionProcessing(false);
       setRecallConfirm(null);
+    }
+  };
+
+  const STATUS_AR_MAP_OC: Record<string, string> = {
+    pending: 'قيد الانتظار',
+    under_review: 'قيد المراجعة',
+    approved: 'معتمد',
+    rejected: 'مرفوض',
+    paid: 'مدفوع',
+    reconciled: 'مسوّى',
+    all: 'الكل',
+  };
+
+  const handleOperationalStatementExport = (type: 'pdf' | 'excel') => {
+    try {
+      const statusFiltered = statusFilter === 'all'
+        ? filteredOperationalCosts
+        : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+      if (statusFiltered.length === 0) {
+        toast({ title: "No Data / لا توجد بيانات", description: "No submissions match the current filter.", variant: "destructive" });
+        return;
+      }
+      const rows: StatementRow[] = statusFiltered.map(oc => {
+        const submitter = users?.find(u => u.id === oc.submitted_by);
+        const t1User = oc.tier1_approved_by ? users?.find(u => u.id === oc.tier1_approved_by) : null;
+        const t2User = oc.tier2_approved_by ? users?.find(u => u.id === oc.tier2_approved_by) : null;
+        const ds = getOperationalDerivedStatus(oc);
+        const catLabel = EXPENSE_CATEGORY_MAP[oc.expense_category]?.label || oc.expense_category;
+        return {
+          refId: (oc.reference_number || oc.id.slice(0, 8)).toUpperCase(),
+          date: oc.submitted_at ? format(new Date(oc.submitted_at), 'yyyy-MM-dd') : format(new Date(oc.created_at), 'yyyy-MM-dd'),
+          description: oc.description || catLabel,
+          requester: submitter ? `${submitter.full_name || submitter.email}` : oc.submitted_by.slice(0, 8),
+          category: catLabel,
+          status: ds,
+          statusAr: STATUS_AR_MAP_OC[ds] || ds,
+          requestedAmount: oc.amount_cents / 100,
+          approvedAmount: ds === 'approved' || ds === 'paid' || ds === 'reconciled' ? oc.amount_cents / 100 : 0,
+          paidAmount: ds === 'paid' || ds === 'reconciled' ? oc.amount_cents / 100 : 0,
+          t1Approver: t1User ? (t1User.full_name || t1User.email) : undefined,
+          t1Date: oc.tier1_approved_at ? format(new Date(oc.tier1_approved_at), 'yyyy-MM-dd') : undefined,
+          t1Status: oc.tier1_status || undefined,
+          t2Approver: t2User ? (t2User.full_name || t2User.email) : undefined,
+          t2Date: oc.tier2_approved_at ? format(new Date(oc.tier2_approved_at), 'yyyy-MM-dd') : undefined,
+          t2Status: oc.tier2_status || undefined,
+          rejectionReason: oc.rejection_reason || undefined,
+          notes: oc.description || undefined,
+        };
+      });
+      const config: StatementConfig = {
+        title: 'Operational Cost Statement',
+        titleAr: 'كشف التكاليف التشغيلية',
+        statementType: 'operational_cost',
+        statusFilter: statusFilter === 'all' ? 'All Statuses' : statusFilter.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        statusFilterAr: STATUS_AR_MAP_OC[statusFilter] || statusFilter,
+        currency: 'SDG',
+        generatedBy: currentUser?.email || 'System',
+      };
+      if (type === 'pdf') {
+        generateFinancialStatementPdf(rows, config);
+        toast({ title: "Statement PDF / كشف PDF", description: `${rows.length} transaction(s) exported.` });
+      } else {
+        generateFinancialStatementExcel(rows, config);
+        toast({ title: "Statement Excel / كشف إكسل", description: `${rows.length} transaction(s) exported.` });
+      }
+    } catch (err) {
+      toast({ title: "Export Error / خطأ في التصدير", description: "Failed to generate statement. / فشل في إنشاء الكشف.", variant: "destructive" });
     }
   };
 
@@ -2167,6 +2236,28 @@ const CostSubmission = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Bank Statement / كشف مالي:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleOperationalStatementExport('pdf')}
+              disabled={filteredOperationalCosts.length === 0}
+              data-testid="button-op-statement-pdf"
+            >
+              <CircleDollarSign className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleOperationalStatementExport('excel')}
+              disabled={filteredOperationalCosts.length === 0}
+              data-testid="button-op-statement-excel"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
           </div>
 
           {/* Operational Cost Submissions */}
