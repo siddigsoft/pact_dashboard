@@ -330,16 +330,28 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     y += 9;
   };
 
+  const drawLabel = (enLabel: string, arLabel: string | undefined, x: number) => {
+    doc.setFontSize(5.5);
+    doc.setTextColor(...C.muted);
+    doc.setFont('helvetica', 'normal');
+    const enText = enLabel.toUpperCase();
+    doc.text(enText, x, y);
+    if (hasArabic && arLabel) {
+      const enWidth = doc.getTextWidth(enText);
+      doc.setFont('helvetica', 'normal');
+      doc.text(' / ', x + enWidth, y);
+      const slashWidth = doc.getTextWidth(' / ');
+      doc.setFont('Amiri', 'normal');
+      doc.text(arLabel, x + enWidth + slashWidth, y);
+      doc.setFont('helvetica', 'normal');
+    }
+  };
+
   const fieldPair = (l1: string, v1: string, l2: string, v2: string, arL1?: string, arL2?: string) => {
     const halfW = cw / 2 - 2;
     const col2X = ml + cw / 2 + 2;
 
-    doc.setFontSize(5.5);
-    doc.setTextColor(...C.muted);
-    doc.setFont('helvetica', 'normal');
-    let labelText = l1.toUpperCase();
-    if (hasArabic && arL1) labelText += ` / ${arL1}`;
-    doc.text(labelText, ml + 3, y);
+    drawLabel(l1, arL1, ml + 3);
     doc.setFontSize(7.5);
     doc.setTextColor(...C.dark);
     doc.setFont('helvetica', 'normal');
@@ -347,12 +359,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     doc.text(lines1[0], ml + 3, y + 3.5);
 
     if (l2) {
-      doc.setFontSize(5.5);
-      doc.setTextColor(...C.muted);
-      doc.setFont('helvetica', 'normal');
-      let label2Text = l2.toUpperCase();
-      if (hasArabic && arL2) label2Text += ` / ${arL2}`;
-      doc.text(label2Text, col2X, y);
+      drawLabel(l2, arL2, col2X);
       doc.setFontSize(7.5);
       doc.setTextColor(...C.dark);
       doc.setFont('helvetica', 'normal');
@@ -375,12 +382,7 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   if (data.submission.description) {
     const cleanDesc = data.submission.description.replace(/^\[(ADVANCE|REIMBURSEMENT)\]\s*/i, '');
     if (cleanDesc.trim()) {
-      doc.setFontSize(5.5);
-      doc.setTextColor(...C.muted);
-      doc.setFont('helvetica', 'normal');
-      let descLabel = 'DESCRIPTION';
-      if (hasArabic) descLabel += ` / ${ar('DESCRIPTION')}`;
-      doc.text(descLabel, ml + 3, y);
+      drawLabel('Description', ar('DESCRIPTION'), ml + 3);
       doc.setFontSize(7.5);
       doc.setTextColor(...C.dark);
       doc.setFont('helvetica', 'normal');
@@ -556,7 +558,16 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
   doc.setFontSize(6);
   doc.setTextColor(...C.dark);
   doc.setFont('helvetica', 'bold');
-  doc.text('VERIFICATION / التحقق', textX, y + 5);
+  doc.text('VERIFICATION', textX, y + 5);
+  if (hasArabic) {
+    const vw = doc.getTextWidth('VERIFICATION');
+    doc.setFont('helvetica', 'normal');
+    doc.text(' / ', textX + vw, y + 5);
+    const sw = doc.getTextWidth(' / ');
+    doc.setFont('Amiri', 'normal');
+    doc.text('التحقق', textX + vw + sw, y + 5);
+    doc.setFont('helvetica', 'normal');
+  }
 
   doc.setFontSize(5.5);
   doc.setTextColor(...C.label);
