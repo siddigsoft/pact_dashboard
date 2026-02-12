@@ -202,18 +202,32 @@ async function buildApprovalCertificateDoc(data: ApprovalCertificateData): Promi
     doc.setFont('helvetica', 'normal');
   };
 
-  const qrContent = JSON.stringify({
-    ref: refNumber,
-    id: data.submission.id,
-    amount: fmtCurrency(data.submission.amount_cents, data.submission.currency),
-    category: fmtCategory(data.submission.expense_category),
-    submitter: data.submitter.name,
-    project: data.project?.name || 'N/A',
-    tier1: { approver: data.tier1.approverName, status: data.tier1.status, date: data.tier1.approvedAt },
-    tier2: { approver: data.tier2.approverName, status: data.tier2.status, date: data.tier2.approvedAt },
-    generated: new Date().toISOString(),
-    verified: true,
-  });
+  const qrLines = [
+    `PACT APPROVAL CERTIFICATE`,
+    `========================`,
+    `Ref: ${refNumber}`,
+    `Date: ${format(new Date(), 'MMM d, yyyy HH:mm')}`,
+    ``,
+    `SUBMISSION`,
+    `Amount: ${fmtCurrency(data.submission.amount_cents, data.submission.currency)}`,
+    `Category: ${fmtCategory(data.submission.expense_category)}`,
+    `Submitter: ${data.submitter.name}`,
+    `Project: ${data.project?.name || 'N/A'}`,
+    `Expense Date: ${fmtDate(data.submission.expense_date)}`,
+    ``,
+    `TIER 1 APPROVAL`,
+    `Approver: ${data.tier1.approverName}`,
+    `Status: ${data.tier1.status.toUpperCase()}`,
+    `Date: ${fmtDate(data.tier1.approvedAt, true)}`,
+    ``,
+    `TIER 2 APPROVAL`,
+    `Approver: ${data.tier2.approverName}`,
+    `Status: ${data.tier2.status.toUpperCase()}`,
+    `Date: ${fmtDate(data.tier2.approvedAt, true)}`,
+    ``,
+    `Verified: YES`,
+  ];
+  const qrContent = qrLines.join('\n');
 
   const [logoDataUrl, qrDataUrl] = await Promise.all([
     loadLogoAsDataUrl(),
