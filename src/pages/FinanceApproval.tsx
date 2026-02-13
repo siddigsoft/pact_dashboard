@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,11 @@ import {
   Receipt,
   Upload,
   Image,
-  X
+  X,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Eye
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, differenceInHours, differenceInDays } from 'date-fns';
@@ -71,6 +75,9 @@ export default function FinanceApproval() {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [userWalletBalances, setUserWalletBalances] = useState<Record<string, { balance: number; currency: string }>>({});
+  const [duplicateSectionOpen, setDuplicateSectionOpen] = useState(true);
+  const [highlightedRequestId, setHighlightedRequestId] = useState<string | null>(null);
+  const requestRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const fetchUserWalletBalances = useCallback(async (userIds: string[]) => {
     if (userIds.length === 0) return;
@@ -206,6 +213,113 @@ export default function FinanceApproval() {
   const totalReadyAmount = supervisorApprovedRequests.reduce((sum, r) => sum + r.amount, 0);
   const totalCompletedAmount = completedRequests.reduce((sum, r) => sum + r.amount, 0);
 
+  interface DuplicateEntry {
+    requestId: string;
+    userId: string;
+    amount: number;
+    currency: string;
+    createdAt: string;
+    status: string;
+    matchedWithId: string;
+    matchedCreatedAt: string;
+    matchedStatus: string;
+    reason: 'same_amount_within_7_days' | 'multiple_pending';
+    similarityScore: number;
+  }
+
+  const potentialDuplicates = useMemo(() => {
+    const duplicates: DuplicateEntry[] = [];
+    const seen = new Set<string>();
+
+    for (let i = 0; i < allRequests.length; i++) {
+      for (let j = i + 1; j < allRequests.length; j++) {
+        const a = allRequests[i];
+        const b = allRequests[j];
+        if (a.userId !== b.userId) continue;
+
+        const daysDiff = Math.abs(differenceInDays(new Date(a.createdAt), new Date(b.createdAt)));
+
+        if (a.amount === b.amount && daysDiff <= 7) {
+          const score = daysDiff === 0 ? 100 : daysDiff <= 1 ? 95 : daysDiff <= 3 ? 85 : 75;
+          const keyA = `${a.id}-same_amount`;
+          const keyB = `${b.id}-same_amount`;
+          if (!seen.has(keyA)) {
+            seen.add(keyA);
+            duplicates.push({
+              requestId: a.id,
+              userId: a.userId,
+              amount: a.amount,
+              currency: a.currency || 'SDG',
+              createdAt: a.createdAt,
+              status: a.status,
+              matchedWithId: b.id,
+              matchedCreatedAt: b.createdAt,
+              matchedStatus: b.status,
+              reason: 'same_amount_within_7_days',
+              similarityScore: score,
+            });
+          }
+          if (!seen.has(keyB)) {
+            seen.add(keyB);
+            duplicates.push({
+              requestId: b.id,
+              userId: b.userId,
+              amount: b.amount,
+              currency: b.currency || 'SDG',
+              createdAt: b.createdAt,
+              status: b.status,
+              matchedWithId: a.id,
+              matchedCreatedAt: a.createdAt,
+              matchedStatus: a.status,
+              reason: 'same_amount_within_7_days',
+              similarityScore: score,
+            });
+          }
+        }
+
+        const pendingStatuses = ['pending', 'supervisor_approved'];
+        if (pendingStatuses.includes(a.status) && pendingStatuses.includes(b.status)) {
+          const keyA = `${a.id}-multiple_pending`;
+          const keyB = `${b.id}-multiple_pending`;
+          if (!seen.has(keyA)) {
+            seen.add(keyA);
+            duplicates.push({
+              requestId: a.id,
+              userId: a.userId,
+              amount: a.amount,
+              currency: a.currency || 'SDG',
+              createdAt: a.createdAt,
+              status: a.status,
+              matchedWithId: b.id,
+              matchedCreatedAt: b.createdAt,
+              matchedStatus: b.status,
+              reason: 'multiple_pending',
+              similarityScore: a.amount === b.amount ? 90 : 60,
+            });
+          }
+          if (!seen.has(keyB)) {
+            seen.add(keyB);
+            duplicates.push({
+              requestId: b.id,
+              userId: b.userId,
+              amount: b.amount,
+              currency: b.currency || 'SDG',
+              createdAt: b.createdAt,
+              status: b.status,
+              matchedWithId: a.id,
+              matchedCreatedAt: a.createdAt,
+              matchedStatus: a.status,
+              reason: 'multiple_pending',
+              similarityScore: a.amount === b.amount ? 90 : 60,
+            });
+          }
+        }
+      }
+    }
+
+    return duplicates.sort((a, b) => b.similarityScore - a.similarityScore);
+  }, [allRequests]);
+
   const getUserName = (userId: string, request?: AdminWithdrawalRequest) => {
     if (request?.requesterName) {
       return request.requesterName;
@@ -216,6 +330,15 @@ export default function FinanceApproval() {
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const handleReviewDuplicate = (requestId: string) => {
+    setHighlightedRequestId(requestId);
+    const el = requestRefs.current[requestId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => setHighlightedRequestId(null), 3000);
+    }
   };
 
   const formatCurrency = (amount: number, currency: string = 'SDG') => {
@@ -498,12 +621,14 @@ export default function FinanceApproval() {
     const hasInsufficientBalance = request.status === 'supervisor_approved' && walletBalance < request.amount;
     
     return (
-      <Card className={`group transition-all duration-200 hover:shadow-md ${
+      <Card
+        ref={(el: HTMLDivElement | null) => { requestRefs.current[request.id] = el; }}
+        className={`group transition-all duration-200 hover:shadow-md ${
         request.status === 'supervisor_approved' ? 'border-l-4 border-l-blue-500' :
         request.status === 'processing' ? 'border-l-4 border-l-purple-500' :
         request.status === 'approved' ? 'border-l-4 border-l-emerald-500' :
         request.status === 'rejected' ? 'border-l-4 border-l-red-500' : ''
-      } ${selectedRequestIds.has(request.id) ? 'ring-2 ring-primary ring-offset-2' : ''} ${hasInsufficientBalance ? 'bg-red-50/50 dark:bg-red-950/20' : ''}`}>
+      } ${selectedRequestIds.has(request.id) ? 'ring-2 ring-primary ring-offset-2' : ''} ${hasInsufficientBalance ? 'bg-red-50/50 dark:bg-red-950/20' : ''} ${highlightedRequestId === request.id ? 'ring-2 ring-amber-500 ring-offset-2 animate-pulse' : ''}`}>
         <CardContent className="p-5">
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -840,6 +965,129 @@ export default function FinanceApproval() {
         pendingCount={supervisorApprovedRequests.length} 
         requiresSignature={true}
       />
+
+      {potentialDuplicates.length > 0 && (
+        <Card className="border-amber-500/30 bg-amber-500/5" data-testid="duplicate-detection-section">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-amber-500/10">
+                  <Copy className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    Potential Duplicate Payments
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30" data-testid="duplicate-count-badge">
+                      {potentialDuplicates.length}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="mt-0.5">
+                    Requests flagged as potential duplicates based on same user, amount, and timing
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDuplicateSectionOpen(!duplicateSectionOpen)}
+                data-testid="button-toggle-duplicates"
+              >
+                {duplicateSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            </div>
+          </CardHeader>
+          {duplicateSectionOpen && (
+            <CardContent className="pt-0">
+              <div className="overflow-x-auto" data-testid="duplicate-table-container">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-2 pr-4 font-medium text-muted-foreground">Staff Name</th>
+                      <th className="pb-2 pr-4 font-medium text-muted-foreground">Amount (SDG)</th>
+                      <th className="pb-2 pr-4 font-medium text-muted-foreground">Request Dates</th>
+                      <th className="pb-2 pr-4 font-medium text-muted-foreground">Status</th>
+                      <th className="pb-2 pr-4 font-medium text-muted-foreground">Similarity Score</th>
+                      <th className="pb-2 font-medium text-muted-foreground">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {potentialDuplicates.map((dup, idx) => {
+                      const userName = getUserName(dup.userId);
+                      return (
+                        <tr
+                          key={`${dup.requestId}-${dup.reason}-${idx}`}
+                          className="border-b last:border-0"
+                          data-testid={`duplicate-row-${dup.requestId}`}
+                        >
+                          <td className="py-2.5 pr-4">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-7 w-7">
+                                <AvatarFallback className="bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs">
+                                  {getInitials(userName)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="font-medium" data-testid={`duplicate-staff-name-${dup.requestId}`}>{userName}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-4 tabular-nums font-medium" data-testid={`duplicate-amount-${dup.requestId}`}>
+                            {formatCurrency(dup.amount, dup.currency)}
+                          </td>
+                          <td className="py-2.5 pr-4" data-testid={`duplicate-dates-${dup.requestId}`}>
+                            <div className="flex flex-col gap-0.5 text-xs">
+                              <span>{formatDate(dup.createdAt)}</span>
+                              <span className="text-muted-foreground">matched: {formatDate(dup.matchedCreatedAt)}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-4" data-testid={`duplicate-status-${dup.requestId}`}>
+                            <div className="flex flex-col gap-1">
+                              {getStatusBadge(dup.status)}
+                              <Badge variant="outline" className="text-xs w-fit">
+                                {dup.reason === 'same_amount_within_7_days' ? 'Same amount' : 'Multiple pending'}
+                              </Badge>
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-4" data-testid={`duplicate-score-${dup.requestId}`}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-2 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    dup.similarityScore >= 90 ? 'bg-red-500' :
+                                    dup.similarityScore >= 75 ? 'bg-amber-500' :
+                                    'bg-yellow-500'
+                                  }`}
+                                  style={{ width: `${dup.similarityScore}%` }}
+                                />
+                              </div>
+                              <span className={`text-xs font-medium tabular-nums ${
+                                dup.similarityScore >= 90 ? 'text-red-600 dark:text-red-400' :
+                                dup.similarityScore >= 75 ? 'text-amber-600 dark:text-amber-400' :
+                                'text-yellow-600 dark:text-yellow-400'
+                              }`}>
+                                {dup.similarityScore}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-2.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReviewDuplicate(dup.requestId)}
+                              data-testid={`button-review-duplicate-${dup.requestId}`}
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              Review
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       <Tabs defaultValue="ready" className="space-y-4">
         <TabsList className="w-full sm:w-auto grid grid-cols-4 sm:inline-flex">

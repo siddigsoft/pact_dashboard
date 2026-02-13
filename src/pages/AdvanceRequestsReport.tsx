@@ -40,11 +40,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   ChevronsLeft,
   ChevronsRight,
   History,
+  Bell,
+  Send,
 } from 'lucide-react';
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, subMonths, isWithinInterval, differenceInDays } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -94,6 +97,7 @@ function AdvanceRequestsReportContent() {
     sending: boolean;
   }>({ open: false, request: null, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
+  const [remindersExpanded, setRemindersExpanded] = useState(false);
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 
@@ -113,6 +117,45 @@ function AdvanceRequestsReportContent() {
   const getProfileName = useCallback((userId: string) => {
     return userMap.get(userId) || 'Unknown User';
   }, [userMap]);
+
+  const overdueLiquidations = useMemo(() => {
+    const now = new Date();
+    return requests
+      .filter(r => {
+        const paidAt = r.metadata?.paid_at;
+        const reconciled = r.metadata?.advance_reconciled_at;
+        if (!paidAt || reconciled) return false;
+        const paidStatuses = ['fully_paid', 'partially_paid', 'approved'];
+        if (!paidStatuses.includes(r.status) && !paidAt) return false;
+        try {
+          const daysSince = differenceInDays(now, parseISO(paidAt));
+          return daysSince > 7;
+        } catch {
+          return false;
+        }
+      })
+      .map(r => {
+        const paidAt = r.metadata!.paid_at as string;
+        const daysSince = differenceInDays(now, parseISO(paidAt));
+        return {
+          id: r.id,
+          staffName: r.requestedByName || getProfileName(r.requestedBy),
+          amount: r.approvedAmount || r.requestedAmount,
+          paidAt,
+          daysSincePayment: daysSince,
+          requestedBy: r.requestedBy,
+          siteName: r.siteName,
+        };
+      })
+      .sort((a, b) => b.daysSincePayment - a.daysSincePayment);
+  }, [requests, getProfileName]);
+
+  const handleSendLiquidationReminder = (item: { id: string; staffName: string; daysSincePayment: number }) => {
+    toast({
+      title: 'Reminder Queued / تم إدراج التذكير',
+      description: `Liquidation reminder would be sent to ${item.staffName} (${item.daysSincePayment} days overdue). / سيتم إرسال تذكير التسوية إلى ${item.staffName} (${item.daysSincePayment} يوم متأخر).`,
+    });
+  };
 
   const handleDownloadCertificate = async (req: DownPaymentRequest) => {
     const requester = users.find(u => u.id === req.requestedBy);
@@ -633,6 +676,71 @@ function AdvanceRequestsReportContent() {
     });
     return Object.values(grouped).sort((a, b) => b.totalRequested - a.totalRequested);
   }, [filteredRequests]);
+
+  const agingData = useMemo(() => {
+    const now = new Date();
+    const outstanding = requests.filter(r => {
+      const isOutstanding = r.status === 'approved' || r.status === 'partially_paid';
+      const isReconciled = r.metadata?.advance_reconciled_at;
+      return isOutstanding && !isReconciled;
+    });
+    const items = outstanding.map(r => {
+      const createdDate = parseISO(r.createdAt || r.requestedAt);
+      const daysOut = differenceInDays(now, createdDate);
+      let bucket: '0-30' | '31-60' | '61-90' | '90+' = '0-30';
+      if (daysOut > 90) bucket = '90+';
+      else if (daysOut > 60) bucket = '61-90';
+      else if (daysOut > 30) bucket = '31-60';
+      return { ...r, daysOutstanding: daysOut, bucket };
+    });
+    const buckets = {
+      '0-30': { label: '0-30 Days', count: 0, total: 0, items: [] as typeof items },
+      '31-60': { label: '31-60 Days', count: 0, total: 0, items: [] as typeof items },
+      '61-90': { label: '61-90 Days', count: 0, total: 0, items: [] as typeof items },
+      '90+': { label: '90+ Days', count: 0, total: 0, items: [] as typeof items },
+    };
+    items.forEach(item => {
+      const b = buckets[item.bucket];
+      b.count++;
+      b.total += item.requestedAmount;
+      b.items.push(item);
+    });
+    return { items: items.sort((a, b) => b.daysOutstanding - a.daysOutstanding), buckets, totalCount: items.length, totalAmount: items.reduce((s, i) => s + i.requestedAmount, 0) };
+  }, [requests]);
+
+  const getAgingRowColor = (bucket: string) => {
+    switch (bucket) {
+      case '0-30': return 'bg-green-50 dark:bg-green-950/20';
+      case '31-60': return 'bg-yellow-50 dark:bg-yellow-950/20';
+      case '61-90': return 'bg-orange-50 dark:bg-orange-950/20';
+      case '90+': return 'bg-red-50 dark:bg-red-950/20';
+      default: return '';
+    }
+  };
+
+  const exportAgingToExcel = () => {
+    const detailData = agingData.items.map(item => ({
+      'Staff Name': getProfileName(item.requestedBy),
+      'Hub': item.hubName || 'N/A',
+      'Amount (SDG)': item.requestedAmount,
+      'Request Date': format(parseISO(item.createdAt || item.requestedAt), 'yyyy-MM-dd'),
+      'Days Outstanding': item.daysOutstanding,
+      'Aging Bucket': item.bucket,
+      'Status': item.status.replace(/_/g, ' ').toUpperCase(),
+      'Site': item.siteName,
+      'Project': item.projectName || 'N/A',
+    }));
+    const summaryData = Object.entries(agingData.buckets).map(([key, b]) => ({
+      'Aging Bucket': b.label,
+      'Count': b.count,
+      'Total Amount (SDG)': b.total,
+    }));
+    summaryData.push({ 'Aging Bucket': 'TOTAL', 'Count': agingData.totalCount, 'Total Amount (SDG)': agingData.totalAmount });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), 'Aging Summary');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailData), 'Aging Details');
+    XLSX.writeFile(wb, `advance_aging_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
 
   const uniqueHubs = useMemo(() => {
     const hubs = new Map<string, string>();
@@ -1282,9 +1390,14 @@ function AdvanceRequestsReportContent() {
               </Button>
               <img src="/pact-logo.png" alt="PACT" className="h-12 w-auto" />
               <div>
-                <h1 className="text-2xl font-bold flex items-center gap-2">
+                <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="heading-advance-report">
                   <Truck className="h-6 w-6 text-primary" />
                   Transportation Advance Cost
+                  {overdueLiquidations.length > 0 && (
+                    <Badge variant="destructive" className="ml-2 text-xs" data-testid="badge-overdue-count">
+                      {overdueLiquidations.length} Overdue
+                    </Badge>
+                  )}
                 </h1>
                 <p className="text-muted-foreground text-sm mt-1">
                   Track and analyze transportation advance costs from your team
@@ -1330,6 +1443,77 @@ function AdvanceRequestsReportContent() {
           { step: 4, role: 'النظام', action: 'يُسوّي تلقائياً', description: 'عند اكتمال العمل وإضافة الأتعاب، تُخصم السلف تلقائياً. يتتبع هذا التقرير تلك الحالة.' },
         ]}
       />
+
+      {overdueLiquidations.length > 0 && (
+        <Card className="border-destructive/30 bg-destructive/5" data-testid="section-liquidation-reminders">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-destructive" />
+                <span className="font-semibold text-destructive" data-testid="text-overdue-summary">
+                  {overdueLiquidations.length} advance{overdueLiquidations.length !== 1 ? 's' : ''} past liquidation deadline
+                </span>
+                <span className="text-muted-foreground text-sm">
+                  (paid &gt; 7 days ago, not yet reconciled)
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRemindersExpanded(!remindersExpanded)}
+                data-testid="button-toggle-reminders"
+              >
+                {remindersExpanded ? <ChevronUp className="h-4 w-4 mr-1" /> : <ChevronDown className="h-4 w-4 mr-1" />}
+                {remindersExpanded ? 'Hide Details' : 'Show Details'}
+              </Button>
+            </div>
+            {remindersExpanded && (
+              <div className="mt-4" data-testid="list-overdue-liquidations">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Staff Name</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead className="text-right">Amount (SDG)</TableHead>
+                      <TableHead>Paid Date</TableHead>
+                      <TableHead className="text-right">Days Since Payment</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {overdueLiquidations.map((item) => (
+                      <TableRow key={item.id} data-testid={`row-overdue-${item.id}`}>
+                        <TableCell className="font-medium" data-testid={`text-staff-name-${item.id}`}>{item.staffName}</TableCell>
+                        <TableCell data-testid={`text-site-name-${item.id}`}>{item.siteName || 'N/A'}</TableCell>
+                        <TableCell className="text-right" data-testid={`text-amount-${item.id}`}>{item.amount.toLocaleString()}</TableCell>
+                        <TableCell data-testid={`text-paid-date-${item.id}`}>
+                          {(() => { try { return format(parseISO(item.paidAt), 'dd MMM yyyy'); } catch { return item.paidAt; } })()}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-days-overdue-${item.id}`}>
+                          <Badge variant="destructive" className="text-xs">
+                            {item.daysSincePayment} days
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleSendLiquidationReminder(item)}
+                            data-testid={`button-send-reminder-${item.id}`}
+                          >
+                            <Send className="h-3 w-3 mr-1" />
+                            Send Reminder
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
@@ -1535,6 +1719,10 @@ function AdvanceRequestsReportContent() {
           <TabsTrigger value="byProject" className="gap-1" data-testid="tab-by-project">
             <FolderKanban className="h-4 w-4" />
             By Project
+          </TabsTrigger>
+          <TabsTrigger value="aging" className="gap-1" data-testid="tab-aging">
+            <Clock className="h-4 w-4" />
+            Aging
           </TabsTrigger>
         </TabsList>
 
@@ -2620,6 +2808,122 @@ function AdvanceRequestsReportContent() {
               </div>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="aging" className="space-y-4">
+          <div className="flex justify-end gap-2">
+            <Button size="sm" onClick={exportAgingToExcel} data-testid="button-aging-excel">
+              <Download className="h-4 w-4 mr-1" />
+              Excel
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card data-testid="card-aging-0-30">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-3 w-3 rounded-full bg-green-500" />
+                  <span className="text-sm font-medium">0-30 Days</span>
+                </div>
+                <div className="text-2xl font-bold">{agingData.buckets['0-30'].count}</div>
+                <div className="text-sm text-muted-foreground font-mono">SDG {agingData.buckets['0-30'].total.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-aging-31-60">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-3 w-3 rounded-full bg-yellow-500" />
+                  <span className="text-sm font-medium">31-60 Days</span>
+                </div>
+                <div className="text-2xl font-bold">{agingData.buckets['31-60'].count}</div>
+                <div className="text-sm text-muted-foreground font-mono">SDG {agingData.buckets['31-60'].total.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-aging-61-90">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-3 w-3 rounded-full bg-orange-500" />
+                  <span className="text-sm font-medium">61-90 Days</span>
+                </div>
+                <div className="text-2xl font-bold">{agingData.buckets['61-90'].count}</div>
+                <div className="text-sm text-muted-foreground font-mono">SDG {agingData.buckets['61-90'].total.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-aging-90plus">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-3 w-3 rounded-full bg-red-500" />
+                  <span className="text-sm font-medium">90+ Days</span>
+                </div>
+                <div className="text-2xl font-bold">{agingData.buckets['90+'].count}</div>
+                <div className="text-sm text-muted-foreground font-mono">SDG {agingData.buckets['90+'].total.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Outstanding Advances Aging Report
+              </CardTitle>
+              <CardDescription>
+                {agingData.totalCount} outstanding advance(s) totaling SDG {agingData.totalAmount.toLocaleString()}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-3">
+                  {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : agingData.items.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground">No outstanding advances found</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Staff Name</TableHead>
+                        <TableHead>Hub</TableHead>
+                        <TableHead className="text-right">Amount (SDG)</TableHead>
+                        <TableHead>Request Date</TableHead>
+                        <TableHead className="text-right">Days Outstanding</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-center">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {agingData.items.map((item, idx) => (
+                        <TableRow key={item.id} className={getAgingRowColor(item.bucket)} data-testid={`row-aging-${idx}`}>
+                          <TableCell className="font-medium">{getProfileName(item.requestedBy)}</TableCell>
+                          <TableCell>{item.hubName || 'N/A'}</TableCell>
+                          <TableCell className="text-right font-mono">{item.requestedAmount.toLocaleString()}</TableCell>
+                          <TableCell className="text-sm">{format(parseISO(item.createdAt || item.requestedAt), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={item.bucket === '90+' ? 'destructive' : item.bucket === '61-90' ? 'default' : 'outline'} className={item.bucket === '61-90' ? 'bg-orange-500' : item.bucket === '31-60' ? 'border-yellow-500 text-yellow-600' : ''}>
+                              {item.daysOutstanding}d
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(item.status)}</TableCell>
+                          <TableCell className="text-center">
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/down-payment-approval`)} data-testid={`button-aging-view-${idx}`}>
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              View
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <tfoot>
+                      <TableRow className="bg-muted/50 font-bold border-t-2">
+                        <TableCell className="font-bold" colSpan={2}>Total</TableCell>
+                        <TableCell className="text-right font-mono font-bold">{agingData.totalAmount.toLocaleString()}</TableCell>
+                        <TableCell colSpan={4} />
+                      </TableRow>
+                    </tfoot>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

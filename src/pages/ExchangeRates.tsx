@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO, startOfDay, isToday, isYesterday } from 'date-fns';
+import { format, parseISO, startOfDay, isToday, isYesterday, differenceInHours, differenceInDays } from 'date-fns';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 
 interface ExchangeRateRecord {
@@ -253,13 +253,60 @@ export default function ExchangeRates() {
   const todaysRate = getTodaysRate();
   const activeRatesByBank = getActiveRatesByBank();
 
+  const stalenessInfo = useMemo(() => {
+    const activeRates = rates.filter(r => r.is_active);
+    if (activeRates.length === 0) {
+      return { status: 'none' as const, hoursAgo: 0, message: '' };
+    }
+    const mostRecent = activeRates.reduce((latest, rate) => {
+      return new Date(rate.fetched_at) > new Date(latest.fetched_at) ? rate : latest;
+    });
+    const now = new Date();
+    const fetchedDate = parseISO(mostRecent.fetched_at);
+    const hoursAgo = differenceInHours(now, fetchedDate);
+    const daysAgo = differenceInDays(now, fetchedDate);
+
+    if (hoursAgo >= 72) {
+      return {
+        status: 'critical' as const,
+        hoursAgo,
+        message: `Exchange rates were last updated ${daysAgo} days ago. Please update rates to ensure accurate financial calculations.`,
+      };
+    } else if (hoursAgo >= 24) {
+      return {
+        status: 'warning' as const,
+        hoursAgo,
+        message: `Exchange rates were last updated ${hoursAgo} hours ago. Please update rates to ensure accurate financial calculations.`,
+      };
+    }
+    return { status: 'current' as const, hoursAgo, message: '' };
+  }, [rates]);
+
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-bold flex items-center flex-wrap gap-2">
             <DollarSign className="h-6 w-6 text-primary" />
             Exchange Rates Management
+            {!loading && stalenessInfo.status === 'current' && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800" data-testid="badge-rates-fresh">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Up to date
+              </Badge>
+            )}
+            {!loading && stalenessInfo.status === 'warning' && (
+              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800" data-testid="badge-rates-warning">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Stale
+              </Badge>
+            )}
+            {!loading && stalenessInfo.status === 'critical' && (
+              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800" data-testid="badge-rates-critical">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Outdated
+              </Badge>
+            )}
           </h1>
           <p className="text-muted-foreground">
             Manage USD to SDG exchange rates for cost calculations
@@ -291,6 +338,33 @@ export default function ExchangeRates() {
           { step: 3, role: 'مدير المالية', action: 'يراجع السجل', description: 'اعرض كيف تغير سعر الصرف بمرور الوقت لفهم تأثيره على تقارير التكاليف.' },
         ]}
       />
+
+      {!loading && stalenessInfo.status === 'warning' && (
+        <Alert className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950" data-testid="alert-rates-warning">
+          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            {stalenessInfo.message}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!loading && stalenessInfo.status === 'critical' && (
+        <Alert className="border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-950" data-testid="alert-rates-critical">
+          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+          <AlertDescription className="text-red-800 dark:text-red-200">
+            {stalenessInfo.message}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!loading && stalenessInfo.status === 'current' && (
+        <Alert className="border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-950" data-testid="alert-rates-current">
+          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+          <AlertDescription className="text-green-800 dark:text-green-200">
+            Rates are up to date
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>

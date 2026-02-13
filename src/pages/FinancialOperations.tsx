@@ -574,12 +574,68 @@ const FinancialOperations = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="budget" className="space-y-4 mt-4">
+        <TabsContent value="budget" className="space-y-4 mt-4" data-testid="tab-content-budget">
+          {budgetVsActual.length > 0 && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="budget-summary-cards">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs text-muted-foreground">Total Budgeted</span>
+                  </div>
+                  <p className="text-xl font-bold font-mono" data-testid="text-total-budgeted">
+                    {formatCurrency(budgetVsActual.reduce((s, i) => s + i.budgetCents, 0) / 100)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <span className="text-xs text-muted-foreground">Total Actual Spent</span>
+                  </div>
+                  <p className="text-xl font-bold font-mono" data-testid="text-total-actual-spent">
+                    {formatCurrency(budgetVsActual.reduce((s, i) => s + i.actualSpendCents, 0) / 100)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-xs text-muted-foreground">Total Variance</span>
+                  </div>
+                  {(() => {
+                    const totalVariance = budgetVsActual.reduce((s, i) => s + i.varianceCents, 0);
+                    return (
+                      <p className={`text-xl font-bold font-mono ${totalVariance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-total-variance">
+                        {totalVariance >= 0 ? '+' : ''}{formatCurrency(totalVariance / 100)}
+                      </p>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Award className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    <span className="text-xs text-muted-foreground">Avg Utilization</span>
+                  </div>
+                  <p className="text-xl font-bold font-mono" data-testid="text-avg-utilization">
+                    {budgetVsActual.length > 0
+                      ? (budgetVsActual.reduce((s, i) => s + i.utilization, 0) / budgetVsActual.length).toFixed(1)
+                      : '0.0'}%
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5 text-muted-foreground" />
-                Budget vs Actual Spend
+                Budget vs Actual Comparison
               </CardTitle>
               <CardDescription>Compare project budgets against actual operational cost submissions</CardDescription>
             </CardHeader>
@@ -594,59 +650,119 @@ const FinancialOperations = () => {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {budgetVsActual.map(item => (
-                    <Card key={item.projectId} data-testid={`budget-vs-actual-${item.projectId}`}>
-                      <CardContent className="p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <Button
-                            variant="link"
-                            className="font-semibold p-0 h-auto"
-                            onClick={() => item.projectId !== '__general__' && navigate(`/projects/${item.projectId}`)}
-                            data-testid={`link-project-${item.projectId}`}
-                          >
-                            <FolderKanban className="h-4 w-4 mr-1.5" />
-                            {item.projectName}
-                          </Button>
-                          <div className="flex items-center gap-2">
-                            {item.utilization > 90 && (
-                              <Badge variant="destructive">
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                Over 90%
+                <div className="overflow-x-auto" data-testid="budget-vs-actual-table-wrapper">
+                  <Table data-testid="budget-vs-actual-table">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Project Name</TableHead>
+                        <TableHead className="text-right">Budgeted Amount</TableHead>
+                        <TableHead className="text-right">Actual Spent</TableHead>
+                        <TableHead className="text-right">Variance</TableHead>
+                        <TableHead className="text-right">Utilization %</TableHead>
+                        <TableHead>Progress</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {budgetVsActual.map(item => {
+                        const statusColor = item.utilization > 95
+                          ? 'text-red-600 dark:text-red-400'
+                          : item.utilization >= 80
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-green-600 dark:text-green-400';
+                        const statusLabel = item.utilization > 95
+                          ? 'Critical'
+                          : item.utilization >= 80
+                            ? 'Warning'
+                            : 'On Track';
+                        const badgeVariant = item.utilization > 95
+                          ? 'destructive' as const
+                          : 'secondary' as const;
+
+                        return (
+                          <TableRow key={item.projectId} data-testid={`budget-vs-actual-row-${item.projectId}`}>
+                            <TableCell>
+                              <Button
+                                variant="link"
+                                className="p-0 h-auto font-medium"
+                                onClick={() => item.projectId !== '__general__' && navigate(`/projects/${item.projectId}`)}
+                                data-testid={`link-budget-project-${item.projectId}`}
+                              >
+                                <FolderKanban className="h-4 w-4 mr-1.5" />
+                                {item.projectName}
+                              </Button>
+                              {item.pendingCount > 0 && (
+                                <span className="block text-xs text-muted-foreground mt-0.5">{item.pendingCount} pending</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm" data-testid={`text-budgeted-${item.projectId}`}>
+                              {formatCurrency(item.budgetCents / 100)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm" data-testid={`text-actual-spent-${item.projectId}`}>
+                              {formatCurrency(item.actualSpendCents / 100)}
+                            </TableCell>
+                            <TableCell className="text-right" data-testid={`text-variance-${item.projectId}`}>
+                              <span className={`font-mono text-sm font-medium ${item.varianceCents >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {item.varianceCents >= 0 ? '+' : ''}{formatCurrency(item.varianceCents / 100)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right" data-testid={`text-utilization-${item.projectId}`}>
+                              <span className={`font-mono text-sm font-medium ${statusColor}`}>
+                                {item.utilization.toFixed(1)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="min-w-[120px]" data-testid={`progress-bar-${item.projectId}`}>
+                              <Progress value={item.utilization} className="h-2" />
+                            </TableCell>
+                            <TableCell data-testid={`status-indicator-${item.projectId}`}>
+                              <Badge variant={badgeVariant}>
+                                {item.utilization > 95 && <AlertTriangle className="h-3 w-3 mr-1" />}
+                                {statusLabel}
                               </Badge>
-                            )}
-                            <Badge variant="secondary">
-                              {item.submissionCount} submissions
-                            </Badge>
-                          </div>
-                        </div>
-                        <Progress
-                          value={item.utilization}
-                          className="h-2"
-                        />
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                          <div>
-                            <span className="text-muted-foreground block text-xs">Budget</span>
-                            <span className="font-mono font-medium">{formatCurrency(item.budgetCents / 100)}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground block text-xs">Actual Spend</span>
-                            <span className="text-green-600 dark:text-green-400 font-mono font-medium">{formatCurrency(item.actualSpendCents / 100)}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground block text-xs">Variance</span>
-                            <span className={`font-mono font-medium ${item.varianceCents >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                              {item.varianceCents >= 0 ? '+' : ''}{formatCurrency(item.varianceCents / 100)}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground block text-xs">Utilization</span>
-                            <span className="font-mono font-medium">{item.utilization.toFixed(1)}%</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {(() => {
+                        const totBudget = budgetVsActual.reduce((s, i) => s + i.budgetCents, 0);
+                        const totActual = budgetVsActual.reduce((s, i) => s + i.actualSpendCents, 0);
+                        const totVariance = totBudget - totActual;
+                        const totUtilization = totBudget > 0 ? (totActual / totBudget) * 100 : 0;
+                        const totStatusColor = totUtilization > 95
+                          ? 'text-red-600 dark:text-red-400'
+                          : totUtilization >= 80
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-green-600 dark:text-green-400';
+                        return (
+                          <TableRow className="border-t-2 font-semibold bg-muted/50" data-testid="budget-vs-actual-summary-row">
+                            <TableCell>
+                              Total ({budgetVsActual.length} projects)
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm" data-testid="text-total-budgeted-summary">
+                              {formatCurrency(totBudget / 100)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm" data-testid="text-total-actual-summary">
+                              {formatCurrency(totActual / 100)}
+                            </TableCell>
+                            <TableCell className="text-right" data-testid="text-total-variance-summary">
+                              <span className={`font-mono text-sm ${totVariance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {totVariance >= 0 ? '+' : ''}{formatCurrency(totVariance / 100)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right" data-testid="text-total-utilization-summary">
+                              <span className={`font-mono text-sm ${totStatusColor}`}>
+                                {totUtilization.toFixed(1)}%
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <Progress value={Math.min(totUtilization, 100)} className="h-2" />
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        );
+                      })()}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </CardContent>
