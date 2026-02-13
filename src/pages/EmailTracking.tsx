@@ -426,7 +426,6 @@ export default function EmailTracking() {
       .subscribe((status) => {
         setIsRealtimeConnected(status === 'SUBSCRIBED');
         if (status === 'SUBSCRIBED') {
-          console.log('[EmailTracking] Real-time subscription active');
           setLastUpdate(new Date());
         }
       });
@@ -598,8 +597,6 @@ export default function EmailTracking() {
     setDiagnosticResult(null);
     
     try {
-      console.log('[DIAGNOSTIC] Calling send-email Edge Function directly...');
-      
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to: testEmail.toLowerCase(),
@@ -614,8 +611,6 @@ export default function EmailTracking() {
         },
       });
 
-      console.log('[DIAGNOSTIC] Edge Function response:', { data, error });
-      
       const resultInfo = JSON.stringify({ data, error }, null, 2);
       setDiagnosticResult(resultInfo);
 
@@ -638,7 +633,6 @@ export default function EmailTracking() {
           variant: 'destructive',
         });
       } else if (data?.success) {
-        console.log('[DIAGNOSTIC] Success:', data);
         await logTestEmailSend(testEmail, subject, true, data.messageId);
         toast({
           title: 'Email sent successfully',

@@ -28,31 +28,21 @@ const MMPVerification: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      console.log(`Fetching MMP with ID: ${id}`);
-      console.log('Available MMP files:', mmpFiles.length);
-      
-      // Debug the available MMP files to check what we're working with
       debugMMPFiles(mmpFiles, 'MMPVerification Page');
       
       const mmp = getMmpById(id);
-      console.log('Found MMP file:', mmp ? 'Found' : 'Not found');
       
       if (mmp) {
-        console.log('MMP Data:', JSON.stringify(mmp, null, 2));
         setMmpFile(mmp);
         
-        // Calculate verification progress
         const siteEntries = getActualSiteCount(mmp);
-        console.log(`Site entries count: ${siteEntries}`);
         
-        // Calculate verification progress based on processed entries
         const processedEntries = mmp.processedEntries || 0;
         const totalEntries = mmp.entries || 0;
         const calculatedProgress = totalEntries > 0 
           ? Math.round((processedEntries / totalEntries) * 100)
           : 0;
           
-        console.log(`Verification progress: ${calculatedProgress}%`);
         setVerificationProgress(calculatedProgress);
       } else {
         toast({

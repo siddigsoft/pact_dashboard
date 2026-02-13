@@ -455,15 +455,23 @@ const DataVisibility: React.FC = () => {
     let fileName = `${templateName.toLowerCase().replace(/\s+/g, '_')}_template.xlsx`;
     if (templateName === "Compliance Summary") {
       const headers = ['Project', 'Status', 'Documentation', 'Process Adherence', 'Data Protection', 'Overall Score'];
-      const sampleData = [['WASH Program', 'Compliant', '95%', '87%', '98%', '92%'], ['Example Project', 'Needs Review', '80%', '75%', '90%', '82%']];
       let csvContent = headers.join(',') + '\n';
-      sampleData.forEach(row => { csvContent += row.join(',') + '\n'; });
+      if (mmpFiles && mmpFiles.length > 0) {
+        const projectNames = [...new Set(mmpFiles.map((m: any) => m.projectName || m.name || 'Unknown'))];
+        projectNames.forEach(name => {
+          csvContent += [name, 'Pending Review', '', '', '', ''].join(',') + '\n';
+        });
+      }
       downloadFile(csvContent, fileName, 'text/csv');
     } else if (templateName === "Project Status Report") {
       const headers = ['Project Name', 'Status', 'Progress', 'Site Count', 'Region', 'Start Date', 'Due Date', 'Manager'];
-      const sampleData = [['WASH Program', 'In Progress', '65%', '12', 'South Darfur', '2025-01-15', '2025-06-30', 'John Doe'], ['Example Project', 'Planning', '10%', '5', 'Khartoum', '2025-05-01', '2025-08-15', 'Jane Smith']];
       let csvContent = headers.join(',') + '\n';
-      sampleData.forEach(row => { csvContent += row.join(',') + '\n'; });
+      if (mmpFiles && mmpFiles.length > 0) {
+        const projectNames = [...new Set(mmpFiles.map((m: any) => m.projectName || m.name || 'Unknown'))];
+        projectNames.forEach(name => {
+          csvContent += [name, '', '', '', '', '', '', ''].join(',') + '\n';
+        });
+      }
       downloadFile(csvContent, fileName, 'text/csv');
     } else {
       downloadMMPTemplate();

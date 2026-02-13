@@ -63,10 +63,8 @@ const EditMMP: React.FC = () => {
 
   useEffect(() => {
     if (id) {
-      console.log("Looking for MMP with ID:", id);
       const mmp = getMmpById(id);
       if (mmp) {
-        console.log("Retrieved MMP for editing:", mmp);
         setMmpFile(mmp);
         setLoading(false);
       } else {
@@ -81,7 +79,6 @@ const EditMMP: React.FC = () => {
   }, [id, getMmpById, navigate, toast]);
 
   const handleUpdate = (updatedMMP: any) => {
-    console.log("Updating MMP with:", updatedMMP);
     if (updateMMP && id) {
       updateMMP(id, updatedMMP);
       setMmpFile(updatedMMP);

@@ -50,10 +50,6 @@ const Index = () => {
   const navigationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!localStorage.getItem("mock_mmp_files")) {
-      localStorage.setItem("mock_mmp_files", JSON.stringify([]));
-    }
-
     // Fetch real stats from database
     fetchDashboardStats();
 

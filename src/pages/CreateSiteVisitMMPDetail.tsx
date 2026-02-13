@@ -57,7 +57,6 @@ const CreateSiteVisitMMPDetail = () => {
     const mmp = getMmpById(id);
     if (mmp) {
       setMmpData(mmp);
-      console.log("MMP data loaded:", mmp);
       const locAny = (mmp as any)?.location || {};
       const df = calculateDistanceFee(Number(locAny.latitude) || 0, Number(locAny.longitude) || 0) || 0;
       setDistanceFeeAmount(String(df));
