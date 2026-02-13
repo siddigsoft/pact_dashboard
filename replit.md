@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language.
 The frontend utilizes React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, adhering to mobile-first principles. It features a responsive, component-based design with dual-theme support, a custom color palette, touch-friendly UI, and PWA readiness.
 
 ### Technical Implementations
-*   **Frontend:** Built with React Router DOM v6, Vite, and React Context API. It uses TanStack Query for server state management and Supabase Realtime for subscriptions.
+*   **Frontend:** Built with React Router DOM v6, Vite, and React Context API. It uses TanStack Query for server state management and Supabase Realtime for subscriptions. Session resilience is handled by `SessionGuard` component and `ensureValidSession()` in `src/lib/supabase.ts`, which auto-refresh tokens on tab focus, visibility change, and reconnect. QueryClient uses 2-minute staleTime, smart retry with exponential backoff, and offlineFirst network mode.
 *   **Backend:** Powered by PostgreSQL via Supabase, incorporating Row Level Security (RLS) and real-time subscriptions. Supabase Auth handles authentication, sessions, role-based access control, and TOTP-based 2FA. The database schema supports core entities and audit logs for financial transactions.
 *   **Mobile Offline Infrastructure:** Employs IndexedDB, a Sync Manager for data synchronization, and a Service Worker for caching, enabling offline site visit workflows, GPS/photo capture, cost submissions, and cached MMP lists. The Android application is Flutter-based.
 *   **Authorization System:** Implements a resource-action based permission model enforced across UI, route guards, and server-side RLS.

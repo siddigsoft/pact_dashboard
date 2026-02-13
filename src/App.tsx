@@ -6,6 +6,7 @@ import { queryClient } from './lib/queryClient';
 import { isSupabaseConfigured } from './integrations/supabase/client';
 import { ConfigurationError } from './components/ConfigurationError';
 import { isMobileApp } from './utils/platformDetection';
+import { SessionGuard } from './components/SessionGuard';
 
 // Import AppProviders
 import { AppProviders } from './context/AppContext';
@@ -393,6 +394,7 @@ function App() {
                       <Suspense fallback={<PageLoader />}>
                         <LiveDashboardProvider>
                         <FCMInitializer />
+                        <SessionGuard>
                         <SessionManager>
                           <AuthGuard>
                             <MobilePermissionGuard>
@@ -400,6 +402,7 @@ function App() {
                             </MobilePermissionGuard>
                           </AuthGuard>
                         </SessionManager>
+                        </SessionGuard>
                         </LiveDashboardProvider>
                       </Suspense>
                       <AppNotifications />
