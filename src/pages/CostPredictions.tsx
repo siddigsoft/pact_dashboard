@@ -1004,10 +1004,7 @@ export default function CostPredictions() {
           }
         }
       });
-      console.log('[CostPredictions] Found', existingCosts?.length || 0, 'existing records and', existingMonthKeys.size, 'unique site-month combinations');
-      if (existingMonthKeys.size > 0) {
-        console.log('[CostPredictions] Sample existing keys:', Array.from(existingMonthKeys).slice(0, 5));
-      }
+      
       
       const data = await uploadFile.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });

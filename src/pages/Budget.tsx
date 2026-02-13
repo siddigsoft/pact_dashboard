@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,6 +78,9 @@ const BudgetPage = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const navigate = useNavigate();
   const { projects } = useProjectContext();
+
+  const [selectedProjectIdOverview, setSelectedProjectIdOverview] = useState<string>('');
+  const [selectedProjectIdProjects, setSelectedProjectIdProjects] = useState<string>('');
 
   const [actualSpendByProject, setActualSpendByProject] = useState<Record<string, { approved: number; paid: number; count: number }>>({});
 
@@ -145,6 +149,19 @@ const BudgetPage = () => {
       (ba.mmpBudgetId && userMmpBudgetIds.includes(ba.mmpBudgetId))
     );
   }, [allBudgetAlerts, userProjectIds, isAdminOrSuperUser, projectBudgets, mmpBudgets]);
+
+  const projectsWithoutBudgets = useMemo(() => {
+    const projectIdsWithBudgets = new Set(projectBudgets.map(pb => pb.projectId));
+    return projects.filter(p => !projectIdsWithBudgets.has(p.id));
+  }, [projects, projectBudgets]);
+
+  const selectedOverviewProject = useMemo(() => {
+    return projects.find(p => p.id === selectedProjectIdOverview);
+  }, [projects, selectedProjectIdOverview]);
+
+  const selectedProjectsTabProject = useMemo(() => {
+    return projects.find(p => p.id === selectedProjectIdProjects);
+  }, [projects, selectedProjectIdProjects]);
 
   const handleRefresh = async () => {
     await Promise.all([
@@ -476,10 +493,35 @@ const BudgetPage = () => {
                     Create your first project budget to start tracking expenditures
                   </p>
                   {canManageBudgets && (
-                    <CreateProjectBudgetDialog
-                      projectId="placeholder"
-                      projectName="Select Project"
-                    />
+                    <div className="flex flex-col items-center gap-3" data-testid="budget-project-selector-overview">
+                      {projects.length === 0 ? (
+                        <p className="text-sm text-blue-300/70">No projects available. Create a project first.</p>
+                      ) : projectsWithoutBudgets.length === 0 ? (
+                        <p className="text-sm text-blue-300/70">All projects already have budgets assigned.</p>
+                      ) : (
+                        <>
+                          <Select value={selectedProjectIdOverview} onValueChange={setSelectedProjectIdOverview}>
+                            <SelectTrigger className="w-64 border-blue-500/30 bg-slate-800/50" data-testid="select-project-overview">
+                              <SelectValue placeholder="Select a project..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {projectsWithoutBudgets.map((project) => (
+                                <SelectItem key={project.id} value={project.id} data-testid={`select-project-option-${project.id}`}>
+                                  {project.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedOverviewProject && (
+                            <CreateProjectBudgetDialog
+                              projectId={selectedOverviewProject.id}
+                              projectName={selectedOverviewProject.name}
+                              onSuccess={() => setSelectedProjectIdOverview('')}
+                            />
+                          )}
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : (
@@ -636,10 +678,35 @@ const BudgetPage = () => {
               <p className="text-blue-300/70">Manage and track project budget allocations</p>
             </div>
             {canManageBudgets && (
-              <CreateProjectBudgetDialog
-                projectId="placeholder"
-                projectName="Select Project"
-              />
+              <div className="flex items-center gap-3" data-testid="budget-project-selector-projects">
+                {projects.length === 0 ? (
+                  <p className="text-sm text-blue-300/70">No projects available.</p>
+                ) : projectsWithoutBudgets.length === 0 ? (
+                  <p className="text-sm text-blue-300/70">All projects have budgets.</p>
+                ) : (
+                  <>
+                    <Select value={selectedProjectIdProjects} onValueChange={setSelectedProjectIdProjects}>
+                      <SelectTrigger className="w-64 border-blue-500/30 bg-slate-800/50" data-testid="select-project-projects-tab">
+                        <SelectValue placeholder="Select a project..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projectsWithoutBudgets.map((project) => (
+                          <SelectItem key={project.id} value={project.id} data-testid={`select-project-tab-option-${project.id}`}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedProjectsTabProject && (
+                      <CreateProjectBudgetDialog
+                        projectId={selectedProjectsTabProject.id}
+                        projectName={selectedProjectsTabProject.name}
+                        onSuccess={() => setSelectedProjectIdProjects('')}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
           
