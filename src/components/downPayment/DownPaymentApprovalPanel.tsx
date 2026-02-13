@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -637,48 +637,66 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
-  const loadFinanceRecipients = async (): Promise<Array<{ id: string; email: string; name: string; role: string }>> => {
+  const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
+
+  useEffect(() => {
+    loadFinanceRecipients().catch(() => {});
+  }, []);
+
+  const loadFinanceRecipients = async (forceRefresh = false): Promise<Array<{ id: string; email: string; name: string; role: string }>> => {
+    if (!forceRefresh && cachedRecipientsRef.current) {
+      return cachedRecipientsRef.current;
+    }
     const { data: financeUsers } = await supabase
       .from('profiles')
       .select('id, email, full_name, role')
       .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
       .eq('status', 'approved');
-    return (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+    const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+    cachedRecipientsRef.current = recipients;
+    return recipients;
   };
 
   const openBulkPaymentRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
-    try {
-      const recipients = await loadFinanceRecipients();
-      setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
-    } catch {
-      setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
-      toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+    const cached = cachedRecipientsRef.current;
+    if (cached && cached.length > 0) {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
+      loadFinanceRecipients(true).then(fresh => {
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+      }).catch(() => {});
+    } else {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
+      try {
+        const recipients = await loadFinanceRecipients();
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
+      } catch {
+        setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+        toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+      }
     }
   };
 
   const openPaymentRequestDialog = async (req: DownPaymentRequest) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, bulkRequests: [], isBulk: false, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: '', bulkGroupValue: '' }));
-    try {
-      const { data: financeUsers } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role')
-        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved');
-
-      const recipients = (financeUsers || [])
-        .filter((u: any) => u.email)
-        .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
-
-      setPaymentRequestDialog(prev => ({
-        ...prev,
-        availableRecipients: recipients,
-        selectedRecipientIds: recipients.map((r: any) => r.id),
-        loading: false,
-      }));
-    } catch {
-      setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
-      toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+    const cached = cachedRecipientsRef.current;
+    if (cached && cached.length > 0) {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, bulkRequests: [], isBulk: false, loading: false, selectedRecipientIds: cached.map(r => r.id), availableRecipients: cached, ccEmails: [], bulkGroupBy: '', bulkGroupValue: '' }));
+      loadFinanceRecipients(true).then(fresh => {
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+      }).catch(() => {});
+    } else {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, bulkRequests: [], isBulk: false, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: '', bulkGroupValue: '' }));
+      try {
+        const recipients = await loadFinanceRecipients();
+        setPaymentRequestDialog(prev => ({
+          ...prev,
+          availableRecipients: recipients,
+          selectedRecipientIds: recipients.map((r: any) => r.id),
+          loading: false,
+        }));
+      } catch {
+        setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+        toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+      }
     }
   };
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, Fragment } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, Fragment } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -357,35 +357,69 @@ function AdvanceRequestsReportContent() {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [approvedForPayment, getProfileName]);
 
+  const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
+
+  useEffect(() => {
+    const preload = async () => {
+      try {
+        const { data: financeUsers } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role')
+          .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+          .eq('status', 'approved');
+        cachedRecipientsRef.current = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+      } catch {}
+    };
+    preload();
+  }, []);
+
+  const loadFinanceRecipientsReport = async (forceRefresh = false): Promise<Array<{ id: string; email: string; name: string; role: string }>> => {
+    if (!forceRefresh && cachedRecipientsRef.current) return cachedRecipientsRef.current;
+    const { data: financeUsers } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, role')
+      .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+      .eq('status', 'approved');
+    const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+    cachedRecipientsRef.current = recipients;
+    return recipients;
+  };
+
   const openBulkPaymentRequestDialog = async (bulkReqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, bulkRequests: bulkReqs, bulkGroupBy: groupBy, bulkGroupValue: groupValue, loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
-    try {
-      const { data: financeUsers } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role')
-        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved');
-      const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
-      setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
-    } catch {
-      setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
-      toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+    const cached = cachedRecipientsRef.current;
+    if (cached && cached.length > 0) {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, bulkRequests: bulkReqs, bulkGroupBy: groupBy, bulkGroupValue: groupValue, loading: false, selectedRecipientIds: cached.map(r => r.id), ccEmails: [], availableRecipients: cached }));
+      loadFinanceRecipientsReport(true).then(fresh => {
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+      }).catch(() => {});
+    } else {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, isBulk: true, bulkRequests: bulkReqs, bulkGroupBy: groupBy, bulkGroupValue: groupValue, loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
+      try {
+        const recipients = await loadFinanceRecipientsReport();
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+      } catch {
+        setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+        toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+      }
     }
   };
 
   const openPaymentRequestDialog = async (req: DownPaymentRequest) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
-    try {
-      const { data: financeUsers } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role')
-        .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved');
-      const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
-      setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
-    } catch {
-      setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
-      toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+    const cached = cachedRecipientsRef.current;
+    if (cached && cached.length > 0) {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', loading: false, selectedRecipientIds: cached.map(r => r.id), ccEmails: [], availableRecipients: cached }));
+      loadFinanceRecipientsReport(true).then(fresh => {
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+      }).catch(() => {});
+    } else {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, isBulk: false, bulkRequests: [], bulkGroupBy: '', bulkGroupValue: '', loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
+      try {
+        const recipients = await loadFinanceRecipientsReport();
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+      } catch {
+        setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+        toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+      }
     }
   };
 
