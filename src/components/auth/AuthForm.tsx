@@ -146,13 +146,11 @@ const AuthForm = ({ mode }: AuthFormProps) => {
 
     setCheckingEmail(true);
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', emailToCheck.toLowerCase().trim())
-        .maybeSingle();
+      const { data, error } = await supabase.rpc('check_email_exists', {
+        check_email: emailToCheck.trim()
+      });
 
-      if (!error && data) {
+      if (!error && data === true) {
         setEmailAlreadyRegistered(true);
       } else {
         setEmailAlreadyRegistered(false);
@@ -270,13 +268,11 @@ const AuthForm = ({ mode }: AuthFormProps) => {
         }
 
         if (email.trim() && /\S+@\S+\.\S+/.test(email)) {
-          const { data: existingProfile } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('email', email.toLowerCase().trim())
-            .maybeSingle();
+          const { data: emailExists } = await supabase.rpc('check_email_exists', {
+            check_email: email.trim()
+          });
 
-          if (existingProfile) {
+          if (emailExists === true) {
             setEmailAlreadyRegistered(true);
             toast({
               title: "Email already registered",
