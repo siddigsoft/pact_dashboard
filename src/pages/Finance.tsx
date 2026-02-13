@@ -13,7 +13,7 @@ import {
   BadgePercent, ClipboardList, DollarSign, ReceiptText, ShieldCheck, 
   CreditCard, ArrowUpDown, FileBarChart, AlertTriangle, FileText,
   DatabaseBackup, ChevronDown, ArrowLeft, TrendingUp, RefreshCw,
-  Wallet, Clock, CheckCircle2, Info
+  Wallet, Clock, CheckCircle2, Info, Download, Loader2, FileSpreadsheet
 } from "lucide-react";
 import { FraudDetection } from "@/components/FraudDetection";
 import { ApprovalTierAnalytics } from "@/components/ApprovalTierAnalytics";
@@ -28,11 +28,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useWallet } from "@/context/wallet/WalletContext";
 import { useBudget } from "@/context/budget/BudgetContext";
 import { useUser } from "@/context/user/UserContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { AdminWithdrawalRequest } from "@/types/wallet";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { format, startOfMonth, endOfMonth } from "date-fns";
+import * as XLSX from "xlsx";
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-SD', {
@@ -65,6 +72,343 @@ const Finance: React.FC = () => {
   const [expensesLoading, setExpensesLoading] = useState(true);
 
   const [walletSummary, setWalletSummary] = useState<{ totalWallets: number; totalBalance: number; totalWithdrawn: number; pendingCount: number; pendingAmount: number }>({ totalWallets: 0, totalBalance: 0, totalWithdrawn: 0, pendingCount: 0, pendingAmount: 0 });
+
+  const now = new Date();
+  const [csStartDate, setCsStartDate] = useState(format(startOfMonth(now), 'yyyy-MM-dd'));
+  const [csEndDate, setCsEndDate] = useState(format(endOfMonth(now), 'yyyy-MM-dd'));
+  const [csIncludeTransport, setCsIncludeTransport] = useState(true);
+  const [csIncludeOperational, setCsIncludeOperational] = useState(true);
+  const [csIncludeWallet, setCsIncludeWallet] = useState(true);
+  const [csIncludeAdvances, setCsIncludeAdvances] = useState(true);
+  const [csCurrency] = useState('SDG');
+  const [csLoading, setCsLoading] = useState(false);
+  const [csData, setCsData] = useState<{
+    totalAssets: number;
+    totalLiabilities: number;
+    netPosition: number;
+    inflowCategories: { category: string; amount: number }[];
+    expenseCategories: { category: string; amount: number }[];
+    projectBreakdown: { project: string; inflow: number; outflow: number; net: number }[];
+    hubBreakdown: { hub: string; inflow: number; outflow: number; net: number }[];
+    totalInflow: number;
+    totalOutflow: number;
+  } | null>(null);
+
+  const fetchConsolidatedData = useCallback(async () => {
+    setCsLoading(true);
+    try {
+      const fromDate = csStartDate ? `${csStartDate}T00:00:00` : undefined;
+      const toDate = csEndDate ? `${csEndDate}T23:59:59` : undefined;
+
+      const { data: walletsData } = await supabase.from('wallets').select('balances, total_earned, total_withdrawn, user_id');
+      let totalAssets = 0;
+      (walletsData || []).forEach((w: any) => {
+        const bal = typeof w.balances === 'object' ? (w.balances?.SDG || 0) : 0;
+        totalAssets += Number(bal) || 0;
+      });
+
+      let inflowMap: Record<string, number> = {};
+      let expenseMap: Record<string, number> = {};
+      let projectMap: Record<string, { inflow: number; outflow: number }> = {};
+      let hubMap: Record<string, { inflow: number; outflow: number }> = {};
+      let totalLiabilities = 0;
+
+      if (csIncludeWallet) {
+        let wtQuery = supabase.from('wallet_transactions').select('*');
+        if (fromDate) wtQuery = wtQuery.gte('created_at', fromDate);
+        if (toDate) wtQuery = wtQuery.lte('created_at', toDate);
+        const { data: wtData } = await wtQuery;
+        (wtData || []).forEach((tx: any) => {
+          const amt = Math.abs(Number(tx.amount) || 0);
+          const txType = (tx.type || tx.transaction_type || '').toLowerCase();
+          if (txType === 'credit' || txType === 'deposit' || txType === 'earning' || txType === 'top_up') {
+            const cat = tx.category || tx.description || 'Wallet Credit';
+            inflowMap[cat] = (inflowMap[cat] || 0) + amt;
+          } else if (txType === 'debit' || txType === 'withdrawal' || txType === 'payment') {
+            const cat = tx.category || tx.description || 'Wallet Withdrawal';
+            expenseMap[cat] = (expenseMap[cat] || 0) + amt;
+          }
+          if (tx.project_id) {
+            const pKey = tx.project_id;
+            if (!projectMap[pKey]) projectMap[pKey] = { inflow: 0, outflow: 0 };
+            if (txType === 'credit' || txType === 'deposit' || txType === 'earning' || txType === 'top_up') {
+              projectMap[pKey].inflow += amt;
+            } else {
+              projectMap[pKey].outflow += amt;
+            }
+          }
+        });
+      }
+
+      if (csIncludeOperational) {
+        let ocQuery = supabase.from('operational_cost_submissions').select('*');
+        if (fromDate) ocQuery = ocQuery.gte('created_at', fromDate);
+        if (toDate) ocQuery = ocQuery.lte('created_at', toDate);
+        const { data: ocData } = await ocQuery;
+        (ocData || []).forEach((oc: any) => {
+          const amt = Math.abs(Number(oc.amount_cents || 0)) / 100;
+          const cat = oc.expense_category || 'Operational Cost';
+          expenseMap[cat] = (expenseMap[cat] || 0) + amt;
+          if (oc.project_id) {
+            if (!projectMap[oc.project_id]) projectMap[oc.project_id] = { inflow: 0, outflow: 0 };
+            projectMap[oc.project_id].outflow += amt;
+          }
+          if (oc.hub) {
+            if (!hubMap[oc.hub]) hubMap[oc.hub] = { inflow: 0, outflow: 0 };
+            hubMap[oc.hub].outflow += amt;
+          }
+          if (oc.status === 'pending' || oc.tier1_status === 'pending' || oc.tier2_status === 'pending') {
+            totalLiabilities += amt;
+          }
+        });
+      }
+
+      if (csIncludeAdvances) {
+        let dpQuery = supabase.from('down_payment_requests').select('*');
+        if (fromDate) dpQuery = dpQuery.gte('created_at', fromDate);
+        if (toDate) dpQuery = dpQuery.lte('created_at', toDate);
+        const { data: dpData } = await dpQuery;
+        (dpData || []).forEach((dp: any) => {
+          const amt = Math.abs(Number(dp.amount) || Number(dp.requested_amount) || 0);
+          expenseMap['Transportation Advance'] = (expenseMap['Transportation Advance'] || 0) + amt;
+          if (dp.project_id) {
+            if (!projectMap[dp.project_id]) projectMap[dp.project_id] = { inflow: 0, outflow: 0 };
+            projectMap[dp.project_id].outflow += amt;
+          }
+          if (dp.hub) {
+            if (!hubMap[dp.hub]) hubMap[dp.hub] = { inflow: 0, outflow: 0 };
+            hubMap[dp.hub].outflow += amt;
+          }
+          if (dp.status === 'pending' || dp.status === 'pending_supervisor' || dp.status === 'pending_admin') {
+            totalLiabilities += amt;
+          }
+        });
+      }
+
+      if (csIncludeTransport) {
+        let csQuery = supabase.from('cost_submissions').select('*');
+        if (fromDate) csQuery = csQuery.gte('created_at', fromDate);
+        if (toDate) csQuery = csQuery.lte('created_at', toDate);
+        const { data: costData } = await csQuery;
+        (costData || []).forEach((cs: any) => {
+          const amt = Math.abs(Number(cs.amount) || Number(cs.amount_cents || 0) / 100 || 0);
+          const cat = cs.category || cs.cost_type || 'Transportation Cost';
+          expenseMap[cat] = (expenseMap[cat] || 0) + amt;
+          if (cs.project_id) {
+            if (!projectMap[cs.project_id]) projectMap[cs.project_id] = { inflow: 0, outflow: 0 };
+            projectMap[cs.project_id].outflow += amt;
+          }
+          if (cs.hub) {
+            if (!hubMap[cs.hub]) hubMap[cs.hub] = { inflow: 0, outflow: 0 };
+            hubMap[cs.hub].outflow += amt;
+          }
+        });
+      }
+
+      const inflowCategories = Object.entries(inflowMap).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
+      const expenseCats = Object.entries(expenseMap).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
+      const totalInflow = inflowCategories.reduce((s, c) => s + c.amount, 0);
+      const totalOutflow = expenseCats.reduce((s, c) => s + c.amount, 0);
+      const netPosition = totalAssets - totalLiabilities;
+
+      const projectBreakdown = Object.entries(projectMap).map(([project, vals]) => ({
+        project,
+        inflow: vals.inflow,
+        outflow: vals.outflow,
+        net: vals.inflow - vals.outflow,
+      })).sort((a, b) => b.outflow - a.outflow);
+
+      const hubBreakdown = Object.entries(hubMap).map(([hub, vals]) => ({
+        hub,
+        inflow: vals.inflow,
+        outflow: vals.outflow,
+        net: vals.inflow - vals.outflow,
+      })).sort((a, b) => b.outflow - a.outflow);
+
+      setCsData({
+        totalAssets,
+        totalLiabilities,
+        netPosition,
+        inflowCategories,
+        expenseCategories: expenseCats,
+        projectBreakdown,
+        hubBreakdown,
+        totalInflow,
+        totalOutflow,
+      });
+    } catch (err) {
+      console.error('Failed to fetch consolidated data:', err);
+      toast({ title: 'Error', description: 'Failed to load consolidated statement data.', variant: 'destructive' });
+    } finally {
+      setCsLoading(false);
+    }
+  }, [csStartDate, csEndDate, csIncludeTransport, csIncludeOperational, csIncludeWallet, csIncludeAdvances, toast]);
+
+  const generateConsolidatedPdf = () => {
+    if (!csData) return;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pw = doc.internal.pageSize.width;
+    const ph = doc.internal.pageSize.height;
+    const ml = 14;
+    const mr = 14;
+    const cw = pw - ml - mr;
+
+    doc.setFillColor(15, 32, 65);
+    doc.rect(0, 0, pw, 34, 'F');
+    doc.setFontSize(18);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PACT', ml + 4, 16);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Consolidated Financial Statement', ml + 4, 23);
+    doc.setFontSize(8);
+    doc.setTextColor(190, 205, 225);
+    doc.text(`Period: ${csStartDate} to ${csEndDate}`, ml + 4, 29);
+    doc.setFontSize(8);
+    doc.text(format(new Date(), 'MMM d, yyyy | HH:mm'), pw - mr, 16, { align: 'right' });
+
+    let y = 40;
+
+    doc.setFontSize(12);
+    doc.setTextColor(15, 32, 65);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Organization Summary', ml, y);
+    y += 7;
+
+    const summaryRows = [
+      ['Total Assets (Wallet Balances)', `${csCurrency} ${csData.totalAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+      ['Total Liabilities (Pending Payments)', `${csCurrency} ${csData.totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+      ['Net Position', `${csCurrency} ${csData.netPosition.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+      ['Total Inflows', `${csCurrency} ${csData.totalInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+      ['Total Outflows', `${csCurrency} ${csData.totalOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      head: [['Item', 'Amount']],
+      body: summaryRows,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255] },
+      columnStyles: { 1: { halign: 'right' } },
+      margin: { left: ml, right: mr },
+    });
+    y = (doc as any).lastAutoTable?.finalY + 8 || y + 40;
+
+    if (csData.expenseCategories.length > 0) {
+      doc.setFontSize(12);
+      doc.setTextColor(15, 32, 65);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Expense/Outflow by Category', ml, y);
+      y += 7;
+
+      const catRows = csData.expenseCategories.map(c => [
+        c.category.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()),
+        `${csCurrency} ${c.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+      ]);
+      catRows.push(['TOTAL', `${csCurrency} ${csData.totalOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`]);
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Category', 'Amount']],
+        body: catRows,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255] },
+        columnStyles: { 1: { halign: 'right' } },
+        margin: { left: ml, right: mr },
+        didParseCell: (data: any) => {
+          if (data.row.index === catRows.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [245, 247, 252];
+          }
+        },
+      });
+      y = (doc as any).lastAutoTable?.finalY + 8 || y + 30;
+    }
+
+    if (csData.projectBreakdown.length > 0 && y < ph - 50) {
+      doc.setFontSize(12);
+      doc.setTextColor(15, 32, 65);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Project-Level Breakdown', ml, y);
+      y += 7;
+
+      const projRows = csData.projectBreakdown.map(p => [
+        p.project,
+        `${csCurrency} ${p.inflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        `${csCurrency} ${p.outflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        `${csCurrency} ${p.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+      ]);
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Project', 'Inflow', 'Outflow', 'Net']],
+        body: projRows,
+        styles: { fontSize: 7.5, cellPadding: 2 },
+        headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255] },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+        margin: { left: ml, right: mr },
+      });
+      y = (doc as any).lastAutoTable?.finalY + 8 || y + 30;
+    }
+
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFillColor(15, 32, 65);
+      doc.rect(0, ph - 12, pw, 12, 'F');
+      doc.setFontSize(7);
+      doc.setTextColor(180, 195, 220);
+      doc.text(`Page ${i} of ${totalPages}  |  Generated: ${format(new Date(), 'MMM d, yyyy HH:mm:ss')}`, pw / 2, ph - 5, { align: 'center' });
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.text('PACT Command Center', pw - mr, ph - 5, { align: 'right' });
+    }
+
+    doc.save(`PACT-Consolidated-Statement-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    toast({ title: 'PDF Generated', description: 'Consolidated statement PDF has been downloaded.' });
+  };
+
+  const exportConsolidatedExcel = () => {
+    if (!csData) return;
+    const wb = XLSX.utils.book_new();
+
+    const summarySheet = XLSX.utils.aoa_to_sheet([
+      ['PACT Consolidated Financial Statement'],
+      [`Period: ${csStartDate} to ${csEndDate}`],
+      [],
+      ['Item', 'Amount (SDG)'],
+      ['Total Assets (Wallet Balances)', csData.totalAssets],
+      ['Total Liabilities (Pending Payments)', csData.totalLiabilities],
+      ['Net Position', csData.netPosition],
+      ['Total Inflows', csData.totalInflow],
+      ['Total Outflows', csData.totalOutflow],
+    ]);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+    if (csData.inflowCategories.length > 0) {
+      const inflowRows = [['Category', 'Amount (SDG)'], ...csData.inflowCategories.map(c => [c.category, c.amount])];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(inflowRows), 'Inflows');
+    }
+
+    if (csData.expenseCategories.length > 0) {
+      const expenseRows = [['Category', 'Amount (SDG)'], ...csData.expenseCategories.map(c => [c.category, c.amount])];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expenseRows), 'Expenses');
+    }
+
+    if (csData.projectBreakdown.length > 0) {
+      const projRows = [['Project', 'Inflow', 'Outflow', 'Net'], ...csData.projectBreakdown.map(p => [p.project, p.inflow, p.outflow, p.net])];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projRows), 'Projects');
+    }
+
+    if (csData.hubBreakdown.length > 0) {
+      const hubRows = [['Hub', 'Inflow', 'Outflow', 'Net'], ...csData.hubBreakdown.map(h => [h.hub, h.inflow, h.outflow, h.net])];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hubRows), 'Hubs');
+    }
+
+    XLSX.writeFile(wb, `PACT-Consolidated-Statement-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    toast({ title: 'Excel Exported', description: 'Consolidated statement Excel file has been downloaded.' });
+  };
 
   const fetchWithdrawals = useCallback(async () => {
     setWithdrawalsLoading(true);
@@ -289,7 +633,7 @@ const Finance: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 gap-2 p-1 h-auto">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 gap-2 p-1 h-auto">
           <TabsTrigger value="financial-tracking" className="py-2 data-[state=active]:bg-blue-50">
             <span className="flex items-center gap-2">
               <DollarSign className="h-4 w-4" />
@@ -323,6 +667,13 @@ const Finance: React.FC = () => {
               <FileText className="h-4 w-4" />
               <span className="hidden sm:inline">Reports & Audit</span>
               <span className="sm:hidden">Reports</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="consolidated-statement" className="py-2 data-[state=active]:bg-blue-50" data-testid="tab-consolidated-statement">
+            <span className="flex items-center gap-2">
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="hidden sm:inline">Statement</span>
+              <span className="sm:hidden">Statement</span>
             </span>
           </TabsTrigger>
         </TabsList>
@@ -786,6 +1137,308 @@ const Finance: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="consolidated-statement" className="mt-4" data-testid="tabcontent-consolidated-statement">
+          <div className="grid gap-6">
+            <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-primary" />
+              Consolidated Financial Statement
+            </h2>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5 text-primary" />
+                  Statement Configuration
+                </CardTitle>
+                <CardDescription>Configure the period and categories for the consolidated statement</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="cs-start-date">Start Date</Label>
+                    <Input
+                      id="cs-start-date"
+                      type="date"
+                      value={csStartDate}
+                      onChange={(e) => setCsStartDate(e.target.value)}
+                      data-testid="input-cs-start-date"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cs-end-date">End Date</Label>
+                    <Input
+                      id="cs-end-date"
+                      type="date"
+                      value={csEndDate}
+                      onChange={(e) => setCsEndDate(e.target.value)}
+                      data-testid="input-cs-end-date"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Currency</Label>
+                    <Input value={csCurrency} disabled data-testid="input-cs-currency" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="cs-transport"
+                      checked={csIncludeTransport}
+                      onCheckedChange={setCsIncludeTransport}
+                      data-testid="switch-cs-transport"
+                    />
+                    <Label htmlFor="cs-transport" className="text-sm">Transportation Costs</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="cs-operational"
+                      checked={csIncludeOperational}
+                      onCheckedChange={setCsIncludeOperational}
+                      data-testid="switch-cs-operational"
+                    />
+                    <Label htmlFor="cs-operational" className="text-sm">Operational Costs</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="cs-wallet"
+                      checked={csIncludeWallet}
+                      onCheckedChange={setCsIncludeWallet}
+                      data-testid="switch-cs-wallet"
+                    />
+                    <Label htmlFor="cs-wallet" className="text-sm">Wallet Transactions</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="cs-advances"
+                      checked={csIncludeAdvances}
+                      onCheckedChange={setCsIncludeAdvances}
+                      data-testid="switch-cs-advances"
+                    />
+                    <Label htmlFor="cs-advances" className="text-sm">Advances</Label>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-6 flex-wrap">
+                  <Button onClick={fetchConsolidatedData} disabled={csLoading} data-testid="button-load-statement">
+                    {csLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                    Load Statement Data
+                  </Button>
+                  <Button variant="outline" onClick={generateConsolidatedPdf} disabled={!csData || csLoading} data-testid="button-generate-pdf">
+                    <Download className="h-4 w-4 mr-2" />
+                    Generate PDF
+                  </Button>
+                  <Button variant="outline" onClick={exportConsolidatedExcel} disabled={!csData || csLoading} data-testid="button-export-excel">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Export Excel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {csLoading && (
+              <Card data-testid="loading-consolidated">
+                <CardContent className="py-8">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading consolidated statement data...</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {csData && !csLoading && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="section-org-summary">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/30">
+                          <DollarSign className="h-4 w-4 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Total Assets</p>
+                          <p className="text-lg font-bold" data-testid="text-cs-total-assets">{formatCurrency(csData.totalAssets)}</p>
+                          <p className="text-xs text-muted-foreground">Wallet balances</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/30">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Total Liabilities</p>
+                          <p className="text-lg font-bold" data-testid="text-cs-total-liabilities">{formatCurrency(csData.totalLiabilities)}</p>
+                          <p className="text-xs text-muted-foreground">Pending payments</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                          <TrendingUp className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Net Position</p>
+                          <p className="text-lg font-bold" data-testid="text-cs-net-position">{formatCurrency(csData.netPosition)}</p>
+                          <p className="text-xs text-muted-foreground">Assets - Liabilities</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Card data-testid="section-inflows">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-green-600" />
+                        Revenue / Inflows
+                      </CardTitle>
+                      <CardDescription>Wallet credits by category</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {csData.inflowCategories.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-inflows">No inflow data for the selected period.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {csData.inflowCategories.map((cat, idx) => (
+                            <div key={cat.category} className="flex items-center justify-between py-1 border-b last:border-b-0" data-testid={`row-inflow-${idx}`}>
+                              <span className="text-sm capitalize">{cat.category.replace(/_/g, ' ')}</span>
+                              <span className="text-sm font-medium text-green-600">{formatCurrency(cat.amount)}</span>
+                            </div>
+                          ))}
+                          <div className="flex items-center justify-between pt-2 font-bold">
+                            <span className="text-sm">Total Inflows</span>
+                            <span className="text-sm text-green-700" data-testid="text-cs-total-inflow">{formatCurrency(csData.totalInflow)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card data-testid="section-expenses">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <ArrowUpDown className="h-5 w-5 text-red-600" />
+                        Expenses / Outflows
+                      </CardTitle>
+                      <CardDescription>Cost submissions and withdrawals by category</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {csData.expenseCategories.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-expenses">No expense data for the selected period.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {csData.expenseCategories.map((cat, idx) => (
+                            <div key={cat.category} className="flex items-center justify-between py-1 border-b last:border-b-0" data-testid={`row-expense-${idx}`}>
+                              <span className="text-sm capitalize">{cat.category.replace(/_/g, ' ')}</span>
+                              <span className="text-sm font-medium text-red-600">{formatCurrency(cat.amount)}</span>
+                            </div>
+                          ))}
+                          <div className="flex items-center justify-between pt-2 font-bold">
+                            <span className="text-sm">Total Outflows</span>
+                            <span className="text-sm text-red-700" data-testid="text-cs-total-outflow">{formatCurrency(csData.totalOutflow)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {csData.projectBreakdown.length > 0 && (
+                  <Card data-testid="section-project-breakdown">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileBarChart className="h-5 w-5 text-primary" />
+                        Project-Level Breakdown
+                      </CardTitle>
+                      <CardDescription>Financial summary per project</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-2 px-2 font-medium text-muted-foreground">Project</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {csData.projectBreakdown.map((p, idx) => (
+                              <tr key={p.project} className="border-b last:border-b-0" data-testid={`row-project-${idx}`}>
+                                <td className="py-2 px-2">{p.project}</td>
+                                <td className="py-2 px-2 text-right text-green-600">{formatCurrency(p.inflow)}</td>
+                                <td className="py-2 px-2 text-right text-red-600">{formatCurrency(p.outflow)}</td>
+                                <td className="py-2 px-2 text-right font-medium">{formatCurrency(p.net)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {csData.hubBreakdown.length > 0 && (
+                  <Card data-testid="section-hub-breakdown">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <DatabaseBackup className="h-5 w-5 text-primary" />
+                        Hub-Level Breakdown
+                      </CardTitle>
+                      <CardDescription>Financial summary per hub</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-2 px-2 font-medium text-muted-foreground">Hub</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {csData.hubBreakdown.map((h, idx) => (
+                              <tr key={h.hub} className="border-b last:border-b-0" data-testid={`row-hub-${idx}`}>
+                                <td className="py-2 px-2">{h.hub}</td>
+                                <td className="py-2 px-2 text-right text-green-600">{formatCurrency(h.inflow)}</td>
+                                <td className="py-2 px-2 text-right text-red-600">{formatCurrency(h.outflow)}</td>
+                                <td className="py-2 px-2 text-right font-medium">{formatCurrency(h.net)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            {!csData && !csLoading && (
+              <Card data-testid="section-cs-empty">
+                <CardContent className="py-8">
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <Info className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Click "Load Statement Data" to generate a consolidated financial statement for the selected period.</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
       </Tabs>

@@ -21,7 +21,13 @@ import {
   FolderKanban,
   AlertTriangle,
   Receipt,
-  ChevronLeft
+  ChevronLeft,
+  TrendingDown,
+  Activity,
+  Lock,
+  Unlock,
+  CalendarCheck,
+  CalendarDays
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -38,8 +44,19 @@ import { WorkflowRail } from '@/components/financial/WorkflowRail';
 import { GradientStatCard, GRADIENT_PRESETS } from '@/components/dashboard/GradientStatCard';
 import { PageLoader } from '@/components/ui/loading-badge';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, subMonths, addMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ConsolidatedFinancialTab } from '@/components/financial/ConsolidatedFinancialTab';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const formatCurrency = (amount: number, currency: string = 'SDG') => {
   return new Intl.NumberFormat('en-US', {
@@ -88,7 +105,179 @@ const FinancialOperations = () => {
   const { loading: walletLoading } = useWallet();
   const { projectBudgets } = useBudget();
   const { projects } = useProjectContext();
-  const { users } = useUser();
+  const { users, currentUser } = useUser();
+
+  interface ClosedPeriodRecord {
+    month: string;
+    status: 'closed' | 'locked';
+    closedBy: string;
+    closedByName: string;
+    closedAt: string;
+  }
+
+  interface PeriodData {
+    month: string;
+    label: string;
+    walletTxCount: number;
+    opCostCount: number;
+    totalCount: number;
+    totalAmount: number;
+    pendingCount: number;
+    status: 'open' | 'closed' | 'locked';
+    closedBy: string | null;
+    closedByName: string | null;
+    closedAt: string | null;
+  }
+
+  const [periodCloseData, setPeriodCloseData] = useState<PeriodData[]>([]);
+  const [periodCloseLoading, setPeriodCloseLoading] = useState(false);
+  const [closedPeriods, setClosedPeriods] = useState<Record<string, ClosedPeriodRecord>>(() => {
+    try {
+      const stored = localStorage.getItem('pact_closed_periods');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+  const [periodCloseDialog, setPeriodCloseDialog] = useState<{ open: boolean; month: string; label: string; pendingCount: number }>({ open: false, month: '', label: '', pendingCount: 0 });
+  const [periodReopenDialog, setPeriodReopenDialog] = useState<{ open: boolean; month: string; label: string }>({ open: false, month: '', label: '' });
+
+  const isSuperAdmin = currentUser?.role === 'superAdmin' || currentUser?.roles?.includes('superAdmin' as any);
+
+  const saveClosedPeriods = (updated: Record<string, ClosedPeriodRecord>) => {
+    setClosedPeriods(updated);
+    localStorage.setItem('pact_closed_periods', JSON.stringify(updated));
+  };
+
+  const handleClosePeriod = (month: string, label: string, pendingCount: number) => {
+    setPeriodCloseDialog({ open: true, month, label, pendingCount });
+  };
+
+  const confirmClosePeriod = () => {
+    const { month } = periodCloseDialog;
+    const updated = {
+      ...closedPeriods,
+      [month]: {
+        month,
+        status: 'closed' as const,
+        closedBy: currentUser?.id || 'unknown',
+        closedByName: currentUser?.name || currentUser?.email || 'Unknown',
+        closedAt: new Date().toISOString(),
+      },
+    };
+    saveClosedPeriods(updated);
+    setPeriodCloseDialog({ open: false, month: '', label: '', pendingCount: 0 });
+    toast({ title: 'Period Closed', description: `${periodCloseDialog.label} has been closed successfully.` });
+  };
+
+  const handleReopenPeriod = (month: string, label: string) => {
+    setPeriodReopenDialog({ open: true, month, label });
+  };
+
+  const confirmReopenPeriod = () => {
+    const { month } = periodReopenDialog;
+    const updated = { ...closedPeriods };
+    delete updated[month];
+    saveClosedPeriods(updated);
+    setPeriodReopenDialog({ open: false, month: '', label: '' });
+    toast({ title: 'Period Reopened', description: `${periodReopenDialog.label} has been reopened.` });
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'periodClose') return;
+    const fetchPeriodData = async () => {
+      setPeriodCloseLoading(true);
+      try {
+        const now = new Date();
+        const projectStart = startOfMonth(new Date('2025-01-01'));
+        const currentMonth = startOfMonth(now);
+        const months: string[] = [];
+        let cursor = projectStart;
+        while (cursor <= currentMonth) {
+          months.push(format(cursor, 'yyyy-MM'));
+          cursor = addMonths(cursor, 1);
+        }
+
+        const fromDate = format(projectStart, 'yyyy-MM-dd');
+
+        const [walletRes, opCostRes] = await Promise.all([
+          supabase
+            .from('wallet_transactions')
+            .select('amount, created_at, type')
+            .gte('created_at', fromDate),
+          supabase
+            .from('operational_cost_submissions')
+            .select('amount_cents, created_at, status, tier1_status, tier2_status')
+            .gte('created_at', fromDate),
+        ]);
+
+        const walletByMonth: Record<string, { count: number; amount: number }> = {};
+        const opCostByMonth: Record<string, { count: number; amount: number; pendingCount: number }> = {};
+
+        months.forEach(m => {
+          walletByMonth[m] = { count: 0, amount: 0 };
+          opCostByMonth[m] = { count: 0, amount: 0, pendingCount: 0 };
+        });
+
+        (walletRes.data || []).forEach((tx: any) => {
+          try {
+            const key = format(parseISO(tx.created_at), 'yyyy-MM');
+            if (walletByMonth[key]) {
+              walletByMonth[key].count++;
+              walletByMonth[key].amount += Math.abs(tx.amount || 0);
+            }
+          } catch {}
+        });
+
+        (opCostRes.data || []).forEach((oc: any) => {
+          try {
+            const key = format(parseISO(oc.created_at), 'yyyy-MM');
+            if (opCostByMonth[key]) {
+              opCostByMonth[key].count++;
+              opCostByMonth[key].amount += (oc.amount_cents || 0) / 100;
+              const isPending = !oc.tier2_status || (oc.tier2_status !== 'approved' && oc.tier2_status !== 'rejected');
+              if (isPending && oc.status !== 'rejected') {
+                opCostByMonth[key].pendingCount++;
+              }
+            }
+          } catch {}
+        });
+
+        const storedPeriods = closedPeriods;
+        const periodRows: PeriodData[] = months.map(m => {
+          const wallet = walletByMonth[m] || { count: 0, amount: 0 };
+          const opCost = opCostByMonth[m] || { count: 0, amount: 0, pendingCount: 0 };
+          const closed = storedPeriods[m];
+          return {
+            month: m,
+            label: format(parseISO(m + '-01'), 'MMMM yyyy'),
+            walletTxCount: wallet.count,
+            opCostCount: opCost.count,
+            totalCount: wallet.count + opCost.count,
+            totalAmount: wallet.amount + opCost.amount,
+            pendingCount: opCost.pendingCount,
+            status: closed ? closed.status : 'open',
+            closedBy: closed?.closedBy || null,
+            closedByName: closed?.closedByName || null,
+            closedAt: closed?.closedAt || null,
+          };
+        });
+
+        setPeriodCloseData(periodRows.reverse());
+      } catch (err) {
+        console.error('Failed to fetch period close data:', err);
+      } finally {
+        setPeriodCloseLoading(false);
+      }
+    };
+    fetchPeriodData();
+  }, [activeTab, closedPeriods]);
+
+  const periodKpis = useMemo(() => {
+    const total = periodCloseData.length;
+    const closed = periodCloseData.filter(p => p.status === 'closed' || p.status === 'locked').length;
+    const open = total - closed;
+    const latestClosed = periodCloseData.find(p => p.status === 'closed' || p.status === 'locked');
+    return { total, open, closed, latestClosedLabel: latestClosed?.label || 'None' };
+  }, [periodCloseData]);
 
   const [opCosts, setOpCosts] = useState<OpCostRow[]>([]);
   const [opCostsLoaded, setOpCostsLoaded] = useState(false);
@@ -110,6 +299,144 @@ const FinancialOperations = () => {
     };
     fetchOpCosts();
   }, []);
+
+  interface CashFlowMonth {
+    month: string;
+    label: string;
+    inflows: number;
+    outflows: number;
+    net: number;
+    runningBalance: number;
+    isProjected: boolean;
+  }
+
+  const [cashFlowData, setCashFlowData] = useState<CashFlowMonth[]>([]);
+  const [cashFlowLoading, setCashFlowLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'cashflow') return;
+    const fetchCashFlow = async () => {
+      setCashFlowLoading(true);
+      try {
+        const now = new Date();
+        const sixMonthsAgo = startOfMonth(subMonths(now, 5));
+        const fromDate = format(sixMonthsAgo, 'yyyy-MM-dd');
+
+        const [creditsRes, debitsRes, paidCostsRes] = await Promise.all([
+          supabase
+            .from('wallet_transactions')
+            .select('amount, created_at')
+            .eq('type', 'credit')
+            .gte('created_at', fromDate),
+          supabase
+            .from('wallet_transactions')
+            .select('amount, created_at')
+            .eq('type', 'debit')
+            .gte('created_at', fromDate),
+          supabase
+            .from('operational_cost_submissions')
+            .select('amount_cents, paid_at')
+            .not('paid_at', 'is', null)
+            .gte('paid_at', fromDate),
+        ]);
+
+        const monthlyMap: Record<string, { inflows: number; outflows: number }> = {};
+
+        for (let i = 5; i >= 0; i--) {
+          const key = format(subMonths(now, i), 'yyyy-MM');
+          monthlyMap[key] = { inflows: 0, outflows: 0 };
+        }
+
+        (creditsRes.data || []).forEach((tx: any) => {
+          const key = format(parseISO(tx.created_at), 'yyyy-MM');
+          if (monthlyMap[key]) monthlyMap[key].inflows += Math.abs(tx.amount || 0);
+        });
+
+        (debitsRes.data || []).forEach((tx: any) => {
+          const key = format(parseISO(tx.created_at), 'yyyy-MM');
+          if (monthlyMap[key]) monthlyMap[key].outflows += Math.abs(tx.amount || 0);
+        });
+
+        (paidCostsRes.data || []).forEach((oc: any) => {
+          const key = format(parseISO(oc.paid_at), 'yyyy-MM');
+          if (monthlyMap[key]) monthlyMap[key].outflows += (oc.amount_cents || 0) / 100;
+        });
+
+        const pastMonths = Object.entries(monthlyMap)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([month, data]) => ({
+            month,
+            label: format(parseISO(month + '-01'), 'MMM yyyy'),
+            inflows: data.inflows,
+            outflows: data.outflows,
+            net: data.inflows - data.outflows,
+            runningBalance: 0,
+            isProjected: false,
+          }));
+
+        const last3 = pastMonths.slice(-3);
+        const avgInflows = last3.reduce((s, m) => s + m.inflows, 0) / (last3.length || 1);
+        const avgOutflows = last3.reduce((s, m) => s + m.outflows, 0) / (last3.length || 1);
+
+        const projectedMonths: CashFlowMonth[] = [];
+        for (let i = 1; i <= 3; i++) {
+          const futureDate = addMonths(now, i);
+          const key = format(futureDate, 'yyyy-MM');
+          projectedMonths.push({
+            month: key,
+            label: format(futureDate, 'MMM yyyy'),
+            inflows: avgInflows,
+            outflows: avgOutflows,
+            net: avgInflows - avgOutflows,
+            runningBalance: 0,
+            isProjected: true,
+          });
+        }
+
+        const allMonths = [...pastMonths, ...projectedMonths];
+        let balance = 0;
+        allMonths.forEach(m => {
+          balance += m.net;
+          m.runningBalance = balance;
+        });
+
+        setCashFlowData(allMonths);
+      } catch (err) {
+        console.error('Failed to fetch cash flow data:', err);
+      } finally {
+        setCashFlowLoading(false);
+      }
+    };
+    fetchCashFlow();
+  }, [activeTab]);
+
+  const cashFlowKpis = useMemo(() => {
+    if (cashFlowData.length === 0) return { currentPosition: 0, avgBurnRate: 0, projectedRunway: 0 };
+    const pastMonths = cashFlowData.filter(m => !m.isProjected);
+    const lastMonth = pastMonths[pastMonths.length - 1];
+    const currentPosition = lastMonth?.runningBalance || 0;
+    const avgBurnRate = pastMonths.length > 0
+      ? pastMonths.reduce((s, m) => s + m.outflows, 0) / pastMonths.length
+      : 0;
+    const avgNetInflow = pastMonths.length > 0
+      ? pastMonths.reduce((s, m) => s + m.inflows, 0) / pastMonths.length
+      : 0;
+    const monthlyNetBurn = avgBurnRate - avgNetInflow;
+    const projectedRunway = monthlyNetBurn > 0 && currentPosition > 0
+      ? currentPosition / monthlyNetBurn
+      : monthlyNetBurn <= 0 ? 999 : 0;
+    return { currentPosition, avgBurnRate, projectedRunway: Math.min(projectedRunway, 999) };
+  }, [cashFlowData]);
+
+  const cashFlowSummary = useMemo(() => {
+    if (cashFlowData.length === 0) return null;
+    const totalInflows = cashFlowData.reduce((s, m) => s + m.inflows, 0);
+    const totalOutflows = cashFlowData.reduce((s, m) => s + m.outflows, 0);
+    const netCashFlow = totalInflows - totalOutflows;
+    const openingBalance = 0;
+    const closingBalance = cashFlowData[cashFlowData.length - 1]?.runningBalance || 0;
+    return { openingBalance, totalInflows, totalOutflows, netCashFlow, closingBalance };
+  }, [cashFlowData]);
 
   const projectCostBreakdown = useMemo(() => {
     const grouped: Record<string, { projectId: string; projectName: string; totalSubmitted: number; totalApproved: number; totalPaid: number; count: number; pendingCount: number }> = {};
@@ -273,6 +600,8 @@ const FinancialOperations = () => {
             <TabsTrigger value="classifications" className="text-xs md:text-sm px-3" data-testid="tab-classifications">Classifications</TabsTrigger>
             <TabsTrigger value="budget" className="text-xs md:text-sm px-3" data-testid="tab-budget">Budget</TabsTrigger>
             <TabsTrigger value="payments" className="text-xs md:text-sm px-3" data-testid="tab-payments">Payments</TabsTrigger>
+            <TabsTrigger value="cashflow" className="text-xs md:text-sm px-3" data-testid="tab-cashflow">Cash Flow</TabsTrigger>
+            <TabsTrigger value="periodClose" className="text-xs md:text-sm px-3" data-testid="tab-period-close">Period Close</TabsTrigger>
           </TabsList>
         </div>
 
@@ -893,6 +1222,375 @@ const FinancialOperations = () => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="cashflow" className="space-y-4 mt-4" data-testid="tab-content-cashflow">
+          {cashFlowLoading ? (
+            <div className="space-y-4" data-testid="cashflow-loading">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[1, 2, 3].map(i => (
+                  <Card key={i}>
+                    <CardContent className="p-4 space-y-2">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-8 w-32" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <Skeleton key={i} className="h-6 w-full" />
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          ) : cashFlowData.length === 0 ? (
+            <Card data-testid="cashflow-empty">
+              <CardContent className="py-12">
+                <div className="text-center">
+                  <Activity className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                  <p className="text-muted-foreground">No cash flow data available. Transactions will appear here once wallet credits and payments are recorded.</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="cashflow-kpi-cards">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Wallet className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-xs text-muted-foreground">Current Cash Position</span>
+                    </div>
+                    <p className={`text-xl font-bold font-mono ${cashFlowKpis.currentPosition >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-current-cash-position">
+                      {formatCurrency(cashFlowKpis.currentPosition)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TrendingDown className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                      <span className="text-xs text-muted-foreground">Avg Monthly Burn Rate</span>
+                    </div>
+                    <p className="text-xl font-bold font-mono" data-testid="text-avg-burn-rate">
+                      {formatCurrency(cashFlowKpis.avgBurnRate)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <span className="text-xs text-muted-foreground">Projected Runway</span>
+                    </div>
+                    <p className="text-xl font-bold font-mono" data-testid="text-projected-runway">
+                      {cashFlowKpis.projectedRunway >= 999 ? 'Sustainable' : `${cashFlowKpis.projectedRunway.toFixed(1)} months`}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-muted-foreground" />
+                    Cash Flow Forecast
+                  </CardTitle>
+                  <CardDescription>Monthly cash flow for the past 6 months and projected next 3 months</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto" data-testid="cashflow-table-wrapper">
+                    <Table data-testid="cashflow-table">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Month</TableHead>
+                          <TableHead className="text-right">Inflows (SDG)</TableHead>
+                          <TableHead className="text-right">Outflows (SDG)</TableHead>
+                          <TableHead className="text-right">Net (SDG)</TableHead>
+                          <TableHead className="text-right">Running Balance</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cashFlowData.map(m => (
+                          <TableRow key={m.month} className={m.isProjected ? 'bg-muted/30' : ''} data-testid={`cashflow-row-${m.month}`}>
+                            <TableCell className="text-sm font-medium">
+                              {m.label}
+                              {m.isProjected && (
+                                <Badge variant="secondary" className="ml-2 text-[10px]">Projected</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-green-600 dark:text-green-400" data-testid={`cashflow-inflow-${m.month}`}>
+                              {formatCurrency(m.inflows)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400" data-testid={`cashflow-outflow-${m.month}`}>
+                              {formatCurrency(m.outflows)}
+                            </TableCell>
+                            <TableCell className="text-right" data-testid={`cashflow-net-${m.month}`}>
+                              <span className={`font-mono text-sm font-medium ${m.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {m.net >= 0 ? '+' : ''}{formatCurrency(m.net)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right" data-testid={`cashflow-balance-${m.month}`}>
+                              <span className={`font-mono text-sm font-medium ${m.runningBalance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {formatCurrency(m.runningBalance)}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {cashFlowSummary && (
+                          <TableRow className="border-t-2 font-semibold bg-muted/50" data-testid="cashflow-summary-row">
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div className="text-xs text-muted-foreground">Opening Balance: {formatCurrency(cashFlowSummary.openingBalance)}</div>
+                                <div className="text-xs text-muted-foreground">Closing Balance: <span className={cashFlowSummary.closingBalance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>{formatCurrency(cashFlowSummary.closingBalance)}</span></div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-green-600 dark:text-green-400" data-testid="text-total-inflows">
+                              {formatCurrency(cashFlowSummary.totalInflows)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-red-600 dark:text-red-400" data-testid="text-total-outflows">
+                              {formatCurrency(cashFlowSummary.totalOutflows)}
+                            </TableCell>
+                            <TableCell className="text-right" data-testid="text-net-cashflow">
+                              <span className={`font-mono text-sm ${cashFlowSummary.netCashFlow >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {cashFlowSummary.netCashFlow >= 0 ? '+' : ''}{formatCurrency(cashFlowSummary.netCashFlow)}
+                              </span>
+                            </TableCell>
+                            <TableCell />
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="periodClose" className="space-y-4 mt-4" data-testid="tab-content-period-close">
+          {periodCloseLoading ? (
+            <div className="space-y-4" data-testid="period-close-loading">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map(i => (
+                  <Card key={i}>
+                    <CardContent className="p-4 space-y-2">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-8 w-16" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <Skeleton key={i} className="h-6 w-full" />
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <>
+              <Alert data-testid="period-close-warning">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Closing a financial period prevents backdated entries and modifications to transactions within that period. Only close periods after all transactions have been reviewed and reconciled. Super admins can reopen closed periods if needed.
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="period-close-kpi-cards">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <span className="text-xs text-muted-foreground">Total Periods</span>
+                    </div>
+                    <p className="text-xl font-bold" data-testid="text-total-periods">{periodKpis.total}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Unlock className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <span className="text-xs text-muted-foreground">Open Periods</span>
+                    </div>
+                    <p className="text-xl font-bold text-green-600 dark:text-green-400" data-testid="text-open-periods">{periodKpis.open}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Lock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                      <span className="text-xs text-muted-foreground">Closed Periods</span>
+                    </div>
+                    <p className="text-xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-closed-periods">{periodKpis.closed}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CalendarCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <span className="text-xs text-muted-foreground">Latest Closed</span>
+                    </div>
+                    <p className="text-sm font-bold truncate" data-testid="text-latest-closed-period">{periodKpis.latestClosedLabel}</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {periodCloseData.length === 0 ? (
+                <Card data-testid="period-close-empty">
+                  <CardContent className="py-12">
+                    <div className="text-center">
+                      <CalendarDays className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                      <p className="text-muted-foreground">No financial periods found. Periods will appear here once transactions are recorded.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Lock className="h-5 w-5 text-muted-foreground" />
+                      Financial Period Management
+                    </CardTitle>
+                    <CardDescription>Review and close financial periods. Each period represents one calendar month.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto" data-testid="period-close-table-wrapper">
+                      <Table data-testid="period-close-table">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Period</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Transactions</TableHead>
+                            <TableHead className="text-right">Total Amount</TableHead>
+                            <TableHead>Closed By</TableHead>
+                            <TableHead>Closed At</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {periodCloseData.map(period => (
+                            <TableRow key={period.month} data-testid={`period-row-${period.month}`}>
+                              <TableCell className="font-medium text-sm" data-testid={`period-label-${period.month}`}>
+                                {period.label}
+                              </TableCell>
+                              <TableCell data-testid={`period-status-${period.month}`}>
+                                {period.status === 'open' && (
+                                  <Badge variant="secondary">
+                                    <Unlock className="h-3 w-3 mr-1" />
+                                    Open
+                                  </Badge>
+                                )}
+                                {period.status === 'closed' && (
+                                  <Badge variant="default">
+                                    <Lock className="h-3 w-3 mr-1" />
+                                    Closed
+                                  </Badge>
+                                )}
+                                {period.status === 'locked' && (
+                                  <Badge variant="destructive">
+                                    <Lock className="h-3 w-3 mr-1" />
+                                    Locked
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-sm" data-testid={`period-tx-count-${period.month}`}>
+                                <span className="font-mono">{period.totalCount}</span>
+                                <span className="text-muted-foreground text-xs ml-1">
+                                  ({period.walletTxCount}W / {period.opCostCount}OC)
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm" data-testid={`period-amount-${period.month}`}>
+                                {formatCurrency(period.totalAmount)}
+                              </TableCell>
+                              <TableCell className="text-sm" data-testid={`period-closed-by-${period.month}`}>
+                                {period.closedByName || <span className="text-muted-foreground">-</span>}
+                              </TableCell>
+                              <TableCell className="text-sm" data-testid={`period-closed-at-${period.month}`}>
+                                {period.closedAt ? safeFormatDate(period.closedAt) : <span className="text-muted-foreground">-</span>}
+                              </TableCell>
+                              <TableCell data-testid={`period-actions-${period.month}`}>
+                                {period.status === 'open' && (
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    onClick={() => handleClosePeriod(period.month, period.label, period.pendingCount)}
+                                    data-testid={`button-close-period-${period.month}`}
+                                  >
+                                    <Lock className="h-3 w-3 mr-1" />
+                                    Close Period
+                                  </Button>
+                                )}
+                                {(period.status === 'closed' || period.status === 'locked') && isSuperAdmin && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleReopenPeriod(period.month, period.label)}
+                                    data-testid={`button-reopen-period-${period.month}`}
+                                  >
+                                    <Unlock className="h-3 w-3 mr-1" />
+                                    Reopen
+                                  </Button>
+                                )}
+                                {(period.status === 'closed' || period.status === 'locked') && !isSuperAdmin && (
+                                  <span className="text-xs text-muted-foreground">Super admin required</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          <AlertDialog open={periodCloseDialog.open} onOpenChange={(open) => !open && setPeriodCloseDialog({ open: false, month: '', label: '', pendingCount: 0 })}>
+            <AlertDialogContent data-testid="dialog-close-period">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Close Financial Period</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to close <strong>{periodCloseDialog.label}</strong>? This will prevent any backdated entries or modifications to transactions within this period.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {periodCloseDialog.pendingCount > 0 && (
+                <Alert variant="destructive" data-testid="dialog-pending-warning">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    There are <strong>{periodCloseDialog.pendingCount}</strong> pending/unapproved cost submissions in this period. Consider reviewing them before closing.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-close-period">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmClosePeriod} data-testid="button-confirm-close-period">
+                  Close Period
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog open={periodReopenDialog.open} onOpenChange={(open) => !open && setPeriodReopenDialog({ open: false, month: '', label: '' })}>
+            <AlertDialogContent data-testid="dialog-reopen-period">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reopen Financial Period</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to reopen <strong>{periodReopenDialog.label}</strong>? This will allow modifications and new entries for this period.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-reopen-period">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmReopenPeriod} data-testid="button-confirm-reopen-period">
+                  Reopen Period
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
       </Tabs>
     </div>

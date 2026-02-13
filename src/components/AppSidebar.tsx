@@ -242,6 +242,7 @@
     const isAdmin = hasRole('admin');
     const isICT = hasRole('ict');
     const isFinancialAdmin = hasRole('financialAdmin');
+    const isAuditor = hasRole('auditor');
     const isDataCollector = hasRole('dataCollector');
     const isCoordinator = hasRole('coordinator');
     const isFOM = hasRole('fom');
@@ -324,7 +325,7 @@
     if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT)) {
       dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 4, isPinned: isPinned('/tracker-preparation-plan') });
     }
-    if (!isHidden('/documents') && (isSuperAdmin || isAdmin || isICT || isFinancialAdmin)) {
+    if (!isHidden('/documents') && (isSuperAdmin || isAdmin || isICT || isFinancialAdmin || isAuditor)) {
       dataItems.push({ id: 'documents', title: "Documents", url: "/documents", icon: FileText, priority: 5, isPinned: isPinned('/documents') });
     }
     if (!isHidden('/map') && (isSuperAdmin || isAdmin || isFOM)) {
@@ -347,7 +348,7 @@
     // Payments & Finance - organized into sub-categories
     // Sub-group 1: My Money (personal wallet, cost submissions - visible to most users)
     const myMoneyItems: MenuGroup['items'] = [];
-    if (!isHidden('/wallet') && (isFinancialAdmin || isFOM || isSupervisor || isDataCollector || isCoordinator)) {
+    if (!isHidden('/wallet') && (isFinancialAdmin || isAuditor || isFOM || isSupervisor || isDataCollector || isCoordinator)) {
       myMoneyItems.push({ id: 'my-wallet', title: "My Wallet", url: "/wallet", icon: CreditCard, priority: 1, isPinned: isPinned('/wallet') });
     }
     if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM)) {
@@ -357,48 +358,51 @@
 
     // Sub-group 2: Approvals (all approval workflows)
     const approvalItems: MenuGroup['items'] = [];
-    if (!isHidden('/supervisor-approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+    if (!isHidden('/supervisor-approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM)) {
       approvalItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 1, isPinned: isPinned('/supervisor-approvals') });
     }
-    if (!isHidden('/withdrawal-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/withdrawal-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       approvalItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/withdrawal-approval') });
     }
-    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor)) {
+    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor)) {
       approvalItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 3, isPinned: isPinned('/down-payment-approval') });
     }
-    if (!isHidden('/finance-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/finance-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       approvalItems.push({ id: 'finance-approval', title: "Finance Processing", url: "/finance-approval", icon: Banknote, priority: 4, isPinned: isPinned('/finance-approval') });
     }
     if (approvalItems.length) groups.push({ id: 'finance-approvals', label: "Approvals", order: 5.2, items: approvalItems, parentGroup: 'finance' } as any);
 
     // Sub-group 3: Financial Management (admin-level management)
     const finMgmtItems: MenuGroup['items'] = [];
-    if (!isHidden('/budget') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/budget') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finMgmtItems.push({ id: 'budget', title: "Budget", url: "/budget", icon: DollarSign, priority: 1, isPinned: isPinned('/budget') });
     }
-    if (!isHidden('/admin/wallets') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/admin/wallets') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finMgmtItems.push({ id: 'wallets', title: "Wallets Admin", url: "/admin/wallets", icon: CreditCard, priority: 2, isPinned: isPinned('/admin/wallets') });
     }
     if (!isHidden('/financial-operations') && (isSuperAdmin || perms.financialOperations)) {
       finMgmtItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 3, isPinned: isPinned('/financial-operations') });
     }
-    if (!isHidden('/retainer-management') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/retainer-management') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finMgmtItems.push({ id: 'retainer-management', title: "Retainer Management", url: "/retainer-management", icon: Banknote, priority: 4, isPinned: isPinned('/retainer-management') });
+    }
+    if (!isHidden('/reconciliation-dashboard') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
+      finMgmtItems.push({ id: 'reconciliation-dashboard', title: "Reconciliation Dashboard", url: "/reconciliation-dashboard", icon: ClipboardCheck, priority: 5, isPinned: isPinned('/reconciliation-dashboard') });
     }
     if (finMgmtItems.length) groups.push({ id: 'finance-management', label: "Financial Management", order: 5.3, items: finMgmtItems, parentGroup: 'finance' } as any);
 
     // Sub-group 4: Financial Reports & Tools
     const finReportItems: MenuGroup['items'] = [];
-    if (!isHidden('/wallet-reports') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/wallet-reports') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finReportItems.push({ id: 'wallet-reports', title: "Wallet Reports", url: "/wallet-reports", icon: BarChart3, priority: 1, isPinned: isPinned('/wallet-reports') });
     }
-    if (!isHidden('/advance-requests-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+    if (!isHidden('/advance-requests-report') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor || isSupervisor || isFOM)) {
       finReportItems.push({ id: 'advance-requests-report', title: "Transport Advance Report", url: "/advance-requests-report", icon: BarChart3, priority: 2, isPinned: isPinned('/advance-requests-report') });
     }
-    if (!isHidden('/cost-predictions') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/cost-predictions') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finReportItems.push({ id: 'cost-predictions', title: "Cost Predictions", url: "/cost-predictions", icon: TrendingUp, priority: 3, isPinned: isPinned('/cost-predictions') });
     }
-    if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/exchange-rates') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       finReportItems.push({ id: 'exchange-rates', title: "Exchange Rates", url: "/exchange-rates", icon: DollarSign, priority: 4, isPinned: isPinned('/exchange-rates') });
     }
     if (finReportItems.length) groups.push({ id: 'finance-reports', label: "Financial Reports", order: 5.4, items: finReportItems, parentGroup: 'finance' } as any);
@@ -411,7 +415,7 @@
     if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 2, isPinned: isPinned('/role-management') });
     }
-    if (!isHidden('/classifications') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/classifications') && (isSuperAdmin || isAdmin || isFinancialAdmin || isAuditor)) {
       adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 3, isPinned: isPinned('/classifications') });
     }
     if (!isHidden('/classification-fees') && (isSuperAdmin || isAdmin)) {
@@ -579,6 +583,7 @@
           ict: "ICT",
           fom: "Field Ops Manager",
           financialAdmin: "Financial Admin",
+          auditor: "Financial Auditor",
           supervisor: "Supervisor",
           coordinator: "Coordinator",
           dataCollector: "Data Collector",

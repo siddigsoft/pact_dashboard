@@ -12,7 +12,8 @@ export type AppRole =
   | 'Coordinator'
   | 'DataTeam'
   | 'DataCollector'
-  | 'Reviewer';
+  | 'Reviewer'
+  | 'Auditor';
 
 export interface UserRole {
   id: string;
@@ -351,5 +352,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
   Reviewer: [
     { resource: 'site_visits', action: 'read' },
     { resource: 'mmp', action: 'read' }
+  ],
+  Auditor: [
+    { resource: 'finances', action: 'read' },
+    { resource: 'reports', action: 'read' },
+    { resource: 'wallets', action: 'read' },
+    { resource: 'audit_logs', action: 'read' },
+    { resource: 'projects', action: 'read' },
+    { resource: 'users', action: 'read' },
+    { resource: 'settings', action: 'read' },
   ]
 };
