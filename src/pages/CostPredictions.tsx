@@ -274,17 +274,16 @@ export default function CostPredictions() {
     try {
       setLoadingHistoricalData(true);
       
-      const hubFilter = isSupervisor && hubAccessInfo.hubId ? hubAccessInfo.hubId : (selectedHub !== 'all' ? selectedHub : undefined);
-      
       const result = await CostPredictionService.getHistoricalCosts({ 
         limit: 50, 
-        offset: page * 50,
-        hubId: hubFilter
+        offset: page * 50
       });
       
       let filteredData = result.data;
       if (isSupervisor && hubAccessInfo.hubStates.length > 0) {
         filteredData = filterByHubAccess(result.data, hubAccessInfo);
+      } else if (selectedHub !== 'all') {
+        filteredData = result.data.filter((d: any) => d.hub_id === selectedHub || d.hub === selectedHub);
       }
       
       setUploadedHistoricalData(filteredData);
@@ -519,7 +518,6 @@ export default function CostPredictions() {
           totalVisits: 0
         });
         setMonthlyTrends([]);
-        setHubCostBreakdown([]);
         return;
       }
       
