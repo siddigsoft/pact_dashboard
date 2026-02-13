@@ -2936,13 +2936,14 @@ function AdvanceRequestsReportContent() {
             <DialogTitle>{paymentRequestDialog.isBulk ? 'Bulk Payment Request / طلب دفع جماعي' : 'Request Payment / طلب دفع'}</DialogTitle>
             <DialogDescription>
               {paymentRequestDialog.isBulk
-                ? `Send bulk payment request for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team. PDF certificates will be attached.`
+                ? `Send one email with a summary PDF for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team.`
                 : 'Send payment request email to finance team with the approval certificate attached.'}
             </DialogDescription>
           </DialogHeader>
           {paymentRequestDialog.loading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
               <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Loading finance recipients... / جاري تحميل المستلمين...</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -3002,7 +3003,7 @@ function AdvanceRequestsReportContent() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <FileText className="h-3.5 w-3.5" />
-                    <span>Individual PDF approval certificates will be generated and attached to the email.</span>
+                    <span>A single summary PDF with all requests will be generated and attached to the email.</span>
                   </div>
                 </div>
               )}
