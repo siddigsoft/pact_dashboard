@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { Link } from "react-router-dom";
-import { AlertCircle, User, Lock, Loader2, LucideShieldCheck, Users2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, User, Lock, Loader2, LucideShieldCheck, Users2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import RoleSelection from '@/components/registration/RoleSelection';
@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNotificationManager } from "@/hooks/use-notification-manager";
 import { useDevice } from "@/hooks/use-device";
 import { MobileRegisterScreen } from "@/components/mobile/MobileRegisterScreen";
+import { supabase } from "@/integrations/supabase/client";
 
 const Register = () => {
   const { isNative, isMobile: isDeviceMobile, isLoading: isDeviceLoading } = useDevice();
@@ -32,6 +33,9 @@ const Register = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const emailCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { registerUser } = useAppContext();
   const navigate = useNavigate();
@@ -45,6 +49,47 @@ const Register = () => {
 
   const { sendNotification } = useNotificationManager();
   const managementRoles = ['admin', 'ict', 'supervisor', 'fom', 'financialAdmin', 'countryDirector', 'dataTeam', 'Admin', 'ICT', 'Supervisor', 'Field Operation Manager (FOM)', 'FinancialAdmin', 'CountryDirector', 'DataTeam'];
+
+  const checkEmailExists = useCallback(async (emailToCheck: string) => {
+    if (!emailToCheck || !/\S+@\S+\.\S+/.test(emailToCheck)) {
+      setEmailAlreadyRegistered(false);
+      setCheckingEmail(false);
+      return;
+    }
+    setCheckingEmail(true);
+    try {
+      const { data, error } = await supabase.rpc('check_email_exists', {
+        check_email: emailToCheck.trim()
+      });
+      if (!error && data === true) {
+        setEmailAlreadyRegistered(true);
+      } else {
+        setEmailAlreadyRegistered(false);
+      }
+    } catch {
+      setEmailAlreadyRegistered(false);
+    } finally {
+      setCheckingEmail(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (emailCheckTimerRef.current) {
+      clearTimeout(emailCheckTimerRef.current);
+    }
+    if (!formData.email || formData.email.length < 5) {
+      setEmailAlreadyRegistered(false);
+      return;
+    }
+    emailCheckTimerRef.current = setTimeout(() => {
+      checkEmailExists(formData.email);
+    }, 600);
+    return () => {
+      if (emailCheckTimerRef.current) {
+        clearTimeout(emailCheckTimerRef.current);
+      }
+    };
+  }, [formData.email, checkEmailExists]);
 
   if (isMobileView && !isDeviceLoading) {
     return <MobileRegisterScreen />;
@@ -79,6 +124,22 @@ const Register = () => {
     setIsLoading(true);
 
     try {
+      if (formData.email.trim() && /\S+@\S+\.\S+/.test(formData.email)) {
+        const { data: emailExists } = await supabase.rpc('check_email_exists', {
+          check_email: formData.email.trim()
+        });
+        if (emailExists === true) {
+          setEmailAlreadyRegistered(true);
+          toast({
+            title: "Email already registered",
+            description: "This email is already in use. Please sign in or reset your password.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const success = await registerUser({
         ...formData,
         hubId: selectedHub,
@@ -278,6 +339,32 @@ const Register = () => {
                         {errors.email && (
                           <p className="text-xs text-red-500">{errors.email}</p>
                         )}
+                        {checkingEmail && !errors.email && formData.email.length >= 5 && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Checking email...
+                          </p>
+                        )}
+                        {emailAlreadyRegistered && !errors.email && !checkingEmail && (
+                          <div className="mt-1 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md" data-testid="alert-email-exists">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                              <div className="text-sm">
+                                <p className="text-amber-800 dark:text-amber-200 font-medium">This email is already registered</p>
+                                <p className="text-amber-700 dark:text-amber-300 mt-1">
+                                  Did you forget your password?{' '}
+                                  <Link to="/forgot-password" className="text-primary font-semibold hover:underline">
+                                    Reset your password
+                                  </Link>
+                                  {' '}or{' '}
+                                  <Link to="/auth?tab=login" className="text-primary font-semibold hover:underline">
+                                    Sign in instead
+                                  </Link>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -427,6 +514,32 @@ const Register = () => {
                         />
                         {errors.email && (
                           <p className="text-xs text-red-500">{errors.email}</p>
+                        )}
+                        {checkingEmail && !errors.email && formData.email.length >= 5 && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Checking email...
+                          </p>
+                        )}
+                        {emailAlreadyRegistered && !errors.email && !checkingEmail && (
+                          <div className="mt-1 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md" data-testid="alert-email-exists">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                              <div className="text-sm">
+                                <p className="text-amber-800 dark:text-amber-200 font-medium">This email is already registered</p>
+                                <p className="text-amber-700 dark:text-amber-300 mt-1">
+                                  Did you forget your password?{' '}
+                                  <Link to="/forgot-password" className="text-primary font-semibold hover:underline">
+                                    Reset your password
+                                  </Link>
+                                  {' '}or{' '}
+                                  <Link to="/auth?tab=login" className="text-primary font-semibold hover:underline">
+                                    Sign in instead
+                                  </Link>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
 
