@@ -358,6 +358,7 @@ function AdvanceRequestsReportContent() {
   }, [approvedForPayment, getProfileName]);
 
   const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
+  const ccContactsRef = useRef<Array<{ id: string; email: string; name: string; role: string }>>([]);
 
   useEffect(() => {
     const preload = async () => {
@@ -371,6 +372,18 @@ function AdvanceRequestsReportContent() {
       } catch {}
     };
     preload();
+    supabase
+      .from('profiles')
+      .select('id, email, full_name, role')
+      .eq('status', 'approved')
+      .not('email', 'is', null)
+      .then(({ data }) => {
+        if (data) {
+          ccContactsRef.current = data
+            .filter((u: any) => u.email)
+            .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role || '' }));
+        }
+      });
   }, []);
 
   const loadFinanceRecipientsReport = async (forceRefresh = false): Promise<Array<{ id: string; email: string; name: string; role: string }>> => {
@@ -3125,6 +3138,7 @@ function AdvanceRequestsReportContent() {
                 <EmailCCInput
                   ccEmails={paymentRequestDialog.ccEmails}
                   onChange={(emails) => setPaymentRequestDialog(prev => ({ ...prev, ccEmails: emails }))}
+                  contacts={ccContactsRef.current.filter(c => !paymentRequestDialog.selectedRecipientIds.includes(c.id))}
                 />
               </div>
             </div>
