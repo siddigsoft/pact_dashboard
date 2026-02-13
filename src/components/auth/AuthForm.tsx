@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, Lock, Eye, EyeOff, User, Phone, Badge } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, User, Phone, Badge, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from 'react-i18next';
 import { useAppContext } from '@/context/AppContext';
@@ -56,6 +56,10 @@ const AuthForm = ({ mode }: AuthFormProps) => {
     locality: false,
     phone: false,
   });
+
+  const [emailAlreadyRegistered, setEmailAlreadyRegistered] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const emailCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showMFAChallenge, setShowMFAChallenge] = useState(false);
   const [pendingLoginEmail, setPendingLoginEmail] = useState('');
@@ -132,6 +136,56 @@ const AuthForm = ({ mode }: AuthFormProps) => {
     setLocalities(locs);
     setSelectedLocality('');
   }, [selectedState]);
+
+  const checkEmailExists = useCallback(async (emailToCheck: string) => {
+    if (!emailToCheck || !/\S+@\S+\.\S+/.test(emailToCheck)) {
+      setEmailAlreadyRegistered(false);
+      setCheckingEmail(false);
+      return;
+    }
+
+    setCheckingEmail(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', emailToCheck.toLowerCase().trim())
+        .maybeSingle();
+
+      if (!error && data) {
+        setEmailAlreadyRegistered(true);
+      } else {
+        setEmailAlreadyRegistered(false);
+      }
+    } catch {
+      setEmailAlreadyRegistered(false);
+    } finally {
+      setCheckingEmail(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode !== 'signup') return;
+
+    if (emailCheckTimerRef.current) {
+      clearTimeout(emailCheckTimerRef.current);
+    }
+
+    if (!email || email.length < 5) {
+      setEmailAlreadyRegistered(false);
+      return;
+    }
+
+    emailCheckTimerRef.current = setTimeout(() => {
+      checkEmailExists(email);
+    }, 600);
+
+    return () => {
+      if (emailCheckTimerRef.current) {
+        clearTimeout(emailCheckTimerRef.current);
+      }
+    };
+  }, [email, mode, checkEmailExists]);
 
   const handleAvatarChange = (file: File | null, previewUrl: string | null) => {
     setAvatarFile(file);
@@ -213,6 +267,26 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           setFieldErrors(prev => ({ ...prev, email: true }));
           if (!firstErrorField) firstErrorField = 'email';
           hasErrors = true;
+        }
+
+        if (email.trim() && /\S+@\S+\.\S+/.test(email)) {
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', email.toLowerCase().trim())
+            .maybeSingle();
+
+          if (existingProfile) {
+            setEmailAlreadyRegistered(true);
+            toast({
+              title: "Email already registered",
+              description: "This email is already in use. Please sign in or reset your password.",
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            scrollToField('email');
+            return;
+          }
         }
 
         if (!password.trim()) {
@@ -634,6 +708,45 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           </div>
           {fieldErrors.email && (
             <p className="text-red-500 text-sm mt-1">Email is required</p>
+          )}
+          {checkingEmail && !fieldErrors.email && email.length >= 5 && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1" data-testid="text-checking-email">
+              <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+              </svg>
+              Checking email...
+            </p>
+          )}
+          {emailAlreadyRegistered && !fieldErrors.email && !checkingEmail && (
+            <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md" data-testid="alert-email-exists">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="text-amber-800 dark:text-amber-200 font-medium">This email is already registered</p>
+                  <p className="text-amber-700 dark:text-amber-300 mt-1">
+                    Did you forget your password?{' '}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/forgot-password')}
+                      className="text-primary font-semibold hover:underline"
+                      data-testid="link-forgot-password-from-signup"
+                    >
+                      Reset your password
+                    </button>
+                    {' '}or{' '}
+                    <button
+                      type="button"
+                      onClick={() => navigate('/auth?tab=login')}
+                      className="text-primary font-semibold hover:underline"
+                      data-testid="link-login-from-signup"
+                    >
+                      Sign in instead
+                    </button>
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
