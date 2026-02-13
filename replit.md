@@ -44,6 +44,7 @@ The frontend utilizes React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, adhe
 *   **Wallet-Advance Integration:** Automated deduction of transportation advances from site visit fees, with reconciliation mechanisms and monthly statement features for the wallet page.
 *   **Role Perspective Viewer:** A Super Admin tool at `/role-perspective` to simulate user and role permissions.
 *   **Advance Receipt Confirmation:** Digital signature-based receipt confirmation for transportation advances, with authorization checks and audit logging.
+*   **Financial System Enhancements Round 3 (Feb 2026):** Period Close moved from localStorage to `financial_period_close` DB table with audit log entries. Budget page project selector replaces placeholder. Shared exchange rate service (`src/utils/exchange-rate-service.ts`) with caching. Consolidated Statement enhanced with advances receivable and USD equivalents. Approval Audit Summary in Finance reports. Wallet Reports pagination (25/50/100). Financial trend indicators (month-over-month). Reconciliation auto-matching with confidence scoring. Unified Financial Alerts center in Financial Operations (budget, exchange rate, reconciliation, approval aging, advance liquidation). CostPredictions debug logging cleaned up.
 
 ### System Design Choices
 The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.

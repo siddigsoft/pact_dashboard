@@ -4,16 +4,18 @@ import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { DataFreshnessBadge } from "@/components/realtime";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getLatestExchangeRate, convertSdgToUsd, formatUsd } from "@/utils/exchange-rate-service";
 import { FinancialDashboard } from "@/components/FinancialDashboard";
 import { SiteVisitFinancialTracker } from "@/components/SiteVisitFinancialTracker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { 
   BadgePercent, ClipboardList, DollarSign, ReceiptText, ShieldCheck, 
   CreditCard, ArrowUpDown, FileBarChart, AlertTriangle, FileText,
-  DatabaseBackup, ChevronDown, ArrowLeft, TrendingUp, RefreshCw,
-  Wallet, Clock, CheckCircle2, Info, Download, Loader2, FileSpreadsheet
+  DatabaseBackup, ChevronDown, ArrowLeft, TrendingUp, TrendingDown, RefreshCw,
+  Wallet, Clock, CheckCircle2, Info, Download, Loader2, FileSpreadsheet, Activity
 } from "lucide-react";
 import { FraudDetection } from "@/components/FraudDetection";
 import { ApprovalTierAnalytics } from "@/components/ApprovalTierAnalytics";
@@ -73,6 +75,9 @@ const Finance: React.FC = () => {
 
   const [walletSummary, setWalletSummary] = useState<{ totalWallets: number; totalBalance: number; totalWithdrawn: number; pendingCount: number; pendingAmount: number }>({ totalWallets: 0, totalBalance: 0, totalWithdrawn: 0, pendingCount: 0, pendingAmount: 0 });
 
+  const [walletTrends, setWalletTrends] = useState<{ balanceChange: number | null; withdrawnChange: number | null; pendingChange: number | null }>({ balanceChange: null, withdrawnChange: null, pendingChange: null });
+  const [expenseTrends, setExpenseTrends] = useState<Record<string, number | null>>({});
+
   const now = new Date();
   const [csStartDate, setCsStartDate] = useState(format(startOfMonth(now), 'yyyy-MM-dd'));
   const [csEndDate, setCsEndDate] = useState(format(endOfMonth(now), 'yyyy-MM-dd'));
@@ -82,8 +87,10 @@ const Finance: React.FC = () => {
   const [csIncludeAdvances, setCsIncludeAdvances] = useState(true);
   const [csCurrency] = useState('SDG');
   const [csLoading, setCsLoading] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<{rate: number; fetchedAt: string; stale: boolean} | null>(null);
   const [csData, setCsData] = useState<{
     totalAssets: number;
+    advancesReceivable: number;
     totalLiabilities: number;
     netPosition: number;
     inflowCategories: { category: string; amount: number }[];
@@ -101,11 +108,26 @@ const Finance: React.FC = () => {
       const toDate = csEndDate ? `${csEndDate}T23:59:59` : undefined;
 
       const { data: walletsData } = await supabase.from('wallets').select('balances, total_earned, total_withdrawn, user_id');
-      let totalAssets = 0;
+      let walletBalances = 0;
       (walletsData || []).forEach((w: any) => {
         const bal = typeof w.balances === 'object' ? (w.balances?.SDG || 0) : 0;
-        totalAssets += Number(bal) || 0;
+        walletBalances += Number(bal) || 0;
       });
+
+      const { data: advancesData } = await supabase
+        .from('down_payment_requests')
+        .select('requested_amount, metadata')
+        .in('status', ['approved', 'paid']);
+      let advancesReceivable = 0;
+      (advancesData || []).forEach((dp: any) => {
+        const meta = dp.metadata;
+        const isReconciled = meta && (meta.reconciled === true || meta.reconciled_at);
+        if (!isReconciled) {
+          advancesReceivable += Math.abs(Number(dp.requested_amount) || 0);
+        }
+      });
+
+      let totalAssets = walletBalances + advancesReceivable;
 
       let inflowMap: Record<string, number> = {};
       let expenseMap: Record<string, number> = {};
@@ -227,6 +249,7 @@ const Finance: React.FC = () => {
 
       setCsData({
         totalAssets,
+        advancesReceivable,
         totalLiabilities,
         netPosition,
         inflowCategories,
@@ -276,21 +299,25 @@ const Finance: React.FC = () => {
     doc.text('Organization Summary', ml, y);
     y += 7;
 
+    const fmtUsdPdf = (sdg: number) => exchangeRate ? formatUsd(convertSdgToUsd(sdg, exchangeRate.rate)) : '-';
+    const walletBal = csData.totalAssets - csData.advancesReceivable;
     const summaryRows = [
-      ['Total Assets (Wallet Balances)', `${csCurrency} ${csData.totalAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
-      ['Total Liabilities (Pending Payments)', `${csCurrency} ${csData.totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
-      ['Net Position', `${csCurrency} ${csData.netPosition.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
-      ['Total Inflows', `${csCurrency} ${csData.totalInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
-      ['Total Outflows', `${csCurrency} ${csData.totalOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+      ['Total Assets', `${csCurrency} ${csData.totalAssets.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, fmtUsdPdf(csData.totalAssets)],
+      ['  Wallet Balances', `${csCurrency} ${walletBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, fmtUsdPdf(walletBal)],
+      ['  Advances Receivable', `${csCurrency} ${csData.advancesReceivable.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, fmtUsdPdf(csData.advancesReceivable)],
+      ['Total Liabilities (Pending Payments)', `${csCurrency} ${csData.totalLiabilities.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, fmtUsdPdf(csData.totalLiabilities)],
+      ['Net Position', `${csCurrency} ${csData.netPosition.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, fmtUsdPdf(csData.netPosition)],
+      ['Total Inflows', `${csCurrency} ${csData.totalInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, fmtUsdPdf(csData.totalInflow)],
+      ['Total Outflows', `${csCurrency} ${csData.totalOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, fmtUsdPdf(csData.totalOutflow)],
     ];
 
     autoTable(doc, {
       startY: y,
-      head: [['Item', 'Amount']],
+      head: [['Item', 'Amount (SDG)', 'Amount (USD)']],
       body: summaryRows,
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255] },
-      columnStyles: { 1: { halign: 'right' } },
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
       margin: { left: ml, right: mr },
     });
     y = (doc as any).lastAutoTable?.finalY + 8 || y + 40;
@@ -305,16 +332,17 @@ const Finance: React.FC = () => {
       const catRows = csData.expenseCategories.map(c => [
         c.category.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase()),
         `${csCurrency} ${c.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        fmtUsdPdf(c.amount),
       ]);
-      catRows.push(['TOTAL', `${csCurrency} ${csData.totalOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`]);
+      catRows.push(['TOTAL', `${csCurrency} ${csData.totalOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, fmtUsdPdf(csData.totalOutflow)]);
 
       autoTable(doc, {
         startY: y,
-        head: [['Category', 'Amount']],
+        head: [['Category', 'Amount (SDG)', 'Amount (USD)']],
         body: catRows,
         styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255] },
-        columnStyles: { 1: { halign: 'right' } },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
         margin: { left: ml, right: mr },
         didParseCell: (data: any) => {
           if (data.row.index === catRows.length - 1) {
@@ -338,15 +366,16 @@ const Finance: React.FC = () => {
         `${csCurrency} ${p.inflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
         `${csCurrency} ${p.outflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
         `${csCurrency} ${p.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+        fmtUsdPdf(p.net),
       ]);
 
       autoTable(doc, {
         startY: y,
-        head: [['Project', 'Inflow', 'Outflow', 'Net']],
+        head: [['Project', 'Inflow (SDG)', 'Outflow (SDG)', 'Net (SDG)', 'Net (USD)']],
         body: projRows,
         styles: { fontSize: 7.5, cellPadding: 2 },
         headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255] },
-        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
         margin: { left: ml, right: mr },
       });
       y = (doc as any).lastAutoTable?.finalY + 8 || y + 30;
@@ -373,36 +402,41 @@ const Finance: React.FC = () => {
     if (!csData) return;
     const wb = XLSX.utils.book_new();
 
+    const fmtUsdXl = (sdg: number) => exchangeRate ? convertSdgToUsd(sdg, exchangeRate.rate) : '';
+    const xlWalletBal = csData.totalAssets - csData.advancesReceivable;
     const summarySheet = XLSX.utils.aoa_to_sheet([
       ['PACT Consolidated Financial Statement'],
       [`Period: ${csStartDate} to ${csEndDate}`],
+      ...(exchangeRate ? [[`Exchange Rate: 1 USD = ${exchangeRate.rate.toLocaleString()} SDG (as of ${exchangeRate.fetchedAt})`]] : []),
       [],
-      ['Item', 'Amount (SDG)'],
-      ['Total Assets (Wallet Balances)', csData.totalAssets],
-      ['Total Liabilities (Pending Payments)', csData.totalLiabilities],
-      ['Net Position', csData.netPosition],
-      ['Total Inflows', csData.totalInflow],
-      ['Total Outflows', csData.totalOutflow],
+      ['Item', 'Amount (SDG)', 'Amount (USD)'],
+      ['Total Assets', csData.totalAssets, fmtUsdXl(csData.totalAssets)],
+      ['  Wallet Balances', xlWalletBal, fmtUsdXl(xlWalletBal)],
+      ['  Advances Receivable', csData.advancesReceivable, fmtUsdXl(csData.advancesReceivable)],
+      ['Total Liabilities (Pending Payments)', csData.totalLiabilities, fmtUsdXl(csData.totalLiabilities)],
+      ['Net Position', csData.netPosition, fmtUsdXl(csData.netPosition)],
+      ['Total Inflows', csData.totalInflow, fmtUsdXl(csData.totalInflow)],
+      ['Total Outflows', csData.totalOutflow, fmtUsdXl(csData.totalOutflow)],
     ]);
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
 
     if (csData.inflowCategories.length > 0) {
-      const inflowRows = [['Category', 'Amount (SDG)'], ...csData.inflowCategories.map(c => [c.category, c.amount])];
+      const inflowRows = [['Category', 'Amount (SDG)', 'Amount (USD)'], ...csData.inflowCategories.map(c => [c.category, c.amount, fmtUsdXl(c.amount)])];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(inflowRows), 'Inflows');
     }
 
     if (csData.expenseCategories.length > 0) {
-      const expenseRows = [['Category', 'Amount (SDG)'], ...csData.expenseCategories.map(c => [c.category, c.amount])];
+      const expenseRows = [['Category', 'Amount (SDG)', 'Amount (USD)'], ...csData.expenseCategories.map(c => [c.category, c.amount, fmtUsdXl(c.amount)])];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expenseRows), 'Expenses');
     }
 
     if (csData.projectBreakdown.length > 0) {
-      const projRows = [['Project', 'Inflow', 'Outflow', 'Net'], ...csData.projectBreakdown.map(p => [p.project, p.inflow, p.outflow, p.net])];
+      const projRows = [['Project', 'Inflow (SDG)', 'Outflow (SDG)', 'Net (SDG)', 'Net (USD)'], ...csData.projectBreakdown.map(p => [p.project, p.inflow, p.outflow, p.net, fmtUsdXl(p.net)])];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(projRows), 'Projects');
     }
 
     if (csData.hubBreakdown.length > 0) {
-      const hubRows = [['Hub', 'Inflow', 'Outflow', 'Net'], ...csData.hubBreakdown.map(h => [h.hub, h.inflow, h.outflow, h.net])];
+      const hubRows = [['Hub', 'Inflow (SDG)', 'Outflow (SDG)', 'Net (SDG)', 'Net (USD)'], ...csData.hubBreakdown.map(h => [h.hub, h.inflow, h.outflow, h.net, fmtUsdXl(h.net)])];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hubRows), 'Hubs');
     }
 
@@ -432,10 +466,20 @@ const Finance: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('operational_cost_submissions')
-        .select('expense_category, amount_cents, tier1_status, tier2_status');
+        .select('expense_category, amount_cents, tier1_status, tier2_status, created_at');
       if (error) throw error;
 
+      const currentMonthStart = startOfMonth(new Date());
+      const currentMonthEnd = endOfMonth(new Date());
+      const prevMonth = new Date();
+      prevMonth.setMonth(prevMonth.getMonth() - 1);
+      const prevMonthStart = startOfMonth(prevMonth);
+      const prevMonthEnd = endOfMonth(prevMonth);
+
       const grouped: Record<string, { total_cents: number; count: number }> = {};
+      const curMonthByCategory: Record<string, number> = {};
+      const prevMonthByCategory: Record<string, number> = {};
+
       (data || []).forEach((row: any) => {
         const cat = row.expense_category || 'Other';
         const isApproved = row.tier2_status === 'approved' || (row.tier1_status === 'approved' && !row.tier2_status);
@@ -443,12 +487,33 @@ const Finance: React.FC = () => {
         if (!grouped[cat]) grouped[cat] = { total_cents: 0, count: 0 };
         grouped[cat].total_cents += Math.abs(row.amount_cents || 0);
         grouped[cat].count++;
+
+        if (row.created_at) {
+          const rowDate = new Date(row.created_at);
+          const amt = Math.abs(row.amount_cents || 0);
+          if (rowDate >= currentMonthStart && rowDate <= currentMonthEnd) {
+            curMonthByCategory[cat] = (curMonthByCategory[cat] || 0) + amt;
+          } else if (rowDate >= prevMonthStart && rowDate <= prevMonthEnd) {
+            prevMonthByCategory[cat] = (prevMonthByCategory[cat] || 0) + amt;
+          }
+        }
       });
 
       setExpenseCategories(
         Object.entries(grouped).map(([category, vals]) => ({ category, ...vals }))
           .sort((a, b) => b.total_cents - a.total_cents)
       );
+
+      const trends: Record<string, number | null> = {};
+      const allCats = new Set([...Object.keys(curMonthByCategory), ...Object.keys(prevMonthByCategory)]);
+      allCats.forEach(cat => {
+        const cur = curMonthByCategory[cat] || 0;
+        const prev = prevMonthByCategory[cat] || 0;
+        if (prev === 0 && cur === 0) { trends[cat] = 0; }
+        else if (prev === 0) { trends[cat] = 100; }
+        else { trends[cat] = ((cur - prev) / prev) * 100; }
+      });
+      setExpenseTrends(trends);
     } catch (err) {
       console.error('Failed to fetch expense categories:', err);
     } finally {
@@ -477,8 +542,160 @@ const Finance: React.FC = () => {
         totalBalance,
         totalWithdrawn,
       }));
+
+      const currentMonthStart = format(startOfMonth(new Date()), "yyyy-MM-dd'T'00:00:00");
+      const currentMonthEnd = format(endOfMonth(new Date()), "yyyy-MM-dd'T'23:59:59");
+      const prevMonth = new Date();
+      prevMonth.setMonth(prevMonth.getMonth() - 1);
+      const prevMonthStart = format(startOfMonth(prevMonth), "yyyy-MM-dd'T'00:00:00");
+      const prevMonthEnd = format(endOfMonth(prevMonth), "yyyy-MM-dd'T'23:59:59");
+
+      const [curTxRes, prevTxRes, curWdRes, prevWdRes] = await Promise.all([
+        supabase.from('wallet_transactions').select('amount, type, transaction_type').gte('created_at', currentMonthStart).lte('created_at', currentMonthEnd),
+        supabase.from('wallet_transactions').select('amount, type, transaction_type').gte('created_at', prevMonthStart).lte('created_at', prevMonthEnd),
+        supabase.from('wallet_transactions').select('amount, type, transaction_type').gte('created_at', currentMonthStart).lte('created_at', currentMonthEnd).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal,transaction_type.eq.debit'),
+        supabase.from('wallet_transactions').select('amount, type, transaction_type').gte('created_at', prevMonthStart).lte('created_at', prevMonthEnd).or('type.eq.withdrawal,type.eq.debit,transaction_type.eq.withdrawal,transaction_type.eq.debit'),
+      ]);
+
+      const sumCredits = (rows: any[]) => rows.reduce((s, tx) => {
+        const txType = (tx.type || tx.transaction_type || '').toLowerCase();
+        if (txType === 'credit' || txType === 'deposit' || txType === 'earning' || txType === 'top_up') {
+          return s + Math.abs(Number(tx.amount) || 0);
+        }
+        return s;
+      }, 0);
+
+      const sumDebits = (rows: any[]) => rows.reduce((s, tx) => s + Math.abs(Number(tx.amount) || 0), 0);
+
+      const curCredits = sumCredits(curTxRes.data || []);
+      const prevCredits = sumCredits(prevTxRes.data || []);
+      const curDebits = sumDebits(curWdRes.data || []);
+      const prevDebits = sumDebits(prevWdRes.data || []);
+
+      const calcChange = (cur: number, prev: number): number | null => {
+        if (prev === 0 && cur === 0) return 0;
+        if (prev === 0) return cur > 0 ? 100 : -100;
+        return ((cur - prev) / prev) * 100;
+      };
+
+      setWalletTrends({
+        balanceChange: calcChange(curCredits, prevCredits),
+        withdrawnChange: calcChange(curDebits, prevDebits),
+        pendingChange: null,
+      });
     } catch (err) {
       console.error('Failed to fetch wallet summary:', err);
+    }
+  }, []);
+
+  interface AuditLogEntry {
+    id: string;
+    module: string;
+    action: string;
+    entity_type: string | null;
+    entity_id: string | null;
+    entity_name: string | null;
+    actor_id: string | null;
+    actor_name: string | null;
+    actor_role: string | null;
+    timestamp: string;
+    severity: string | null;
+    description: string | null;
+    details: any;
+    metadata: any;
+  }
+
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditKpis, setAuditKpis] = useState({
+    totalActions: 0,
+    avgApprovalDays: 0,
+    approvalRate: 0,
+    pendingCount: 0,
+  });
+
+  const fetchAuditSummary = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd'T'00:00:00");
+      const monthEnd = format(endOfMonth(new Date()), "yyyy-MM-dd'T'23:59:59");
+
+      const { data: logs, error: logsErr } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .in('module', ['financial_operations', 'cost_approval', 'down_payment', 'withdrawal', 'wallet', 'retainer'])
+        .gte('timestamp', monthStart)
+        .lte('timestamp', monthEnd)
+        .order('timestamp', { ascending: false })
+        .limit(100);
+
+      if (logsErr) throw logsErr;
+
+      const allLogs = (logs || []) as AuditLogEntry[];
+      const actionPattern = /approve|reject|process|period_close|period_reopen/i;
+      const filteredLogs = allLogs.filter(l => actionPattern.test(l.action));
+
+      const approved = filteredLogs.filter(l => /approve/i.test(l.action)).length;
+      const rejected = filteredLogs.filter(l => /reject/i.test(l.action)).length;
+      const totalDecisions = approved + rejected;
+      const approvalRate = totalDecisions > 0 ? (approved / totalDecisions) * 100 : 0;
+
+      const { data: ocData } = await supabase
+        .from('operational_cost_submissions')
+        .select('created_at, paid_at, tier1_status, tier2_status')
+        .not('paid_at', 'is', null);
+
+      const { data: dpData } = await supabase
+        .from('down_payment_requests')
+        .select('created_at, status, updated_at')
+        .in('status', ['approved', 'paid', 'rejected', 'completed']);
+
+      let totalDays = 0;
+      let countTimed = 0;
+
+      (ocData || []).forEach((oc: any) => {
+        if (oc.created_at && oc.paid_at) {
+          const diff = (new Date(oc.paid_at).getTime() - new Date(oc.created_at).getTime()) / (1000 * 60 * 60 * 24);
+          if (diff >= 0 && diff < 365) {
+            totalDays += diff;
+            countTimed++;
+          }
+        }
+      });
+
+      (dpData || []).forEach((dp: any) => {
+        if (dp.created_at && dp.updated_at) {
+          const diff = (new Date(dp.updated_at).getTime() - new Date(dp.created_at).getTime()) / (1000 * 60 * 60 * 24);
+          if (diff >= 0 && diff < 365) {
+            totalDays += diff;
+            countTimed++;
+          }
+        }
+      });
+
+      const avgDays = countTimed > 0 ? totalDays / countTimed : 0;
+
+      const { count: pendingOcCount } = await supabase
+        .from('operational_cost_submissions')
+        .select('id', { count: 'exact', head: true })
+        .or('tier1_status.eq.pending,tier2_status.eq.pending');
+
+      const { count: pendingDpCount } = await supabase
+        .from('down_payment_requests')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['pending', 'pending_supervisor', 'pending_admin']);
+
+      setAuditLogs(filteredLogs.slice(0, 50));
+      setAuditKpis({
+        totalActions: filteredLogs.length,
+        avgApprovalDays: Math.round(avgDays * 10) / 10,
+        approvalRate: Math.round(approvalRate),
+        pendingCount: (pendingOcCount || 0) + (pendingDpCount || 0),
+      });
+    } catch (err) {
+      console.error('Failed to fetch audit summary:', err);
+    } finally {
+      setAuditLoading(false);
     }
   }, []);
 
@@ -486,7 +703,9 @@ const Finance: React.FC = () => {
     fetchWithdrawals();
     fetchExpenseCategories();
     fetchWalletSummary();
-  }, [fetchWithdrawals, fetchExpenseCategories, fetchWalletSummary]);
+    fetchAuditSummary();
+    getLatestExchangeRate().then(rate => setExchangeRate(rate));
+  }, [fetchWithdrawals, fetchExpenseCategories, fetchWalletSummary, fetchAuditSummary]);
 
   const siteVisitTransactions = transactions.filter(
     transaction => transaction.siteVisitId
@@ -830,17 +1049,26 @@ const Finance: React.FC = () => {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {expenseCategories.slice(0, 8).map((cat) => (
-                      <Card key={cat.category} className="p-3">
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-muted-foreground capitalize">{cat.category.replace(/_/g, ' ')}</p>
-                          <p className="text-lg font-bold" data-testid={`text-expense-${cat.category}`}>{formatCurrencyCents(cat.total_cents)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {totalExpenseCents > 0 ? ((cat.total_cents / totalExpenseCents) * 100).toFixed(0) : 0}% of total ({cat.count} submission{cat.count !== 1 ? 's' : ''})
-                          </p>
-                        </div>
-                      </Card>
-                    ))}
+                    {expenseCategories.slice(0, 8).map((cat) => {
+                      const trend = expenseTrends[cat.category];
+                      return (
+                        <Card key={cat.category} className="p-3">
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground capitalize">{cat.category.replace(/_/g, ' ')}</p>
+                            <p className="text-lg font-bold" data-testid={`text-expense-${cat.category}`}>{formatCurrencyCents(cat.total_cents)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {totalExpenseCents > 0 ? ((cat.total_cents / totalExpenseCents) * 100).toFixed(0) : 0}% of total ({cat.count} submission{cat.count !== 1 ? 's' : ''})
+                            </p>
+                            {trend !== null && trend !== undefined && trend !== 0 && (
+                              <div className={`flex items-center gap-1 text-xs ${trend > 0 ? 'text-red-500' : 'text-green-600'}`} data-testid={`trend-expense-${cat.category}`}>
+                                {trend > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                <span>{trend > 0 ? '+' : ''}{trend.toFixed(1)}% vs last month</span>
+                              </div>
+                            )}
+                          </div>
+                        </Card>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -967,7 +1195,14 @@ const Finance: React.FC = () => {
                       <div>
                         <p className="font-medium">Total Balance</p>
                         <p className="text-lg font-bold" data-testid="text-total-balance">{formatCurrency(walletSummary.totalBalance)}</p>
-                        <p className="text-sm text-muted-foreground">Combined SDG balance</p>
+                        {walletTrends.balanceChange !== null && walletTrends.balanceChange !== 0 ? (
+                          <div className={`flex items-center gap-1 text-xs mt-1 ${walletTrends.balanceChange > 0 ? 'text-green-600' : 'text-red-500'}`} data-testid="trend-balance-change">
+                            {walletTrends.balanceChange > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                            <span>{walletTrends.balanceChange > 0 ? '+' : ''}{walletTrends.balanceChange.toFixed(1)}% from last month</span>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Combined SDG balance</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -979,7 +1214,14 @@ const Finance: React.FC = () => {
                       <div>
                         <p className="font-medium">Total Withdrawn</p>
                         <p className="text-lg font-bold" data-testid="text-total-withdrawn">{formatCurrency(walletSummary.totalWithdrawn)}</p>
-                        <p className="text-sm text-muted-foreground">All-time withdrawals</p>
+                        {walletTrends.withdrawnChange !== null && walletTrends.withdrawnChange !== 0 ? (
+                          <div className={`flex items-center gap-1 text-xs mt-1 ${walletTrends.withdrawnChange > 0 ? 'text-red-500' : 'text-green-600'}`} data-testid="trend-withdrawn-change">
+                            {walletTrends.withdrawnChange > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                            <span>{walletTrends.withdrawnChange > 0 ? '+' : ''}{walletTrends.withdrawnChange.toFixed(1)}% from last month</span>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">All-time withdrawals</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -991,7 +1233,14 @@ const Finance: React.FC = () => {
                       <div>
                         <p className="font-medium">Pending Payments</p>
                         <p className="text-lg font-bold" data-testid="text-pending-payments">{walletSummary.pendingCount}</p>
-                        <p className="text-sm text-muted-foreground">{formatCurrency(walletSummary.pendingAmount)} awaiting</p>
+                        {walletTrends.pendingChange !== null && walletTrends.pendingChange !== 0 ? (
+                          <div className={`flex items-center gap-1 text-xs mt-1 ${walletTrends.pendingChange > 0 ? 'text-red-500' : 'text-green-600'}`} data-testid="trend-pending-change">
+                            {walletTrends.pendingChange > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                            <span>{walletTrends.pendingChange > 0 ? '+' : ''}{walletTrends.pendingChange.toFixed(1)}% from last month</span>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">{formatCurrency(walletSummary.pendingAmount)} awaiting</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1137,6 +1386,153 @@ const Finance: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
+
+            <Card data-testid="card-approval-audit-summary">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <CardTitle className="flex items-center gap-2" data-testid="title-approval-audit-summary">
+                      <Activity className="h-5 w-5 text-primary" />
+                      Approval Audit Summary
+                    </CardTitle>
+                    <CardDescription data-testid="desc-approval-audit-summary">Unified view of all financial approval actions across workflows this month</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchAuditSummary} disabled={auditLoading} data-testid="button-refresh-audit">
+                    {auditLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {auditLoading ? (
+                  <div className="flex flex-col items-center gap-3 py-8" data-testid="loading-audit-summary">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading audit summary...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="section-audit-kpis">
+                      <div className="p-4 border rounded-lg" data-testid="kpi-total-actions">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                            <Activity className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Total Actions</p>
+                            <p className="text-lg font-bold" data-testid="text-audit-total-actions">{auditKpis.totalActions}</p>
+                            <p className="text-xs text-muted-foreground">This month</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4 border rounded-lg" data-testid="kpi-avg-approval-time">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-900/30">
+                            <Clock className="h-4 w-4 text-amber-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Avg Approval Time</p>
+                            <p className="text-lg font-bold" data-testid="text-audit-avg-approval-time">{auditKpis.avgApprovalDays} days</p>
+                            <p className="text-xs text-muted-foreground">Submission to approval</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4 border rounded-lg" data-testid="kpi-approval-rate">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/30">
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Approval Rate</p>
+                            <p className="text-lg font-bold" data-testid="text-audit-approval-rate">{auditKpis.approvalRate}%</p>
+                            <p className="text-xs text-muted-foreground">Approved / total decisions</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4 border rounded-lg" data-testid="kpi-pending-actions">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                            <AlertTriangle className="h-4 w-4 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Pending Actions</p>
+                            <p className="text-lg font-bold" data-testid="text-audit-pending-count">{auditKpis.pendingCount}</p>
+                            <p className="text-xs text-muted-foreground">Awaiting approval</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div data-testid="section-audit-log-table">
+                      <h3 className="text-sm font-semibold mb-3" data-testid="title-recent-actions">Recent Approval Actions</h3>
+                      {auditLogs.length === 0 ? (
+                        <div className="bg-muted/50 border rounded-lg p-6 text-center" data-testid="empty-audit-logs">
+                          <Activity className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                          <p className="text-sm text-muted-foreground">No approval actions recorded this month yet.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Actions will appear here as approvals, rejections, and processing events are logged.</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <Table data-testid="table-audit-logs">
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead data-testid="th-audit-datetime">Date/Time</TableHead>
+                                <TableHead data-testid="th-audit-module">Module</TableHead>
+                                <TableHead data-testid="th-audit-action">Action</TableHead>
+                                <TableHead data-testid="th-audit-actor">Actor</TableHead>
+                                <TableHead data-testid="th-audit-entity">Entity</TableHead>
+                                <TableHead data-testid="th-audit-description">Description</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {auditLogs.map((log, idx) => {
+                                const moduleLabel = (() => {
+                                  switch (log.module) {
+                                    case 'cost_approval': return 'Cost';
+                                    case 'down_payment': return 'Advance';
+                                    case 'withdrawal': return 'Withdrawal';
+                                    case 'retainer': return 'Retainer';
+                                    case 'wallet': return 'Wallet';
+                                    case 'financial_operations': return 'Finance';
+                                    default: return log.module;
+                                  }
+                                })();
+                                const actionVariant = /approve/i.test(log.action) ? 'default' as const
+                                  : /reject/i.test(log.action) ? 'destructive' as const
+                                  : 'secondary' as const;
+                                const actionLabel = log.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+                                return (
+                                  <TableRow key={log.id} data-testid={`row-audit-log-${idx}`}>
+                                    <TableCell className="whitespace-nowrap text-sm" data-testid={`cell-audit-datetime-${idx}`}>
+                                      {format(new Date(log.timestamp), 'MMM d, yyyy HH:mm')}
+                                    </TableCell>
+                                    <TableCell data-testid={`cell-audit-module-${idx}`}>
+                                      <Badge variant="outline" className="text-xs">{moduleLabel}</Badge>
+                                    </TableCell>
+                                    <TableCell data-testid={`cell-audit-action-${idx}`}>
+                                      <Badge variant={actionVariant} className="text-xs">{actionLabel}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-sm" data-testid={`cell-audit-actor-${idx}`}>
+                                      {log.actor_name || log.actor_id || 'System'}
+                                    </TableCell>
+                                    <TableCell className="text-sm max-w-[200px] truncate" data-testid={`cell-audit-entity-${idx}`}>
+                                      {log.entity_name || log.entity_type || '-'}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground max-w-[250px] truncate" data-testid={`cell-audit-desc-${idx}`}>
+                                      {log.description || '-'}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -1262,7 +1658,11 @@ const Finance: React.FC = () => {
                         <div>
                           <p className="text-sm text-muted-foreground">Total Assets</p>
                           <p className="text-lg font-bold" data-testid="text-cs-total-assets">{formatCurrency(csData.totalAssets)}</p>
-                          <p className="text-xs text-muted-foreground">Wallet balances</p>
+                          {exchangeRate && <p className="text-xs text-muted-foreground" data-testid="text-cs-total-assets-usd">{formatUsd(convertSdgToUsd(csData.totalAssets, exchangeRate.rate))}</p>}
+                          <div className="mt-1 space-y-0.5">
+                            <p className="text-xs text-muted-foreground" data-testid="text-cs-wallet-balances">Wallet balances: {formatCurrency(csData.totalAssets - csData.advancesReceivable)}</p>
+                            <p className="text-xs text-muted-foreground" data-testid="text-cs-advances-receivable">Advances receivable: {formatCurrency(csData.advancesReceivable)}</p>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -1276,6 +1676,7 @@ const Finance: React.FC = () => {
                         <div>
                           <p className="text-sm text-muted-foreground">Total Liabilities</p>
                           <p className="text-lg font-bold" data-testid="text-cs-total-liabilities">{formatCurrency(csData.totalLiabilities)}</p>
+                          {exchangeRate && <p className="text-xs text-muted-foreground" data-testid="text-cs-total-liabilities-usd">{formatUsd(convertSdgToUsd(csData.totalLiabilities, exchangeRate.rate))}</p>}
                           <p className="text-xs text-muted-foreground">Pending payments</p>
                         </div>
                       </div>
@@ -1290,6 +1691,7 @@ const Finance: React.FC = () => {
                         <div>
                           <p className="text-sm text-muted-foreground">Net Position</p>
                           <p className="text-lg font-bold" data-testid="text-cs-net-position">{formatCurrency(csData.netPosition)}</p>
+                          {exchangeRate && <p className="text-xs text-muted-foreground" data-testid="text-cs-net-position-usd">{formatUsd(convertSdgToUsd(csData.netPosition, exchangeRate.rate))}</p>}
                           <p className="text-xs text-muted-foreground">Assets - Liabilities</p>
                         </div>
                       </div>
@@ -1312,14 +1714,20 @@ const Finance: React.FC = () => {
                       ) : (
                         <div className="space-y-2">
                           {csData.inflowCategories.map((cat, idx) => (
-                            <div key={cat.category} className="flex items-center justify-between py-1 border-b last:border-b-0" data-testid={`row-inflow-${idx}`}>
+                            <div key={cat.category} className="flex items-center justify-between gap-2 py-1 border-b last:border-b-0" data-testid={`row-inflow-${idx}`}>
                               <span className="text-sm capitalize">{cat.category.replace(/_/g, ' ')}</span>
-                              <span className="text-sm font-medium text-green-600">{formatCurrency(cat.amount)}</span>
+                              <div className="text-right">
+                                <span className="text-sm font-medium text-green-600">{formatCurrency(cat.amount)}</span>
+                                {exchangeRate && <p className="text-xs text-muted-foreground">{formatUsd(convertSdgToUsd(cat.amount, exchangeRate.rate))}</p>}
+                              </div>
                             </div>
                           ))}
-                          <div className="flex items-center justify-between pt-2 font-bold">
+                          <div className="flex items-center justify-between gap-2 pt-2 font-bold">
                             <span className="text-sm">Total Inflows</span>
-                            <span className="text-sm text-green-700" data-testid="text-cs-total-inflow">{formatCurrency(csData.totalInflow)}</span>
+                            <div className="text-right">
+                              <span className="text-sm text-green-700" data-testid="text-cs-total-inflow">{formatCurrency(csData.totalInflow)}</span>
+                              {exchangeRate && <p className="text-xs text-muted-foreground" data-testid="text-cs-total-inflow-usd">{formatUsd(convertSdgToUsd(csData.totalInflow, exchangeRate.rate))}</p>}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1340,14 +1748,20 @@ const Finance: React.FC = () => {
                       ) : (
                         <div className="space-y-2">
                           {csData.expenseCategories.map((cat, idx) => (
-                            <div key={cat.category} className="flex items-center justify-between py-1 border-b last:border-b-0" data-testid={`row-expense-${idx}`}>
+                            <div key={cat.category} className="flex items-center justify-between gap-2 py-1 border-b last:border-b-0" data-testid={`row-expense-${idx}`}>
                               <span className="text-sm capitalize">{cat.category.replace(/_/g, ' ')}</span>
-                              <span className="text-sm font-medium text-red-600">{formatCurrency(cat.amount)}</span>
+                              <div className="text-right">
+                                <span className="text-sm font-medium text-red-600">{formatCurrency(cat.amount)}</span>
+                                {exchangeRate && <p className="text-xs text-muted-foreground">{formatUsd(convertSdgToUsd(cat.amount, exchangeRate.rate))}</p>}
+                              </div>
                             </div>
                           ))}
-                          <div className="flex items-center justify-between pt-2 font-bold">
+                          <div className="flex items-center justify-between gap-2 pt-2 font-bold">
                             <span className="text-sm">Total Outflows</span>
-                            <span className="text-sm text-red-700" data-testid="text-cs-total-outflow">{formatCurrency(csData.totalOutflow)}</span>
+                            <div className="text-right">
+                              <span className="text-sm text-red-700" data-testid="text-cs-total-outflow">{formatCurrency(csData.totalOutflow)}</span>
+                              {exchangeRate && <p className="text-xs text-muted-foreground" data-testid="text-cs-total-outflow-usd">{formatUsd(convertSdgToUsd(csData.totalOutflow, exchangeRate.rate))}</p>}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1370,9 +1784,10 @@ const Finance: React.FC = () => {
                           <thead>
                             <tr className="border-b">
                               <th className="text-left py-2 px-2 font-medium text-muted-foreground">Project</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow (SDG)</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow (SDG)</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (SDG)</th>
+                              {exchangeRate && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (USD)</th>}
                             </tr>
                           </thead>
                           <tbody>
@@ -1382,6 +1797,7 @@ const Finance: React.FC = () => {
                                 <td className="py-2 px-2 text-right text-green-600">{formatCurrency(p.inflow)}</td>
                                 <td className="py-2 px-2 text-right text-red-600">{formatCurrency(p.outflow)}</td>
                                 <td className="py-2 px-2 text-right font-medium">{formatCurrency(p.net)}</td>
+                                {exchangeRate && <td className="py-2 px-2 text-right text-muted-foreground text-xs">{formatUsd(convertSdgToUsd(p.net, exchangeRate.rate))}</td>}
                               </tr>
                             ))}
                           </tbody>
@@ -1406,9 +1822,10 @@ const Finance: React.FC = () => {
                           <thead>
                             <tr className="border-b">
                               <th className="text-left py-2 px-2 font-medium text-muted-foreground">Hub</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow</th>
-                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Inflow (SDG)</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Outflow (SDG)</th>
+                              <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (SDG)</th>
+                              {exchangeRate && <th className="text-right py-2 px-2 font-medium text-muted-foreground">Net (USD)</th>}
                             </tr>
                           </thead>
                           <tbody>
@@ -1418,6 +1835,7 @@ const Finance: React.FC = () => {
                                 <td className="py-2 px-2 text-right text-green-600">{formatCurrency(h.inflow)}</td>
                                 <td className="py-2 px-2 text-right text-red-600">{formatCurrency(h.outflow)}</td>
                                 <td className="py-2 px-2 text-right font-medium">{formatCurrency(h.net)}</td>
+                                {exchangeRate && <td className="py-2 px-2 text-right text-muted-foreground text-xs">{formatUsd(convertSdgToUsd(h.net, exchangeRate.rate))}</td>}
                               </tr>
                             ))}
                           </tbody>

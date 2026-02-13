@@ -27,7 +27,9 @@ import {
   Lock,
   Unlock,
   CalendarCheck,
-  CalendarDays
+  CalendarDays,
+  Bell,
+  Info
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -44,7 +46,7 @@ import { WorkflowRail } from '@/components/financial/WorkflowRail';
 import { GradientStatCard, GRADIENT_PRESETS } from '@/components/dashboard/GradientStatCard';
 import { PageLoader } from '@/components/ui/loading-badge';
 import { supabase } from '@/integrations/supabase/client';
-import { format, parseISO, isValid, subMonths, addMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { format, parseISO, isValid, subMonths, addMonths, startOfMonth, endOfMonth, differenceInHours, differenceInDays } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConsolidatedFinancialTab } from '@/components/financial/ConsolidatedFinancialTab';
 import {
@@ -103,7 +105,7 @@ const FinancialOperations = () => {
   const { submissions: costSubmissions, isLoading: submissionsLoading } = useCostSubmissions();
   const { userClassifications, feeStructures, loading: classificationsLoading } = useClassification();
   const { loading: walletLoading } = useWallet();
-  const { projectBudgets } = useBudget();
+  const { projectBudgets, budgetAlerts } = useBudget();
   const { projects } = useProjectContext();
   const { users, currentUser } = useUser();
 
@@ -131,54 +133,126 @@ const FinancialOperations = () => {
 
   const [periodCloseData, setPeriodCloseData] = useState<PeriodData[]>([]);
   const [periodCloseLoading, setPeriodCloseLoading] = useState(false);
-  const [closedPeriods, setClosedPeriods] = useState<Record<string, ClosedPeriodRecord>>(() => {
-    try {
-      const stored = localStorage.getItem('pact_closed_periods');
-      return stored ? JSON.parse(stored) : {};
-    } catch { return {}; }
-  });
+  const [closedPeriods, setClosedPeriods] = useState<Record<string, ClosedPeriodRecord>>({});
   const [periodCloseDialog, setPeriodCloseDialog] = useState<{ open: boolean; month: string; label: string; pendingCount: number }>({ open: false, month: '', label: '', pendingCount: 0 });
   const [periodReopenDialog, setPeriodReopenDialog] = useState<{ open: boolean; month: string; label: string }>({ open: false, month: '', label: '' });
 
   const isSuperAdmin = currentUser?.role === 'superAdmin' || currentUser?.roles?.includes('superAdmin' as any);
 
-  const saveClosedPeriods = (updated: Record<string, ClosedPeriodRecord>) => {
-    setClosedPeriods(updated);
-    localStorage.setItem('pact_closed_periods', JSON.stringify(updated));
+  const fetchClosedPeriods = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('financial_period_close')
+        .select('*');
+      if (error) throw error;
+      const mapped: Record<string, ClosedPeriodRecord> = {};
+      (data || []).forEach((row: any) => {
+        mapped[row.period_month] = {
+          month: row.period_month,
+          status: row.status === 'locked' ? 'locked' : 'closed',
+          closedBy: row.closed_by,
+          closedByName: row.closed_by_name,
+          closedAt: row.closed_at,
+        };
+      });
+      setClosedPeriods(mapped);
+    } catch (err) {
+      console.error('Failed to fetch closed periods:', err);
+    }
   };
+
+  useEffect(() => {
+    fetchClosedPeriods();
+  }, []);
 
   const handleClosePeriod = (month: string, label: string, pendingCount: number) => {
     setPeriodCloseDialog({ open: true, month, label, pendingCount });
   };
 
-  const confirmClosePeriod = () => {
-    const { month } = periodCloseDialog;
-    const updated = {
-      ...closedPeriods,
-      [month]: {
-        month,
-        status: 'closed' as const,
-        closedBy: currentUser?.id || 'unknown',
-        closedByName: currentUser?.name || currentUser?.email || 'Unknown',
-        closedAt: new Date().toISOString(),
-      },
-    };
-    saveClosedPeriods(updated);
-    setPeriodCloseDialog({ open: false, month: '', label: '', pendingCount: 0 });
-    toast({ title: 'Period Closed', description: `${periodCloseDialog.label} has been closed successfully.` });
+  const confirmClosePeriod = async () => {
+    const { month, label } = periodCloseDialog;
+    const closedAt = new Date().toISOString();
+    const actorId = currentUser?.id || 'unknown';
+    const actorName = currentUser?.name || currentUser?.email || 'Unknown';
+    const actorRole = currentUser?.role || 'unknown';
+    const actorEmail = currentUser?.email || '';
+
+    try {
+      const { error: insertError } = await supabase
+        .from('financial_period_close')
+        .insert({
+          period_month: month,
+          status: 'closed',
+          closed_by: actorId,
+          closed_by_name: actorName,
+          closed_at: closedAt,
+        });
+      if (insertError) throw insertError;
+
+      await supabase.from('audit_logs').insert({
+        module: 'financial_operations',
+        action: 'period_close',
+        entity_type: 'financial_period',
+        entity_id: month,
+        entity_name: label,
+        actor_id: actorId,
+        actor_name: actorName,
+        actor_role: actorRole,
+        actor_email: actorEmail,
+        severity: 'info',
+        description: `Financial period ${label} was closed by ${actorName}`,
+        details: JSON.stringify({ period_month: month, action: 'close' }),
+      });
+
+      await fetchClosedPeriods();
+      setPeriodCloseDialog({ open: false, month: '', label: '', pendingCount: 0 });
+      toast({ title: 'Period Closed', description: `${label} has been closed successfully.` });
+    } catch (err: any) {
+      console.error('Failed to close period:', err);
+      toast({ title: 'Error', description: err?.message || 'Failed to close period. Please try again.', variant: 'destructive' });
+    }
   };
 
   const handleReopenPeriod = (month: string, label: string) => {
     setPeriodReopenDialog({ open: true, month, label });
   };
 
-  const confirmReopenPeriod = () => {
-    const { month } = periodReopenDialog;
-    const updated = { ...closedPeriods };
-    delete updated[month];
-    saveClosedPeriods(updated);
-    setPeriodReopenDialog({ open: false, month: '', label: '' });
-    toast({ title: 'Period Reopened', description: `${periodReopenDialog.label} has been reopened.` });
+  const confirmReopenPeriod = async () => {
+    const { month, label } = periodReopenDialog;
+    const actorId = currentUser?.id || 'unknown';
+    const actorName = currentUser?.name || currentUser?.email || 'Unknown';
+    const actorRole = currentUser?.role || 'unknown';
+    const actorEmail = currentUser?.email || '';
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('financial_period_close')
+        .delete()
+        .eq('period_month', month);
+      if (deleteError) throw deleteError;
+
+      await supabase.from('audit_logs').insert({
+        module: 'financial_operations',
+        action: 'period_reopen',
+        entity_type: 'financial_period',
+        entity_id: month,
+        entity_name: label,
+        actor_id: actorId,
+        actor_name: actorName,
+        actor_role: actorRole,
+        actor_email: actorEmail,
+        severity: 'warning',
+        description: `Financial period ${label} was reopened by ${actorName}`,
+        details: JSON.stringify({ period_month: month, action: 'reopen' }),
+      });
+
+      await fetchClosedPeriods();
+      setPeriodReopenDialog({ open: false, month: '', label: '' });
+      toast({ title: 'Period Reopened', description: `${label} has been reopened.` });
+    } catch (err: any) {
+      console.error('Failed to reopen period:', err);
+      toast({ title: 'Error', description: err?.message || 'Failed to reopen period. Please try again.', variant: 'destructive' });
+    }
   };
 
   useEffect(() => {
@@ -299,6 +373,151 @@ const FinancialOperations = () => {
     };
     fetchOpCosts();
   }, []);
+
+  interface UnifiedAlert {
+    id: string;
+    severity: 'critical' | 'warning' | 'info';
+    category: string;
+    title: string;
+    description: string;
+    timestamp: string;
+    actionLabel?: string;
+    actionPath?: string;
+  }
+
+  const [unifiedAlerts, setUnifiedAlerts] = useState<UnifiedAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== 'alerts') return;
+    const fetchAlerts = async () => {
+      setAlertsLoading(true);
+      const alerts: UnifiedAlert[] = [];
+      try {
+        (budgetAlerts || []).filter(a => a.status === 'active').forEach(ba => {
+          alerts.push({
+            id: `budget-${ba.id}`,
+            severity: ba.severity,
+            category: 'Budget',
+            title: ba.title,
+            description: ba.message || `${ba.alertType} alert - threshold at ${ba.thresholdPercentage || 0}%`,
+            timestamp: ba.createdAt,
+            actionLabel: 'View Budget',
+            actionPath: undefined,
+          });
+        });
+
+        const { data: rateData } = await supabase
+          .from('exchange_rates')
+          .select('updated_at, created_at')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (rateData && rateData.length > 0) {
+          const lastUpdate = parseISO(rateData[0].updated_at || rateData[0].created_at);
+          const hoursStale = differenceInHours(new Date(), lastUpdate);
+          if (hoursStale > 72) {
+            alerts.push({
+              id: 'exchange-rate-critical',
+              severity: 'critical',
+              category: 'Exchange Rate',
+              title: 'Exchange rates critically stale',
+              description: `Last updated ${hoursStale} hours ago. Rates may be inaccurate.`,
+              timestamp: rateData[0].updated_at || rateData[0].created_at,
+              actionLabel: 'Update Rates',
+              actionPath: '/exchange-rates',
+            });
+          } else if (hoursStale > 24) {
+            alerts.push({
+              id: 'exchange-rate-warning',
+              severity: 'warning',
+              category: 'Exchange Rate',
+              title: 'Exchange rates may be stale',
+              description: `Last updated ${hoursStale} hours ago. Consider refreshing.`,
+              timestamp: rateData[0].updated_at || rateData[0].created_at,
+              actionLabel: 'Update Rates',
+              actionPath: '/exchange-rates',
+            });
+          }
+        }
+
+        const sevenDaysAgo = format(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+        const { data: overdueRecon } = await supabase
+          .from('operational_cost_submissions')
+          .select('id, description, paid_at, created_at')
+          .not('paid_at', 'is', null)
+          .is('reconciled_at', null)
+          .lt('paid_at', sevenDaysAgo);
+        (overdueRecon || []).forEach((item: any) => {
+          const daysSincePaid = differenceInDays(new Date(), parseISO(item.paid_at));
+          alerts.push({
+            id: `overdue-recon-${item.id}`,
+            severity: daysSincePaid > 14 ? 'critical' : 'warning',
+            category: 'Reconciliation',
+            title: 'Overdue reconciliation',
+            description: `Paid ${daysSincePaid} days ago but not yet reconciled. ${item.description || ''}`.trim(),
+            timestamp: item.paid_at,
+            actionLabel: 'View Payments',
+            actionPath: undefined,
+          });
+        });
+
+        const threeDaysAgo = format(new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+        const { data: agingApprovals } = await supabase
+          .from('operational_cost_submissions')
+          .select('id, description, created_at, tier2_status')
+          .or('tier2_status.is.null,tier2_status.eq.pending')
+          .lt('created_at', threeDaysAgo);
+        (agingApprovals || []).forEach((item: any) => {
+          const daysOld = differenceInDays(new Date(), parseISO(item.created_at));
+          alerts.push({
+            id: `aging-approval-${item.id}`,
+            severity: daysOld > 7 ? 'critical' : 'warning',
+            category: 'Approval',
+            title: 'Pending approval aging',
+            description: `Submitted ${daysOld} days ago, still awaiting Tier 2 approval. ${item.description || ''}`.trim(),
+            timestamp: item.created_at,
+            actionLabel: 'Review',
+            actionPath: '/tier2-approval',
+          });
+        });
+
+        const { data: advanceLiq } = await supabase
+          .from('down_payment_requests')
+          .select('id, created_at, amount, status')
+          .eq('status', 'paid')
+          .lt('created_at', sevenDaysAgo);
+        (advanceLiq || []).forEach((item: any) => {
+          const daysOld = differenceInDays(new Date(), parseISO(item.created_at));
+          alerts.push({
+            id: `advance-liq-${item.id}`,
+            severity: daysOld > 14 ? 'critical' : 'info',
+            category: 'Advance',
+            title: 'Advance liquidation reminder',
+            description: `Down payment of ${formatCurrency((item.amount || 0) / 100)} paid ${daysOld} days ago, pending liquidation.`,
+            timestamp: item.created_at,
+            actionLabel: 'View Advances',
+            actionPath: '/finance',
+          });
+        });
+      } catch (err) {
+        console.error('Failed to fetch alerts:', err);
+      }
+
+      const severityOrder: Record<string, number> = { critical: 0, warning: 1, info: 2 };
+      alerts.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+      setUnifiedAlerts(alerts);
+      setAlertsLoading(false);
+    };
+    fetchAlerts();
+  }, [activeTab, budgetAlerts]);
+
+  const alertKpis = useMemo(() => {
+    const total = unifiedAlerts.length;
+    const critical = unifiedAlerts.filter(a => a.severity === 'critical').length;
+    const warning = unifiedAlerts.filter(a => a.severity === 'warning').length;
+    const info = unifiedAlerts.filter(a => a.severity === 'info').length;
+    return { total, critical, warning, info };
+  }, [unifiedAlerts]);
 
   interface CashFlowMonth {
     month: string;
@@ -602,6 +821,10 @@ const FinancialOperations = () => {
             <TabsTrigger value="payments" className="text-xs md:text-sm px-3" data-testid="tab-payments">Payments</TabsTrigger>
             <TabsTrigger value="cashflow" className="text-xs md:text-sm px-3" data-testid="tab-cashflow">Cash Flow</TabsTrigger>
             <TabsTrigger value="periodClose" className="text-xs md:text-sm px-3" data-testid="tab-period-close">Period Close</TabsTrigger>
+            <TabsTrigger value="alerts" className="text-xs md:text-sm px-3" data-testid="tab-alerts">
+              <Bell className="h-3.5 w-3.5 mr-1" />
+              Alerts
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -1591,6 +1814,119 @@ const FinancialOperations = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </TabsContent>
+
+        <TabsContent value="alerts" className="space-y-4 mt-4" data-testid="tab-content-alerts">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="alerts-kpi-grid">
+            <GradientStatCard
+              title="Total Alerts"
+              value={alertKpis.total}
+              subtitle="All active alerts"
+              icon={Bell}
+              gradient={GRADIENT_PRESETS.blue}
+              testId="card-alerts-total"
+            />
+            <GradientStatCard
+              title="Critical"
+              value={alertKpis.critical}
+              subtitle="Immediate action needed"
+              icon={AlertTriangle}
+              gradient={GRADIENT_PRESETS.red}
+              testId="card-alerts-critical"
+            />
+            <GradientStatCard
+              title="Warning"
+              value={alertKpis.warning}
+              subtitle="Attention required"
+              icon={AlertCircle}
+              gradient={GRADIENT_PRESETS.purple}
+              testId="card-alerts-warning"
+            />
+            <GradientStatCard
+              title="Info"
+              value={alertKpis.info}
+              subtitle="For your awareness"
+              icon={Info}
+              gradient={GRADIENT_PRESETS.green}
+              testId="card-alerts-info"
+            />
+          </div>
+
+          {alertsLoading ? (
+            <div className="space-y-3" data-testid="alerts-loading">
+              {[1, 2, 3].map(i => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          ) : unifiedAlerts.length === 0 ? (
+            <Card data-testid="alerts-empty">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <CheckCircle className="h-12 w-12 text-green-500 mb-3" />
+                <p className="text-lg font-medium">All Clear</p>
+                <p className="text-sm text-muted-foreground">No active financial alerts at this time.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3" data-testid="alerts-list">
+              {unifiedAlerts.map((alert) => {
+                const severityConfig = {
+                  critical: { icon: AlertTriangle, color: 'text-red-500', badgeVariant: 'destructive' as const, bgClass: 'border-red-200 dark:border-red-900' },
+                  warning: { icon: AlertTriangle, color: 'text-amber-500', badgeVariant: 'secondary' as const, bgClass: 'border-amber-200 dark:border-amber-900' },
+                  info: { icon: Info, color: 'text-blue-500', badgeVariant: 'secondary' as const, bgClass: 'border-blue-200 dark:border-blue-900' },
+                };
+                const config = severityConfig[alert.severity];
+                const SeverityIcon = config.icon;
+
+                return (
+                  <Card key={alert.id} className={config.bgClass} data-testid={`alert-item-${alert.id}`}>
+                    <CardContent className="flex items-start gap-3 py-4">
+                      <SeverityIcon className={`h-5 w-5 mt-0.5 shrink-0 ${config.color}`} data-testid={`alert-icon-${alert.id}`} />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant={config.badgeVariant} data-testid={`alert-severity-${alert.id}`}>
+                            {alert.severity}
+                          </Badge>
+                          <Badge variant="outline" data-testid={`alert-category-${alert.id}`}>
+                            {alert.category}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground ml-auto" data-testid={`alert-timestamp-${alert.id}`}>
+                            {safeFormatDate(alert.timestamp)}
+                          </span>
+                        </div>
+                        <p className="font-medium text-sm" data-testid={`alert-title-${alert.id}`}>{alert.title}</p>
+                        <p className="text-sm text-muted-foreground" data-testid={`alert-description-${alert.id}`}>{alert.description}</p>
+                      </div>
+                      {alert.actionPath && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(alert.actionPath!)}
+                          data-testid={`alert-action-${alert.id}`}
+                        >
+                          {alert.actionLabel || 'View'}
+                          <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                        </Button>
+                      )}
+                      {!alert.actionPath && alert.actionLabel && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (alert.category === 'Budget') setActiveTab('budget');
+                            else if (alert.category === 'Reconciliation') setActiveTab('payments');
+                          }}
+                          data-testid={`alert-action-${alert.id}`}
+                        >
+                          {alert.actionLabel}
+                          <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

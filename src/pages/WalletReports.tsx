@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,7 +27,9 @@ import {
   Search,
   Download,
   Loader2,
-  Eye
+  Eye,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
@@ -40,6 +43,10 @@ export default function WalletReports() {
   const [walletRows, setWalletRows] = useState<any[]>([]);
   const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+  const [txLoading, setTxLoading] = useState(false);
 
   const currentMonth = useMemo(() => {
     const now = new Date();
@@ -49,18 +56,37 @@ export default function WalletReports() {
     };
   }, []);
 
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(totalCount / pageSize)), [totalCount, pageSize]);
+
+  const fetchTransactions = useCallback(async (page: number, size: number) => {
+    setTxLoading(true);
+    try {
+      const { count } = await supabase
+        .from('wallet_transactions')
+        .select('id', { count: 'exact', head: true });
+      setTotalCount(count || 0);
+
+      const from = (page - 1) * size;
+      const to = from + size - 1;
+      const { data: txData } = await supabase
+        .from('wallet_transactions')
+        .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(site_name, site_code, state, locality)')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      setAllTransactions(txData || []);
+    } catch (err) {
+      console.error('Error loading transactions:', err);
+    } finally {
+      setTxLoading(false);
+    }
+  }, []);
+
   const loadData = async () => {
     setLoading(true);
     try {
       const data = await adminListWallets({ pageSize: 500 });
       setWalletRows(data || []);
-
-      const { data: txData } = await supabase
-        .from('wallet_transactions')
-        .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(site_name, site_code, state, locality)')
-        .order('created_at', { ascending: false })
-        .limit(1000);
-      setAllTransactions(txData || []);
+      await fetchTransactions(currentPage, pageSize);
     } catch (err) {
       console.error('Error loading wallet reports:', err);
     } finally {
@@ -71,6 +97,16 @@ export default function WalletReports() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      fetchTransactions(currentPage, pageSize);
+    }
+  }, [currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [timeframe]);
 
   const formatCurrency = (amount: number, currency: string = 'SDG') => {
     return new Intl.NumberFormat('en-SD', {
@@ -458,13 +494,19 @@ export default function WalletReports() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary" />
-                Recent Transactions ({filteredTransactions.length})
+                Transactions ({totalCount})
               </CardTitle>
               <CardDescription>
-                Latest wallet transactions across all users
+                All wallet transactions across all users — page {currentPage} of {totalPages}
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {txLoading && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading transactions...</span>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -478,7 +520,7 @@ export default function WalletReports() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTransactions.length === 0 ? (
+                    {filteredTransactions.length === 0 && !txLoading ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           No transactions found
@@ -486,7 +528,7 @@ export default function WalletReports() {
                       </TableRow>
                     ) : (
                       <>
-                        {filteredTransactions.slice(0, 50).map((tx) => {
+                        {filteredTransactions.map((tx) => {
                           const userName = walletRows.find(w => w.user_id === tx.user_id)?.owner_name || 'Unknown';
                           const siteName = tx.mmp_site_entries?.site_name || '';
                           return (
@@ -516,37 +558,83 @@ export default function WalletReports() {
                             </TableRow>
                           );
                         })}
-                        {/* Totals */}
-                        <TableRow className="bg-green-500/10 font-semibold border-t-2">
-                          <TableCell colSpan={5} className="text-right text-green-700 dark:text-green-300">Total Earned:</TableCell>
-                          <TableCell className="text-right tabular-nums font-bold text-green-600 dark:text-green-400">
-                            +{formatCurrency(filteredTransactions.filter(t => Number(t.amount) > 0).reduce((s, t) => s + Number(t.amount), 0))}
-                          </TableCell>
-                        </TableRow>
-                        {filteredTransactions.some(t => Number(t.amount) < 0) && (
-                          <TableRow className="bg-red-500/10 font-semibold">
-                            <TableCell colSpan={5} className="text-right text-red-700 dark:text-red-300">Total Deducted:</TableCell>
-                            <TableCell className="text-right tabular-nums font-bold text-red-600 dark:text-red-400">
-                              {formatCurrency(filteredTransactions.filter(t => Number(t.amount) < 0).reduce((s, t) => s + Number(t.amount), 0))}
-                            </TableCell>
-                          </TableRow>
+                        {filteredTransactions.length > 0 && (
+                          <>
+                            <TableRow className="bg-green-500/10 font-semibold border-t-2">
+                              <TableCell colSpan={5} className="text-right text-green-700 dark:text-green-300">Page Earned:</TableCell>
+                              <TableCell className="text-right tabular-nums font-bold text-green-600 dark:text-green-400">
+                                +{formatCurrency(filteredTransactions.filter(t => Number(t.amount) > 0).reduce((s, t) => s + Number(t.amount), 0))}
+                              </TableCell>
+                            </TableRow>
+                            {filteredTransactions.some(t => Number(t.amount) < 0) && (
+                              <TableRow className="bg-red-500/10 font-semibold">
+                                <TableCell colSpan={5} className="text-right text-red-700 dark:text-red-300">Page Deducted:</TableCell>
+                                <TableCell className="text-right tabular-nums font-bold text-red-600 dark:text-red-400">
+                                  {formatCurrency(filteredTransactions.filter(t => Number(t.amount) < 0).reduce((s, t) => s + Number(t.amount), 0))}
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            <TableRow className="bg-blue-500/10 font-semibold">
+                              <TableCell colSpan={5} className="text-right text-blue-700 dark:text-blue-300">Page Net:</TableCell>
+                              <TableCell className="text-right tabular-nums font-bold text-blue-600 dark:text-blue-400 text-lg">
+                                {formatCurrency(filteredTransactions.reduce((s, t) => s + Number(t.amount), 0))}
+                              </TableCell>
+                            </TableRow>
+                          </>
                         )}
-                        <TableRow className="bg-blue-500/10 font-semibold">
-                          <TableCell colSpan={5} className="text-right text-blue-700 dark:text-blue-300">Net Total:</TableCell>
-                          <TableCell className="text-right tabular-nums font-bold text-blue-600 dark:text-blue-400 text-lg">
-                            {formatCurrency(filteredTransactions.reduce((s, t) => s + Number(t.amount), 0))}
-                          </TableCell>
-                        </TableRow>
                       </>
                     )}
                   </TableBody>
                 </Table>
               </div>
-              {filteredTransactions.length > 50 && (
-                <p className="text-sm text-muted-foreground text-center mt-4">
-                  Showing 50 of {filteredTransactions.length} transactions. Use Admin Wallets to view all transactions per user.
-                </p>
-              )}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t" data-testid="pagination-controls">
+                <div className="flex items-center gap-2" data-testid="pagination-page-size">
+                  <span className="text-sm text-muted-foreground">Rows per page:</span>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(val) => {
+                      setPageSize(Number(val));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-[80px]" data-testid="select-page-size">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="25" data-testid="option-page-size-25">25</SelectItem>
+                      <SelectItem value="50" data-testid="option-page-size-50">50</SelectItem>
+                      <SelectItem value="100" data-testid="option-page-size-100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground" data-testid="text-page-indicator">
+                    Page {currentPage} of {totalPages} ({totalCount} total)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1 || txLoading}
+                    data-testid="button-previous-page"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages || txLoading}
+                    data-testid="button-next-page"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

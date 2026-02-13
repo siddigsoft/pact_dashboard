@@ -17,7 +17,9 @@ import {
   Download,
   Search,
   ChevronLeft,
-  CalendarCheck
+  CalendarCheck,
+  Sparkles,
+  Zap
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +41,8 @@ interface OpCostRow {
   reconciled_amount_cents: number | null;
   created_at: string;
 }
+
+type MatchConfidence = 'high' | 'medium' | 'low' | null;
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -69,6 +73,8 @@ const ReconciliationDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
+  const [matchResults, setMatchResults] = useState<Map<string, MatchConfidence>>(new Map());
+  const [autoMatchRunning, setAutoMatchRunning] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -265,6 +271,145 @@ const ReconciliationDashboard = () => {
     }
   };
 
+  const runAutoMatch = () => {
+    setAutoMatchRunning(true);
+    const reconciledItems = submissions.filter(s => s.reconciled_at);
+    const newMatchResults = new Map<string, MatchConfidence>();
+
+    for (const pending of pendingItems) {
+      let bestConfidence: MatchConfidence = null;
+
+      for (const reconciled of reconciledItems) {
+        const reconciledAmount = reconciled.reconciled_amount_cents || reconciled.amount_cents;
+        const exactAmount = pending.amount_cents === reconciledAmount;
+        const approxAmount = Math.abs(pending.amount_cents - reconciledAmount) / reconciledAmount <= 0.05;
+        const sameProject = pending.project_id && reconciled.project_id && pending.project_id === reconciled.project_id;
+        let sameWeek = false;
+        if (pending.paid_at && reconciled.paid_at) {
+          try {
+            const paidDate = parseISO(pending.paid_at);
+            const reconDate = parseISO(reconciled.paid_at);
+            if (isValid(paidDate) && isValid(reconDate)) {
+              sameWeek = Math.abs(differenceInDays(paidDate, reconDate)) <= 7;
+            }
+          } catch {}
+        }
+
+        if (exactAmount && sameProject && sameWeek) {
+          bestConfidence = 'high';
+          break;
+        } else if (exactAmount && sameProject && bestConfidence !== 'high') {
+          bestConfidence = 'medium';
+        } else if (approxAmount && !bestConfidence) {
+          bestConfidence = 'low';
+        }
+      }
+
+      if (!bestConfidence) {
+        for (const other of pendingItems) {
+          if (other.id === pending.id) continue;
+          const sameProject = pending.project_id && other.project_id && pending.project_id === other.project_id;
+          const sameCategory = pending.expense_category === other.expense_category;
+          const exactAmount = pending.amount_cents === other.amount_cents;
+          const approxAmount = other.amount_cents > 0 && Math.abs(pending.amount_cents - other.amount_cents) / other.amount_cents <= 0.05;
+          let sameWeek = false;
+          if (pending.paid_at && other.paid_at) {
+            try {
+              const d1 = parseISO(pending.paid_at);
+              const d2 = parseISO(other.paid_at);
+              if (isValid(d1) && isValid(d2)) {
+                sameWeek = Math.abs(differenceInDays(d1, d2)) <= 7;
+              }
+            } catch {}
+          }
+
+          if (exactAmount && sameProject && sameWeek) {
+            bestConfidence = 'high';
+            break;
+          } else if (exactAmount && (sameProject || sameCategory) && bestConfidence !== 'high') {
+            bestConfidence = 'medium';
+          } else if (approxAmount && !bestConfidence) {
+            bestConfidence = 'low';
+          }
+        }
+      }
+
+      if (bestConfidence) {
+        newMatchResults.set(pending.id, bestConfidence);
+      }
+    }
+
+    setMatchResults(newMatchResults);
+    setAutoMatchRunning(false);
+
+    const highCount = Array.from(newMatchResults.values()).filter(v => v === 'high').length;
+    const medCount = Array.from(newMatchResults.values()).filter(v => v === 'medium').length;
+    const lowCount = Array.from(newMatchResults.values()).filter(v => v === 'low').length;
+
+    toast({
+      title: 'Auto-Match Complete',
+      description: `Found ${highCount} high, ${medCount} medium, and ${lowCount} low confidence matches.`,
+    });
+  };
+
+  const handleReconcileAllMatched = async () => {
+    const highConfidenceIds = filteredPending
+      .filter(item => matchResults.get(item.id) === 'high')
+      .map(item => item);
+    if (highConfidenceIds.length === 0) {
+      toast({ title: 'No matches', description: 'No high-confidence matches to reconcile.', variant: 'destructive' });
+      return;
+    }
+    const allIds = new Set(highConfidenceIds.map(i => i.id));
+    setReconcilingIds(allIds);
+    try {
+      const now = new Date().toISOString();
+      const promises = highConfidenceIds.map(item =>
+        supabase
+          .from('operational_cost_submissions')
+          .update({
+            reconciled_at: now,
+            reconciled_amount_cents: item.amount_cents,
+          })
+          .eq('id', item.id)
+      );
+      const results = await Promise.all(promises);
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) {
+        toast({ title: 'Partial Success', description: `${highConfidenceIds.length - errors.length} of ${highConfidenceIds.length} matched items reconciled.`, variant: 'destructive' });
+      } else {
+        toast({ title: 'Matched Reconciliation Complete', description: `${highConfidenceIds.length} high-confidence items reconciled successfully.` });
+      }
+      setMatchResults(new Map());
+      setSelectedIds(new Set());
+      await fetchData();
+    } catch (err) {
+      console.error('Matched reconcile failed:', err);
+      toast({ title: 'Error', description: 'Matched reconciliation failed.', variant: 'destructive' });
+    } finally {
+      setReconcilingIds(new Set());
+    }
+  };
+
+  const getConfidenceBadge = (confidence: MatchConfidence) => {
+    if (!confidence) return null;
+    const variants: Record<string, { className: string; label: string }> = {
+      high: { className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', label: 'High' },
+      medium: { className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200', label: 'Medium' },
+      low: { className: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200', label: 'Low' },
+    };
+    const v = variants[confidence];
+    return (
+      <Badge variant="secondary" className={v.className}>
+        {v.label}
+      </Badge>
+    );
+  };
+
+  const highMatchCount = useMemo(() => {
+    return filteredPending.filter(item => matchResults.get(item.id) === 'high').length;
+  }, [filteredPending, matchResults]);
+
   const handleExport = () => {
     const data = filteredPending.map(item => ({
       'Ref #': item.id.slice(0, 8).toUpperCase(),
@@ -386,6 +531,27 @@ const ReconciliationDashboard = () => {
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-lg">Pending Reconciliation</CardTitle>
           <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={runAutoMatch}
+              disabled={autoMatchRunning || pendingItems.length === 0}
+              data-testid="button-auto-match"
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              {autoMatchRunning ? 'Matching...' : 'Auto-Match'}
+            </Button>
+            {highMatchCount > 0 && (
+              <Button
+                size="sm"
+                onClick={handleReconcileAllMatched}
+                disabled={reconcilingIds.size > 0}
+                data-testid="button-reconcile-all-matched"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Reconcile All Matched ({highMatchCount})
+              </Button>
+            )}
             {selectedIds.size > 0 && (
               <Button
                 size="sm"
@@ -453,13 +619,14 @@ const ReconciliationDashboard = () => {
                   <TableHead>Paid Date</TableHead>
                   <TableHead>Days Since Payment</TableHead>
                   <TableHead>Project</TableHead>
+                  <TableHead>Match</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredPending.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8" data-testid="text-no-pending">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8" data-testid="text-no-pending">
                       No pending reconciliation items found.
                     </TableCell>
                   </TableRow>
@@ -501,6 +668,9 @@ const ReconciliationDashboard = () => {
                         </TableCell>
                         <TableCell className="text-xs" data-testid={`text-project-${item.id}`}>
                           {item.project_id ? item.project_id.slice(0, 8) : 'General'}
+                        </TableCell>
+                        <TableCell data-testid={`badge-match-confidence-${item.id}`}>
+                          {getConfidenceBadge(matchResults.get(item.id) || null)}
                         </TableCell>
                         <TableCell>
                           <Button
