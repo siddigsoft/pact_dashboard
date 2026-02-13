@@ -78,6 +78,7 @@ import { SignatureConfirmationModal } from '@/components/signatures/SignatureCon
 import { supabase } from '@/integrations/supabase/client';
 import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdf, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { EmailCCInput } from '@/components/EmailCCInput';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Wallet } from 'lucide-react';
 
@@ -128,11 +129,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     isBulk: boolean;
     availableRecipients: Array<{ id: string; email: string; name: string; role: string }>;
     selectedRecipientIds: string[];
+    ccEmails: string[];
     loading: boolean;
     sending: boolean;
     bulkGroupBy: string;
     bulkGroupValue: string;
-  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
+  }>({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
   const [markPaidProcessing, setMarkPaidProcessing] = useState(false);
   const [bulkPaymentIds, setBulkPaymentIds] = useState<Set<string>>(new Set());
 
@@ -645,7 +647,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   };
 
   const openBulkPaymentRequestDialog = async (reqs: DownPaymentRequest[], groupBy: string, groupValue: string) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
+    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: null, bulkRequests: reqs, isBulk: true, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: groupBy, bulkGroupValue: groupValue }));
     try {
       const recipients = await loadFinanceRecipients();
       setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map(r => r.id), loading: false }));
@@ -656,7 +658,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   };
 
   const openPaymentRequestDialog = async (req: DownPaymentRequest) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, bulkRequests: [], isBulk: false, loading: true, selectedRecipientIds: [], availableRecipients: [], bulkGroupBy: '', bulkGroupValue: '' }));
+    setPaymentRequestDialog(prev => ({ ...prev, open: true, request: req, bulkRequests: [], isBulk: false, loading: true, selectedRecipientIds: [], availableRecipients: [], ccEmails: [], bulkGroupBy: '', bulkGroupValue: '' }));
     try {
       const { data: financeUsers } = await supabase
         .from('profiles')
@@ -681,7 +683,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   };
 
   const handleSendPaymentRequest = async () => {
-    const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, bulkGroupBy, bulkGroupValue } = paymentRequestDialog;
+    const { request: req, bulkRequests, isBulk, selectedRecipientIds, availableRecipients, ccEmails, bulkGroupBy, bulkGroupValue } = paymentRequestDialog;
     if (!currentUser?.id || selectedRecipientIds.length === 0) return;
     if (!isBulk && !req) return;
 
@@ -728,7 +730,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           'SDG',
           `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.`,
           '/down-payment-approval',
-          summaryPdf
+          summaryPdf,
+          undefined,
+          ccEmails.length > 0 ? ccEmails : undefined
         );
 
         if (result.success) {
@@ -754,7 +758,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           selectedRecipients, approverName, approverEmail, requesterName,
           `Transport Advance - ${req.siteName}`, requestId, 'Transportation Advance',
           req.approvedAmount || req.requestedAmount, 'advance', req.projectName || 'N/A',
-          'SDG', '', '/down-payment-approval', pdfAttachment
+          'SDG', '', '/down-payment-approval', pdfAttachment,
+          undefined, ccEmails.length > 0 ? ccEmails : undefined
         );
 
         if (result.success) {
@@ -769,7 +774,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     } catch {
       toast({ title: "Error / خطأ", description: "Failed to send payment request. / فشل في إرسال طلب الدفع.", variant: "destructive" });
     } finally {
-      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
+      setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' });
     }
   };
 
@@ -2248,19 +2253,29 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         />
       )}
 
-      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' }); }}>
+      <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => { if (!open) setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' }); }}>
         <DialogContent className={paymentRequestDialog.isBulk ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
           <DialogHeader>
             <DialogTitle>{paymentRequestDialog.isBulk ? 'Bulk Payment Request / طلب دفع جماعي' : 'Request Payment / طلب دفع'}</DialogTitle>
             <DialogDescription>
               {paymentRequestDialog.isBulk
-                ? `Send bulk payment request for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team. PDF certificates will be attached.`
+                ? `Send one email with a summary PDF for ${paymentRequestDialog.bulkRequests.length} approved advance(s) to finance team.`
                 : 'Send payment request email to finance team with the approval certificate attached.'}
             </DialogDescription>
+            {paymentRequestDialog.isBulk && paymentRequestDialog.bulkRequests.length > 0 && (
+              <div className="mt-2 flex items-center gap-3 text-sm">
+                <Badge variant="secondary" className="font-semibold">{paymentRequestDialog.bulkRequests.length} request(s)</Badge>
+                <span className="font-semibold text-green-600 dark:text-green-400">SDG {paymentRequestDialog.bulkRequests.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}</span>
+                {paymentRequestDialog.bulkGroupBy && (
+                  <Badge variant="outline" className="text-xs">{paymentRequestDialog.bulkGroupBy}: {paymentRequestDialog.bulkGroupValue}</Badge>
+                )}
+              </div>
+            )}
           </DialogHeader>
           {paymentRequestDialog.loading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center justify-center py-8 gap-3">
               <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Loading finance recipients... / جاري تحميل المستلمين...</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -2324,7 +2339,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <FileText className="h-3.5 w-3.5" />
-                    <span>Individual PDF approval certificates will be generated and attached to the email.</span>
+                    <span>A single summary PDF with all requests will be generated and attached to the email.</span>
                   </div>
                 </div>
               )}
@@ -2409,12 +2424,19 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                   </div>
                 </ScrollArea>
               </div>
+
+              <div className="border-t pt-3">
+                <EmailCCInput
+                  ccEmails={paymentRequestDialog.ccEmails}
+                  onChange={(emails) => setPaymentRequestDialog(prev => ({ ...prev, ccEmails: emails }))}
+                />
+              </div>
             </div>
           )}
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' })}
+              onClick={() => setPaymentRequestDialog({ open: false, request: null, bulkRequests: [], isBulk: false, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false, bulkGroupBy: '', bulkGroupValue: '' })}
               data-testid="button-cancel-payment-request"
             >
               Cancel
