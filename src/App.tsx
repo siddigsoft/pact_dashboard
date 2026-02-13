@@ -105,6 +105,7 @@ const MobileHelpArticles = lazy(() => import('./pages/MobileHelpArticles'));
 const MobileSignatureAdmin = lazy(() => import('./pages/MobileSignatureAdmin'));
 const MobileCallScheduling = lazy(() => import('./pages/MobileCallScheduling'));
 const MobileDocumentSync = lazy(() => import('./pages/MobileDocumentSync'));
+const ReconciliationDashboard = lazy(() => import('./pages/ReconciliationDashboard'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -291,6 +292,7 @@ const AppRoutes = () => {
         <Route path="/mobile-signatures" element={<MobileSignatureAdmin />} />
         <Route path="/mobile-call-scheduling" element={<MobileCallScheduling />} />
         <Route path="/mobile-document-sync" element={<MobileDocumentSync />} />
+        <Route path="/reconciliation-dashboard" element={<ReconciliationDashboard />} />
       </Route>
 
       {/* Redirects */}
