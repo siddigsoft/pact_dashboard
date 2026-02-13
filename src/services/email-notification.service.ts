@@ -1516,7 +1516,8 @@ PACT Command Center | مركز قيادة باكت`;
     approvalNotes: string = '',
     costSubmissionUrl: string = '/cost-submission',
     pdfAttachment?: { base64: string; filename: string },
-    additionalAttachments?: Array<{ base64: string; filename: string }>
+    additionalAttachments?: Array<{ base64: string; filename: string }>,
+    extraCcEmails?: string[]
   ): Promise<EmailNotificationResult> {
     try {
       if (!recipients || recipients.length === 0) {
@@ -1533,6 +1534,14 @@ PACT Command Center | مركز قيادة باكت`;
       if (additionalAttachments?.length) {
         additionalAttachments.forEach(att => {
           allAttachments.push({ filename: att.filename, content: att.base64, type: 'application/pdf' });
+        });
+      }
+
+      const ccList: string[] = [];
+      if (approverEmail) ccList.push(approverEmail);
+      if (extraCcEmails?.length) {
+        extraCcEmails.forEach(e => {
+          if (e && !ccList.includes(e)) ccList.push(e);
         });
       }
 
@@ -1557,7 +1566,7 @@ PACT Command Center | مركز قيادة باكت`;
           ...(fundingType === 'advance' ? [{ label: 'Reconciliation / التسوية', value: 'REQUIRED - Must reconcile after activity completion / مطلوبة - يجب التسوية بعد اكتمال النشاط' }] : []),
           ...(approvalNotes ? [{ label: 'Approval Notes / ملاحظات', value: approvalNotes }] : []),
         ],
-        cc: approverEmail ? [approverEmail] : [],
+        cc: ccList,
         attachments: allAttachments.length > 0 ? allAttachments : undefined,
       };
 

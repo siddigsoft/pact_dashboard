@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { EmailCCInput } from '@/components/EmailCCInput';
 import { generateFinancialStatementPdf, type StatementRow, type StatementConfig } from '@/utils/financialStatementPdf';
 import { generateFinancialStatementExcel } from '@/utils/financialStatementExcel';
 
@@ -179,9 +180,10 @@ const CostSubmission = () => {
     submission: OperationalCostSubmission | null;
     availableRecipients: Array<{ id: string; email: string; name: string; role: string }>;
     selectedRecipientIds: string[];
+    ccEmails: string[];
     loading: boolean;
     sending: boolean;
-  }>({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
+  }>({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
 
   const [editingSubmission, setEditingSubmission] = useState<OperationalCostSubmission | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<OperationalCostSubmission | null>(null);
@@ -823,7 +825,7 @@ const CostSubmission = () => {
   };
 
   const openPaymentRequestDialog = async (oc: OperationalCostSubmission) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: true, selectedRecipientIds: [], availableRecipients: [] }));
+    setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
     try {
       const { data: financeUsers } = await supabase
         .from('profiles')
@@ -866,7 +868,7 @@ const CostSubmission = () => {
   };
 
   const handleSendPaymentRequest = async () => {
-    const { submission: oc, selectedRecipientIds, availableRecipients } = paymentRequestDialog;
+    const { submission: oc, selectedRecipientIds, availableRecipients, ccEmails } = paymentRequestDialog;
     if (!oc || !currentUser?.id || selectedRecipientIds.length === 0) return;
 
     setPaymentRequestDialog(prev => ({ ...prev, sending: true }));
@@ -972,7 +974,9 @@ const CostSubmission = () => {
         (oc as any).currency || 'SDG',
         '',
         '/cost-submission',
-        pdfAttachment
+        pdfAttachment,
+        undefined,
+        ccEmails.length > 0 ? ccEmails : undefined
       );
 
       if (result.success) {
@@ -994,7 +998,7 @@ const CostSubmission = () => {
         variant: "destructive",
       });
     } finally {
-      setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
+      setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
     }
   };
 
@@ -3046,7 +3050,7 @@ const CostSubmission = () => {
 
       <Dialog open={paymentRequestDialog.open} onOpenChange={(open) => {
         if (!open && !paymentRequestDialog.sending) {
-          setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false });
+          setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false });
         }
       }}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
@@ -3105,10 +3109,19 @@ const CostSubmission = () => {
             </div>
           )}
 
+          {!paymentRequestDialog.loading && paymentRequestDialog.availableRecipients.length > 0 && (
+            <div className="border-t pt-3">
+              <EmailCCInput
+                ccEmails={paymentRequestDialog.ccEmails}
+                onChange={(emails) => setPaymentRequestDialog(prev => ({ ...prev, ccEmails: emails }))}
+              />
+            </div>
+          )}
+
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              onClick={() => setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], loading: false, sending: false })}
+              onClick={() => setPaymentRequestDialog({ open: false, submission: null, availableRecipients: [], selectedRecipientIds: [], ccEmails: [], loading: false, sending: false })}
               disabled={paymentRequestDialog.sending}
               data-testid="button-payment-request-cancel"
             >
