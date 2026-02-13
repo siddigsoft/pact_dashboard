@@ -76,7 +76,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { SignatureConfirmationModal } from '@/components/signatures/SignatureConfirmationModal';
 import { supabase } from '@/integrations/supabase/client';
-import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdf } from '@/utils/transportAdvanceCertificatePdf';
+import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdf, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { EmailNotificationService } from '@/services/email-notification.service';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Wallet } from 'lucide-react';
@@ -703,17 +703,16 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
         }))].join(', ');
         const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : '';
 
-        const pdfAttachments: Array<{ base64: string; filename: string }> = [];
-        for (const bReq of bulkRequests) {
-          try {
-            const sig = await getSignatureImageData(bReq);
-            const pdf = await generateTransportAdvanceCertificateBase64(buildCertData(bReq, sig));
-            if (pdf) pdfAttachments.push(pdf);
-          } catch { /* skip individual PDF errors */ }
-        }
-
-        const firstPdf = pdfAttachments.length > 0 ? pdfAttachments[0] : undefined;
-        const additionalPdfs = pdfAttachments.length > 1 ? pdfAttachments.slice(1) : undefined;
+        let summaryPdf: { base64: string; filename: string } | undefined;
+        try {
+          const certDataList = await Promise.all(
+            bulkRequests.map(async (bReq) => {
+              const sig = await getSignatureImageData(bReq);
+              return buildCertData(bReq, sig);
+            })
+          );
+          summaryPdf = await generateBulkPaymentPdfBase64(certDataList, groupLabel || 'All Approved');
+        } catch { /* continue without PDF */ }
 
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients,
@@ -729,14 +728,13 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           'SDG',
           `Bulk payment request for ${bulkRequests.length} approved advances${groupLabel ? ` grouped by ${groupLabel}` : ''}. Total: SDG ${totalAmount.toLocaleString()}. Individual requests: ${bulkRequests.map(r => `${r.siteName} (SDG ${(r.approvedAmount || r.requestedAmount).toLocaleString()})`).join('; ')}.\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.`,
           '/down-payment-approval',
-          firstPdf,
-          additionalPdfs
+          summaryPdf
         );
 
         if (result.success) {
           toast({
             title: "Bulk Payment Request Sent / تم إرسال طلبات الدفع الجماعية",
-            description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with ${pdfAttachments.length} PDF(s) attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين) مع ${pdfAttachments.length} مرفق(ات).`,
+            description: `${bulkRequests.length} requests sent to ${selectedRecipients.length} recipient(s) with summary PDF attached. / تم إرسال ${bulkRequests.length} طلب إلى ${selectedRecipients.length} مستلم(ين) مع ملف PDF ملخص مرفق.`,
           });
         } else {
           toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });

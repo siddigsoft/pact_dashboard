@@ -53,7 +53,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PageInfoBanner } from '@/components/financial/PageInfoBanner';
 import { supabase } from '@/integrations/supabase/client';
-import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64 } from '@/utils/transportAdvanceCertificatePdf';
+import { generateTransportAdvanceCertificatePdf, generateTransportAdvanceCertificateBase64, generateBulkPaymentPdfBase64 } from '@/utils/transportAdvanceCertificatePdf';
 import { useToast } from '@/hooks/use-toast';
 import type { DownPaymentRequest } from '@/types/down-payment';
 import { EmailNotificationService } from '@/services/email-notification.service';
@@ -409,17 +409,16 @@ function AdvanceRequestsReportContent() {
 
         const groupLabel = bulkGroupBy ? `${bulkGroupBy}: ${bulkGroupValue}` : 'All Approved';
 
-        const pdfAttachments: Array<{ base64: string; filename: string }> = [];
-        for (const bReq of bulkRequests) {
-          try {
-            const sig = await getSignatureAndCertData(bReq);
-            const pdf = await generateTransportAdvanceCertificateBase64(buildCertData(bReq, sig));
-            if (pdf) pdfAttachments.push(pdf);
-          } catch { /* skip individual PDF errors */ }
-        }
-
-        const firstPdf = pdfAttachments.length > 0 ? pdfAttachments[0] : undefined;
-        const additionalPdfs = pdfAttachments.length > 1 ? pdfAttachments.slice(1) : undefined;
+        let summaryPdf: { base64: string; filename: string } | undefined;
+        try {
+          const certDataList = await Promise.all(
+            bulkRequests.map(async (bReq) => {
+              const sig = await getSignatureAndCertData(bReq);
+              return buildCertData(bReq, sig);
+            })
+          );
+          summaryPdf = await generateBulkPaymentPdfBase64(certDataList, groupLabel);
+        } catch { /* continue without PDF */ }
 
         const result = await EmailNotificationService.sendPaymentRequestToFinanceWithRecipients(
           selectedRecipients, approverName, approverEmail, `${bulkRequests.length} staff members`,
@@ -427,12 +426,12 @@ function AdvanceRequestsReportContent() {
           `BULK-${Date.now().toString(36).toUpperCase()}`, 'Transportation Advance (Bulk)',
           totalAmount, 'advance', bulkRequests[0]?.projectName || 'N/A', 'SDG',
           `\n\n--- BULK REQUEST DETAILS ---\nGroup: ${groupLabel}\nTotal Requests: ${bulkRequests.length}\nTotal Amount: SDG ${totalAmount.toLocaleString()}\n\n${requestDetails}\n\nRECONCILIATION NOTICE: All recipients must submit receipts and return any unused funds within 5 working days.\nملاحظة تسوية: يجب على جميع المستلمين تقديم الإيصالات وإرجاع أي أموال غير مستخدمة خلال 5 أيام عمل.`,
-          '/advance-requests-report', firstPdf, additionalPdfs,
+          '/advance-requests-report', summaryPdf, undefined,
           ccEmails.length > 0 ? ccEmails : undefined
         );
 
         if (result.success) {
-          toast({ title: "Bulk Payment Request Sent / تم إرسال طلب الدفع الجماعي", description: `Email sent to ${selectedRecipients.length} recipient(s) for ${bulkRequests.length} advance(s) with ${pdfAttachments.length} PDF(s). / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين) لـ ${bulkRequests.length} سلفة مع ${pdfAttachments.length} مرفق(ات).` });
+          toast({ title: "Bulk Payment Request Sent / تم إرسال طلب الدفع الجماعي", description: `Email sent to ${selectedRecipients.length} recipient(s) for ${bulkRequests.length} advance(s) with summary PDF attached. / تم إرسال البريد إلى ${selectedRecipients.length} مستلم(ين) لـ ${bulkRequests.length} سلفة مع ملف PDF ملخص مرفق.` });
         } else {
           toast({ title: "Email Failed / فشل الإرسال", description: result.error || "Could not send. / تعذر الإرسال.", variant: "destructive" });
         }
