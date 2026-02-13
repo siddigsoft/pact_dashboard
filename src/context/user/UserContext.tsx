@@ -924,7 +924,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const registerUser = async (userData: Partial<User>): Promise<boolean> => {
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
+      const emailToCheck = (userData.email || '').trim().toLowerCase();
+
+      const { data: emailExists } = await supabase.rpc('check_email_exists', {
+        check_email: emailToCheck
+      });
+
+      if (emailExists === true) {
+        toast({
+          title: "Email already registered",
+          description: "This email is already in use. Please sign in or reset your password.",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: userData.email || '',
         password: userData.password || '',
         options: {
@@ -946,6 +961,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toast({
           title: "Registration failed",
           description: "There was a problem creating your account. Please try again.",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (signUpData?.user?.identities && signUpData.user.identities.length === 0) {
+        toast({
+          title: "Email already registered",
+          description: "An account with this email already exists. Please sign in or reset your password.",
           variant: "destructive",
         });
         return false;
