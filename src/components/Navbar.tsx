@@ -20,6 +20,7 @@ import NavBrand from './navbar/NavBrand';
 import { GlobalSearch } from './navbar/GlobalSearch';
 import { RealtimeActivityIndicator } from '@/components/realtime';
 import { useFocusReconnect } from '@/hooks/useFocusReconnect';
+import { CommandPalette } from '@/components/CommandPalette';
 
 const featureList = [
         { name: 'Dashboard', path: '/dashboard' },
@@ -95,6 +96,8 @@ const Navbar = () => {
                         </div>
 
                         <div className="ml-auto flex items-center gap-1 sm:gap-2 flex-wrap sm:flex-nowrap justify-end">
+                                <CommandPalette />
+
                                 {/* Realtime Status */}
                                 <RealtimeActivityIndicator 
                                         variant="pulse" 
