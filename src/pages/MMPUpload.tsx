@@ -568,7 +568,6 @@ const MMPUpload = () => {
     
     try {
       const fileToUpload: File = previewData.length > 0 ? buildCsvFromPreview() : data.file;
-      console.log('Starting MMP upload process...');
       const result: {
         success: boolean;
         id?: string;
@@ -593,11 +592,9 @@ const MMPUpload = () => {
         setUploadTimeout(null);
       }
       
-      console.log('Upload result:', result);
-      
       if (result && result.success) {
-        const mockMmpId = result.id || `mmp-${Date.now().toString(36)}`;
-        setUploadedMmpId(mockMmpId);
+        const mmpId = result.id || `mmp-${Date.now().toString(36)}`;
+        setUploadedMmpId(mmpId);
         setUploadSuccess(true);
         
         toast({

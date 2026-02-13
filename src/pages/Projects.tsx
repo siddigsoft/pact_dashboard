@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, FolderKanban, CheckCircle2, Clock, BarChart3 } from 'lucide-react';
 
@@ -10,18 +10,7 @@ import { useProjectContext } from '@/context/project/ProjectContext';
 const ProjectsPage = () => {
   const navigate = useNavigate();
   
-  // Debug: Log when component mounts
-  useEffect(() => {
-    console.log('[ProjectsPage] Component mounted');
-  }, []);
-  
   const projectContext = useProjectContext();
-  console.log('[ProjectsPage] Context received:', { 
-    hasProjects: !!projectContext?.projects, 
-    projectCount: projectContext?.projects?.length,
-    loading: projectContext?.loading 
-  });
-  
   const { projects, loading } = projectContext;
 
   const handleViewProject = (projectId: string) => {

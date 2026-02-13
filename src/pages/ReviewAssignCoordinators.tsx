@@ -73,7 +73,6 @@ const ReviewAssignCoordinators: React.FC = () => {
         // Step 1: Get MMP file
         const mmp = getMmpById(id);
         if (!mmp) {
-          console.log('[ReviewAssignCoordinators] MMP not found in context, might still be loading');
           toast({
             title: "MMP Not Found",
             description: "The requested MMP file could not be found.",
@@ -89,11 +88,9 @@ const ReviewAssignCoordinators: React.FC = () => {
         // Step 1.5: Fetch site entries on demand (they're not loaded with initial MMP list for performance)
         let mmpWithEntries = mmp;
         if (!mmp.siteEntries || mmp.siteEntries.length === 0) {
-          console.log('[ReviewAssignCoordinators] Site entries not loaded, fetching on demand...');
           try {
             const entries = await fetchSiteEntriesForMMP(id);
             mmpWithEntries = { ...mmp, siteEntries: entries };
-            console.log(`[ReviewAssignCoordinators] Loaded ${entries.length} site entries`);
           } catch (err) {
             console.error('Failed to fetch site entries:', err);
             toast({
@@ -133,7 +130,6 @@ const ReviewAssignCoordinators: React.FC = () => {
           
           setForwardedSiteIds(forwarded);
           setStatePermitSiteIds(statePermitIds);
-          console.log(`Loaded ${forwarded.size} forwarded site(s) out of ${siteEntries?.length || 0} total`);
         } catch (err) {
           console.error('Failed to load forwarded sites:', err);
           toast({
@@ -160,8 +156,6 @@ const ReviewAssignCoordinators: React.FC = () => {
           setHubStates(hubStatesData);
           setStates(statesData);
           setLocalities(localitiesData);
-          
-          console.log(`Loaded ${hubsData.length} hubs, ${hubStatesData.length} hub-state relationships, ${statesData.length} states, ${localitiesData.length} localities`);
         } catch (err) {
           console.error('Failed to load location data:', err);
           toast({
@@ -512,7 +506,6 @@ const ReviewAssignCoordinators: React.FC = () => {
           // Get forwarder name
           const forwarderName = currentUser?.fullName || currentUser?.name || currentUser?.email || 'Field Operations Manager';
           
-          console.log(`[EMAIL] Sending sites forwarded email to coordinator: ${coordinator.email}`);
           const emailResult = await EmailNotificationService.sendSitesForwardedToCoordinator(
             coordinator.email,
             coordinator.fullName || coordinator.name || 'Coordinator',
@@ -523,9 +516,7 @@ const ReviewAssignCoordinators: React.FC = () => {
             mmpId
           );
           
-          if (emailResult.success) {
-            console.log(`[EMAIL] Successfully sent to coordinator: ${coordinator.email}`);
-          } else {
+          if (!emailResult.success) {
             console.error(`[EMAIL] Failed to send to coordinator ${coordinator.email}:`, emailResult.error);
           }
         }
@@ -563,7 +554,6 @@ const ReviewAssignCoordinators: React.FC = () => {
             const messageEn = `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${coordinatorName} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}. Location: ${locationInfo}`;
             const messageAr = `${mmpFile?.name || 'خطة المراقبة الشهرية'}: تم تعيين ${siteIds.length} موقع(ات) إلى ${coordinatorName} للتحقق من CP${attachStatePermitMap[groupKey] ? ' (تم إرفاق تصريح الولاية)' : ''}. الموقع: ${locationInfo}`;
             
-            console.log(`[EMAIL] Sending sites assigned notification email to supervisor: ${supervisor.email}`);
             const emailResult = await EmailNotificationService.sendNotification(
               supervisor.email,
               supervisor.fullName || supervisor.name || 'Supervisor',
@@ -586,9 +576,7 @@ const ReviewAssignCoordinators: React.FC = () => {
               }
             );
             
-            if (emailResult.success) {
-              console.log(`[EMAIL] Successfully sent to supervisor: ${supervisor.email}`);
-            } else {
+            if (!emailResult.success) {
               console.error(`[EMAIL] Failed to send to supervisor ${supervisor.email}:`, emailResult.error);
             }
           }
