@@ -433,6 +433,7 @@ const MMP = () => {
   const [dispatchedSiteEntries, setDispatchedSiteEntries] = useState<any[]>([]);
   const [loadingDispatched, setLoadingDispatched] = useState(false);
   const [dispatchedCount, setDispatchedCount] = useState(0);
+  const [adminRefreshTrigger, setAdminRefreshTrigger] = useState(0);
   const [dispatchedStateFilter, setDispatchedStateFilter] = useState<string>('all');
   const [dispatchedLocalityFilter, setDispatchedLocalityFilter] = useState<string>('all');
   const [acceptedSiteEntries, setAcceptedSiteEntries] = useState<any[]>([]);
@@ -1846,6 +1847,8 @@ const MMP = () => {
   const [enumeratorMySites, setEnumeratorMySites] = useState<any[]>([]);
   const [unsyncedCompletedVisits, setUnsyncedCompletedVisits] = useState<any[]>([]);
   const [viewerEnumeratorFee, setViewerEnumeratorFee] = useState<number>(0);
+  const [enumeratorRefreshTrigger, setEnumeratorRefreshTrigger] = useState(0);
+  const enumeratorDbLoadedRef = React.useRef(false);
 
   // Helper function to normalize role checking (handles both lowercase, proper case, and spaces)
   const hasRole = (rolesToCheck: string[]) => {
@@ -1951,8 +1954,8 @@ const MMP = () => {
 
         console.log(`📊 [MMP Direct Load] Found ${dispatchedSites?.length || 0} dispatched sites for "${collectorStateName}"`);
 
+        enumeratorDbLoadedRef.current = true;
         if (dispatchedSites && dispatchedSites.length > 0) {
-          // Format entries for display
           const formattedEntries = dispatchedSites.map(entry => ({
             ...entry,
             siteName: entry.site_name,
@@ -1966,7 +1969,6 @@ const MMP = () => {
           
           setEnumeratorSiteEntries(formattedEntries);
           
-          // Group by state-locality
           const grouped = formattedEntries.reduce((acc: Record<string, any[]>, entry: any) => {
             const state = entry.state || 'Unknown State';
             const locality = entry.locality || 'Unknown Locality';
@@ -1976,9 +1978,9 @@ const MMP = () => {
             return acc;
           }, {});
           setEnumeratorGroupedByStates(grouped);
-          console.log('[MMP Direct Load] Successfully loaded sites. Groups:', Object.keys(grouped).length);
         } else {
-          console.log('[MMP Direct Load] No dispatched sites found for this state');
+          setEnumeratorSiteEntries([]);
+          setEnumeratorGroupedByStates({});
         }
       } catch (error) {
         console.error('[MMP Direct Load] Failed:', error);
@@ -1987,8 +1989,9 @@ const MMP = () => {
       }
     };
 
+    enumeratorDbLoadedRef.current = false;
     loadDispatchedSitesForEnumerator();
-  }, [canClaimSites, currentUser?.id, currentUser?.stateId]);
+  }, [canClaimSites, currentUser?.id, currentUser?.stateId, enumeratorRefreshTrigger]);
 
   // Direct database load of MY SITES (accepted by current user)
   // This ensures "My Sites" tab shows data even if MMP context hasn't loaded site entries yet
@@ -2042,7 +2045,7 @@ const MMP = () => {
     };
 
     loadMySitesForEnumerator();
-  }, [canClaimSites, currentUser?.id]);
+  }, [canClaimSites, currentUser?.id, enumeratorRefreshTrigger]);
 
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isSupervisor || isCoordinator || isICT || isDataCollector;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
@@ -2053,9 +2056,6 @@ const MMP = () => {
   // Real-time subscription for site claims (Uber-like first-claim system)
   // When another enumerator claims a site, it will be removed from available sites in real-time
   const handleSiteClaimedRealtime = React.useCallback((siteId: string, claimedBy: string) => {
-    // Skip if we're the one who claimed it
-    if (claimedBy === currentUser?.id) return;
-    
     // Remove the claimed site from available sites immediately
     setEnumeratorSiteEntries(prev => prev.filter(s => s.id !== siteId));
     setEnumeratorGroupedByStates(prev => {
@@ -2066,11 +2066,24 @@ const MMP = () => {
       });
       return updated;
     });
+    // Trigger a full DB refresh for both dispatched and My Sites tabs
+    setEnumeratorRefreshTrigger(prev => prev + 1);
   }, [currentUser?.id]);
 
   useSiteClaimRealtime({
     onSiteClaimed: handleSiteClaimedRealtime,
-    enabled: canClaimSites
+    enabled: canClaimSites,
+    currentUserId: currentUser?.id
+  });
+
+  // Admin/FOM/Supervisor: listen for claim events to refresh dispatched/accepted tabs
+  useSiteClaimRealtime({
+    onSiteClaimed: () => {
+      setAdminRefreshTrigger(prev => prev + 1);
+    },
+    enabled: !canClaimSites && (isAdmin || isICT || isFOM || isSupervisor || isCoordinator),
+    channelName: 'admin_claim_updates',
+    suppressToast: true
   });
 
   // Set initial active tab based on role
@@ -2883,36 +2896,28 @@ const MMP = () => {
     return () => window.removeEventListener('online', handleOnline);
   }, [canClaimSites, currentUser?.id]);
 
-  // Set enumerator state from derived data
-  // IMPORTANT: Only update availableSites/groupedByStates if enumeratorData has results
-  // This prevents overwriting data from the direct database load above
   useEffect(() => {
-    // Only update available sites if enumeratorData has results
-    // (the direct DB load populates these if context data isn't ready)
-    if (enumeratorData.availableSites.length > 0) {
-      setEnumeratorSiteEntries(enumeratorData.availableSites);
-      setEnumeratorGroupedByStates(enumeratorData.groupedByStateLocality);
+    // If DB has already loaded fresh dispatched data, do NOT overwrite with stale context data.
+    // The direct DB query (loadDispatchedSitesForEnumerator) filters by actual DB status/accepted_by,
+    // while context data may still include claimed sites that haven't been refreshed.
+    if (!enumeratorDbLoadedRef.current) {
+      if (enumeratorData.availableSites.length > 0) {
+        setEnumeratorSiteEntries(enumeratorData.availableSites);
+        setEnumeratorGroupedByStates(enumeratorData.groupedByStateLocality);
+      }
     }
     setEnumeratorGroupedByLocality({});
     setEnumeratorSmartAssigned(enumeratorData.smartAssigned);
-    // CRITICAL: Do NOT overwrite enumeratorMySites if the direct DB query already loaded data.
-    // The direct query (loadMySitesForEnumerator) is more reliable for data collectors
-    // because it queries mmp_site_entries directly by accepted_by, whereas enumeratorData.mySites
-    // comes from the MMP context which may not include all sites claimed by the collector.
-    // Merge both sources, preferring DB-loaded rows (prev) over context-derived rows.
+    // Merge My Sites: DB-loaded rows take priority over context-derived rows
     setEnumeratorMySites(prev => {
       if (prev.length === 0 && enumeratorData.mySites.length === 0) return prev;
       const byId = new Map<string, any>();
-      // DB-loaded rows take priority (added first)
       prev.forEach(e => { if (e?.id) byId.set(String(e.id), e); });
-      // Context rows only added if not already present from DB
       enumeratorData.mySites.forEach((e: any) => { if (e?.id && !byId.has(String(e.id))) byId.set(String(e.id), e); });
       const merged = Array.from(byId.values());
-      // Skip update if nothing changed (same length and same ids)
       if (merged.length === prev.length && prev.every(e => byId.has(String(e.id)))) return prev;
       return merged;
     });
-    // Don't override loading state if we're in the middle of direct loading
   }, [enumeratorData]);
 
   // Load smart assigned site entries only when the tab is active
@@ -3081,7 +3086,7 @@ const MMP = () => {
     };
     
     loadDispatchedFromDB();
-  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry, currentUser?.id]);
+  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry, currentUser?.id, adminRefreshTrigger]);
 
   // Load accepted site entries directly from database for fresh data
   useEffect(() => {
@@ -3136,7 +3141,7 @@ const MMP = () => {
       };
 
       loadAcceptedFromDB();
-  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry]);
+  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry, adminRefreshTrigger]);
 
   // Load ongoing site entries only when the tab is active
   // Uses verifiedSiteEntries (only from verified MMPs) for consistency
@@ -3467,17 +3472,20 @@ const MMP = () => {
   // Use precomputed count for newSites badge
   const newSitesVerifiedCount = precomputedSubcategorySites.newSites.length;
 
-  // Derive verifiedTabSiteEntryCounts from precomputed data for badge display
   const verifiedTabSiteEntryCounts = useMemo(() => ({
     verified: precomputedSubcategorySites.newSites.length,
-    dispatched: precomputedSubcategorySites.dispatched.length,
-    accepted: precomputedSubcategorySites.accepted.length,
+    dispatched: dispatchedCount > 0 || dispatchedSiteEntries.length > 0 
+      ? (dispatchedCount || dispatchedSiteEntries.length) 
+      : precomputedSubcategorySites.dispatched.length,
+    accepted: acceptedCount > 0 || acceptedSiteEntries.length > 0
+      ? (acceptedCount || acceptedSiteEntries.length)
+      : precomputedSubcategorySites.accepted.length,
     smartAssigned: precomputedSubcategorySites.smartAssigned.length,
     ongoing: precomputedSubcategorySites.ongoing.length,
     completed: precomputedSubcategorySites.completed.length,
     rejected: precomputedSubcategorySites.rejected.length,
     approvedCosted: precomputedSubcategorySites.approvedCosted.length
-  }), [precomputedSubcategorySites]);
+  }), [precomputedSubcategorySites, dispatchedCount, dispatchedSiteEntries.length, acceptedCount, acceptedSiteEntries.length]);
 
   // Verified site rows per subcategory (all roles seeing Verified tab)
   // Uses precomputed data for consistency with badge counts
@@ -5033,6 +5041,7 @@ const MMP = () => {
                                 currentUserId={currentUser?.id}
                                 onSiteClaimed={() => {
                                   setEnumeratorSiteEntries(prev => prev.filter(s => !sites.find(site => site.id === s.id && s.accepted_by)));
+                                  setEnumeratorRefreshTrigger(prev => prev + 1);
                                 }}
                                 onUpdateSites={async (updatedSites) => {
                                   // Handle updates for enumerator sites
