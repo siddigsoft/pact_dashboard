@@ -378,22 +378,32 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
   // Filter site entries based on selection
   const filteredSiteEntries = useMemo(() => {
-    // 'open' dispatch shows all sites without filtering
+    const excludeAlreadyDispatchedOrClaimed = (entries: any[]) => {
+      return entries.filter((entry) => {
+        const status = String(entry.status || '').toLowerCase().replace(/[\s_-]/g, '');
+        const acceptedBy = entry.accepted_by || entry.acceptedBy;
+        if (acceptedBy && String(acceptedBy).trim() !== '') return false;
+        const excludedStatuses = ['dispatched', 'accepted', 'ongoing', 'completed', 'inprogress'];
+        if (excludedStatuses.some(s => status === s || status.startsWith(s))) return false;
+        return true;
+      });
+    };
+
     if (dispatchType === "open") {
-      return siteEntries;
+      return excludeAlreadyDispatchedOrClaimed(siteEntries);
     }
     if (dispatchType === "state" && selectedState) {
-      return siteEntries.filter((entry) => {
+      return excludeAlreadyDispatchedOrClaimed(siteEntries.filter((entry) => {
         const state = entry.state || entry.state_name;
         return state && state.trim() === selectedState;
-      });
+      }));
     } else if (dispatchType === "locality" && selectedLocality) {
-      return siteEntries.filter((entry) => {
+      return excludeAlreadyDispatchedOrClaimed(siteEntries.filter((entry) => {
         const locality = entry.locality || entry.locality_name;
         return locality && locality.trim() === selectedLocality;
-      });
+      }));
     }
-    return siteEntries;
+    return excludeAlreadyDispatchedOrClaimed(siteEntries);
   }, [siteEntries, dispatchType, selectedState, selectedLocality]);
 
   // Select all sites
