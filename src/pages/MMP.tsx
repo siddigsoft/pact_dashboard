@@ -3319,6 +3319,7 @@ const MMP = () => {
             rejectionReason: undefined,
             accepted_by: se.accepted_by,
             dispatched_by: se.dispatched_by,
+            dispatched_at: se.dispatched_at,
             verified_by: se.verified_by,
           } as SiteVisitRow;
           if (!filterFn || filterFn(row)) {
@@ -3366,11 +3367,13 @@ const MMP = () => {
     const categorizeRow = (row: SiteVisitRow): keyof typeof result | null => {
       const status = row.status?.toLowerCase() || '';
       const acceptedBy = (row as any).accepted_by;
+      const dispatchedAt = (row as any).dispatched_at;
       const ad = (row as any).additionalData || (row as any).additional_data || {};
       const assignedTo = ad.assigned_to || ad.smart_assigned_to || (row as any).assigned_to || (row as any).smart_assigned_to;
       
       // Check categories in order of specificity
-      if (status.includes('approved') && status.includes('costed')) {
+      // approvedCosted: only sites that haven't been dispatched or claimed yet
+      if (status.includes('approved') && status.includes('costed') && !acceptedBy && !dispatchedAt) {
         return 'approvedCosted';
       }
       if (status === 'completed') {
@@ -3441,6 +3444,7 @@ const MMP = () => {
             rejectionReason: undefined,
             accepted_by: se.accepted_by,
             dispatched_by: se.dispatched_by,
+            dispatched_at: se.dispatched_at,
             verified_by: se.verified_by,
           } as SiteVisitRow;
           
@@ -3484,8 +3488,10 @@ const MMP = () => {
     ongoing: precomputedSubcategorySites.ongoing.length,
     completed: precomputedSubcategorySites.completed.length,
     rejected: precomputedSubcategorySites.rejected.length,
-    approvedCosted: precomputedSubcategorySites.approvedCosted.length
-  }), [precomputedSubcategorySites, dispatchedCount, dispatchedSiteEntries.length, acceptedCount, acceptedSiteEntries.length]);
+    approvedCosted: approvedCostedCount > 0 || approvedCostedSiteEntries.length > 0
+      ? (approvedCostedCount || approvedCostedSiteEntries.length)
+      : precomputedSubcategorySites.approvedCosted.length
+  }), [precomputedSubcategorySites, dispatchedCount, dispatchedSiteEntries.length, acceptedCount, acceptedSiteEntries.length, approvedCostedCount, approvedCostedSiteEntries.length]);
 
   // Verified site rows per subcategory (all roles seeing Verified tab)
   // Uses precomputed data for consistency with badge counts
