@@ -1,0 +1,108 @@
+PS C:\Users\PC\PACT_mobile\android> flutter build appbundle --release
+Changing current working directory to: C:\Users\PC\PACT_mobile
+√ Fixed GeneratedPluginRegistrant imports
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 37748 bytes (97.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Running Gradle task 'bundleRelease'...                            157.5s
+√ Built build\app\outputs\bundle\release\app-release.aab (167.1MB)
+PS C:\Users\PC\PACT_mobile\android> flutter build appbundle --release
+Changing current working directory to: C:\Users\PC\PACT_mobile
+√ Fixed GeneratedPluginRegistrant imports
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 37748 bytes (97.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release  
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release  
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+The message received from the daemon indicates that the daemon has disappeared.
+Build request sent: Build{id=07deab9e-e347-42d8-90f4-73476d51eb63, currentDir=C:\Users\PC\PACT_mobile\android}
+Attempting to read last messages from the daemon log...
+Daemon pid: 38460
+  log file: C:\Users\PC\.gradle\daemon\8.13\daemon-38460.out.log
+----- Last 20 lines from daemon log file - daemon-38460.out.log -----
+warning: [options] source value 8 is obsolete and will be removed in a future release  
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release  
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release  
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+3 warnings
+warning: [options] source value 8 is obsolete and will be removed in a future release  
+warning: [options] target value 8 is obsolete and will be removed in a future release  
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.   
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings----- End of the daemon log -----
+
+JVM crash log found: file:///C:/Users/PC/PACT_mobile/android/hs_err_pid38460.log       
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Gradle build daemon disappeared unexpectedly (it may have been killed or may have crashed)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+Running Gradle task 'bundleRelease'...                            996.2s
+Gradle task bundleRelease failed with exit code 1
+PS C:\Users\PC\PACT_mobile\android> 
