@@ -824,28 +824,66 @@ const CostSubmission = () => {
     return isSuperAdmin || isAdmin || isFinanceAdmin;
   };
 
+  const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
+  const ccContactsRef = useRef<Array<{ id: string; email: string; name: string; role: string }>>([]);
+
+  useEffect(() => {
+    const preloadRecipients = async () => {
+      try {
+        const { data: financeUsers } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role')
+          .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+          .eq('status', 'approved');
+        cachedRecipientsRef.current = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+      } catch {}
+    };
+    preloadRecipients();
+    supabase
+      .from('profiles')
+      .select('id, email, full_name, role')
+      .eq('status', 'approved')
+      .not('email', 'is', null)
+      .then(({ data }) => {
+        if (data) {
+          ccContactsRef.current = data
+            .filter((u: any) => u.email)
+            .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role || '' }));
+        }
+      });
+  }, []);
+
   const openPaymentRequestDialog = async (oc: OperationalCostSubmission) => {
-    setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
-    try {
-      const { data: financeUsers } = await supabase
+    const cached = cachedRecipientsRef.current;
+    if (cached && cached.length > 0) {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: false, selectedRecipientIds: cached.map(r => r.id), ccEmails: [], availableRecipients: cached }));
+      supabase
         .from('profiles')
         .select('id, email, full_name, role')
         .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
-        .eq('status', 'approved');
-
-      const recipients = (financeUsers || [])
-        .filter((u: any) => u.email)
-        .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
-
-      setPaymentRequestDialog(prev => ({
-        ...prev,
-        availableRecipients: recipients,
-        selectedRecipientIds: recipients.map((r: any) => r.id),
-        loading: false,
-      }));
-    } catch {
-      setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
-      toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+        .eq('status', 'approved')
+        .then(({ data }) => {
+          if (data) {
+            const fresh = data.filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+            cachedRecipientsRef.current = fresh;
+            setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: fresh, selectedRecipientIds: fresh.map(r => r.id) }));
+          }
+        });
+    } else {
+      setPaymentRequestDialog(prev => ({ ...prev, open: true, submission: oc, loading: true, selectedRecipientIds: [], ccEmails: [], availableRecipients: [] }));
+      try {
+        const { data: financeUsers } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role')
+          .in('role', ['finance_admin', 'Finance Admin', 'superAdmin', 'SuperAdmin', 'super_admin', 'admin', 'Admin', 'Administrator'])
+          .eq('status', 'approved');
+        const recipients = (financeUsers || []).filter((u: any) => u.email).map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role }));
+        cachedRecipientsRef.current = recipients;
+        setPaymentRequestDialog(prev => ({ ...prev, availableRecipients: recipients, selectedRecipientIds: recipients.map((r: any) => r.id), loading: false }));
+      } catch {
+        setPaymentRequestDialog(prev => ({ ...prev, loading: false }));
+        toast({ title: "Error / خطأ", description: "Failed to load recipients. / فشل في تحميل المستلمين.", variant: "destructive" });
+      }
     }
   };
 
@@ -3114,6 +3152,7 @@ const CostSubmission = () => {
               <EmailCCInput
                 ccEmails={paymentRequestDialog.ccEmails}
                 onChange={(emails) => setPaymentRequestDialog(prev => ({ ...prev, ccEmails: emails }))}
+                contacts={ccContactsRef.current.filter(c => !paymentRequestDialog.selectedRecipientIds.includes(c.id))}
               />
             </div>
           )}
