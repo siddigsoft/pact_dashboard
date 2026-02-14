@@ -638,7 +638,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   };
 
   const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
-  const ccContactsRef = useRef<Array<{ id: string; email: string; name: string; role: string }>>([]);
+  const [ccContacts, setCcContacts] = useState<Array<{ id: string; email: string; name: string; role: string }>>([]);
 
   useEffect(() => {
     loadFinanceRecipients().catch(() => {});
@@ -649,9 +649,9 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
       .not('email', 'is', null)
       .then(({ data }) => {
         if (data) {
-          ccContactsRef.current = data
+          setCcContacts(data
             .filter((u: any) => u.email)
-            .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role || '' }));
+            .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role || '' })));
         }
       });
   }, []);
@@ -2460,7 +2460,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 <EmailCCInput
                   ccEmails={paymentRequestDialog.ccEmails}
                   onChange={(emails) => setPaymentRequestDialog(prev => ({ ...prev, ccEmails: emails }))}
-                  contacts={ccContactsRef.current.filter(c => !paymentRequestDialog.selectedRecipientIds.includes(c.id))}
+                  contacts={ccContacts.filter(c => !paymentRequestDialog.selectedRecipientIds.includes(c.id))}
                 />
               </div>
             </div>
