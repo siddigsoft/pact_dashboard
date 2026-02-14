@@ -1,4 +1,4 @@
-import { Bell, AlertCircle, Clock, DollarSign, CheckCircle2, ClipboardList, Settings, Wallet } from 'lucide-react';
+import { Bell, AlertCircle, Clock, DollarSign, CheckCircle2, ClipboardList, Settings, Wallet, Pin, AlarmClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface NotificationFilterProps {
@@ -8,6 +8,8 @@ interface NotificationFilterProps {
     all: number;
     unread: number;
     today: number;
+    pinned?: number;
+    snoozed?: number;
   };
   categoryCounts?: {
     financial: number;
@@ -22,6 +24,8 @@ const filterItems = [
   { value: 'all', label: 'All', icon: Bell },
   { value: 'unread', label: 'Unread', icon: AlertCircle },
   { value: 'today', label: 'Today', icon: Clock },
+  { value: 'pinned', label: 'Pinned', icon: Pin },
+  { value: 'snoozed', label: 'Snoozed', icon: AlarmClock },
   { value: 'financial', label: 'Financial', icon: DollarSign },
   { value: 'approvals', label: 'Approvals', icon: CheckCircle2 },
   { value: 'assignments', label: 'Assignments', icon: ClipboardList },
@@ -40,6 +44,8 @@ export const NotificationFilter: React.FC<NotificationFilterProps> = ({
       case 'all': return counts.all;
       case 'unread': return counts.unread;
       case 'today': return counts.today;
+      case 'pinned': return counts.pinned;
+      case 'snoozed': return counts.snoozed;
       case 'financial': return categoryCounts?.financial;
       case 'approvals': return categoryCounts?.approvals;
       case 'assignments': return categoryCounts?.assignments;

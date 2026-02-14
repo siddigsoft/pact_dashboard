@@ -16,6 +16,7 @@ export interface NotificationGroupProps {
   notifications: Notification[];
   onNotificationClick?: (notification: Notification) => void;
   actionButtons?: (notification: Notification) => React.ReactNode;
+  extraActions?: (notification: Notification) => React.ReactNode;
   variant?: 'urgent' | 'warning' | 'info';
 }
 
@@ -99,11 +100,13 @@ const NotificationCard = ({
   notification,
   onNotificationClick,
   actionButtons,
+  extraActions,
   isGroupChild,
 }: {
   notification: Notification;
   onNotificationClick?: (notification: Notification) => void;
   actionButtons?: (notification: Notification) => React.ReactNode;
+  extraActions?: (notification: Notification) => React.ReactNode;
   isGroupChild?: boolean;
 }) => (
   <Card
@@ -128,9 +131,12 @@ const NotificationCard = ({
             }`}>
               {notification.title}
             </h4>
-            {!notification.isRead && (
-              <span className="flex-shrink-0 w-2 h-2 rounded-full bg-primary animate-pulse" />
-            )}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {extraActions && extraActions(notification)}
+              {!notification.isRead && (
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              )}
+            </div>
           </div>
           <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
             {notification.message}
@@ -162,6 +168,7 @@ export const NotificationGroup: React.FC<NotificationGroupProps> = ({
   notifications,
   onNotificationClick,
   actionButtons,
+  extraActions,
   variant = 'info',
 }) => {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -227,6 +234,7 @@ export const NotificationGroup: React.FC<NotificationGroupProps> = ({
                   notification={grouped}
                   onNotificationClick={onNotificationClick}
                   actionButtons={actionButtons}
+                  extraActions={extraActions}
                 />
                 {hasGroup && (
                   <div className="flex items-center gap-1 mt-1 ml-1">
@@ -259,6 +267,7 @@ export const NotificationGroup: React.FC<NotificationGroupProps> = ({
                       notification={child}
                       onNotificationClick={onNotificationClick}
                       actionButtons={actionButtons}
+                      extraActions={extraActions}
                       isGroupChild
                     />
                   ))}

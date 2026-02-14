@@ -107,6 +107,9 @@ const MobileSignatureAdmin = lazy(() => import('./pages/MobileSignatureAdmin'));
 const MobileCallScheduling = lazy(() => import('./pages/MobileCallScheduling'));
 const MobileDocumentSync = lazy(() => import('./pages/MobileDocumentSync'));
 const ReconciliationDashboard = lazy(() => import('./pages/ReconciliationDashboard'));
+const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'));
+const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
+const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -234,6 +237,9 @@ const AppRoutes = () => {
         <Route path="/public-documentation" element={<PublicDocumentation />} />
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/notification-preferences" element={<NotificationPreferences />} />
+        <Route path="/notification-history" element={<NotificationHistory />} />
+        <Route path="/notification-analytics" element={<NotificationAnalytics />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/admin/wallets" element={<AdminWallets />} />

@@ -4,7 +4,8 @@ import { DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X, ChevronRight, Wifi, WifiOff, Loader2, XCircle, Shield } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X, ChevronRight, Wifi, WifiOff, Loader2, XCircle, Shield, Pin, PinOff, AlarmClock, Moon, Volume2, VolumeX, History, Settings, BarChart3 } from 'lucide-react';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
@@ -16,6 +17,10 @@ import { useUser } from '@/context/user/UserContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { toast } from '@/hooks/toast';
 import { useNotificationReceipts } from '@/hooks/use-notification-receipts';
+import { useNotificationSnooze } from '@/hooks/use-notification-snooze';
+import { useNotificationPin } from '@/hooks/use-notification-pin';
+import { useDoNotDisturb } from '@/hooks/use-do-not-disturb';
+import { useNotificationSound } from '@/hooks/use-notification-sound';
 
 interface NotificationDropdownProps {
   onClose: () => void;
@@ -33,6 +38,10 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
   const { getUnreadMessagesCount } = useChat();
   const containerRef = useRef<HTMLDivElement>(null);
   const { acknowledgeNotification } = useNotificationReceipts();
+  const { snoozeNotification, isSnoozed, SNOOZE_OPTIONS, getSnoozedCount } = useNotificationSnooze();
+  const { togglePin, isPinned } = useNotificationPin();
+  const { isDND, toggleDND } = useDoNotDisturb();
+  const { soundEnabled, toggleSound } = useNotificationSound();
 
   const unreadMessages = getUnreadMessagesCount();
 
@@ -136,14 +145,18 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
 
   const categoryFilters = ['financial', 'approvals', 'assignments', 'system', 'wallet'];
 
-  // Filter and group notifications
+  // Filter and group notifications — pinned first, snoozed excluded
   const filteredNotifications = useMemo(() => {
-    let filtered = notifications;
+    let filtered = notifications.filter(n => !isSnoozed(n.id));
     
     if (activeFilter === 'unread') {
       filtered = filtered.filter(n => !n.isRead);
     } else if (activeFilter === 'today') {
       filtered = filtered.filter(n => isToday(new Date(n.createdAt)));
+    } else if (activeFilter === 'pinned') {
+      filtered = filtered.filter(n => isPinned(n.id));
+    } else if (activeFilter === 'snoozed') {
+      filtered = notifications.filter(n => isSnoozed(n.id));
     } else if (categoryFilters.includes(activeFilter)) {
       filtered = filtered.filter(n => matchesCategory(n, activeFilter));
     }
@@ -156,8 +169,18 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
       );
     }
     
+    // Sort pinned to top
+    if (activeFilter !== 'pinned' && activeFilter !== 'snoozed') {
+      filtered.sort((a, b) => {
+        const aPinned = isPinned(a.id) ? 1 : 0;
+        const bPinned = isPinned(b.id) ? 1 : 0;
+        if (aPinned !== bPinned) return bPinned - aPinned;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    }
+    
     return filtered;
-  }, [notifications, activeFilter, searchQuery]);
+  }, [notifications, activeFilter, searchQuery, isSnoozed, isPinned]);
 
   const urgentNotifications = filteredNotifications.filter(n => n.type === 'error');
   const warningNotifications = filteredNotifications.filter(n => n.type === 'warning');
@@ -192,6 +215,8 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
     all: notifications.length,
     unread: notifications.filter(n => !n.isRead).length,
     today: notifications.filter(n => isToday(new Date(n.createdAt))).length,
+    pinned: notifications.filter(n => isPinned(n.id)).length,
+    snoozed: notifications.filter(n => isSnoozed(n.id)).length,
   };
 
   const categoryCounts = useMemo(() => ({
@@ -428,6 +453,53 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
     return renderAcknowledgeButton(notification);
   };
 
+  const renderSnoozePin = (notification: Notification) => (
+    <div className="flex gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6"
+        title={isPinned(notification.id) ? 'Unpin' : 'Pin'}
+        onClick={(e) => { e.stopPropagation(); togglePin(notification.id); }}
+        data-testid={`button-pin-${notification.id}`}
+      >
+        {isPinned(notification.id) ? <PinOff className="h-3 w-3 text-primary" /> : <Pin className="h-3 w-3" />}
+      </Button>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            title="Snooze"
+            onClick={(e) => e.stopPropagation()}
+            data-testid={`button-snooze-${notification.id}`}
+          >
+            <AlarmClock className="h-3 w-3" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-40 p-1" align="end" side="left">
+          {SNOOZE_OPTIONS.map(opt => (
+            <Button
+              key={opt.label}
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                snoozeNotification(notification.id, opt.duration);
+                toast({ title: 'Snoozed', description: `Notification snoozed for ${opt.label}` });
+              }}
+              data-testid={`snooze-option-${opt.label}`}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+
   return (
     <DropdownMenuContent 
       className="w-[420px] sm:w-[380px] md:w-[420px] p-0 notification-dropdown shadow-xl border border-border rounded-xl overflow-hidden max-w-[95vw] sm:max-w-[420px] z-[9999]" 
@@ -478,24 +550,46 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
               </div>
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 ${isDND ? 'text-amber-500' : ''}`}
+              onClick={toggleDND}
+              title={isDND ? 'Disable Do Not Disturb' : 'Enable Do Not Disturb'}
+              data-testid="button-toggle-dnd"
+            >
+              <Moon className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={toggleSound}
+              title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+              data-testid="button-toggle-sound"
+            >
+              {soundEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+            </Button>
             <Button 
               variant="ghost" 
-              size="sm" 
+              size="icon"
+              className="h-7 w-7"
               onClick={handleMarkAllRead}
               disabled={counts.unread === 0}
               data-testid="button-mark-all-read"
             >
-              <CheckCheck className="h-4 w-4" />
+              <CheckCheck className="h-3.5 w-3.5" />
             </Button>
             <Button 
               variant="ghost" 
-              size="sm" 
+              size="sm"
+              className="h-7 text-xs"
               onClick={handleClearAll}
               disabled={counts.all === 0}
               data-testid="button-clear-all"
             >
-              Clear all
+              Clear
             </Button>
           </div>
         </div>
@@ -567,6 +661,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
                 notifications={urgentNotifications}
                 onNotificationClick={handleNotificationClick}
                 actionButtons={renderActionButtons}
+                extraActions={renderSnoozePin}
                 variant="urgent"
               />
               
@@ -576,6 +671,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
                 notifications={warningNotifications}
                 onNotificationClick={handleNotificationClick}
                 actionButtons={renderActionButtons}
+                extraActions={renderSnoozePin}
                 variant="warning"
               />
               
@@ -585,6 +681,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
                 notifications={infoNotifications}
                 onNotificationClick={handleNotificationClick}
                 actionButtons={renderActionButtons}
+                extraActions={renderSnoozePin}
                 variant="info"
               />
             </>
@@ -596,6 +693,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
                 notifications={dateGroupedNotifications.today}
                 onNotificationClick={handleNotificationClick}
                 actionButtons={renderActionButtons}
+                extraActions={renderSnoozePin}
                 variant="info"
               />
               
@@ -605,6 +703,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
                 notifications={dateGroupedNotifications.yesterday}
                 onNotificationClick={handleNotificationClick}
                 actionButtons={renderActionButtons}
+                extraActions={renderSnoozePin}
                 variant="info"
               />
               
@@ -614,6 +713,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
                 notifications={dateGroupedNotifications.thisWeek}
                 onNotificationClick={handleNotificationClick}
                 actionButtons={renderActionButtons}
+                extraActions={renderSnoozePin}
                 variant="info"
               />
               
@@ -623,6 +723,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
                 notifications={dateGroupedNotifications.older}
                 onNotificationClick={handleNotificationClick}
                 actionButtons={renderActionButtons}
+                extraActions={renderSnoozePin}
                 variant="info"
               />
             </>
@@ -643,6 +744,41 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
           )}
         </div>
       </ScrollArea>
+
+      <div className="border-t border-border bg-muted/30 px-3 py-2 flex items-center justify-between">
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => { navigate('/notification-history'); onClose(); }}
+            data-testid="link-notification-history"
+          >
+            <History className="h-3 w-3 mr-1" />
+            History
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => { navigate('/notification-preferences'); onClose(); }}
+            data-testid="link-notification-preferences"
+          >
+            <Settings className="h-3 w-3 mr-1" />
+            Settings
+          </Button>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => { navigate('/notification-analytics'); onClose(); }}
+          data-testid="link-notification-analytics"
+        >
+          <BarChart3 className="h-3 w-3 mr-1" />
+          Analytics
+        </Button>
+      </div>
     </DropdownMenuContent>
   );
 };
