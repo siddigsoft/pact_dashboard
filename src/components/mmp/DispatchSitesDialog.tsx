@@ -379,17 +379,36 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   // Filter site entries based on selection
   const filteredSiteEntries = useMemo(() => {
     const excludeAlreadyDispatchedOrClaimed = (entries: any[]) => {
-      return entries.filter((entry) => {
+      console.log(`[DispatchFilter] Input entries: ${entries.length}`);
+      const result = entries.filter((entry) => {
         const status = String(entry.status || '').toLowerCase().replace(/[\s_-]/g, '');
         const acceptedBy = entry.accepted_by || entry.acceptedBy;
-        if (acceptedBy && String(acceptedBy).trim() !== '') return false;
-        const excludedStatuses = ['dispatched', 'accepted', 'assigned', 'ongoing', 'completed', 'inprogress'];
-        if (excludedStatuses.some(s => status === s || status.startsWith(s))) return false;
-        if (entry.dispatched_at || entry.dispatchedAt) return false;
+        const dispatchedAt = entry.dispatched_at || entry.dispatchedAt;
         const addlData = entry.additional_data || entry.additionalData || {};
-        if (addlData.dispatched_by || addlData.dispatched_at || addlData.dispatch_type) return false;
+        const siteName = entry.site_name || entry.siteName || 'unknown';
+
+        if (acceptedBy && String(acceptedBy).trim() !== '') {
+          console.log(`[DispatchFilter] EXCLUDED "${siteName}" - has accepted_by: ${acceptedBy}`);
+          return false;
+        }
+        const excludedStatuses = ['dispatched', 'accepted', 'assigned', 'ongoing', 'completed', 'inprogress'];
+        if (excludedStatuses.some(s => status === s || status.startsWith(s))) {
+          console.log(`[DispatchFilter] EXCLUDED "${siteName}" - status: "${status}"`);
+          return false;
+        }
+        if (dispatchedAt) {
+          console.log(`[DispatchFilter] EXCLUDED "${siteName}" - has dispatched_at: ${dispatchedAt}`);
+          return false;
+        }
+        if (addlData.dispatched_by || addlData.dispatched_at || addlData.dispatch_type) {
+          console.log(`[DispatchFilter] EXCLUDED "${siteName}" - has dispatch info in additional_data`);
+          return false;
+        }
+        console.log(`[DispatchFilter] INCLUDED "${siteName}" - status: "${status}", accepted_by: ${acceptedBy}, dispatched_at: ${dispatchedAt}, addlData keys: ${Object.keys(addlData).join(',')}`);
         return true;
       });
+      console.log(`[DispatchFilter] Result: ${result.length} of ${entries.length} entries passed`);
+      return result;
     };
 
     if (dispatchType === "open") {
