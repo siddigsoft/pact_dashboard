@@ -199,7 +199,7 @@ const MMPSiteEntriesTable = ({
     
     // Acceptance information - read from new columns first
     const acceptedAt = site.accepted_at || (ad['accepted_at'] ? new Date(ad['accepted_at']).toISOString() : undefined) || (ad['Accepted At'] ? new Date(ad['Accepted At']).toISOString() : undefined) || undefined;
-    const acceptedBy = site.accepted_by || ad['accepted_by'] || ad['Accepted By'] || undefined;
+    const acceptedBy = site.accepted_by || site.acceptedBy || ad['accepted_by'] || ad['Accepted By'] || undefined;
     
     // Rejection information - read from new columns first, then fallback to additional_data
     const rejectionComments = site.rejection_comments || ad['rejection_comments'] || ad['rejection_reason'] || undefined;
@@ -256,7 +256,7 @@ const MMPSiteEntriesTable = ({
 
   const normalizedEntries = useMemo(() => {
     return siteEntries.map(site => ({ raw: site, norm: normalizeSite(site) }));
-  }, [siteEntries]);
+  }, [siteEntries, users]);
 
   const filterOptions = useMemo(() => {
     const hubs = new Set<string>();
@@ -458,7 +458,7 @@ const MMPSiteEntriesTable = ({
                   )}
                   {enumeratorFilter !== 'all' && (
                     <Badge variant="secondary" className="gap-1">
-                      Enumerator: {enumeratorFilter}
+                      Data Collector: {enumeratorFilter}
                       <X className="h-3 w-3 cursor-pointer" onClick={() => { setEnumeratorFilter("all"); setCurrentPage(1); }} />
                     </Badge>
                   )}
