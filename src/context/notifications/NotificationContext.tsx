@@ -24,6 +24,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [appNotifications, setAppNotifications] = useState<Notification[]>(initialNotifications);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [clearedAt, setClearedAt] = useState<Date | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   // Get current user ID from localStorage or auth state
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     try {
@@ -187,6 +189,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return true;
   }, [currentUserRole, currentUserProjects]);
 
+  // Reset clear state when user changes (new session)
+  useEffect(() => {
+    setClearedAt(null);
+    setDismissedIds(new Set());
+  }, [currentUserId]);
+
   // Load notifications for current user from Supabase and subscribe for realtime inserts
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -249,7 +257,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const mapped = allNotifications.map(mapDbToNotification);
             const filteredOutChat = mapped.filter(n => n.title !== 'Chat System Active');
             const filtered = filteredOutChat.filter(filterByRoleAndProject);
-            setAppNotifications(filtered);
+            setAppNotifications(prev => {
+              const currentClearedAt = clearedAt;
+              const currentDismissedIds = dismissedIds;
+              if (!currentClearedAt && currentDismissedIds.size === 0) return filtered;
+              return filtered.filter(n => {
+                if (currentDismissedIds.has(n.id)) return false;
+                if (currentClearedAt && new Date(n.createdAt) <= currentClearedAt) return false;
+                return true;
+              });
+            });
             setLastRefresh(new Date());
           }
         }
@@ -464,7 +481,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       userId = user?.id || null;
     } catch (err) {
       console.error('Failed to get authenticated user:', err);
-      // Fallback to currentUserId from state
       userId = currentUserId;
     }
     
@@ -473,9 +489,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       throw new Error('User not authenticated');
     }
     
-    // Delete all notifications for the current user from the database
+    // Track all currently visible notification IDs so they stay dismissed
+    // even if they can't be deleted from DB (e.g. admin-fetched notifications)
+    const currentIds = new Set(appNotifications.map(n => n.id));
+    const clearTimestamp = new Date();
+    
     try {
-      // Delete notifications where recipient_id matches
       const { data: deletedData, error } = await supabase
         .from('notifications')
         .delete()
@@ -491,15 +510,22 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       
       const deletedCount = deletedData?.length || 0;
+      
+      // Set clear timestamp and dismissed IDs to prevent re-fetch from bringing them back
+      setClearedAt(clearTimestamp);
+      setDismissedIds(prev => {
+        const next = new Set(prev);
+        currentIds.forEach(id => next.add(id));
+        return next;
+      });
       setAppNotifications([]);
       
       return deletedCount;
     } catch (err) {
       console.error('Failed to clear all notifications:', err);
-      // Don't clear local state if delete failed
       throw err;
     }
-  }, [currentUserId]);
+  }, [currentUserId, appNotifications]);
 
   const getUnreadNotificationsCount = useCallback((): number => {
     // If we don't have a current user ID, return 0
