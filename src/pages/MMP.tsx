@@ -3944,13 +3944,17 @@ const MMP = () => {
         map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
       }
       
-      // For "Approved & Costed", ALL entries must have status = 'approved and costed'
+      // For "Approved & Costed", check if there are still undispatched/unaccepted costed sites
       if (entries.length > 0) {
-        const allApprovedAndCosted = entries.every(entry => {
+        const costedEntries = entries.filter(entry => {
           const status = String(entry.status || '').toLowerCase();
           return status === 'approved and costed';
         });
-        map[mmpId].allApprovedAndCosted = allApprovedAndCosted;
+        // Only mark as approvedCosted if there are costed entries that haven't been dispatched or accepted
+        const hasUndispatchedCosted = costedEntries.some(entry => {
+          return !entry.accepted_by && !entry.dispatched_at;
+        });
+        map[mmpId].allApprovedAndCosted = costedEntries.length > 0 && hasUndispatchedCosted;
       }
     }
     
