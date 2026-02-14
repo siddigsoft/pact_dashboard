@@ -1,6 +1,8 @@
 import { useEffect, useCallback } from 'react';
 import { useServiceWorker } from '@/hooks/use-service-worker';
 import { useNotificationCleanup } from '@/hooks/use-notification-cleanup';
+import { useNotificationBadge } from '@/hooks/use-notification-badge';
+import { useNotificationReceipts } from '@/hooks/use-notification-receipts';
 import { useBrowserNotifications } from '@/hooks/use-browser-notifications';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -9,6 +11,8 @@ import { useFCM } from '@/hooks/useFCM';
 export function NotificationInitializer() {
   const { isSupported, isRegistered, registration, error } = useServiceWorker();
   const { cleanupOldNotifications } = useNotificationCleanup();
+  useNotificationBadge();
+  useNotificationReceipts();
   const { permission, isEnabled } = useBrowserNotifications();
   const navigate = useNavigate();
   const { toast } = useToast();

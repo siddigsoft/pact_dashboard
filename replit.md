@@ -51,9 +51,16 @@ The frontend utilizes React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, adhe
 *   **Data Flow:** `NotificationTriggerService` → Supabase `notifications` table → Bell dropdown via `notifications/NotificationContext.tsx` (Supabase Realtime subscriptions)
 *   **Two Notification Contexts:** Root `src/context/NotificationContext.tsx` (WhatsApp-style toasts + persistent notifications via `usePersistentNotifications`), and `src/context/notifications/NotificationContext.tsx` (bell dropdown with Supabase Realtime, used by Navbar, NotificationDropdown, and most UI components). Both are provided in the component tree via `App.tsx` (root) and `AppProviders` in `src/context/AppContext.tsx` (notifications/).
 *   **Email Notifications:** `EmailNotificationService` (src/services/email-notification.service.ts) handles SMTP delivery with retry logic and bilingual templates via Supabase Edge Function.
+*   **Digest Service:** `NotificationDigestService` (src/services/notification-digest.service.ts) generates daily/weekly bilingual email summaries of unread notifications grouped by category.
 *   **Specialized Services:** `BudgetNotificationService`, `CoverageGapNotificationService` for domain-specific alerts.
 *   **Priority Levels:** `normal` | `high` | `urgent` (standardized, no 'low' usage in notification pipeline).
 *   **Categories:** assignments, approvals, financial, team, system, signatures, calls, messages, recall, wallet, retainer, account.
+*   **Category Filtering:** Dropdown supports filtering by All, Unread, Today, Financial, Approvals, Assignments, System, Wallet with dynamic counts.
+*   **Notification Grouping:** Similar notifications (same entity type within 1 hour) are bundled with expand/collapse functionality.
+*   **Quick Actions:** Inline approve/reject buttons for approval notifications, acknowledge button for urgent/critical notifications.
+*   **Browser Badge:** Tab title shows unread count via `useNotificationBadge` hook (src/hooks/use-notification-badge.ts). PWA badge API support.
+*   **Read Receipts:** `useNotificationReceipts` hook (src/hooks/use-notification-receipts.ts) tracks acknowledgment of urgent notifications with browser notification reminders (15min for urgent, 30min for high priority).
+*   **Auto-Cleanup:** `useNotificationCleanup` hook runs on mount and periodically. Cleans read notifications past user-configured threshold + any notifications older than 90 days. Supports per-category cleanup.
 
 ### System Design Choices
 The project uses a unified Supabase client for all interactions, ensuring consistent authentication and session management, and integrates the complete Sudan administrative structure.

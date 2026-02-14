@@ -4,7 +4,7 @@ import { DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X, ChevronRight, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X, ChevronRight, Wifi, WifiOff, Loader2, XCircle, Shield } from 'lucide-react';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
@@ -15,6 +15,7 @@ import { Notification } from '@/types';
 import { useUser } from '@/context/user/UserContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { toast } from '@/hooks/toast';
+import { useNotificationReceipts } from '@/hooks/use-notification-receipts';
 
 interface NotificationDropdownProps {
   onClose: () => void;
@@ -31,6 +32,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
   const { siteVisits } = useSiteVisitContext();
   const { getUnreadMessagesCount } = useChat();
   const containerRef = useRef<HTMLDivElement>(null);
+  const { acknowledgeNotification } = useNotificationReceipts();
 
   const unreadMessages = getUnreadMessagesCount();
 
@@ -114,6 +116,26 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
     }
   };
 
+  const matchesCategory = (n: Notification, category: string): boolean => {
+    switch (category) {
+      case 'financial':
+        return ['financial', 'wallet'].includes(n.category || '') ||
+          ['wallet', 'downPayment', 'costSubmission', 'retainer', 'recovery'].includes(n.relatedEntityType || '');
+      case 'approvals':
+        return n.category === 'approvals' || n.relatedEntityType === 'signature';
+      case 'assignments':
+        return n.category === 'assignments';
+      case 'system':
+        return ['system', 'team', 'account'].includes(n.category || '');
+      case 'wallet':
+        return n.relatedEntityType === 'wallet';
+      default:
+        return false;
+    }
+  };
+
+  const categoryFilters = ['financial', 'approvals', 'assignments', 'system', 'wallet'];
+
   // Filter and group notifications
   const filteredNotifications = useMemo(() => {
     let filtered = notifications;
@@ -122,6 +144,8 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
       filtered = filtered.filter(n => !n.isRead);
     } else if (activeFilter === 'today') {
       filtered = filtered.filter(n => isToday(new Date(n.createdAt)));
+    } else if (categoryFilters.includes(activeFilter)) {
+      filtered = filtered.filter(n => matchesCategory(n, activeFilter));
     }
     
     if (searchQuery.trim()) {
@@ -141,12 +165,6 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
     n.type === 'info' || n.type === 'success' || !n.type // Include notifications without type
   );
   
-  // Debug logging
-  console.log('[NotificationDropdown] Filtered notifications:', filteredNotifications.length);
-  console.log('[NotificationDropdown] Urgent:', urgentNotifications.length);
-  console.log('[NotificationDropdown] Warning:', warningNotifications.length);
-  console.log('[NotificationDropdown] Info:', infoNotifications.length);
-  console.log('[NotificationDropdown] Notification types:', filteredNotifications.map(n => ({ id: n.id, type: n.type, title: n.title })));
 
   const dateGroupedNotifications = useMemo(() => {
     const today: Notification[] = [];
@@ -176,10 +194,40 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
     today: notifications.filter(n => isToday(new Date(n.createdAt))).length,
   };
 
+  const categoryCounts = useMemo(() => ({
+    financial: notifications.filter(n => matchesCategory(n, 'financial')).length,
+    approvals: notifications.filter(n => matchesCategory(n, 'approvals')).length,
+    assignments: notifications.filter(n => matchesCategory(n, 'assignments')).length,
+    system: notifications.filter(n => matchesCategory(n, 'system')).length,
+    wallet: notifications.filter(n => matchesCategory(n, 'wallet')).length,
+  }), [notifications]);
+
+  const renderAcknowledgeButton = (notification: Notification) => {
+    if (!notification.isRead && (notification.priority === 'urgent' || notification.priority === 'high' || notification.type === 'error')) {
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950"
+          onClick={(e) => {
+            e.stopPropagation();
+            acknowledgeNotification(notification.id);
+          }}
+          data-testid={`button-acknowledge-${notification.id}`}
+        >
+          <Shield className="h-3 w-3 mr-1" />
+          Ack
+        </Button>
+      );
+    }
+    return null;
+  };
+
   const renderActionButtons = (notification: Notification) => {
     if (notification.relatedEntityType === 'siteVisit') {
       return (
         <>
+          {renderAcknowledgeButton(notification)}
           <Button 
             variant="outline" 
             size="sm" 
@@ -210,18 +258,21 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
     
     if (notification.relatedEntityType === 'mmpFile') {
       return (
-        <Button 
-          variant="outline"
-          size="sm"
-          className="h-7"
-          onClick={(e) => { 
-            e.stopPropagation();
-            handleStartChat(notification.relatedEntityId!, notification.relatedEntityType!);
-          }}
-        >
-          <MessageSquare className="h-3 w-3 mr-1" />
-          Discuss
-        </Button>
+        <>
+          {renderAcknowledgeButton(notification)}
+          <Button 
+            variant="outline"
+            size="sm"
+            className="h-7"
+            onClick={(e) => { 
+              e.stopPropagation();
+              handleStartChat(notification.relatedEntityId!, notification.relatedEntityType!);
+            }}
+          >
+            <MessageSquare className="h-3 w-3 mr-1" />
+            Discuss
+          </Button>
+        </>
       );
     }
     
@@ -232,6 +283,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
       
       return (
         <>
+          {renderAcknowledgeButton(notification)}
           <Button 
             variant="destructive" 
             size="sm"
@@ -290,44 +342,90 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
         notification.title?.toLowerCase().includes('call') ||
         notification.message?.toLowerCase().includes('call')) {
       return (
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="h-7"
-          onClick={(e) => { 
-            e.stopPropagation();
-            navigate('/calls');
-            onClose();
-          }}
-          data-testid="button-view-calls"
-        >
-          <Phone className="h-3 w-3 mr-1" />
-          View Calls
-        </Button>
+        <>
+          {renderAcknowledgeButton(notification)}
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="h-7"
+            onClick={(e) => { 
+              e.stopPropagation();
+              navigate('/calls');
+              onClose();
+            }}
+            data-testid="button-view-calls"
+          >
+            <Phone className="h-3 w-3 mr-1" />
+            View Calls
+          </Button>
+        </>
       );
     }
     
-    // Fallback: Show View Details button if notification has a link
+    const isApprovalType =
+      notification.category === 'approvals' ||
+      notification.relatedEntityType === 'downPayment' ||
+      notification.relatedEntityType === 'costSubmission';
+
+    if (isApprovalType && notification.link) {
+      return (
+        <>
+          {renderAcknowledgeButton(notification)}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-green-600 border-green-300 dark:text-green-400 dark:border-green-700"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(notification.link!);
+              onClose();
+            }}
+            data-testid={`button-approve-${notification.id}`}
+          >
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Approve
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-red-600 border-red-300 dark:text-red-400 dark:border-red-700"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(notification.link!);
+              onClose();
+            }}
+            data-testid={`button-reject-${notification.id}`}
+          >
+            <XCircle className="h-3 w-3 mr-1" />
+            Reject
+          </Button>
+        </>
+      );
+    }
+
     if (notification.link) {
       return (
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="h-7"
-          onClick={(e) => { 
-            e.stopPropagation();
-            navigate(notification.link!);
-            onClose();
-          }}
-          data-testid="button-view-details"
-        >
-          <ChevronRight className="h-3 w-3 mr-1" />
-          View Details
-        </Button>
+        <>
+          {renderAcknowledgeButton(notification)}
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="h-7"
+            onClick={(e) => { 
+              e.stopPropagation();
+              navigate(notification.link!);
+              onClose();
+            }}
+            data-testid="button-view-details"
+          >
+            <ChevronRight className="h-3 w-3 mr-1" />
+            View Details
+          </Button>
+        </>
       );
     }
     
-    return null;
+    return renderAcknowledgeButton(notification);
   };
 
   return (
@@ -455,6 +553,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
         counts={counts}
+        categoryCounts={categoryCounts}
       />
       
       {/* Notification list */}
