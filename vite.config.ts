@@ -31,7 +31,8 @@ export default defineConfig(({ mode }) => ({
     ]
   },
   esbuild: {
-    drop: mode === 'production' ? ['console', 'debugger'] : [],
+    // Keep console in production to debug white screen / errors in browser DevTools
+    drop: mode === 'production' ? ['debugger'] : [],
   },
   resolve: {
     alias: {
