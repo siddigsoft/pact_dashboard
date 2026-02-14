@@ -66,31 +66,22 @@ export default defineConfig(({ mode }) => ({
       ],
       output: {
         manualChunks(id) {
-          // Core React libraries - keep in vendor chunk to ensure proper loading order
-          // React must be available before any other chunks that use it
-          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+          // Core React libraries + Radix UI (MUST be in same chunk to avoid forwardRef errors)
+          // All packages that depend on React or that React components depend on must be here
+          if (id.includes('node_modules/react/') || 
+              id.includes('node_modules/react-dom/') ||
+              id.includes('@radix-ui') ||
+              id.includes('class-variance-authority') ||
+              id.includes('clsx') ||
+              id.includes('tailwind-merge') ||
+              id.includes('@heroicons/react') ||
+              id.includes('lucide-react')) {
             return 'vendor';
           }
           
-          // React Router (depends on React, so should load after vendor)
+          // React Router (depends on React, loads after vendor)
           if (id.includes('react-router-dom') || id.includes('wouter')) {
             return 'router';
-          }
-          
-          // Supabase client
-          if (id.includes('@supabase')) {
-            return 'supabase';
-          }
-          
-          // Split Radix UI into smaller chunks by component type
-          if (id.includes('@radix-ui/react-dialog') || id.includes('@radix-ui/react-alert-dialog')) {
-            return 'radix-dialogs';
-          }
-          if (id.includes('@radix-ui/react-dropdown') || id.includes('@radix-ui/react-select') || id.includes('@radix-ui/react-menubar')) {
-            return 'radix-menus';
-          }
-          if (id.includes('@radix-ui')) {
-            return 'radix-ui';
           }
           
           // Form handling
