@@ -2020,7 +2020,7 @@ const MMP = () => {
         // Query 2: Sites assigned via down_payment_requests (requested_by = user.id)
         const { data: dpRequests, error: dpError } = await supabase
           .from('down_payment_requests')
-          .select('mmp_site_entry_id, site_name')
+          .select('mmp_site_entry_id, site_name, requested_amount, total_transportation_budget')
           .eq('requested_by', currentUser.id)
           .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
 
@@ -2039,21 +2039,34 @@ const MMP = () => {
           // Fetch by ID
           if (withId.length > 0) {
             const uniqueIds = [...new Set(withId.map((dp: any) => dp.mmp_site_entry_id))];
+            const dpIdMap = new Map<string, any>();
+            withId.forEach((dp: any) => { if (dp.mmp_site_entry_id) dpIdMap.set(dp.mmp_site_entry_id, dp); });
             const { data: idEntries } = await supabase
               .from('mmp_site_entries')
               .select('*')
               .in('id', uniqueIds)
               .limit(1000);
             if (idEntries) {
-              dpSiteEntries.push(...idEntries.map(entry => ({
-                ...entry, accepted_by: entry.accepted_by || currentUser.id
-              })));
+              dpSiteEntries.push(...idEntries.map(entry => {
+                const dpReq = dpIdMap.get(entry.id);
+                const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
+                const dpAmount = dpReq?.requested_amount || dpReq?.total_transportation_budget;
+                return {
+                  ...entry,
+                  accepted_by: entry.accepted_by || currentUser.id,
+                  cost: hasCost ? (entry.cost || (Number(entry.enumerator_fee || 0) + Number(entry.transport_fee || 0))) : (dpAmount ? Number(dpAmount) : entry.cost),
+                  enumerator_fee: entry.enumerator_fee != null ? entry.enumerator_fee : (dpAmount ? Number(dpAmount) : null),
+                  transport_fee: entry.transport_fee != null ? entry.transport_fee : 0,
+                };
+              }));
             }
           }
           
           // Fallback: match by site_name
           if (withoutId.length > 0) {
             const siteNames = [...new Set(withoutId.map((dp: any) => dp.site_name).filter(Boolean))];
+            const nameToReq = new Map<string, any>();
+            withoutId.forEach((dp: any) => { if (dp.site_name) nameToReq.set(dp.site_name.toLowerCase(), dp); });
             const alreadyFound = new Set([...acceptedIds, ...dpSiteEntries.map(e => e.id)]);
             for (let i = 0; i < siteNames.length; i += 50) {
               const batch = siteNames.slice(i, i + 50);
@@ -2066,7 +2079,16 @@ const MMP = () => {
                 nameEntries
                   .filter(e => !alreadyFound.has(e.id))
                   .forEach(e => {
-                    dpSiteEntries.push({ ...e, accepted_by: e.accepted_by || currentUser.id });
+                    const dpReq = nameToReq.get((e.site_name || '').toLowerCase());
+                    const hasCost = (e.enumerator_fee != null && e.transport_fee != null) || e.cost != null;
+                    const dpAmount = dpReq?.requested_amount || dpReq?.total_transportation_budget;
+                    dpSiteEntries.push({
+                      ...e,
+                      accepted_by: e.accepted_by || currentUser.id,
+                      cost: hasCost ? (e.cost || (Number(e.enumerator_fee || 0) + Number(e.transport_fee || 0))) : (dpAmount ? Number(dpAmount) : e.cost),
+                      enumerator_fee: e.enumerator_fee != null ? e.enumerator_fee : (dpAmount ? Number(dpAmount) : null),
+                      transport_fee: e.transport_fee != null ? e.transport_fee : 0,
+                    });
                     alreadyFound.add(e.id);
                   });
               }
@@ -3190,7 +3212,7 @@ const MMP = () => {
           // Query 2: Find ALL down_payment_requests (both with and without mmp_site_entry_id)
           const { data: dpRequests, error: dpError } = await supabase
             .from('down_payment_requests')
-            .select('mmp_site_entry_id, requested_by, site_name')
+            .select('mmp_site_entry_id, requested_by, site_name, requested_amount, total_transportation_budget')
             .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
 
           if (dpError) {
@@ -3226,7 +3248,16 @@ const MMP = () => {
                 });
                 dpSiteEntries.push(...dpEntries.map(entry => {
                   const dpReq = dpRequestMap.get(entry.id);
-                  return { ...entry, accepted_by: entry.accepted_by || dpReq?.requested_by, _from_down_payment: true };
+                  const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
+                  const dpAmount = dpReq?.requested_amount || dpReq?.total_transportation_budget;
+                  return {
+                    ...entry,
+                    accepted_by: entry.accepted_by || dpReq?.requested_by,
+                    cost: hasCost ? (entry.cost || (Number(entry.enumerator_fee || 0) + Number(entry.transport_fee || 0))) : (dpAmount ? Number(dpAmount) : entry.cost),
+                    enumerator_fee: entry.enumerator_fee != null ? entry.enumerator_fee : (dpAmount ? Number(dpAmount) : null),
+                    transport_fee: entry.transport_fee != null ? entry.transport_fee : 0,
+                    _from_down_payment: true
+                  };
                 }));
               }
             }
@@ -3234,10 +3265,10 @@ const MMP = () => {
             // For requests without mmp_site_entry_id, match by site_name
             if (withoutEntryId.length > 0) {
               const siteNames = [...new Set(withoutEntryId.map((dp: any) => dp.site_name).filter(Boolean))];
-              // Build name-to-requester map for attribution
-              const nameToRequester = new Map<string, string>();
+              // Build name-to-request map for attribution and cost
+              const nameToRequest = new Map<string, any>();
               withoutEntryId.forEach((dp: any) => {
-                if (dp.site_name && dp.requested_by) nameToRequester.set(dp.site_name.toLowerCase(), dp.requested_by);
+                if (dp.site_name) nameToRequest.set(dp.site_name.toLowerCase(), dp);
               });
               
               // Query site entries by site_name match
@@ -3258,8 +3289,17 @@ const MMP = () => {
                   nameMatches
                     .filter(entry => !alreadyFoundIds.has(entry.id))
                     .forEach(entry => {
-                      const requester = nameToRequester.get((entry.site_name || '').toLowerCase());
-                      dpSiteEntries.push({ ...entry, accepted_by: entry.accepted_by || requester, _from_down_payment: true });
+                      const dpReq = nameToRequest.get((entry.site_name || '').toLowerCase());
+                      const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
+                      const dpAmount = dpReq?.requested_amount || dpReq?.total_transportation_budget;
+                      dpSiteEntries.push({
+                        ...entry,
+                        accepted_by: entry.accepted_by || dpReq?.requested_by,
+                        cost: hasCost ? (entry.cost || (Number(entry.enumerator_fee || 0) + Number(entry.transport_fee || 0))) : (dpAmount ? Number(dpAmount) : entry.cost),
+                        enumerator_fee: entry.enumerator_fee != null ? entry.enumerator_fee : (dpAmount ? Number(dpAmount) : null),
+                        transport_fee: entry.transport_fee != null ? entry.transport_fee : 0,
+                        _from_down_payment: true
+                      });
                       alreadyFoundIds.add(entry.id);
                     });
                 }
@@ -3267,8 +3307,31 @@ const MMP = () => {
             }
           }
 
+          // Also enrich Query 1 entries (accepted_by set) with cost from down_payment_requests if missing
+          const enrichedDbEntries = (dbEntries || []).map(entry => {
+            const hasCost = (entry.enumerator_fee != null && entry.transport_fee != null) || entry.cost != null;
+            if (hasCost) return entry;
+            // Try to find matching down_payment_request by site name or ID
+            const matchingDp = (dpRequests || []).find((dp: any) =>
+              (dp.mmp_site_entry_id && dp.mmp_site_entry_id === entry.id) ||
+              (dp.site_name && entry.site_name && dp.site_name.toLowerCase() === entry.site_name.toLowerCase())
+            );
+            if (matchingDp) {
+              const dpAmount = matchingDp.requested_amount || matchingDp.total_transportation_budget;
+              if (dpAmount) {
+                return {
+                  ...entry,
+                  cost: Number(dpAmount),
+                  enumerator_fee: Number(dpAmount),
+                  transport_fee: 0,
+                };
+              }
+            }
+            return entry;
+          });
+
           // Merge both sources, deduplicating by ID
-          const allEntries = [...(dbEntries || []), ...dpSiteEntries];
+          const allEntries = [...enrichedDbEntries, ...dpSiteEntries];
           const seenIds = new Set<string>();
           const deduped = allEntries.filter(e => {
             if (seenIds.has(e.id)) return false;
