@@ -6,12 +6,18 @@ interface UseSiteClaimRealtimeOptions {
   onSiteClaimed?: (siteId: string, claimedBy: string) => void;
   onRefresh?: () => void;
   enabled?: boolean;
+  channelName?: string;
+  currentUserId?: string;
+  suppressToast?: boolean;
 }
 
 export function useSiteClaimRealtime({
   onSiteClaimed,
   onRefresh,
-  enabled = true
+  enabled = true,
+  channelName = 'site_claim_updates',
+  currentUserId,
+  suppressToast = false
 }: UseSiteClaimRealtimeOptions = {}) {
   const { toast } = useToast();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -25,21 +31,25 @@ export function useSiteClaimRealtime({
     const isNowAssigned = newRecord?.status?.toLowerCase() === 'assigned';
     const wasClaimed = !oldRecord?.claimed_by && newRecord?.claimed_by;
     const wasAccepted = !oldRecord?.accepted_by && newRecord?.accepted_by;
+    const claimedByUserId = newRecord?.claimed_by || newRecord?.accepted_by;
     
     if ((wasDispatched && isNowAssigned) || wasClaimed || wasAccepted) {
-      const siteName = newRecord?.site_name || 'A site';
+      const isOwnClaim = currentUserId && claimedByUserId === currentUserId;
       
-      toast({
-        title: 'Site Claimed',
-        description: `${siteName} has been claimed by another enumerator.`,
-        variant: 'default',
-        duration: 3000
-      });
+      if (!suppressToast && !isOwnClaim) {
+        const siteName = newRecord?.site_name || 'A site';
+        toast({
+          title: 'Site Claimed',
+          description: `${siteName} has been claimed by another enumerator.`,
+          variant: 'default',
+          duration: 3000
+        });
+      }
       
-      onSiteClaimed?.(newRecord?.id, newRecord?.claimed_by || newRecord?.accepted_by);
+      onSiteClaimed?.(newRecord?.id, claimedByUserId);
       onRefresh?.();
     }
-  }, [toast, onSiteClaimed, onRefresh]);
+  }, [toast, onSiteClaimed, onRefresh, currentUserId, suppressToast]);
 
   useEffect(() => {
     if (!enabled) {
@@ -51,7 +61,7 @@ export function useSiteClaimRealtime({
     }
 
     const channel = supabase
-      .channel('site_claim_updates')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -74,7 +84,7 @@ export function useSiteClaimRealtime({
         channelRef.current = null;
       }
     };
-  }, [enabled, handleClaimUpdate]);
+  }, [enabled, handleClaimUpdate, channelName]);
 
   return {
     isSubscribed: channelRef.current !== null
