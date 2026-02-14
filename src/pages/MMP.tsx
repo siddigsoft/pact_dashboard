@@ -2020,9 +2020,8 @@ const MMP = () => {
         // Query 2: Sites assigned via down_payment_requests (requested_by = user.id)
         const { data: dpRequests, error: dpError } = await supabase
           .from('down_payment_requests')
-          .select('mmp_site_entry_id')
+          .select('mmp_site_entry_id, site_name')
           .eq('requested_by', currentUser.id)
-          .not('mmp_site_entry_id', 'is', null)
           .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
 
         if (dpError) {
@@ -2030,24 +2029,48 @@ const MMP = () => {
         }
 
         const acceptedIds = new Set((mySitesData || []).map(e => e.id));
-        const dpSiteIds = (dpRequests || [])
-          .map((dp: any) => dp.mmp_site_entry_id)
-          .filter((id: string) => id && !acceptedIds.has(id));
-
         let dpSiteEntries: any[] = [];
-        if (dpSiteIds.length > 0) {
-          const uniqueDpIds = [...new Set(dpSiteIds)];
-          const { data: dpEntries } = await supabase
-            .from('mmp_site_entries')
-            .select('*')
-            .in('id', uniqueDpIds)
-            .limit(1000);
+        
+        if (dpRequests && dpRequests.length > 0) {
+          // Split: those with mmp_site_entry_id and those with only site_name
+          const withId = dpRequests.filter((dp: any) => dp.mmp_site_entry_id && !acceptedIds.has(dp.mmp_site_entry_id));
+          const withoutId = dpRequests.filter((dp: any) => !dp.mmp_site_entry_id && dp.site_name);
           
-          if (dpEntries) {
-            dpSiteEntries = dpEntries.map(entry => ({
-              ...entry,
-              accepted_by: entry.accepted_by || currentUser.id
-            }));
+          // Fetch by ID
+          if (withId.length > 0) {
+            const uniqueIds = [...new Set(withId.map((dp: any) => dp.mmp_site_entry_id))];
+            const { data: idEntries } = await supabase
+              .from('mmp_site_entries')
+              .select('*')
+              .in('id', uniqueIds)
+              .limit(1000);
+            if (idEntries) {
+              dpSiteEntries.push(...idEntries.map(entry => ({
+                ...entry, accepted_by: entry.accepted_by || currentUser.id
+              })));
+            }
+          }
+          
+          // Fallback: match by site_name
+          if (withoutId.length > 0) {
+            const siteNames = [...new Set(withoutId.map((dp: any) => dp.site_name).filter(Boolean))];
+            const alreadyFound = new Set([...acceptedIds, ...dpSiteEntries.map(e => e.id)]);
+            for (let i = 0; i < siteNames.length; i += 50) {
+              const batch = siteNames.slice(i, i + 50);
+              const { data: nameEntries } = await supabase
+                .from('mmp_site_entries')
+                .select('*')
+                .in('site_name', batch)
+                .limit(500);
+              if (nameEntries) {
+                nameEntries
+                  .filter(e => !alreadyFound.has(e.id))
+                  .forEach(e => {
+                    dpSiteEntries.push({ ...e, accepted_by: e.accepted_by || currentUser.id });
+                    alreadyFound.add(e.id);
+                  });
+              }
+            }
           }
         }
 
@@ -3164,12 +3187,10 @@ const MMP = () => {
             console.error('[Accepted] DB query error:', error);
           }
 
-          // Query 2: Find site entry IDs that have approved down_payment_requests
-          // These sites are assigned to enumerators even if accepted_by is not set
+          // Query 2: Find ALL down_payment_requests (both with and without mmp_site_entry_id)
           const { data: dpRequests, error: dpError } = await supabase
             .from('down_payment_requests')
             .select('mmp_site_entry_id, requested_by, site_name')
-            .not('mmp_site_entry_id', 'is', null)
             .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
 
           if (dpError) {
@@ -3179,39 +3200,70 @@ const MMP = () => {
           // Get IDs already in the accepted list
           const acceptedIds = new Set((dbEntries || []).map(e => e.id));
           
-          // Find site entries with down payment requests but NOT in accepted list
-          const dpSiteEntryIds = (dpRequests || [])
-            .map(dp => dp.mmp_site_entry_id)
-            .filter((id: string) => id && !acceptedIds.has(id));
-          
           let dpSiteEntries: any[] = [];
-          if (dpSiteEntryIds.length > 0) {
-            const uniqueDpIds = [...new Set(dpSiteEntryIds)];
-            const { data: dpEntries, error: dpEntriesError } = await supabase
-              .from('mmp_site_entries')
-              .select('*')
-              .in('id', uniqueDpIds)
-              .in('mmp_file_id', verifiedMmpIds)
-              .not('status', 'ilike', '%completed%')
-              .not('status', 'ilike', '%rejected%')
-              .not('status', 'ilike', '%declined%')
-              .limit(2000);
+          if (dpRequests && dpRequests.length > 0) {
+            // Split requests: those with mmp_site_entry_id and those without
+            const withEntryId = dpRequests.filter((dp: any) => dp.mmp_site_entry_id && !acceptedIds.has(dp.mmp_site_entry_id));
+            const withoutEntryId = dpRequests.filter((dp: any) => !dp.mmp_site_entry_id && dp.site_name);
             
-            if (!dpEntriesError && dpEntries) {
-              // Also set the accepted_by from the down payment request for proper attribution
-              const dpRequestMap = new Map<string, any>();
-              (dpRequests || []).forEach((dp: any) => {
-                if (dp.mmp_site_entry_id) dpRequestMap.set(dp.mmp_site_entry_id, dp);
+            // Fetch by ID for requests that have mmp_site_entry_id
+            if (withEntryId.length > 0) {
+              const uniqueDpIds = [...new Set(withEntryId.map((dp: any) => dp.mmp_site_entry_id))];
+              const { data: dpEntries } = await supabase
+                .from('mmp_site_entries')
+                .select('*')
+                .in('id', uniqueDpIds)
+                .in('mmp_file_id', verifiedMmpIds)
+                .not('status', 'ilike', '%completed%')
+                .not('status', 'ilike', '%rejected%')
+                .not('status', 'ilike', '%declined%')
+                .limit(2000);
+              
+              if (dpEntries) {
+                const dpRequestMap = new Map<string, any>();
+                withEntryId.forEach((dp: any) => {
+                  if (dp.mmp_site_entry_id) dpRequestMap.set(dp.mmp_site_entry_id, dp);
+                });
+                dpSiteEntries.push(...dpEntries.map(entry => {
+                  const dpReq = dpRequestMap.get(entry.id);
+                  return { ...entry, accepted_by: entry.accepted_by || dpReq?.requested_by, _from_down_payment: true };
+                }));
+              }
+            }
+            
+            // For requests without mmp_site_entry_id, match by site_name
+            if (withoutEntryId.length > 0) {
+              const siteNames = [...new Set(withoutEntryId.map((dp: any) => dp.site_name).filter(Boolean))];
+              // Build name-to-requester map for attribution
+              const nameToRequester = new Map<string, string>();
+              withoutEntryId.forEach((dp: any) => {
+                if (dp.site_name && dp.requested_by) nameToRequester.set(dp.site_name.toLowerCase(), dp.requested_by);
               });
               
-              dpSiteEntries = dpEntries.map(entry => {
-                const dpReq = dpRequestMap.get(entry.id);
-                return {
-                  ...entry,
-                  accepted_by: entry.accepted_by || dpReq?.requested_by,
-                  _from_down_payment: true
-                };
-              });
+              // Query site entries by site_name match
+              const alreadyFoundIds = new Set([...acceptedIds, ...dpSiteEntries.map(e => e.id)]);
+              for (let i = 0; i < siteNames.length; i += 50) {
+                const batch = siteNames.slice(i, i + 50);
+                const { data: nameMatches } = await supabase
+                  .from('mmp_site_entries')
+                  .select('*')
+                  .in('mmp_file_id', verifiedMmpIds)
+                  .in('site_name', batch)
+                  .not('status', 'ilike', '%completed%')
+                  .not('status', 'ilike', '%rejected%')
+                  .not('status', 'ilike', '%declined%')
+                  .limit(500);
+                
+                if (nameMatches) {
+                  nameMatches
+                    .filter(entry => !alreadyFoundIds.has(entry.id))
+                    .forEach(entry => {
+                      const requester = nameToRequester.get((entry.site_name || '').toLowerCase());
+                      dpSiteEntries.push({ ...entry, accepted_by: entry.accepted_by || requester, _from_down_payment: true });
+                      alreadyFoundIds.add(entry.id);
+                    });
+                }
+              }
             }
           }
 
