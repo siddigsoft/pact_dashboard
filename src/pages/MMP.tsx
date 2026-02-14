@@ -451,6 +451,8 @@ const MMP = () => {
   const [smartAssignedSiteEntries, setSmartAssignedSiteEntries] = useState<any[]>([]);
   const [loadingSmartAssigned, setLoadingSmartAssigned] = useState(false);
   const [smartAssignedCount, setSmartAssignedCount] = useState(0);
+  const [dpLinkedSiteNames, setDpLinkedSiteNames] = useState<Set<string>>(new Set());
+  const [dpLinkedEntryIds, setDpLinkedEntryIds] = useState<Set<string>>(new Set());
   
   // Global site entry filters (applies to all tabs)
   const [siteStatusFilter, setSiteStatusFilter] = useState<string>('all');
@@ -2515,6 +2517,26 @@ const MMP = () => {
     return Object.values(grouped);
   }, [mmpFiles]);
 
+  // Load down-payment-linked site info once for use across all badge/count computations
+  useEffect(() => {
+    const loadDpLinkedSites = async () => {
+      const { data: dpReqs } = await supabase
+        .from('down_payment_requests')
+        .select('mmp_site_entry_id, site_name')
+        .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
+      
+      const ids = new Set<string>();
+      const names = new Set<string>();
+      (dpReqs || []).forEach((dp: any) => {
+        if (dp.mmp_site_entry_id) ids.add(dp.mmp_site_entry_id);
+        if (dp.site_name) names.add(dp.site_name.toLowerCase());
+      });
+      setDpLinkedEntryIds(ids);
+      setDpLinkedSiteNames(names);
+    };
+    loadDpLinkedSites();
+  }, [adminRefreshTrigger]);
+
   // Calculate all counts from context using useMemo (for global stats, not specific to Verified Sites tab)
   const siteEntryCounts = useMemo(() => {
     const allEntries = mmpFiles.flatMap(mmp => {
@@ -2558,10 +2580,13 @@ const MMP = () => {
         const acceptedBy = e.accepted_by || e.acceptedBy;
         if (acceptedBy && String(acceptedBy).trim() !== '') return false;
         if (e.dispatched_at || e.dispatchedAt) return false;
+        if (dpLinkedEntryIds.has(e.id)) return false;
+        if (e.site_name && dpLinkedSiteNames.has(String(e.site_name).toLowerCase())) return false;
+        if (e.siteName && dpLinkedSiteNames.has(String(e.siteName).toLowerCase())) return false;
         return true;
       }).length
     };
-  }, [mmpFiles]);
+  }, [mmpFiles, dpLinkedEntryIds, dpLinkedSiteNames]);
 
   // Update count state from context (fast counts loaded separately from site entries)
   useEffect(() => {
@@ -3085,7 +3110,22 @@ const MMP = () => {
             return;
           }
 
-          const formattedEntries = (dbEntries || []).map(entry => {
+          // Also exclude sites linked to down_payment_requests (assigned via advance requests)
+          const { data: dpRequests } = await supabase
+            .from('down_payment_requests')
+            .select('mmp_site_entry_id, site_name')
+            .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
+
+          const dpEntryIds = new Set((dpRequests || []).filter((dp: any) => dp.mmp_site_entry_id).map((dp: any) => dp.mmp_site_entry_id));
+          const dpSiteNames = new Set((dpRequests || []).filter((dp: any) => dp.site_name).map((dp: any) => dp.site_name.toLowerCase()));
+
+          const filteredDbEntries = (dbEntries || []).filter(entry => {
+            if (dpEntryIds.has(entry.id)) return false;
+            if (entry.site_name && dpSiteNames.has(entry.site_name.toLowerCase())) return false;
+            return true;
+          });
+
+          const formattedEntries = filteredDbEntries.map(entry => {
             const formatted = formatSiteEntry(entry);
             return {
               ...formatted,
@@ -3603,8 +3643,11 @@ const MMP = () => {
         return 'accepted';
       }
       
-      // approvedCosted: only sites that haven't been dispatched or claimed yet
+      // approvedCosted: only sites that haven't been dispatched, claimed, or linked to advance requests
       if (status.includes('approved') && status.includes('costed') && !dispatchedAt) {
+        const sName = row.siteName || (row as any).site_name || '';
+        if (dpLinkedEntryIds.has(row.id)) return 'accepted';
+        if (sName && dpLinkedSiteNames.has(sName.toLowerCase())) return 'accepted';
         return 'approvedCosted';
       }
       if (status === 'completed') {
@@ -3685,7 +3728,7 @@ const MMP = () => {
     }
     
     return result;
-  }, [categorizedMMPs.verified, siteVisitRows]);
+  }, [categorizedMMPs.verified, siteVisitRows, dpLinkedEntryIds, dpLinkedSiteNames]);
 
   // Calculate total verified sites count from precomputed data
   const totalVerifiedSitesCount = useMemo(() => {
