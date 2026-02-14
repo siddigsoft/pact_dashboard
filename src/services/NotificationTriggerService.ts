@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from './email-notification.service';
 
-export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages';
+export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages' | 'recall' | 'wallet' | 'retainer' | 'account';
 
 /**
  * Helper function to format role strings into displayable titles
@@ -55,7 +55,7 @@ interface TriggerNotificationOptions {
   priority?: NotificationPriority;
   link?: string;
   relatedEntityId?: string;
-  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'call' | 'signature' | 'document';
+  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'call' | 'signature' | 'document' | 'wallet' | 'downPayment' | 'costSubmission' | 'retainer' | 'account' | 'recovery';
   targetRoles?: string[];
   projectId?: string;
   sendEmail?: boolean;
@@ -402,7 +402,7 @@ export const NotificationTriggerService = {
       message: `${memberName} (${role}) has been assigned to ${projectName}`,
       type: 'info',
       category: 'team',
-      priority: 'low'
+      priority: 'normal'
     });
   },
 
@@ -496,7 +496,7 @@ export const NotificationTriggerService = {
       message: `Your ${signatureType} signature for "${itemName}" has been verified successfully`,
       type: 'success',
       category: 'signatures',
-      priority: 'low',
+      priority: 'normal',
       link: '/signatures'
     });
   },
@@ -597,7 +597,7 @@ export const NotificationTriggerService = {
       message: `Call with ${participantName} ended (${durationStr})`,
       type: 'info',
       category: 'calls',
-      priority: 'low',
+      priority: 'normal',
       link: '/calls'
     });
   },
@@ -1941,7 +1941,7 @@ export const NotificationTriggerService = {
   ): Promise<number> {
     try {
       let successCount = 0;
-      const urgency = hoursPending > 48 ? 'critical' : 'high';
+      const urgency: NotificationPriority = hoursPending > 48 ? 'urgent' : 'high';
 
       for (const approverId of approverUserIds) {
         const sent = await this.send({
@@ -1955,7 +1955,7 @@ export const NotificationTriggerService = {
           priority: urgency,
           link: `/mmp/${mmpId}?tab=recalls`,
           relatedEntityId: recallEventId,
-          relatedEntityType: 'recall'
+          relatedEntityType: 'recovery'
         });
         if (sent) successCount++;
       }
@@ -1964,6 +1964,882 @@ export const NotificationTriggerService = {
     } catch (error) {
       console.error('Failed to send recall overdue reminder notifications:', error);
       return 0;
+    }
+  },
+
+  // =============================================
+  // DOWN PAYMENT NOTIFICATION METHODS
+  // =============================================
+
+  async downPaymentRequested(
+    approverUserIds: string[],
+    requesterName: string,
+    amount: number,
+    currency: string,
+    purpose: string,
+    requestId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+      for (const approverId of approverUserIds) {
+        const sent = await this.send({
+          userId: approverId,
+          title: 'Down Payment Request',
+          titleAr: 'طلب دفعة مقدمة',
+          message: `${requesterName} has submitted a down payment request of ${currency} ${amount.toLocaleString()} for: ${purpose}`,
+          messageAr: `قدم ${requesterName} طلب دفعة مقدمة بمبلغ ${currency} ${amount.toLocaleString()} لـ: ${purpose}`,
+          type: 'info',
+          category: 'financial',
+          priority: 'high',
+          link: '/down-payment-approval',
+          relatedEntityId: requestId,
+          relatedEntityType: 'downPayment'
+        });
+        if (sent) successCount++;
+      }
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send down payment request notifications:', error);
+      return 0;
+    }
+  },
+
+  async downPaymentApproved(
+    userId: string,
+    amount: number,
+    currency: string,
+    approverName: string,
+    requestId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Down Payment Approved',
+        titleAr: 'تمت الموافقة على الدفعة المقدمة',
+        message: `Your down payment request of ${currency} ${amount.toLocaleString()} has been approved by ${approverName}.`,
+        messageAr: `تمت الموافقة على طلب الدفعة المقدمة بمبلغ ${currency} ${amount.toLocaleString()} بواسطة ${approverName}.`,
+        type: 'success',
+        category: 'financial',
+        priority: 'high',
+        link: '/down-payment-approval',
+        relatedEntityId: requestId,
+        relatedEntityType: 'downPayment',
+        sendEmail: true,
+        emailActionUrl: '/down-payment-approval',
+        emailActionLabel: 'View Approval'
+      });
+    } catch (error) {
+      console.error('Failed to send down payment approved notification:', error);
+      return false;
+    }
+  },
+
+  async downPaymentRejected(
+    userId: string,
+    amount: number,
+    currency: string,
+    rejectorName: string,
+    reason?: string,
+    requestId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Down Payment Rejected',
+        titleAr: 'تم رفض الدفعة المقدمة',
+        message: `Your down payment request of ${currency} ${amount.toLocaleString()} has been rejected by ${rejectorName}.${reason ? ` Reason: ${reason}` : ''}`,
+        messageAr: `تم رفض طلب الدفعة المقدمة بمبلغ ${currency} ${amount.toLocaleString()} بواسطة ${rejectorName}.${reason ? ` السبب: ${reason}` : ''}`,
+        type: 'error',
+        category: 'financial',
+        priority: 'high',
+        link: '/down-payment-approval',
+        relatedEntityId: requestId,
+        relatedEntityType: 'downPayment',
+        sendEmail: true,
+        emailActionUrl: '/down-payment-approval',
+        emailActionLabel: 'View Details'
+      });
+    } catch (error) {
+      console.error('Failed to send down payment rejected notification:', error);
+      return false;
+    }
+  },
+
+  // =============================================
+  // COST SUBMISSION NOTIFICATION METHODS
+  // =============================================
+
+  async costSubmissionCreated(
+    approverUserIds: string[],
+    submitterName: string,
+    amount: number,
+    currency: string,
+    category: string,
+    submissionId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+      for (const approverId of approverUserIds) {
+        const sent = await this.send({
+          userId: approverId,
+          title: 'New Cost Submission',
+          titleAr: 'تقديم تكلفة جديد',
+          message: `${submitterName} submitted a ${category} cost of ${currency} ${amount.toLocaleString()} for approval.`,
+          messageAr: `قدم ${submitterName} تكلفة ${category} بمبلغ ${currency} ${amount.toLocaleString()} للموافقة.`,
+          type: 'info',
+          category: 'financial',
+          priority: 'high',
+          link: '/cost-approval',
+          relatedEntityId: submissionId,
+          relatedEntityType: 'costSubmission'
+        });
+        if (sent) successCount++;
+      }
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send cost submission notifications:', error);
+      return 0;
+    }
+  },
+
+  async costSubmissionApproved(
+    userId: string,
+    amount: number,
+    currency: string,
+    approverName: string,
+    tier: 'first' | 'final',
+    submissionId?: string
+  ): Promise<boolean> {
+    try {
+      const tierLabel = tier === 'first' ? 'First-tier' : 'Final';
+      const tierLabelAr = tier === 'first' ? 'المستوى الأول' : 'النهائية';
+      return await this.send({
+        userId,
+        title: `Cost Submission ${tierLabel} Approved`,
+        titleAr: `تمت الموافقة ${tierLabelAr} على تقديم التكلفة`,
+        message: `Your cost submission of ${currency} ${amount.toLocaleString()} has received ${tierLabel.toLowerCase()} approval from ${approverName}.`,
+        messageAr: `حصل تقديم التكلفة الخاص بك بمبلغ ${currency} ${amount.toLocaleString()} على موافقة ${tierLabelAr} من ${approverName}.`,
+        type: 'success',
+        category: 'financial',
+        priority: tier === 'final' ? 'high' : 'normal',
+        link: '/cost-approval',
+        relatedEntityId: submissionId,
+        relatedEntityType: 'costSubmission',
+        sendEmail: tier === 'final',
+        emailActionUrl: '/cost-approval',
+        emailActionLabel: 'View Approval'
+      });
+    } catch (error) {
+      console.error('Failed to send cost submission approved notification:', error);
+      return false;
+    }
+  },
+
+  async costSubmissionRejected(
+    userId: string,
+    amount: number,
+    currency: string,
+    rejectorName: string,
+    reason?: string,
+    submissionId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Cost Submission Rejected',
+        titleAr: 'تم رفض تقديم التكلفة',
+        message: `Your cost submission of ${currency} ${amount.toLocaleString()} has been rejected by ${rejectorName}.${reason ? ` Reason: ${reason}` : ''}`,
+        messageAr: `تم رفض تقديم التكلفة الخاص بك بمبلغ ${currency} ${amount.toLocaleString()} بواسطة ${rejectorName}.${reason ? ` السبب: ${reason}` : ''}`,
+        type: 'error',
+        category: 'financial',
+        priority: 'high',
+        link: '/cost-approval',
+        relatedEntityId: submissionId,
+        relatedEntityType: 'costSubmission',
+        sendEmail: true,
+        emailActionUrl: '/cost-approval',
+        emailActionLabel: 'View Details'
+      });
+    } catch (error) {
+      console.error('Failed to send cost submission rejected notification:', error);
+      return false;
+    }
+  },
+
+  async costSubmissionRevision(
+    userId: string,
+    amount: number,
+    currency: string,
+    reviewerName: string,
+    notes?: string,
+    submissionId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Cost Submission Needs Revision',
+        titleAr: 'تقديم التكلفة يحتاج إلى مراجعة',
+        message: `Your cost submission of ${currency} ${amount.toLocaleString()} requires revision per ${reviewerName}.${notes ? ` Notes: ${notes}` : ''}`,
+        messageAr: `تقديم التكلفة الخاص بك بمبلغ ${currency} ${amount.toLocaleString()} يحتاج إلى مراجعة بواسطة ${reviewerName}.${notes ? ` ملاحظات: ${notes}` : ''}`,
+        type: 'warning',
+        category: 'financial',
+        priority: 'high',
+        link: '/cost-submission',
+        relatedEntityId: submissionId,
+        relatedEntityType: 'costSubmission'
+      });
+    } catch (error) {
+      console.error('Failed to send cost submission revision notification:', error);
+      return false;
+    }
+  },
+
+  // =============================================
+  // WALLET TRANSACTION NOTIFICATION METHODS
+  // =============================================
+
+  async walletCredited(
+    userId: string,
+    amount: number,
+    currency: string,
+    reason: string,
+    transactionId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Wallet Credited',
+        titleAr: 'تم إيداع المحفظة',
+        message: `${currency} ${amount.toLocaleString()} has been credited to your wallet. Reason: ${reason}`,
+        messageAr: `تم إيداع مبلغ ${currency} ${amount.toLocaleString()} في محفظتك. السبب: ${reason}`,
+        type: 'success',
+        category: 'wallet',
+        priority: 'high',
+        link: '/wallet',
+        relatedEntityId: transactionId,
+        relatedEntityType: 'wallet'
+      });
+    } catch (error) {
+      console.error('Failed to send wallet credited notification:', error);
+      return false;
+    }
+  },
+
+  async walletDebited(
+    userId: string,
+    amount: number,
+    currency: string,
+    reason: string,
+    transactionId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Wallet Debited',
+        titleAr: 'تم خصم من المحفظة',
+        message: `${currency} ${amount.toLocaleString()} has been debited from your wallet. Reason: ${reason}`,
+        messageAr: `تم خصم مبلغ ${currency} ${amount.toLocaleString()} من محفظتك. السبب: ${reason}`,
+        type: 'info',
+        category: 'wallet',
+        priority: 'normal',
+        link: '/wallet',
+        relatedEntityId: transactionId,
+        relatedEntityType: 'wallet'
+      });
+    } catch (error) {
+      console.error('Failed to send wallet debited notification:', error);
+      return false;
+    }
+  },
+
+  async withdrawalSubmitted(
+    approverUserIds: string[],
+    requesterName: string,
+    amount: number,
+    currency: string,
+    withdrawalId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+      for (const approverId of approverUserIds) {
+        const sent = await this.send({
+          userId: approverId,
+          title: 'Withdrawal Request',
+          titleAr: 'طلب سحب',
+          message: `${requesterName} has submitted a withdrawal request of ${currency} ${amount.toLocaleString()}.`,
+          messageAr: `قدم ${requesterName} طلب سحب بمبلغ ${currency} ${amount.toLocaleString()}.`,
+          type: 'info',
+          category: 'wallet',
+          priority: 'high',
+          link: '/finance-approval',
+          relatedEntityId: withdrawalId,
+          relatedEntityType: 'wallet'
+        });
+        if (sent) successCount++;
+      }
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send withdrawal submitted notifications:', error);
+      return 0;
+    }
+  },
+
+  async withdrawalApproved(
+    userId: string,
+    amount: number,
+    currency: string,
+    approverName: string,
+    withdrawalId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Withdrawal Approved',
+        titleAr: 'تمت الموافقة على السحب',
+        message: `Your withdrawal of ${currency} ${amount.toLocaleString()} has been approved by ${approverName}.`,
+        messageAr: `تمت الموافقة على سحبك بمبلغ ${currency} ${amount.toLocaleString()} بواسطة ${approverName}.`,
+        type: 'success',
+        category: 'wallet',
+        priority: 'high',
+        link: '/wallet',
+        relatedEntityId: withdrawalId,
+        relatedEntityType: 'wallet',
+        sendEmail: true,
+        emailActionUrl: '/wallet',
+        emailActionLabel: 'View Wallet'
+      });
+    } catch (error) {
+      console.error('Failed to send withdrawal approved notification:', error);
+      return false;
+    }
+  },
+
+  async withdrawalRejected(
+    userId: string,
+    amount: number,
+    currency: string,
+    rejectorName: string,
+    reason?: string,
+    withdrawalId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Withdrawal Rejected',
+        titleAr: 'تم رفض السحب',
+        message: `Your withdrawal of ${currency} ${amount.toLocaleString()} has been rejected by ${rejectorName}.${reason ? ` Reason: ${reason}` : ''}`,
+        messageAr: `تم رفض سحبك بمبلغ ${currency} ${amount.toLocaleString()} بواسطة ${rejectorName}.${reason ? ` السبب: ${reason}` : ''}`,
+        type: 'error',
+        category: 'wallet',
+        priority: 'high',
+        link: '/wallet',
+        relatedEntityId: withdrawalId,
+        relatedEntityType: 'wallet',
+        sendEmail: true,
+        emailActionUrl: '/wallet',
+        emailActionLabel: 'View Details'
+      });
+    } catch (error) {
+      console.error('Failed to send withdrawal rejected notification:', error);
+      return false;
+    }
+  },
+
+  async walletBalanceLow(
+    userId: string,
+    balance: number,
+    currency: string,
+    threshold: number
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Low Wallet Balance',
+        titleAr: 'رصيد محفظة منخفض',
+        message: `Your wallet balance (${currency} ${balance.toLocaleString()}) is below the threshold of ${currency} ${threshold.toLocaleString()}.`,
+        messageAr: `رصيد محفظتك (${currency} ${balance.toLocaleString()}) أقل من الحد الأدنى ${currency} ${threshold.toLocaleString()}.`,
+        type: 'warning',
+        category: 'wallet',
+        priority: 'high',
+        link: '/wallet',
+        relatedEntityType: 'wallet'
+      });
+    } catch (error) {
+      console.error('Failed to send wallet balance low notification:', error);
+      return false;
+    }
+  },
+
+  // =============================================
+  // RETAINER MANAGEMENT NOTIFICATION METHODS
+  // =============================================
+
+  async retainerPaymentScheduled(
+    userId: string,
+    amount: number,
+    currency: string,
+    period: string,
+    retainerId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Retainer Payment Scheduled',
+        titleAr: 'تم جدولة دفعة التجنيب',
+        message: `A retainer payment of ${currency} ${amount.toLocaleString()} has been scheduled for ${period}.`,
+        messageAr: `تم جدولة دفعة تجنيب بمبلغ ${currency} ${amount.toLocaleString()} لفترة ${period}.`,
+        type: 'info',
+        category: 'retainer',
+        priority: 'normal',
+        link: '/retainer-management',
+        relatedEntityId: retainerId,
+        relatedEntityType: 'retainer'
+      });
+    } catch (error) {
+      console.error('Failed to send retainer payment scheduled notification:', error);
+      return false;
+    }
+  },
+
+  async retainerPaymentProcessed(
+    userId: string,
+    amount: number,
+    currency: string,
+    period: string,
+    processedBy: string,
+    retainerId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Retainer Payment Processed',
+        titleAr: 'تم معالجة دفعة التجنيب',
+        message: `Your retainer payment of ${currency} ${amount.toLocaleString()} for ${period} has been processed by ${processedBy}.`,
+        messageAr: `تم معالجة دفعة التجنيب الخاصة بك بمبلغ ${currency} ${amount.toLocaleString()} لفترة ${period} بواسطة ${processedBy}.`,
+        type: 'success',
+        category: 'retainer',
+        priority: 'high',
+        link: '/retainer-management',
+        relatedEntityId: retainerId,
+        relatedEntityType: 'retainer',
+        sendEmail: true,
+        emailActionUrl: '/retainer-management',
+        emailActionLabel: 'View Payment'
+      });
+    } catch (error) {
+      console.error('Failed to send retainer payment processed notification:', error);
+      return false;
+    }
+  },
+
+  async retainerPaymentPending(
+    approverUserIds: string[],
+    payeeName: string,
+    amount: number,
+    currency: string,
+    period: string,
+    retainerId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+      for (const approverId of approverUserIds) {
+        const sent = await this.send({
+          userId: approverId,
+          title: 'Retainer Payment Pending Approval',
+          titleAr: 'دفعة تجنيب في انتظار الموافقة',
+          message: `Retainer payment of ${currency} ${amount.toLocaleString()} for ${payeeName} (${period}) requires your approval.`,
+          messageAr: `دفعة تجنيب بمبلغ ${currency} ${amount.toLocaleString()} لـ ${payeeName} (${period}) تحتاج موافقتك.`,
+          type: 'info',
+          category: 'retainer',
+          priority: 'high',
+          link: '/retainer-management',
+          relatedEntityId: retainerId,
+          relatedEntityType: 'retainer'
+        });
+        if (sent) successCount++;
+      }
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send retainer payment pending notifications:', error);
+      return 0;
+    }
+  },
+
+  async retainerEligibilityChanged(
+    userId: string,
+    eligible: boolean,
+    reason: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: eligible ? 'Retainer Eligibility Confirmed' : 'Retainer Eligibility Changed',
+        titleAr: eligible ? 'تم تأكيد الأهلية للتجنيب' : 'تغيير أهلية التجنيب',
+        message: eligible
+          ? `You are now eligible for retainer payments. ${reason}`
+          : `Your retainer eligibility status has changed. ${reason}`,
+        messageAr: eligible
+          ? `أنت الآن مؤهل لدفعات التجنيب. ${reason}`
+          : `تم تغيير حالة أهليتك للتجنيب. ${reason}`,
+        type: eligible ? 'success' : 'warning',
+        category: 'retainer',
+        priority: 'normal',
+        link: '/retainer-management',
+        relatedEntityType: 'retainer'
+      });
+    } catch (error) {
+      console.error('Failed to send retainer eligibility notification:', error);
+      return false;
+    }
+  },
+
+  // =============================================
+  // ACCOUNT & ROLE CHANGE NOTIFICATION METHODS
+  // =============================================
+
+  async roleChanged(
+    userId: string,
+    oldRole: string,
+    newRole: string,
+    changedBy: string
+  ): Promise<boolean> {
+    try {
+      const oldRoleInfo = formatRoleName(oldRole);
+      const newRoleInfo = formatRoleName(newRole);
+      return await this.send({
+        userId,
+        title: 'Role Updated',
+        titleAr: 'تم تحديث الدور',
+        message: `Your role has been changed from ${oldRoleInfo.en} to ${newRoleInfo.en} by ${changedBy}.`,
+        messageAr: `تم تغيير دورك من ${oldRoleInfo.ar} إلى ${newRoleInfo.ar} بواسطة ${changedBy}.`,
+        type: 'info',
+        category: 'account',
+        priority: 'high',
+        link: '/profile',
+        relatedEntityType: 'account',
+        sendEmail: true,
+        emailActionUrl: '/profile',
+        emailActionLabel: 'View Profile'
+      });
+    } catch (error) {
+      console.error('Failed to send role changed notification:', error);
+      return false;
+    }
+  },
+
+  async accountApproved(
+    userId: string,
+    approverName: string,
+    assignedRole: string
+  ): Promise<boolean> {
+    try {
+      const roleInfo = formatRoleName(assignedRole);
+      return await this.send({
+        userId,
+        title: 'Account Approved',
+        titleAr: 'تمت الموافقة على الحساب',
+        message: `Your account has been approved by ${approverName}. You have been assigned the role of ${roleInfo.en}.`,
+        messageAr: `تمت الموافقة على حسابك بواسطة ${approverName}. تم تعيينك بدور ${roleInfo.ar}.`,
+        type: 'success',
+        category: 'account',
+        priority: 'high',
+        link: '/dashboard',
+        relatedEntityType: 'account',
+        sendEmail: true,
+        emailActionUrl: '/dashboard',
+        emailActionLabel: 'Go to Dashboard'
+      });
+    } catch (error) {
+      console.error('Failed to send account approved notification:', error);
+      return false;
+    }
+  },
+
+  async accountDeactivated(
+    userId: string,
+    reason?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Account Deactivated',
+        titleAr: 'تم تعطيل الحساب',
+        message: `Your account has been deactivated.${reason ? ` Reason: ${reason}` : ''} Please contact your administrator for assistance.`,
+        messageAr: `تم تعطيل حسابك.${reason ? ` السبب: ${reason}` : ''} يرجى التواصل مع المسؤول للمساعدة.`,
+        type: 'error',
+        category: 'account',
+        priority: 'urgent',
+        relatedEntityType: 'account',
+        sendEmail: true
+      });
+    } catch (error) {
+      console.error('Failed to send account deactivated notification:', error);
+      return false;
+    }
+  },
+
+  async accountReactivated(
+    userId: string,
+    reactivatedBy: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Account Reactivated',
+        titleAr: 'تم إعادة تفعيل الحساب',
+        message: `Your account has been reactivated by ${reactivatedBy}. You can now access the system.`,
+        messageAr: `تم إعادة تفعيل حسابك بواسطة ${reactivatedBy}. يمكنك الآن الوصول إلى النظام.`,
+        type: 'success',
+        category: 'account',
+        priority: 'high',
+        link: '/dashboard',
+        relatedEntityType: 'account',
+        sendEmail: true,
+        emailActionUrl: '/dashboard',
+        emailActionLabel: 'Go to Dashboard'
+      });
+    } catch (error) {
+      console.error('Failed to send account reactivated notification:', error);
+      return false;
+    }
+  },
+
+  async hubAssignmentChanged(
+    userId: string,
+    hubName: string,
+    action: 'assigned' | 'removed',
+    changedBy: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: action === 'assigned' ? 'Hub Assignment' : 'Hub Removal',
+        titleAr: action === 'assigned' ? 'تعيين محور' : 'إزالة من المحور',
+        message: action === 'assigned'
+          ? `You have been assigned to hub "${hubName}" by ${changedBy}.`
+          : `You have been removed from hub "${hubName}" by ${changedBy}.`,
+        messageAr: action === 'assigned'
+          ? `تم تعيينك في محور "${hubName}" بواسطة ${changedBy}.`
+          : `تم إزالتك من محور "${hubName}" بواسطة ${changedBy}.`,
+        type: action === 'assigned' ? 'info' : 'warning',
+        category: 'account',
+        priority: 'normal',
+        link: '/profile',
+        relatedEntityType: 'account'
+      });
+    } catch (error) {
+      console.error('Failed to send hub assignment notification:', error);
+      return false;
+    }
+  },
+
+  // =============================================
+  // ADVANCE & TRANSPORTATION NOTIFICATION METHODS
+  // =============================================
+
+  async advanceRequested(
+    approverUserIds: string[],
+    requesterName: string,
+    amount: number,
+    currency: string,
+    siteName: string,
+    advanceId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+      for (const approverId of approverUserIds) {
+        const sent = await this.send({
+          userId: approverId,
+          title: 'Transportation Advance Request',
+          titleAr: 'طلب سلفة نقل',
+          message: `${requesterName} has requested a transportation advance of ${currency} ${amount.toLocaleString()} for site "${siteName}".`,
+          messageAr: `طلب ${requesterName} سلفة نقل بمبلغ ${currency} ${amount.toLocaleString()} لموقع "${siteName}".`,
+          type: 'info',
+          category: 'financial',
+          priority: 'high',
+          link: '/advance-requests',
+          relatedEntityId: advanceId,
+          relatedEntityType: 'transaction'
+        });
+        if (sent) successCount++;
+      }
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send advance request notifications:', error);
+      return 0;
+    }
+  },
+
+  async advanceApproved(
+    userId: string,
+    amount: number,
+    currency: string,
+    approverName: string,
+    advanceId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Advance Approved',
+        titleAr: 'تمت الموافقة على السلفة',
+        message: `Your transportation advance of ${currency} ${amount.toLocaleString()} has been approved by ${approverName}.`,
+        messageAr: `تمت الموافقة على سلفة النقل الخاصة بك بمبلغ ${currency} ${amount.toLocaleString()} بواسطة ${approverName}.`,
+        type: 'success',
+        category: 'financial',
+        priority: 'high',
+        link: '/advance-requests',
+        relatedEntityId: advanceId,
+        relatedEntityType: 'transaction',
+        sendEmail: true,
+        emailActionUrl: '/advance-requests',
+        emailActionLabel: 'View Advance'
+      });
+    } catch (error) {
+      console.error('Failed to send advance approved notification:', error);
+      return false;
+    }
+  },
+
+  async advanceRejected(
+    userId: string,
+    amount: number,
+    currency: string,
+    rejectorName: string,
+    reason?: string,
+    advanceId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Advance Rejected',
+        titleAr: 'تم رفض السلفة',
+        message: `Your transportation advance of ${currency} ${amount.toLocaleString()} has been rejected by ${rejectorName}.${reason ? ` Reason: ${reason}` : ''}`,
+        messageAr: `تم رفض سلفة النقل الخاصة بك بمبلغ ${currency} ${amount.toLocaleString()} بواسطة ${rejectorName}.${reason ? ` السبب: ${reason}` : ''}`,
+        type: 'error',
+        category: 'financial',
+        priority: 'high',
+        link: '/advance-requests',
+        relatedEntityId: advanceId,
+        relatedEntityType: 'transaction',
+        sendEmail: true,
+        emailActionUrl: '/advance-requests',
+        emailActionLabel: 'View Details'
+      });
+    } catch (error) {
+      console.error('Failed to send advance rejected notification:', error);
+      return false;
+    }
+  },
+
+  // =============================================
+  // BUDGET ALERT NOTIFICATION METHODS
+  // =============================================
+
+  async budgetUtilizationAlert(
+    userIds: string[],
+    projectName: string,
+    utilizationPercent: number,
+    budgetAmount: number,
+    spentAmount: number,
+    currency: string,
+    projectId?: string
+  ): Promise<number> {
+    try {
+      const isExceeded = utilizationPercent >= 100;
+      const isWarning = utilizationPercent >= 90;
+      let successCount = 0;
+
+      for (const userId of userIds) {
+        const sent = await this.send({
+          userId,
+          title: isExceeded ? 'Budget Exceeded' : isWarning ? 'Budget Warning' : 'Budget Alert',
+          titleAr: isExceeded ? 'تجاوز الميزانية' : isWarning ? 'تحذير ميزانية' : 'تنبيه ميزانية',
+          message: isExceeded
+            ? `Budget for "${projectName}" has been exceeded (${utilizationPercent.toFixed(1)}%). Spent: ${currency} ${spentAmount.toLocaleString()} / Budget: ${currency} ${budgetAmount.toLocaleString()}.`
+            : `Budget utilization for "${projectName}" is at ${utilizationPercent.toFixed(1)}%. Spent: ${currency} ${spentAmount.toLocaleString()} / Budget: ${currency} ${budgetAmount.toLocaleString()}.`,
+          messageAr: isExceeded
+            ? `تم تجاوز ميزانية "${projectName}" (${utilizationPercent.toFixed(1)}%). المصروف: ${currency} ${spentAmount.toLocaleString()} / الميزانية: ${currency} ${budgetAmount.toLocaleString()}.`
+            : `استخدام ميزانية "${projectName}" عند ${utilizationPercent.toFixed(1)}%. المصروف: ${currency} ${spentAmount.toLocaleString()} / الميزانية: ${currency} ${budgetAmount.toLocaleString()}.`,
+          type: isExceeded ? 'error' : isWarning ? 'warning' : 'info',
+          category: 'financial',
+          priority: isExceeded ? 'urgent' : isWarning ? 'high' : 'normal',
+          link: '/budget',
+          relatedEntityId: projectId,
+          relatedEntityType: 'transaction'
+        });
+        if (sent) successCount++;
+      }
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send budget threshold alert notifications:', error);
+      return 0;
+    }
+  },
+
+  // =============================================
+  // PAYMENT REQUEST NOTIFICATION METHODS
+  // =============================================
+
+  async paymentRequestCreated(
+    financeUserIds: string[],
+    requesterName: string,
+    totalAmount: number,
+    currency: string,
+    recipientCount: number,
+    requestId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+      for (const userId of financeUserIds) {
+        const sent = await this.send({
+          userId,
+          title: 'Payment Request Submitted',
+          titleAr: 'تم تقديم طلب دفع',
+          message: `${requesterName} submitted a payment request of ${currency} ${totalAmount.toLocaleString()} for ${recipientCount} recipient(s).`,
+          messageAr: `قدم ${requesterName} طلب دفع بمبلغ ${currency} ${totalAmount.toLocaleString()} لـ ${recipientCount} مستلم(ين).`,
+          type: 'info',
+          category: 'financial',
+          priority: 'high',
+          link: '/finance-approval',
+          relatedEntityId: requestId,
+          relatedEntityType: 'transaction'
+        });
+        if (sent) successCount++;
+      }
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send payment request notifications:', error);
+      return 0;
+    }
+  },
+
+  async paymentCompleted(
+    userId: string,
+    amount: number,
+    currency: string,
+    paymentMethod: string,
+    transactionId?: string
+  ): Promise<boolean> {
+    try {
+      return await this.send({
+        userId,
+        title: 'Payment Completed',
+        titleAr: 'تم إتمام الدفع',
+        message: `Payment of ${currency} ${amount.toLocaleString()} has been completed via ${paymentMethod}.`,
+        messageAr: `تم إتمام دفعة بمبلغ ${currency} ${amount.toLocaleString()} عبر ${paymentMethod}.`,
+        type: 'success',
+        category: 'financial',
+        priority: 'high',
+        link: '/wallet',
+        relatedEntityId: transactionId,
+        relatedEntityType: 'transaction',
+        sendEmail: true,
+        emailActionUrl: '/wallet',
+        emailActionLabel: 'View Payment'
+      });
+    } catch (error) {
+      console.error('Failed to send payment completed notification:', error);
+      return false;
     }
   }
 };

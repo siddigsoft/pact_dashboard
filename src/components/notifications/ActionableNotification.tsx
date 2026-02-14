@@ -39,7 +39,7 @@ export interface ActionableNotificationData {
   senderName?: string;
   senderAvatar?: string;
   link?: string;
-  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  priority?: 'normal' | 'high' | 'urgent';
 }
 
 interface ActionableNotificationProps {

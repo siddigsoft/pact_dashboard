@@ -1253,7 +1253,7 @@ async function sendRecallApprovalNotifications(
             entity_type: 'mmpFile',
             event_type: 'recall',
             status: 'pending',
-            priority: 'low'
+            priority: 'normal'
           });
         }
       }
@@ -1328,7 +1328,7 @@ async function sendRecallRejectionNotification(
           entity_type: 'mmpFile',
           event_type: 'recall',
           status: 'pending',
-          priority: 'low'
+          priority: 'normal'
         });
       }
     }

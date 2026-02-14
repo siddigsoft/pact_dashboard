@@ -14,7 +14,7 @@ interface NotificationPayload {
   data?: Record<string, any>;
   route?: string;
   type?: 'site_visit' | 'approval' | 'wallet' | 'mmp' | 'team' | 'general';
-  priority?: 'high' | 'normal' | 'low';
+  priority?: 'high' | 'normal' | 'urgent';
   sound?: boolean;
   badge?: number;
 }
