@@ -926,16 +926,13 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       let previousStatus: string;
       
       if (currentStatus === 'dispatched' || currentStatus === 'assigned') {
-        previousStatus = 'approved';
+        // Dispatched → stays Dispatched (clear assignee info, keep transportation costs so it can be claimed again)
+        previousStatus = 'dispatched';
         updateData = {
           accepted_by: null,
           accepted_at: null,
-          status: 'approved',
-          dispatched_at: null,
-          dispatched_by: null,
-          cost: null,
-          enumerator_fee: null,
-          transport_fee: null,
+          status: 'dispatched',
+          // Keep dispatched_at, dispatched_by, cost, enumerator_fee, transport_fee
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
@@ -969,16 +966,12 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           updated_at: new Date().toISOString(),
         };
       } else {
-        previousStatus = 'approved';
+        // Default: keep as dispatched with costs preserved
+        previousStatus = 'dispatched';
         updateData = {
           accepted_by: null,
           accepted_at: null,
-          status: 'approved',
-          dispatched_at: null,
-          dispatched_by: null,
-          cost: null,
-          enumerator_fee: null,
-          transport_fee: null,
+          status: 'dispatched',
           cost_acknowledged: null,
           cost_acknowledged_at: null,
           updated_at: new Date().toISOString(),
