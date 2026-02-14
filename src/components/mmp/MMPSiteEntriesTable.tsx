@@ -59,7 +59,13 @@ const MMPSiteEntriesTable = ({
   onApproveForCosting,
   showApproveButton = false
 }: MMPSiteEntriesTableProps) => {
-  const { currentUser } = useUser();
+  const { currentUser, users } = useUser();
+
+  const resolveUserName = (userId: string | undefined): string | null => {
+    if (!userId) return null;
+    const user = users?.find(u => u.id === userId);
+    return user?.fullName || user?.name || user?.username || null;
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -204,13 +210,15 @@ const MMPSiteEntriesTable = ({
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
+    const acceptedByName = resolveUserName(acceptedBy) || null;
+
     return { 
       hubOffice, state, locality, siteCode, mmpName, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       mainActivity, visitType, visitDate, comments, 
       enumeratorFee: enumeratorFee, transportFee: transportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
-      dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
+      dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, acceptedByName,
       rejectionComments, rejectedBy, rejectedAt,
       createdAt, updatedAt
     };
@@ -259,7 +267,8 @@ const MMPSiteEntriesTable = ({
       if (norm.hubOffice && norm.hubOffice !== '—') hubs.add(norm.hubOffice);
       if (norm.state && norm.state !== '—') states.add(norm.state);
       if (norm.locality && norm.locality !== '—') localities.add(norm.locality);
-      if (norm.monitoringBy && norm.monitoringBy !== '—') enumerators.add(norm.monitoringBy);
+      if (norm.acceptedByName && norm.acceptedByName !== '—') enumerators.add(norm.acceptedByName);
+      else if (norm.monitoringBy && norm.monitoringBy !== '—') enumerators.add(norm.monitoringBy);
     }
     return {
       hubs: Array.from(hubs).sort((a, b) => a.localeCompare(b)),
@@ -292,13 +301,13 @@ const MMPSiteEntriesTable = ({
       results = results.filter(({ norm }) => norm.locality === localityFilter);
     }
     if (enumeratorFilter !== 'all') {
-      results = results.filter(({ norm }) => norm.monitoringBy === enumeratorFilter);
+      results = results.filter(({ norm }) => norm.acceptedByName === enumeratorFilter || norm.monitoringBy === enumeratorFilter);
     }
 
     if (debouncedSearchQuery.trim() !== "") {
       const q = debouncedSearchQuery.toLowerCase();
       results = results.filter(({ norm }) => {
-        return [norm.hubOffice, norm.state, norm.locality, norm.mmpName, norm.siteName, norm.cpName, norm.siteActivity, norm.monitoringBy, norm.surveyTool, norm.visitDate, norm.comments]
+        return [norm.hubOffice, norm.state, norm.locality, norm.mmpName, norm.siteName, norm.cpName, norm.siteActivity, norm.monitoringBy, norm.acceptedByName, norm.surveyTool, norm.visitDate, norm.comments]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(q));
       });
@@ -412,13 +421,13 @@ const MMPSiteEntriesTable = ({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Enumerator</label>
+                <label className="text-xs font-medium text-muted-foreground">Data Collector</label>
                 <Select value={enumeratorFilter} onValueChange={(val) => { setEnumeratorFilter(val); setCurrentPage(1); }}>
                   <SelectTrigger className="w-full" data-testid="select-enumerator-filter">
-                    <SelectValue placeholder="All Enumerators" />
+                    <SelectValue placeholder="All Data Collectors" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Enumerators</SelectItem>
+                    <SelectItem value="all">All Data Collectors</SelectItem>
                     {filterOptions.enumerators.map(name => (
                       <SelectItem key={name} value={name}>{name}</SelectItem>
                     ))}
@@ -548,6 +557,18 @@ const MMPSiteEntriesTable = ({
                             </p>
                           </div>
                         </div>
+
+                        {row.acceptedByName && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground">Claimed By:</span>
+                            <span className="font-medium text-purple-700">{row.acceptedByName}</span>
+                            {row.acceptedAt && (
+                              <span className="text-xs text-muted-foreground">
+                                ({new Date(row.acceptedAt).toLocaleDateString()})
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         {row.comments && row.comments !== '—' && (
                           <div>
