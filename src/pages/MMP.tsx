@@ -2971,7 +2971,15 @@ const MMP = () => {
         // - "approved and costed"
         // - "costed" (after approval or reset)
         // - Any status containing "costed"
-        return status === 'costed' || (status.includes('approved') && status.includes('costed'));
+        const isCosted = status === 'costed' || (status.includes('approved') && status.includes('costed'));
+        if (!isCosted) return false;
+        // Exclude entries that have already been dispatched or claimed
+        const acceptedBy = entry.accepted_by || entry.acceptedBy;
+        if (acceptedBy && String(acceptedBy).trim() !== '') return false;
+        if (entry.dispatched_at || entry.dispatchedAt) return false;
+        const addlData = entry.additional_data || entry.additionalData || {};
+        if (addlData.dispatched_by || addlData.dispatched_at || addlData.dispatch_type) return false;
+        return true;
       })
       setApprovedCostedSiteEntries(formattedEntries);
       setApprovedCostedCount(formattedEntries.length);

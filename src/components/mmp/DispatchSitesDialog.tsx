@@ -383,8 +383,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         const status = String(entry.status || '').toLowerCase().replace(/[\s_-]/g, '');
         const acceptedBy = entry.accepted_by || entry.acceptedBy;
         if (acceptedBy && String(acceptedBy).trim() !== '') return false;
-        const excludedStatuses = ['dispatched', 'accepted', 'ongoing', 'completed', 'inprogress'];
+        const excludedStatuses = ['dispatched', 'accepted', 'assigned', 'ongoing', 'completed', 'inprogress'];
         if (excludedStatuses.some(s => status === s || status.startsWith(s))) return false;
+        if (entry.dispatched_at || entry.dispatchedAt) return false;
+        const addlData = entry.additional_data || entry.additionalData || {};
+        if (addlData.dispatched_by || addlData.dispatched_at || addlData.dispatch_type) return false;
         return true;
       });
     };
