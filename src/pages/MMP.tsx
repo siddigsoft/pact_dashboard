@@ -2786,14 +2786,11 @@ const MMP = () => {
     }).slice(0, 1000);
 
     // Filter my sites: accepted_by = currentUser.id
-    // EXCLUDE sites with status "assigned" that haven't been cost-acknowledged (those belong in Smart Assigned tab)
+    // Include ALL sites accepted by the current user regardless of status.
+    // When a site is claimed via RPC, status becomes "Assigned" with accepted_by set -
+    // these MUST appear in My Sites since the collector explicitly claimed them.
     const mySites = formattedEntries.filter(entry => {
       if (entry.accepted_by !== currentUser.id) return false;
-      
-      const status = String(entry.status || '').toLowerCase();
-      // If status is "assigned" and not cost-acknowledged, it belongs in Smart Assigned, not My Sites
-      if (status === 'assigned' && !entry.cost_acknowledged) return false;
-      
       return true;
     }).sort((a, b) => {
       const aDate = a.created_at || a.createdAt || '';
@@ -2898,7 +2895,20 @@ const MMP = () => {
     }
     setEnumeratorGroupedByLocality({});
     setEnumeratorSmartAssigned(enumeratorData.smartAssigned);
-    setEnumeratorMySites(enumeratorData.mySites);
+    // CRITICAL: Do NOT overwrite enumeratorMySites if the direct DB query already loaded data.
+    // The direct query (loadMySitesForEnumerator) is more reliable for data collectors
+    // because it queries mmp_site_entries directly by accepted_by, whereas enumeratorData.mySites
+    // comes from the MMP context which may not include all sites claimed by the collector.
+    // Only use enumeratorData.mySites if the direct query hasn't loaded anything yet.
+    if (enumeratorData.mySites.length > 0) {
+      setEnumeratorMySites(prev => {
+        // Merge: union of direct DB results and context-computed results (deduplicated by id)
+        const byId = new Map<string, any>();
+        prev.forEach(e => { if (e?.id) byId.set(String(e.id), e); });
+        enumeratorData.mySites.forEach((e: any) => { if (e?.id && !byId.has(String(e.id))) byId.set(String(e.id), e); });
+        return Array.from(byId.values());
+      });
+    }
     // Don't override loading state if we're in the middle of direct loading
   }, [enumeratorData]);
 
