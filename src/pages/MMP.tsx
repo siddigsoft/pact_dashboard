@@ -2554,7 +2554,11 @@ const MMP = () => {
       }).length,
       approvedCosted: allEntries.filter(e => {
         const status = String(e.status || '').toLowerCase();
-        return status === 'approved and costed';
+        if (status !== 'approved and costed') return false;
+        const acceptedBy = e.accepted_by || e.acceptedBy;
+        if (acceptedBy && String(acceptedBy).trim() !== '') return false;
+        if (e.dispatched_at || e.dispatchedAt) return false;
+        return true;
       }).length
     };
   }, [mmpFiles]);
