@@ -241,10 +241,25 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     }
   }, [open]);
 
-  // Get unique states and localities from site entries
+  // Helper: filter to only dispatchable sites (not already dispatched/accepted/claimed)
+  const dispatchableSiteEntries = useMemo(() => {
+    return siteEntries.filter((entry) => {
+      const status = String(entry.status || '').toLowerCase().replace(/[\s_-]/g, '');
+      const acceptedBy = entry.accepted_by || entry.acceptedBy;
+      if (acceptedBy && String(acceptedBy).trim() !== '') return false;
+      const excludedStatuses = ['dispatched', 'accepted', 'assigned', 'ongoing', 'completed', 'inprogress'];
+      if (excludedStatuses.some(s => status === s || status.startsWith(s))) return false;
+      if (entry.dispatched_at || entry.dispatchedAt) return false;
+      const addlData = entry.additional_data || entry.additionalData || {};
+      if (addlData.dispatched_by || addlData.dispatched_at || addlData.dispatch_type) return false;
+      return true;
+    });
+  }, [siteEntries]);
+
+  // Get unique states and localities from DISPATCHABLE site entries only
   const uniqueStates = useMemo(() => {
     const states = new Set<string>();
-    siteEntries.forEach((entry) => {
+    dispatchableSiteEntries.forEach((entry) => {
       const state = entry.state || entry.state_name;
       if (state && state.trim() !== "") {
         states.add(state.trim());
@@ -253,11 +268,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     return Array.from(states)
       .filter((s) => s && s.trim() !== "")
       .sort();
-  }, [siteEntries]);
+  }, [dispatchableSiteEntries]);
 
   const uniqueLocalities = useMemo(() => {
     const localities = new Set<string>();
-    siteEntries.forEach((entry) => {
+    dispatchableSiteEntries.forEach((entry) => {
       const locality = entry.locality || entry.locality_name;
       if (
         locality &&
@@ -270,7 +285,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     return Array.from(localities)
       .filter((loc) => loc && loc.trim() !== "")
       .sort();
-  }, [siteEntries, selectedState]);
+  }, [dispatchableSiteEntries, selectedState]);
 
   // Filter collectors based on dispatch type
   const filteredCollectors = useMemo(() => {
