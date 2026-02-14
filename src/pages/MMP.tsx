@@ -3111,8 +3111,10 @@ const MMP = () => {
             .from('mmp_site_entries')
             .select('*')
             .in('mmp_file_id', verifiedMmpIds)
-            .or('status.ilike.accepted,status.ilike.assigned')
             .not('accepted_by', 'is', null)
+            .not('status', 'ilike', '%completed%')
+            .not('status', 'ilike', '%rejected%')
+            .not('status', 'ilike', '%declined%')
             .order('accepted_at', { ascending: false })
             .limit(2000);
 
@@ -3372,8 +3374,18 @@ const MMP = () => {
       const assignedTo = ad.assigned_to || ad.smart_assigned_to || (row as any).assigned_to || (row as any).smart_assigned_to;
       
       // Check categories in order of specificity
+      // Any site with accepted_by set goes to 'accepted' regardless of status
+      // (covers individually dispatched sites, claimed sites, etc.)
+      if (acceptedBy) {
+        // Exception: completed/rejected sites keep their own category
+        if (status === 'completed') return 'completed';
+        if (status === 'rejected' || status === 'declined') return 'rejected';
+        if (/inprogress|in_progress|ongoing/.test(status)) return 'ongoing';
+        return 'accepted';
+      }
+      
       // approvedCosted: only sites that haven't been dispatched or claimed yet
-      if (status.includes('approved') && status.includes('costed') && !acceptedBy && !dispatchedAt) {
+      if (status.includes('approved') && status.includes('costed') && !dispatchedAt) {
         return 'approvedCosted';
       }
       if (status === 'completed') {
@@ -3388,13 +3400,10 @@ const MMP = () => {
       if (status === 'accepted') {
         return 'accepted';
       }
-      if (status === 'assigned' && acceptedBy) {
-        return 'accepted';
-      }
-      if (status === 'assigned' && assignedTo && !acceptedBy) {
+      if (status === 'assigned' && assignedTo) {
         return 'smartAssigned';
       }
-      if (status === 'dispatched' && !acceptedBy) {
+      if (status === 'dispatched') {
         return 'dispatched';
       }
       // New sites - verified statuses before costing/dispatch
