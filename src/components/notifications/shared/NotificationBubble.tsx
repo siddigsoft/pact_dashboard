@@ -86,13 +86,13 @@ interface PriorityIndicatorProps {
 }
 
 export function PriorityIndicator({ priority }: PriorityIndicatorProps) {
-  if (priority === 'low') return null;
+  if (priority === 'low' || priority === 'normal') return null;
   
   return (
     <span
       className={cn(
         'notification-priority',
-        priority === 'high' && 'notification-priority--high',
+        (priority === 'high' || priority === 'urgent') && 'notification-priority--high',
         priority === 'medium' && 'notification-priority--medium'
       )}
       data-testid={`priority-indicator-${priority}`}

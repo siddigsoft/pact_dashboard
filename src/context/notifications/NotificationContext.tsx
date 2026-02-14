@@ -140,17 +140,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Supports both old columns (title, message, link, related_entity_id/type) 
   // and new columns (title_en, message_en, action_url, entity_id/type)
   const mapDbToNotification = useCallback((row: any): Notification => {
-    // Ensure we have a valid userId - prefer recipient_id, fallback to user_id
     const userId = row.recipient_id || row.user_id;
-    
-    // Log if we have a notification with missing userId (shouldn't happen but helps debug)
-    if (!userId && row.id) {
-      console.warn('[NotificationContext] Notification missing userId:', row.id, {
-        recipient_id: row.recipient_id,
-        user_id: row.user_id,
-        title: row.title_en || row.title
-      });
-    }
     
     return {
       id: row.id,
@@ -207,12 +197,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return;
       }
       try {
-        // Fetch notifications where recipient_id OR user_id matches current user
-        // Database has both columns - recipient_id is the primary one in extended schema
-        console.log('[NotificationContext] Fetching notifications for user:', currentUserId);
-        console.log('[NotificationContext] Current user role:', currentUserRole);
-        
-        // If user is admin or super admin, also include system notifications (like MMP uploads)
         const isAdmin = currentUserRole && ['admin', 'Admin', 'super_admin', 'superAdmin', 'SuperAdmin'].includes(currentUserRole);
         
         let allNotifications: any[] = [];
@@ -226,28 +210,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           .limit(50);
         
         if (userError) {
-          console.error('[NotificationContext] Error fetching user notifications:', userError);
+          console.error('[NotificationContext] Error fetching notifications:', userError);
         } else if (userNotifications) {
           allNotifications = userNotifications;
-          console.log('[NotificationContext] User notifications:', userNotifications.length);
         }
         
         // If admin, also fetch system and assignment notifications related to MMPs and site visits
         // This includes: MMP uploads (system), MMP forwarded to FOM (assignments), etc.
         if (isAdmin) {
-          console.log('[NotificationContext] Admin user - fetching admin-relevant notifications');
           const { data: adminNotifications, error: adminError } = await supabase
             .from('notifications')
             .select('*')
-            .in('entity_type', ['mmpFile', 'siteVisit'])
-            .in('event_type', ['system', 'assignments', 'approvals'])
+            .in('entity_type', ['mmpFile', 'siteVisit', 'wallet', 'downPayment', 'costSubmission', 'retainer', 'transaction', 'account', 'recovery'])
+            .in('event_type', ['system', 'assignments', 'approvals', 'financial', 'wallet', 'retainer', 'account', 'recall'])
             .order('created_at', { ascending: false })
             .limit(50);
           
           if (adminError) {
             console.error('[NotificationContext] Error fetching admin notifications:', adminError);
           } else if (adminNotifications) {
-            console.log('[NotificationContext] Admin-relevant notifications:', adminNotifications.length);
             // Merge and deduplicate by ID
             const existingIds = new Set(allNotifications.map(n => n.id));
             const newAdminNotifications = adminNotifications.filter(n => !existingIds.has(n.id));
@@ -261,38 +242,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         }
         
-        const error = userError;
-        const data = allNotifications;
-        
-        console.log('[NotificationContext] Query result - error:', error);
-        console.log('[NotificationContext] Query result - data count:', data?.length || 0);
-        
         if (!cancelled) {
-          if (error) {
-            console.error('[NotificationContext] Failed to fetch notifications:', error);
-            console.error('[NotificationContext] Error code:', error.code);
-            console.error('[NotificationContext] Error message:', error.message);
-            console.error('[NotificationContext] Error details:', error.details);
-            console.error('[NotificationContext] Error hint:', error.hint);
-          } else if (data) {
-            console.log('[NotificationContext] Raw notifications fetched:', data.length);
-            console.log('[NotificationContext] Sample notification:', data[0]);
-            
-            // Additional client-side filter as backup + role/project filtering
-            const mapped = data.map(mapDbToNotification);
-            console.log('[NotificationContext] Mapped notifications:', mapped.length);
-            
+          if (userError) {
+            console.error('[NotificationContext] Failed to fetch notifications:', userError);
+          } else {
+            const mapped = allNotifications.map(mapDbToNotification);
             const filteredOutChat = mapped.filter(n => n.title !== 'Chat System Active');
-            console.log('[NotificationContext] After filtering out chat:', filteredOutChat.length);
-            
             const filtered = filteredOutChat.filter(filterByRoleAndProject);
-            console.log('[NotificationContext] After role/project filter:', filtered.length);
-            console.log('[NotificationContext] Final notifications to display:', filtered);
-            
             setAppNotifications(filtered);
             setLastRefresh(new Date());
-          } else {
-            console.warn('[NotificationContext] No data returned from query');
           }
         }
       } catch (err) {
@@ -515,8 +473,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       throw new Error('User not authenticated');
     }
     
-    console.log(`Attempting to delete all notifications for user: ${userId}`);
-    
     // Delete all notifications for the current user from the database
     try {
       // Delete notifications where recipient_id matches
@@ -527,40 +483,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .select('id');
       
       if (error) {
-        console.error('Failed to delete notifications:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
-        
-        // Check if it's an RLS policy error
+        console.error('Failed to delete notifications:', error.code, error.message);
         if (error.code === '42501' || error.message?.includes('policy')) {
-          console.error('RLS policy error: User may not have permission to delete notifications');
           throw new Error('Permission denied: Unable to delete notifications. Please check RLS policies.');
         }
-        
         throw error;
       }
       
       const deletedCount = deletedData?.length || 0;
-      console.log(`Successfully deleted ${deletedCount} notifications`);
-      
-      // Clear local state immediately
       setAppNotifications([]);
-      
-      // Verify deletion by checking if any notifications remain
-      const { data: remaining, error: verifyError } = await supabase
-        .from('notifications')
-        .select('id')
-        .eq('recipient_id', userId)
-        .limit(1);
-      
-      if (verifyError) {
-        console.warn('Error verifying deletion:', verifyError);
-      } else if (remaining && remaining.length > 0) {
-        console.warn(`Warning: ${remaining.length} notification(s) still exist after delete. This might be due to RLS policies or concurrent inserts.`);
-      } else {
-        console.log('Verification: All notifications successfully deleted');
-      }
       
       return deletedCount;
     } catch (err) {

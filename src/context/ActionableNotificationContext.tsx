@@ -15,7 +15,7 @@ interface NotificationOptions {
   senderName?: string;
   senderAvatar?: string;
   link?: string;
-  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  priority?: 'normal' | 'high' | 'urgent';
   playSound?: boolean;
 }
 

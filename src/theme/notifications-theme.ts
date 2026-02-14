@@ -277,7 +277,7 @@ export type NotificationType =
   | 'approval'
   | 'mention';
 
-export type NotificationPriority = 'high' | 'medium' | 'low';
+export type NotificationPriority = 'high' | 'medium' | 'low' | 'normal' | 'urgent';
 
 // Notification data structure
 export interface NotificationData {
@@ -319,10 +319,12 @@ export const getTheme = (isDark: boolean): NotificationTheme => {
 export const getPriorityColor = (priority: NotificationPriority, theme: NotificationTheme): string => {
   switch (priority) {
     case 'high':
+    case 'urgent':
       return theme.colors.priorityHigh;
     case 'medium':
       return theme.colors.priorityMedium;
     case 'low':
+    case 'normal':
     default:
       return theme.colors.priorityLow;
   }
