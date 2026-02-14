@@ -2005,7 +2005,7 @@ const MMP = () => {
       console.log('[MMP My Sites Load] Loading sites accepted by user:', currentUser?.id);
       
       try {
-        // Query all sites accepted by this user (My Sites)
+        // Query 1: Sites accepted by this user (accepted_by = user.id)
         const { data: mySitesData, error } = await supabase
           .from('mmp_site_entries')
           .select('*')
@@ -2015,14 +2015,55 @@ const MMP = () => {
 
         if (error) {
           console.error('[MMP My Sites Load] DB Error:', error);
-          return;
         }
 
-        console.log(`📊 [MMP My Sites Load] Found ${mySitesData?.length || 0} sites accepted by user`);
+        // Query 2: Sites assigned via down_payment_requests (requested_by = user.id)
+        const { data: dpRequests, error: dpError } = await supabase
+          .from('down_payment_requests')
+          .select('mmp_site_entry_id')
+          .eq('requested_by', currentUser.id)
+          .not('mmp_site_entry_id', 'is', null)
+          .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
 
-        if (mySitesData && mySitesData.length > 0) {
-          // Format entries for display
-          const formattedEntries = mySitesData.map(entry => ({
+        if (dpError) {
+          console.error('[MMP My Sites Load] Down payment query error:', dpError);
+        }
+
+        const acceptedIds = new Set((mySitesData || []).map(e => e.id));
+        const dpSiteIds = (dpRequests || [])
+          .map((dp: any) => dp.mmp_site_entry_id)
+          .filter((id: string) => id && !acceptedIds.has(id));
+
+        let dpSiteEntries: any[] = [];
+        if (dpSiteIds.length > 0) {
+          const uniqueDpIds = [...new Set(dpSiteIds)];
+          const { data: dpEntries } = await supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .in('id', uniqueDpIds)
+            .limit(1000);
+          
+          if (dpEntries) {
+            dpSiteEntries = dpEntries.map(entry => ({
+              ...entry,
+              accepted_by: entry.accepted_by || currentUser.id
+            }));
+          }
+        }
+
+        // Merge and deduplicate
+        const allEntries = [...(mySitesData || []), ...dpSiteEntries];
+        const seenIds = new Set<string>();
+        const deduped = allEntries.filter(e => {
+          if (seenIds.has(e.id)) return false;
+          seenIds.add(e.id);
+          return true;
+        });
+
+        console.log(`📊 [MMP My Sites Load] Found ${deduped.length} sites (${mySitesData?.length || 0} accepted + ${dpSiteEntries.length} from advance requests)`);
+
+        if (deduped.length > 0) {
+          const formattedEntries = deduped.map(entry => ({
             ...entry,
             siteName: entry.site_name,
             siteCode: entry.site_code,
@@ -2036,7 +2077,7 @@ const MMP = () => {
           setEnumeratorMySites(formattedEntries);
           console.log('[MMP My Sites Load] Successfully loaded My Sites:', formattedEntries.length);
         } else {
-          console.log('[MMP My Sites Load] No accepted sites found for this user');
+          console.log('[MMP My Sites Load] No sites found for this user');
           setEnumeratorMySites([]);
         }
       } catch (error) {
@@ -3107,6 +3148,7 @@ const MMP = () => {
             return;
           }
 
+          // Query 1: Sites with accepted_by set directly
           const { data: dbEntries, error } = await supabase
             .from('mmp_site_entries')
             .select('*')
@@ -3120,11 +3162,69 @@ const MMP = () => {
 
           if (error) {
             console.error('[Accepted] DB query error:', error);
-            setLoadingAccepted(false);
-            return;
           }
 
-          const formattedEntries = (dbEntries || []).map(entry => {
+          // Query 2: Find site entry IDs that have approved down_payment_requests
+          // These sites are assigned to enumerators even if accepted_by is not set
+          const { data: dpRequests, error: dpError } = await supabase
+            .from('down_payment_requests')
+            .select('mmp_site_entry_id, requested_by, site_name')
+            .not('mmp_site_entry_id', 'is', null)
+            .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
+
+          if (dpError) {
+            console.error('[Accepted] Down payment query error:', dpError);
+          }
+
+          // Get IDs already in the accepted list
+          const acceptedIds = new Set((dbEntries || []).map(e => e.id));
+          
+          // Find site entries with down payment requests but NOT in accepted list
+          const dpSiteEntryIds = (dpRequests || [])
+            .map(dp => dp.mmp_site_entry_id)
+            .filter((id: string) => id && !acceptedIds.has(id));
+          
+          let dpSiteEntries: any[] = [];
+          if (dpSiteEntryIds.length > 0) {
+            const uniqueDpIds = [...new Set(dpSiteEntryIds)];
+            const { data: dpEntries, error: dpEntriesError } = await supabase
+              .from('mmp_site_entries')
+              .select('*')
+              .in('id', uniqueDpIds)
+              .in('mmp_file_id', verifiedMmpIds)
+              .not('status', 'ilike', '%completed%')
+              .not('status', 'ilike', '%rejected%')
+              .not('status', 'ilike', '%declined%')
+              .limit(2000);
+            
+            if (!dpEntriesError && dpEntries) {
+              // Also set the accepted_by from the down payment request for proper attribution
+              const dpRequestMap = new Map<string, any>();
+              (dpRequests || []).forEach((dp: any) => {
+                if (dp.mmp_site_entry_id) dpRequestMap.set(dp.mmp_site_entry_id, dp);
+              });
+              
+              dpSiteEntries = dpEntries.map(entry => {
+                const dpReq = dpRequestMap.get(entry.id);
+                return {
+                  ...entry,
+                  accepted_by: entry.accepted_by || dpReq?.requested_by,
+                  _from_down_payment: true
+                };
+              });
+            }
+          }
+
+          // Merge both sources, deduplicating by ID
+          const allEntries = [...(dbEntries || []), ...dpSiteEntries];
+          const seenIds = new Set<string>();
+          const deduped = allEntries.filter(e => {
+            if (seenIds.has(e.id)) return false;
+            seenIds.add(e.id);
+            return true;
+          });
+
+          const formattedEntries = deduped.map(entry => {
             const formatted = formatSiteEntry(entry);
             return {
               ...formatted,
