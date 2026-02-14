@@ -2899,16 +2899,19 @@ const MMP = () => {
     // The direct query (loadMySitesForEnumerator) is more reliable for data collectors
     // because it queries mmp_site_entries directly by accepted_by, whereas enumeratorData.mySites
     // comes from the MMP context which may not include all sites claimed by the collector.
-    // Only use enumeratorData.mySites if the direct query hasn't loaded anything yet.
-    if (enumeratorData.mySites.length > 0) {
-      setEnumeratorMySites(prev => {
-        // Merge: union of direct DB results and context-computed results (deduplicated by id)
-        const byId = new Map<string, any>();
-        prev.forEach(e => { if (e?.id) byId.set(String(e.id), e); });
-        enumeratorData.mySites.forEach((e: any) => { if (e?.id && !byId.has(String(e.id))) byId.set(String(e.id), e); });
-        return Array.from(byId.values());
-      });
-    }
+    // Merge both sources, preferring DB-loaded rows (prev) over context-derived rows.
+    setEnumeratorMySites(prev => {
+      if (prev.length === 0 && enumeratorData.mySites.length === 0) return prev;
+      const byId = new Map<string, any>();
+      // DB-loaded rows take priority (added first)
+      prev.forEach(e => { if (e?.id) byId.set(String(e.id), e); });
+      // Context rows only added if not already present from DB
+      enumeratorData.mySites.forEach((e: any) => { if (e?.id && !byId.has(String(e.id))) byId.set(String(e.id), e); });
+      const merged = Array.from(byId.values());
+      // Skip update if nothing changed (same length and same ids)
+      if (merged.length === prev.length && prev.every(e => byId.has(String(e.id)))) return prev;
+      return merged;
+    });
     // Don't override loading state if we're in the middle of direct loading
   }, [enumeratorData]);
 
@@ -2951,43 +2954,66 @@ const MMP = () => {
     setSmartAssignedCount(formattedEntries.length);
   }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
 
-  // Load approved and costed site entries only when the tab is active
-  // Uses verifiedSiteEntries (only from verified MMPs) to ensure data consistency
+  // Load approved and costed site entries directly from database for fresh data
+  // This ensures dispatched/claimed sites are immediately excluded
   useEffect(() => {
-    
       if (verifiedSubTab !== 'approvedCosted') {
         setApprovedCostedSiteEntries([]);
         setLoadingApprovedCosted(false);
         return;
       }
 
-      setLoadingApprovedCosted(false);
+      const loadApprovedCostedFromDB = async () => {
+        setLoadingApprovedCosted(true);
+        try {
+          const verifiedMmpIds = (categorizedMMPs.verified || []).map(mmp => mmp.id);
+          if (verifiedMmpIds.length === 0) {
+            setApprovedCostedSiteEntries([]);
+            setApprovedCostedCount(0);
+            setLoadingApprovedCosted(false);
+            return;
+          }
 
-      const formattedEntries = verifiedSiteEntries
-      .map(formatSiteEntry)
-      .filter(entry =>{
-        const status = String(entry.status || '').toLowerCase();
-        // Include sites that are:
-        // - "approved and costed"
-        // - "costed" (after approval or reset)
-        // - Any status containing "costed"
-        const isCosted = status === 'costed' || (status.includes('approved') && status.includes('costed'));
-        if (!isCosted) return false;
-        // Exclude entries that have already been dispatched or claimed
-        const acceptedBy = entry.accepted_by || entry.acceptedBy;
-        if (acceptedBy && String(acceptedBy).trim() !== '') return false;
-        if (entry.dispatched_at || entry.dispatchedAt) return false;
-        const addlData = entry.additional_data || entry.additionalData || {};
-        if (addlData.dispatched_by || addlData.dispatched_at || addlData.dispatch_type) return false;
-        return true;
-      })
-      setApprovedCostedSiteEntries(formattedEntries);
-      setApprovedCostedCount(formattedEntries.length);
-  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
+          const { data: dbEntries, error } = await supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .in('mmp_file_id', verifiedMmpIds)
+            .ilike('status', '%costed%')
+            .is('accepted_by', null)
+            .is('dispatched_at', null)
+            .order('created_at', { ascending: false })
+            .limit(2000);
+
+          if (error) {
+            console.error('[ApprovedCosted] DB query error:', error);
+            setLoadingApprovedCosted(false);
+            return;
+          }
+
+          const formattedEntries = (dbEntries || []).map(entry => {
+            const formatted = formatSiteEntry(entry);
+            return {
+              ...formatted,
+              mmp_file_id: entry.mmp_file_id,
+              mmpId: entry.mmp_file_id,
+            };
+          });
+
+          setApprovedCostedSiteEntries(formattedEntries);
+          setApprovedCostedCount(formattedEntries.length);
+        } catch (err) {
+          console.error('[ApprovedCosted] Failed to load:', err);
+        } finally {
+          setLoadingApprovedCosted(false);
+        }
+      };
+
+      loadApprovedCostedFromDB();
+  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry]);
 
   
-  // Load dispatched site entries (uses verifiedSiteEntries for consistency)
-  // Also calculate total cost with viewer's enumerator fee
+  // Load dispatched site entries directly from database for fresh data
+  // This ensures sites claimed by data collectors are immediately excluded
   useEffect(() => {
     if (verifiedSubTab !== 'dispatched') {
       setDispatchedSiteEntries([]);
@@ -2995,81 +3021,122 @@ const MMP = () => {
       return;
     }
 
-    const loadDispatchedWithFees = async () => {
+    const loadDispatchedFromDB = async () => {
       setLoadingDispatched(true);
       
-      // Get viewer's enumerator fee first
-      let viewerEnumeratorFee = 0;
-      if (currentUser?.id) {
-        try {
-          const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
-          viewerEnumeratorFee = feeResult.fee;
-        } catch (error) {
-          console.warn('[Dispatched] Could not calculate viewer enumerator fee:', error);
+      try {
+        let viewerEnumeratorFee = 0;
+        if (currentUser?.id) {
+          try {
+            const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
+            viewerEnumeratorFee = feeResult.fee;
+          } catch (error) {
+            console.warn('[Dispatched] Could not calculate viewer enumerator fee:', error);
+          }
         }
-      }
 
-      const formattedEntries = verifiedSiteEntries
-        .map(formatSiteEntry)
-        .filter(entry => {
-          const status = String(entry.status || '').toLowerCase();
-          const acceptedBy = (entry as any).accepted_by;
-          return status === 'dispatched' && !acceptedBy;
-        })
-        .map(entry => {
-          // Add enumerator fee and calculate total cost for display
-          const transportFee = Number(entry.transport_fee) || 0;
+        const verifiedMmpIds = (categorizedMMPs.verified || []).map(mmp => mmp.id);
+        if (verifiedMmpIds.length === 0) {
+          setDispatchedSiteEntries([]);
+          setDispatchedCount(0);
+          setLoadingDispatched(false);
+          return;
+        }
+
+        const { data: dbEntries, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .in('mmp_file_id', verifiedMmpIds)
+          .ilike('status', 'dispatched')
+          .is('accepted_by', null)
+          .order('dispatched_at', { ascending: false })
+          .limit(2000);
+
+        if (error) {
+          console.error('[Dispatched] DB query error:', error);
+          setLoadingDispatched(false);
+          return;
+        }
+
+        const formattedEntries = (dbEntries || []).map(entry => {
+          const formatted = formatSiteEntry(entry);
+          const transportFee = Number(formatted.transport_fee) || 0;
           const totalCost = viewerEnumeratorFee + transportFee;
           return {
-            ...entry,
-            enumerator_fee: entry.enumerator_fee || viewerEnumeratorFee,
+            ...formatted,
+            mmp_file_id: entry.mmp_file_id,
+            mmpId: entry.mmp_file_id,
+            enumerator_fee: formatted.enumerator_fee || viewerEnumeratorFee,
             cost: totalCost
           };
-        })
-        .sort((a, b) => {
-          const aDate = (a as any).dispatched_at || (a as any).dispatchedAt || (a as any).created_at || (a as any).createdAt || '';
-          const bDate = (b as any).dispatched_at || (b as any).dispatchedAt || (b as any).created_at || (b as any).createdAt || '';
-          return bDate.localeCompare(aDate);
         });
 
-      setDispatchedSiteEntries(formattedEntries);
-      setDispatchedCount(formattedEntries.length);
-      setLoadingDispatched(false);
+        setDispatchedSiteEntries(formattedEntries);
+        setDispatchedCount(formattedEntries.length);
+      } catch (err) {
+        console.error('[Dispatched] Failed to load:', err);
+      } finally {
+        setLoadingDispatched(false);
+      }
     };
     
-    loadDispatchedWithFees();
-  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry, currentUser?.id]);
+    loadDispatchedFromDB();
+  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry, currentUser?.id]);
 
-  // Load accepted site entries only when the tab is active
-  // Uses verifiedSiteEntries (only from verified MMPs) for consistency
+  // Load accepted site entries directly from database for fresh data
   useEffect(() => {
-    
       if (verifiedSubTab !== 'accepted') {
         setAcceptedSiteEntries([]);
         setLoadingAccepted(false);
         return;
       }
 
-      setLoadingAccepted(false);
-      const formattedEntries = verifiedSiteEntries
-      .map(formatSiteEntry)
-      .filter(entry =>{
-        const status = String(entry.status || '').toLowerCase();
-        if (status === "accepted") return true;
-        if (status === "assigned" && entry.accepted_by) return true;
-        return false;
-      })
-      .sort((a, b) => {
-      const aDate = (a as any).accepted_at || (a as any).updated_at || (a as any).createdAt || '';
-      const bDate = (b as any).accepted_at || (b as any).updated_at || (b as any).createdAt || '';
-      return bDate.localeCompare(aDate);
-    })
+      const loadAcceptedFromDB = async () => {
+        setLoadingAccepted(true);
+        try {
+          const verifiedMmpIds = (categorizedMMPs.verified || []).map(mmp => mmp.id);
+          if (verifiedMmpIds.length === 0) {
+            setAcceptedSiteEntries([]);
+            setAcceptedCount(0);
+            setLoadingAccepted(false);
+            return;
+          }
 
-    setAcceptedSiteEntries(formattedEntries);
-    setAcceptedCount(formattedEntries.length);
+          const { data: dbEntries, error } = await supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .in('mmp_file_id', verifiedMmpIds)
+            .or('status.ilike.accepted,status.ilike.assigned')
+            .not('accepted_by', 'is', null)
+            .order('accepted_at', { ascending: false })
+            .limit(2000);
 
-    // No async operation needed - using in-memory data
-  }, [verifiedSubTab, verifiedSiteEntries, formatSiteEntry]);
+          if (error) {
+            console.error('[Accepted] DB query error:', error);
+            setLoadingAccepted(false);
+            return;
+          }
+
+          const formattedEntries = (dbEntries || []).map(entry => {
+            const formatted = formatSiteEntry(entry);
+            return {
+              ...formatted,
+              mmp_file_id: entry.mmp_file_id,
+              mmpId: entry.mmp_file_id,
+            };
+          });
+
+          setAcceptedSiteEntries(formattedEntries);
+          setAcceptedCount(formattedEntries.length);
+        } catch (err) {
+          console.error('[Accepted] Failed to load:', err);
+        } finally {
+          setLoadingAccepted(false);
+        }
+      };
+
+      loadAcceptedFromDB();
+  }, [verifiedSubTab, categorizedMMPs.verified, formatSiteEntry]);
 
   // Load ongoing site entries only when the tab is active
   // Uses verifiedSiteEntries (only from verified MMPs) for consistency
