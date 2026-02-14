@@ -358,7 +358,7 @@ function AdvanceRequestsReportContent() {
   }, [approvedForPayment, getProfileName]);
 
   const cachedRecipientsRef = useRef<Array<{ id: string; email: string; name: string; role: string }> | null>(null);
-  const ccContactsRef = useRef<Array<{ id: string; email: string; name: string; role: string }>>([]);
+  const [ccContacts, setCcContacts] = useState<Array<{ id: string; email: string; name: string; role: string }>>([]);
 
   useEffect(() => {
     const preload = async () => {
@@ -379,9 +379,9 @@ function AdvanceRequestsReportContent() {
       .not('email', 'is', null)
       .then(({ data }) => {
         if (data) {
-          ccContactsRef.current = data
+          setCcContacts(data
             .filter((u: any) => u.email)
-            .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role || '' }));
+            .map((u: any) => ({ id: u.id, email: u.email, name: u.full_name || u.email, role: u.role || '' })));
         }
       });
   }, []);
@@ -3138,7 +3138,7 @@ function AdvanceRequestsReportContent() {
                 <EmailCCInput
                   ccEmails={paymentRequestDialog.ccEmails}
                   onChange={(emails) => setPaymentRequestDialog(prev => ({ ...prev, ccEmails: emails }))}
-                  contacts={ccContactsRef.current.filter(c => !paymentRequestDialog.selectedRecipientIds.includes(c.id))}
+                  contacts={ccContacts.filter(c => !paymentRequestDialog.selectedRecipientIds.includes(c.id))}
                 />
               </div>
             </div>
