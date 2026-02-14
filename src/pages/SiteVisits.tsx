@@ -152,14 +152,14 @@ const SiteVisits = () => {
   // Check if user is a data collector
   const isDataCollector = useMemo(() => {
     if (!currentUser) return false;
-    const role = (currentUser.role || '').toLowerCase();
-    return role === 'datacollector' || role === 'data collector';
+    const role = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'datacollector' || role === 'enumerator';
   }, [currentUser]);
 
   // Check if user is a coordinator
   const isCoordinator = useMemo(() => {
     if (!currentUser) return false;
-    const role = (currentUser.role || '').toLowerCase();
+    const role = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
     return role === 'coordinator';
   }, [currentUser]);
 

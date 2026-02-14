@@ -1847,17 +1847,17 @@ const MMP = () => {
   const [unsyncedCompletedVisits, setUnsyncedCompletedVisits] = useState<any[]>([]);
   const [viewerEnumeratorFee, setViewerEnumeratorFee] = useState<number>(0);
 
-  // Helper function to normalize role checking (handles both lowercase and proper case)
+  // Helper function to normalize role checking (handles both lowercase, proper case, and spaces)
   const hasRole = (rolesToCheck: string[]) => {
     if (!currentUser) return false;
     
-    // Get user's role (single) and roles (array) - normalize to lowercase for comparison
-    const userRole = currentUser.role?.toLowerCase() || '';
-    const userRoles = (currentUser.roles || []).map(r => r.toLowerCase());
+    const normalize = (r: string) => r.toLowerCase().replace(/[\s_-]/g, '');
     
-    // Check if any of the provided roles match
+    const userRole = normalize(currentUser.role || '');
+    const userRoles = (currentUser.roles || []).map(r => normalize(r));
+    
     return rolesToCheck.some(role => {
-      const normalizedRole = role.toLowerCase();
+      const normalizedRole = normalize(role);
       return userRole === normalizedRole || userRoles.includes(normalizedRole);
     });
   };
@@ -1867,7 +1867,7 @@ const MMP = () => {
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
   const isSupervisor = hasRole(['Supervisor', 'supervisor']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
-  const isDataCollector = hasRole(['DataCollector', 'datacollector', 'enumerator', 'Enumerator']);
+  const isDataCollector = hasRole(['DataCollector', 'datacollector', 'Data Collector', 'data collector', 'enumerator', 'Enumerator']);
   // Coordinators have full data collector capabilities (can claim sites, view transport fees, etc.)
   const canClaimSites = isDataCollector || isCoordinator;
   
