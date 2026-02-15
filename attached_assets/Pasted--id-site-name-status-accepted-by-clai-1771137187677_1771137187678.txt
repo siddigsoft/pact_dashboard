@@ -1,0 +1,15 @@
+| id                                   | site_name        | status              | accepted_by | claimed_by_name | dispatched_at              | dispatched_by                        |
+| ------------------------------------ | ---------------- | ------------------- | ----------- | --------------- | -------------------------- | ------------------------------------ |
+| f18819f4-b3b4-46e4-a931-51e0eb9ab288 | AL HILA ALJADIDA | costed              | null        | mohamed ahmed   | null                       | null                                 |
+| 46889f54-b110-4648-9395-4dc197478ca2 | AL HILA ALJADIDA | Pending             | null        | null            | null                       | null                                 |
+| 3b7f4988-7734-4b14-895b-f201fc69d58f | AL HILA ALJADIDA | Pending             | null        | null            | null                       | null                                 |
+| 2196236a-724f-48e5-9e4b-f20e6a907578 | ALKRIDA HOSPITAL | costed              | null        | mohamed ahmed   | null                       | null                                 |
+| 9ce87e74-e0e4-484e-8cc3-a4784523bc2b | ALKRIDA HOSPITAL | Pending             | null        | null            | null                       | null                                 |
+| 7d966582-6d94-43f0-9362-324dd85b4638 | ALLAOUTA         | costed              | null        | mohamed ahmed   | null                       | null                                 |
+| e7900402-b8ed-4c8f-ac5e-0b504a403962 | ALLAOUTA         | Pending             | null        | null            | null                       | null                                 |
+| 84a67659-5696-4aff-8acf-c5628fa8db0d | ELTURA ELKHADRA  | Approved and Costed | null        | null            | 2026-01-26 18:34:56.636+00 | 7943f569-b5fb-4ad6-b788-7194bd36a9e6 |
+| cc500fa9-8537-4772-bace-bf3cda54c4bd | ELTURA ELKHADRA  | costed              | null        | mohamed ahmed   | null                       | null                                 |
+| 2bc152ec-f148-4ac1-8563-4ce454143bef | ELTURA ELKHADRA  | Pending             | null        | null            | null                       | null                                 |
+| 48df5c94-8961-41a5-9b4c-d8b96b446576 | ELTURA ELKHADRA  | Pending             | null        | null            | null                       | null                                 |
+| 3d90b469-cccd-408c-87c6-cbc5c1de6be7 | SHATIB           | costed              | null        | mohamed ahmed   | null                       | null                                 |
+| 3c828880-8464-4627-8f18-bc068cd35734 | SHATIB           | Pending             | null        | null            | null                       | null                                 |
