@@ -1695,6 +1695,12 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     <CheckCircle2 className="h-4 w-4 mr-1" />
                     Approve All
                   </Button>
+                  {isSuperAdmin && (
+                    <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={handleBulkDelete} disabled={processing} data-testid="button-bulk-delete-pending">
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete ({selectedIds.size})
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={clearSelection} data-testid="button-clear-selection">
                     Clear
                   </Button>
