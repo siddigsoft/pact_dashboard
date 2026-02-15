@@ -2897,7 +2897,7 @@ const MMP = () => {
     // Also calculate total cost for display
     const smartAssigned = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
-      if (status !== 'assigned' && status !== 'claimed') return false;
+      if (status !== 'assigned') return false;
       if (entry.accepted_by !== currentUser.id) return false;
       return !entry.cost_acknowledged; // Exclude cost-acknowledged sites
     }).map(entry => {
@@ -5209,16 +5209,10 @@ const MMP = () => {
                             <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                return status === 'accepted' || 
-                                       status === 'assigned' || 
-                                       status === 'dispatched' ||
-                                       status === 'smartassigned' ||
-                                       status === 'pending' ||
+                                return status === 'claimed' || 
+                                       status === 'accepted' || 
                                        status === 'acknowledged' ||
-                                       status === 'costandacknowledged' ||
-                                       status.includes('pending') ||
-                                       status.includes('accepted') ||
-                                       status.includes('assigned');
+                                       status === 'costandacknowledged';
                               }).length}
                             </Badge>
                           </Button>
@@ -5502,19 +5496,10 @@ const MMP = () => {
                         } else if (mySitesSubTab === 'pending') {
                           sitesToShow = enumeratorMySites.filter(site => {
                             const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                            return status === 'accepted' || 
-                                   status === 'assigned' || 
-                                   status === 'claimed' ||
-                                   status === 'dispatched' ||
-                                   status === 'smartassigned' ||
-                                   status === 'pending' ||
+                            return status === 'claimed' || 
+                                   status === 'accepted' || 
                                    status === 'acknowledged' ||
-                                   status === 'costandacknowledged' ||
-                                   status === 'costed' ||
-                                   status.includes('pending') ||
-                                   status.includes('accepted') ||
-                                   status.includes('assigned') ||
-                                   status.includes('claimed');
+                                   status === 'costandacknowledged';
                           });
                         } else if (mySitesSubTab === 'ongoing') {
                           // Outbox: Show completed visits that are not yet synced (from offline DB)
