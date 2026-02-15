@@ -241,17 +241,15 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     }
   }, [open]);
 
-  // Helper: filter to only dispatchable sites (not already dispatched/accepted/claimed)
+  // Helper: filter to only dispatchable sites based on status
+  // Sites passed to this dialog are already filtered to "approved and costed"/"costed" status,
+  // so we trust the status rather than checking stale metadata (accepted_by, dispatched_at, etc.)
+  // which may not have been cleared during re-approval workflows
   const dispatchableSiteEntries = useMemo(() => {
     return siteEntries.filter((entry) => {
       const status = String(entry.status || '').toLowerCase().replace(/[\s_-]/g, '');
-      const acceptedBy = entry.accepted_by || entry.acceptedBy;
-      if (acceptedBy && String(acceptedBy).trim() !== '') return false;
-      const excludedStatuses = ['dispatched', 'accepted', 'assigned', 'ongoing', 'completed', 'inprogress'];
+      const excludedStatuses = ['dispatched', 'accepted', 'assigned', 'ongoing', 'completed', 'inprogress', 'claimed'];
       if (excludedStatuses.some(s => status === s || status.startsWith(s))) return false;
-      if (entry.dispatched_at || entry.dispatchedAt) return false;
-      const addlData = entry.additional_data || entry.additionalData || {};
-      if (addlData.dispatched_by || addlData.dispatched_at || addlData.dispatch_type) return false;
       return true;
     });
   }, [siteEntries]);
@@ -391,18 +389,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     return filtered;
   }, [collectors, dispatchType, selectedState, selectedLocality, search]);
 
-  // Filter site entries based on selection
+  // Filter site entries based on selection - trust status over stale metadata
   const filteredSiteEntries = useMemo(() => {
     const excludeAlreadyDispatchedOrClaimed = (entries: any[]) => {
       return entries.filter((entry) => {
         const status = String(entry.status || '').toLowerCase().replace(/[\s_-]/g, '');
-        const acceptedBy = entry.accepted_by || entry.acceptedBy;
-        if (acceptedBy && String(acceptedBy).trim() !== '') return false;
-        const excludedStatuses = ['dispatched', 'accepted', 'assigned', 'ongoing', 'completed', 'inprogress'];
+        const excludedStatuses = ['dispatched', 'accepted', 'assigned', 'ongoing', 'completed', 'inprogress', 'claimed'];
         if (excludedStatuses.some(s => status === s || status.startsWith(s))) return false;
-        if (entry.dispatched_at || entry.dispatchedAt) return false;
-        const addlData = entry.additional_data || entry.additionalData || {};
-        if (addlData.dispatched_by || addlData.dispatched_at || addlData.dispatch_type) return false;
         return true;
       });
     };
