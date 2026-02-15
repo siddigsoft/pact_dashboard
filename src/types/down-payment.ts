@@ -9,7 +9,8 @@ export type DownPaymentStatus =
   | 'rejected'            // Rejected by supervisor or admin
   | 'partially_paid'      // Some installments paid
   | 'fully_paid'          // All installments paid
-  | 'cancelled';          // Cancelled by requester or system
+  | 'cancelled'           // Cancelled by requester or system
+  | 'deleted';            // Permanently removed by admin
 
 export type SupervisorStatus = 
   | 'pending' 
