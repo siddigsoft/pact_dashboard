@@ -606,12 +606,8 @@ export function SuperAdminDataManagement() {
           cost: null,
           enumerator_fee: null,
           transport_fee: null,
-          // Clear acceptance/claim fields
           accepted_by: null,
           accepted_at: null,
-          claimed_by: null,
-          claimed_at: null,
-          // Clear all additional data from dispatch/acceptance process
           additional_data: null,
         })
         .eq('id', selectedDispatchedSite.id);
