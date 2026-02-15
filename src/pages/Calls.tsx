@@ -39,6 +39,7 @@ import { useCommunication } from '@/context/communications/CommunicationContext'
 import { useCallSounds } from '@/hooks/useCallSounds';
 import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
 import { CallMethodDialog, CallType } from '@/components/calls/CallMethodDialog';
+import { CallLogService, CallLog } from '@/services/call-log.service';
 
 const MESSAGE_TEMPLATES = [
   { id: 1, label: "I'll call back", text: "Sorry I missed your call. I'll call you back shortly." },
@@ -83,14 +84,32 @@ const Calls = () => {
     connectionStatus 
   } = useRealtimeTeamLocations({ enabled: true });
   
-  // Generate sample call history from actual users (excluding current user)
-  const otherUsers = users.filter(u => u.id !== currentUser?.id);
-  const callHistory = otherUsers.length > 0 ? [
-    { id: 'c1', recipientId: otherUsers[0]?.id, direction: 'outgoing' as const, duration: 124, timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), status: 'completed' },
-    { id: 'c2', recipientId: otherUsers[1]?.id || otherUsers[0]?.id, direction: 'incoming' as const, duration: 0, timestamp: new Date(Date.now() - 3600000 * 5).toISOString(), status: 'missed' },
-    { id: 'c3', recipientId: otherUsers[2]?.id || otherUsers[0]?.id, direction: 'outgoing' as const, duration: 245, timestamp: new Date(Date.now() - 86400000).toISOString(), status: 'completed' },
-    { id: 'c4', recipientId: otherUsers[3]?.id || otherUsers[0]?.id, direction: 'incoming' as const, duration: 31, timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), status: 'completed' },
-  ].filter(call => call.recipientId) : [];
+  const [callLogs, setCallLogs] = useState<CallLog[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const fetchCallHistory = async () => {
+      setLoadingHistory(true);
+      const logs = await CallLogService.getCallHistory(currentUser.id);
+      setCallLogs(logs);
+      setLoadingHistory(false);
+    };
+    fetchCallHistory();
+  }, [currentUser?.id, activeTab]);
+
+  const callHistory = callLogs.map(log => {
+    const isOutgoing = log.caller_id === currentUser?.id;
+    const recipientId = isOutgoing ? log.callee_id : log.caller_id;
+    return {
+      id: log.id,
+      recipientId,
+      direction: isOutgoing ? 'outgoing' as const : 'incoming' as const,
+      duration: log.duration,
+      timestamp: log.started_at,
+      status: log.status,
+    };
+  });
   
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -573,7 +592,12 @@ const Calls = () => {
 
                 {activeTab === 'history' && (
                   <div className="space-y-0.5">
-                    {callHistory.length === 0 ? (
+                    {loadingHistory ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <div className="w-8 h-8 border-2 border-gray-300 border-t-black dark:border-t-white rounded-full animate-spin mb-4" />
+                        <p className="text-xs text-gray-500">Loading call history...</p>
+                      </div>
+                    ) : callHistory.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="empty-call-history">
                         <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
                           <Phone className="h-8 w-8 text-gray-400" />
@@ -586,7 +610,8 @@ const Calls = () => {
                         const user = users.find(u => u.id === call.recipientId);
                         if (!user) return null;
                         
-                        const isMissed = call.status === 'missed';
+                        const isMissed = call.status === 'missed' || call.status === 'no_answer';
+                        const isRejected = call.status === 'rejected';
                         const status = getUserOnlineStatus(user.id);
                         
                         return (
