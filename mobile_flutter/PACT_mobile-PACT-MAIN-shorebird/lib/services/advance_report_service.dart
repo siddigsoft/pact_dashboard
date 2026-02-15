@@ -17,6 +17,15 @@ class AdvanceReportService {
           .order('requested_at', ascending: false);
 
       return (response as List)
+          .where((json) {
+            if (json['status'] == 'cancelled') {
+              final metadata = json['metadata'];
+              if (metadata is Map && metadata['deleted'] == true) {
+                return false;
+              }
+            }
+            return true;
+          })
           .map((json) => AdvanceRequestData.fromJson(json))
           .toList();
     } catch (e) {

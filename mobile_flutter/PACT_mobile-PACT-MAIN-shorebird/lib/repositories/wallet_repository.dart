@@ -709,6 +709,7 @@ class WalletRepository {
   }
 
   /// Get down payment requests for current user
+  /// Filters out requests that have been soft-deleted (cancelled with deleted flag in metadata)
   Future<List<DownPaymentRequest>> getUserDownPaymentRequests(
     String userId,
   ) async {
@@ -720,6 +721,15 @@ class WalletRepository {
           .order('created_at', ascending: false);
 
       return (response as List)
+          .where((json) {
+            if (json['status'] == 'cancelled') {
+              final metadata = json['metadata'];
+              if (metadata is Map && metadata['deleted'] == true) {
+                return false;
+              }
+            }
+            return true;
+          })
           .map((json) => DownPaymentRequest.fromJson(json))
           .toList();
     } catch (e) {
@@ -923,6 +933,7 @@ class WalletRepository {
   }
 
   /// Real-time stream for user's down payment requests
+  /// Filters out requests that have been soft-deleted (cancelled with deleted flag in metadata)
   Stream<List<DownPaymentRequest>> watchUserDownPaymentRequests(String userId) {
     return _supabase
         .from('down_payment_requests')
@@ -930,8 +941,18 @@ class WalletRepository {
         .eq('requested_by', userId)
         .order('created_at', ascending: false)
         .map(
-          (data) =>
-              data.map((json) => DownPaymentRequest.fromJson(json)).toList(),
+          (data) => data
+              .where((json) {
+                if (json['status'] == 'cancelled') {
+                  final metadata = json['metadata'];
+                  if (metadata is Map && metadata['deleted'] == true) {
+                    return false;
+                  }
+                }
+                return true;
+              })
+              .map((json) => DownPaymentRequest.fromJson(json))
+              .toList(),
         );
   }
 
