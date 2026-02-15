@@ -2897,7 +2897,7 @@ const MMP = () => {
     // Also calculate total cost for display
     const smartAssigned = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
-      if (status !== 'assigned') return false;
+      if (status !== 'assigned' && status !== 'claimed') return false;
       if (entry.accepted_by !== currentUser.id) return false;
       return !entry.cost_acknowledged; // Exclude cost-acknowledged sites
     }).map(entry => {
@@ -5504,14 +5504,17 @@ const MMP = () => {
                             const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
                             return status === 'accepted' || 
                                    status === 'assigned' || 
+                                   status === 'claimed' ||
                                    status === 'dispatched' ||
                                    status === 'smartassigned' ||
                                    status === 'pending' ||
                                    status === 'acknowledged' ||
                                    status === 'costandacknowledged' ||
+                                   status === 'costed' ||
                                    status.includes('pending') ||
                                    status.includes('accepted') ||
-                                   status.includes('assigned');
+                                   status.includes('assigned') ||
+                                   status.includes('claimed');
                           });
                         } else if (mySitesSubTab === 'ongoing') {
                           // Outbox: Show completed visits that are not yet synced (from offline DB)
