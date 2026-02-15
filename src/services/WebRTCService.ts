@@ -49,26 +49,21 @@ export type CallEventHandler = {
   onConnectionStateChange: (state: RTCPeerConnectionState) => void;
 };
 
-const ICE_SERVERS: RTCConfiguration = {
+const CLOUDFLARE_TURN_CREDS_URL = 'https://speed.cloudflare.com/turn-creds';
+
+const DEFAULT_ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
     {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
+      urls: [
+        'turn:turn.cloudflare.com:3478?transport=udp',
+        'turn:turn.cloudflare.com:3478?transport=tcp',
+        'turns:turn.cloudflare.com:5349?transport=tcp',
+      ],
+      username: '',
+      credential: '',
     },
     {
       urls: 'turn:freestun.net:3478',
@@ -81,6 +76,50 @@ const ICE_SERVERS: RTCConfiguration = {
   bundlePolicy: 'max-bundle',
   rtcpMuxPolicy: 'require',
 };
+
+let cachedIceConfig: RTCConfiguration | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 10 * 60 * 1000;
+
+async function getIceServers(): Promise<RTCConfiguration> {
+  if (cachedIceConfig && Date.now() - cacheTimestamp < CACHE_TTL) {
+    return cachedIceConfig;
+  }
+
+  try {
+    const response = await fetch(CLOUDFLARE_TURN_CREDS_URL);
+    if (response.ok) {
+      const creds = await response.json();
+      console.log('[WebRTC] Got fresh Cloudflare TURN credentials');
+      cachedIceConfig = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun.cloudflare.com:3478' },
+          {
+            urls: creds.urls.filter((u: string) => u.startsWith('turn')),
+            username: creds.username,
+            credential: creds.credential,
+          },
+          {
+            urls: 'turn:freestun.net:3478',
+            username: 'free',
+            credential: 'free',
+          },
+        ],
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+      };
+      cacheTimestamp = Date.now();
+      return cachedIceConfig;
+    }
+  } catch (err) {
+    console.warn('[WebRTC] Failed to fetch Cloudflare TURN creds, using defaults:', err);
+  }
+
+  return DEFAULT_ICE_SERVERS;
+}
 
 const generateSecureToken = (): string => {
   const array = new Uint8Array(32);
@@ -597,16 +636,7 @@ class WebRTCService {
     console.log('[WebRTC] Accepting call from:', callerId, 'callId:', this.currentCallId);
 
     try {
-      // Send call-accepted FIRST so caller stops ringing immediately
-      console.log('[WebRTC] Sending call-accepted signal...');
-      await this.sendSignal({
-        type: 'call-accepted',
-        to: callerId,
-      });
-      console.log('[WebRTC] call-accepted signal sent');
-
-      // Then set up the media and connection
-      console.log('[WebRTC] Setting up local stream...');
+      console.log('[WebRTC] Setting up local stream BEFORE accepting...');
       await this.setupLocalStream();
       console.log('[WebRTC] Local stream ready');
       
@@ -614,10 +644,15 @@ class WebRTCService {
       await this.createPeerConnection();
       console.log('[WebRTC] Peer connection created');
 
-      // Update presence using the SAME token that was received in call-request
-      // This is critical for signal validation to work correctly
       await this.updateUserPresenceWithToken(true, this.currentCallId, this.currentCallToken);
-      console.log('[WebRTC] Presence updated, waiting for offer...');
+      console.log('[WebRTC] Presence updated');
+
+      console.log('[WebRTC] Sending call-accepted signal...');
+      await this.sendSignal({
+        type: 'call-accepted',
+        to: callerId,
+      });
+      console.log('[WebRTC] call-accepted signal sent, waiting for offer...');
     } catch (error) {
       console.error('[WebRTC] Failed to accept call:', error);
       this.cleanup();
@@ -715,8 +750,9 @@ class WebRTCService {
   }
 
   private async createPeerConnection() {
-    this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
-    console.log('[WebRTC] PeerConnection created, signalingState:', this.peerConnection.signalingState);
+    const iceConfig = await getIceServers();
+    this.peerConnection = new RTCPeerConnection(iceConfig);
+    console.log('[WebRTC] PeerConnection created with', iceConfig.iceServers?.length, 'ICE servers, signalingState:', this.peerConnection.signalingState);
 
     this.remoteStream = new MediaStream();
 
@@ -731,18 +767,35 @@ class WebRTCService {
     }
 
     this.peerConnection.ontrack = (event) => {
-      console.log('[WebRTC] ontrack fired, kind:', event.track.kind, 'readyState:', event.track.readyState);
+      console.log('[WebRTC] ontrack fired, kind:', event.track.kind, 'readyState:', event.track.readyState, 'muted:', event.track.muted, 'id:', event.track.id);
+      
+      const existingTrackIds = this.remoteStream?.getTracks().map(t => t.id) || [];
+      
       if (event.streams && event.streams[0]) {
-        event.streams[0].getTracks().forEach((track) => {
-          console.log('[WebRTC] Adding track from stream:', track.kind, track.id);
-          this.remoteStream?.addTrack(track);
-        });
+        console.log('[WebRTC] Using event stream directly as remote stream');
+        this.remoteStream = event.streams[0];
       } else {
-        console.log('[WebRTC] No streams in event, adding track directly:', event.track.kind);
-        this.remoteStream?.addTrack(event.track);
+        if (!existingTrackIds.includes(event.track.id)) {
+          console.log('[WebRTC] Adding track directly:', event.track.kind, event.track.id);
+          this.remoteStream?.addTrack(event.track);
+        } else {
+          console.log('[WebRTC] Track already exists, skipping:', event.track.id);
+        }
       }
+
+      event.track.onunmute = () => {
+        console.log('[WebRTC] Remote track unmuted:', event.track.kind, event.track.id);
+        if (this.remoteStream) {
+          this.eventHandlers?.onRemoteStream(this.remoteStream);
+        }
+      };
+
+      event.track.onended = () => {
+        console.warn('[WebRTC] Remote track ended:', event.track.kind, event.track.id);
+      };
+
       if (this.remoteStream && this.remoteStream.getTracks().length > 0) {
-        console.log('[WebRTC] Remote stream tracks:', this.remoteStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
+        console.log('[WebRTC] Remote stream tracks:', this.remoteStream.getTracks().map(t => `${t.kind}:${t.readyState}:muted=${t.muted}`));
         this.eventHandlers?.onRemoteStream(this.remoteStream);
       }
     };
@@ -849,11 +902,13 @@ class WebRTCService {
 
   private async handleOffer(offer: RTCSessionDescriptionInit, callerId: string) {
     if (!this.peerConnection) {
+      console.log('[WebRTC] handleOffer: no peer connection, setting up...');
       await this.setupLocalStream();
       await this.createPeerConnection();
     }
 
     this.targetUserId = callerId;
+    console.log('[WebRTC] handleOffer: signalingState:', this.peerConnection?.signalingState);
 
     const offerCollision = this.makingOffer || this.peerConnection!.signalingState !== 'stable';
     const isPolite = !this.isInitiator;
