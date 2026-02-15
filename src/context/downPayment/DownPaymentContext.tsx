@@ -137,6 +137,60 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const [requests, setRequests] = useState<DownPaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const cleanupDeletedRequests = useCallback(async () => {
+    try {
+      const { data: cancelledWithLinks } = await supabase
+        .from('down_payment_requests')
+        .select('id, metadata')
+        .eq('status', 'cancelled')
+        .not('site_visit_id', 'is', null);
+
+      if (cancelledWithLinks && cancelledWithLinks.length > 0) {
+        const deletedOnes = cancelledWithLinks.filter(r => r.metadata?.deleted === true);
+        if (deletedOnes.length > 0) {
+          const now = new Date().toISOString();
+          for (const req of deletedOnes) {
+            await supabase
+              .from('down_payment_requests')
+              .update({
+                site_visit_id: null,
+                mmp_site_entry_id: null,
+                updated_at: now,
+              } as any)
+              .eq('id', req.id);
+          }
+          console.log(`[DownPayment] Cleaned up ${deletedOnes.length} deleted requests with stale site links`);
+        }
+      }
+
+      const { data: allCancelled } = await supabase
+        .from('down_payment_requests')
+        .select('id, metadata, site_visit_id')
+        .eq('status', 'cancelled');
+
+      if (allCancelled && allCancelled.length > 0) {
+        const staleOnes = allCancelled.filter(r => r.site_visit_id && !r.metadata?.deleted);
+        if (staleOnes.length > 0) {
+          const now = new Date().toISOString();
+          for (const req of staleOnes) {
+            await supabase
+              .from('down_payment_requests')
+              .update({
+                site_visit_id: null,
+                mmp_site_entry_id: null,
+                updated_at: now,
+                metadata: { ...(req.metadata || {}), deleted: true, deleted_at: now, cleanup: true },
+              } as any)
+              .eq('id', req.id);
+          }
+          console.log(`[DownPayment] Cleaned up ${staleOnes.length} cancelled requests (unlinked from sites)`);
+        }
+      }
+    } catch (e) {
+      console.error('[DownPayment] Cleanup error:', e);
+    }
+  }, []);
+
   const refreshRequests = useCallback(async () => {
     if (!currentUser) {
       setRequests([]);
@@ -324,6 +378,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   }, [currentUser, toast]);
 
   useEffect(() => {
+    cleanupDeletedRequests();
     refreshRequests();
 
     // Set up real-time subscription for down payment requests
