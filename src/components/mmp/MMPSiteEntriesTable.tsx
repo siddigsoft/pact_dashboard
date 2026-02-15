@@ -530,11 +530,10 @@ const MMPSiteEntriesTable = ({
                                 // Check if site has been claimed: acceptedBy is set OR status indicates claimed
                                 const status = (row.status || '').toLowerCase();
                                 const acceptedBy = row.acceptedBy || (site as any).accepted_by;
-                                const claimedStatuses = ['accepted', 'ongoing', 'inprogress', 'in_progress', 'completed', 'approved and costed'];
-                                const isClaimed = acceptedBy || claimedStatuses.some(s => status.includes(s));
+                                const costVisibleStatuses = ['accepted', 'ongoing', 'inprogress', 'in_progress', 'in progress', 'completed', 'approved and costed', 'costed', 'claimed', 'acknowledged', 'cost and acknowledged', 'dispatched'];
+                                const hasCostStatus = costVisibleStatuses.some(s => status.includes(s));
                                 
-                                // Don't show cost for unclaimed sites
-                                if (!isClaimed) {
+                                if (!hasCostStatus && !acceptedBy) {
                                   return 'Pending Claim';
                                 }
                                 
@@ -558,17 +557,25 @@ const MMPSiteEntriesTable = ({
                           </div>
                         </div>
 
-                        {row.acceptedByName && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground">Claimed By:</span>
-                            <span className="font-medium text-purple-700">{row.acceptedByName}</span>
-                            {row.acceptedAt && (
-                              <span className="text-xs text-muted-foreground">
-                                ({new Date(row.acceptedAt).toLocaleDateString()})
-                              </span>
-                            )}
-                          </div>
-                        )}
+                        {(() => {
+                          const st = (row.status || '').toLowerCase();
+                          const postClaimStatuses = ['claimed', 'accepted', 'acknowledged', 'cost and acknowledged', 'ongoing', 'inprogress', 'in_progress', 'in progress', 'completed'];
+                          const isPostClaim = postClaimStatuses.some(s => st.includes(s));
+                          if (row.acceptedByName && isPostClaim) {
+                            return (
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground">Claimed By:</span>
+                                <span className="font-medium text-purple-700">{row.acceptedByName}</span>
+                                {row.acceptedAt && (
+                                  <span className="text-xs text-muted-foreground">
+                                    ({new Date(row.acceptedAt).toLocaleDateString()})
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
 
                         {row.comments && row.comments !== '—' && (
                           <div>
