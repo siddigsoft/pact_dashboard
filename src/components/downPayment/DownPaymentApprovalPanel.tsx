@@ -1648,98 +1648,103 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-3 pt-0">
-                <p className="text-xs text-muted-foreground mb-3">Select a group below to send a bulk payment request email. Use the Filters panel above to filter the list. / اختر مجموعة لإرسال طلب دفع جماعي. استخدم لوحة التصفية أعلاه لتصفية القائمة.</p>
+                <p className="text-xs text-muted-foreground mb-3">Filter requests by location and send bulk payment emails. / تصفية الطلبات حسب الموقع وإرسال رسائل الدفع الجماعي.</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                  <Select onValueChange={(val) => {
-                    const reqs = approvedForPayment.filter(r => r.stateName === val);
-                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'State', val);
-                  }} disabled={uniqueStates.length === 0}>
+                  <Select
+                    value={filters.stateName || 'all'}
+                    onValueChange={(val) => {
+                      setFilters(f => ({ ...f, stateName: val === 'all' ? undefined : val }));
+                    }}
+                  >
                     <SelectTrigger data-testid="select-bulk-state">
-                      <SelectValue placeholder="Send by State" />
+                      <SelectValue placeholder="All States" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
                       {uniqueStates.map(s => {
-                        const count = approvedForPayment.filter(r => r.stateName === s).length;
+                        const count = requests.filter(r => r.stateName === s).length;
                         return count > 0 ? <SelectItem key={s} value={s!}>{s} ({count})</SelectItem> : null;
                       })}
                     </SelectContent>
                   </Select>
-                  <Select onValueChange={(val) => {
-                    const reqs = approvedForPayment.filter(r => r.hubName === val);
-                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Hub', val);
-                  }} disabled={uniqueHubs.length === 0}>
+                  <Select
+                    value={filters.hubId || 'all'}
+                    onValueChange={(val) => {
+                      setFilters(f => ({ ...f, hubId: val === 'all' ? undefined : val }));
+                    }}
+                  >
                     <SelectTrigger data-testid="select-bulk-hub">
-                      <SelectValue placeholder="Send by Hub" />
+                      <SelectValue placeholder="All Hubs" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Hubs</SelectItem>
                       {uniqueHubs.map(h => {
-                        const count = approvedForPayment.filter(r => r.hubName === h).length;
+                        const count = requests.filter(r => r.hubName === h).length;
                         return count > 0 ? <SelectItem key={h} value={h!}>{h} ({count})</SelectItem> : null;
                       })}
                     </SelectContent>
                   </Select>
-                  <Select onValueChange={(val) => {
-                    const reqs = approvedForPayment.filter(r => r.localityName === val);
-                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Locality', val);
-                  }} disabled={uniqueLocalities.length === 0}>
+                  <Select
+                    value={filters.localityName || 'all'}
+                    onValueChange={(val) => {
+                      setFilters(f => ({ ...f, localityName: val === 'all' ? undefined : val }));
+                    }}
+                  >
                     <SelectTrigger data-testid="select-bulk-locality">
-                      <SelectValue placeholder="Send by Locality" />
+                      <SelectValue placeholder="All Localities" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Localities</SelectItem>
                       {uniqueLocalities.map(l => {
-                        const count = approvedForPayment.filter(r => r.localityName === l).length;
+                        const count = requests.filter(r => r.localityName === l).length;
                         return count > 0 ? <SelectItem key={l} value={l!}>{l} ({count})</SelectItem> : null;
                       })}
                     </SelectContent>
                   </Select>
-                  <Select onValueChange={(val) => {
-                    const reqs = approvedForPayment.filter(r => r.supervisorApprovedBy === val);
-                    if (reqs.length > 0) {
-                      const sup = uniqueSupervisors.find(s => s.id === val);
-                      openBulkPaymentRequestDialog(reqs, 'Supervisor', sup?.name || val);
-                    }
-                  }} disabled={uniqueSupervisors.length === 0}>
-                    <SelectTrigger data-testid="select-bulk-supervisor">
-                      <SelectValue placeholder="Send by Supervisor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {uniqueSupervisors.map(s => {
-                        const count = approvedForPayment.filter(r => r.supervisorApprovedBy === s.id).length;
-                        return count > 0 ? <SelectItem key={s.id} value={s.id}>{s.name} ({count})</SelectItem> : null;
-                      })}
-                    </SelectContent>
-                  </Select>
-                  <Select onValueChange={(val) => {
-                    const reqs = approvedForPayment.filter(r => r.requestedBy === val);
-                    if (reqs.length > 0) {
-                      const en = uniqueEnumerators.find(e => e.id === val);
-                      openBulkPaymentRequestDialog(reqs, 'Enumerator', en?.name || val);
-                    }
-                  }} disabled={uniqueEnumerators.length === 0}>
+                  <Select
+                    value={filters.dataCollectorId || 'all'}
+                    onValueChange={(val) => {
+                      setFilters(f => ({ ...f, dataCollectorId: val === 'all' ? undefined : val }));
+                    }}
+                  >
                     <SelectTrigger data-testid="select-bulk-enumerator">
-                      <SelectValue placeholder="Send by Enumerator" />
+                      <SelectValue placeholder="All Enumerators" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Enumerators</SelectItem>
                       {uniqueEnumerators.map(e => {
-                        const count = approvedForPayment.filter(r => r.requestedBy === e.id).length;
+                        const count = requests.filter(r => r.requestedBy === e.id).length;
                         return count > 0 ? <SelectItem key={e.id} value={e.id}>{e.name} ({count})</SelectItem> : null;
                       })}
                     </SelectContent>
                   </Select>
-                  <Select onValueChange={(val) => {
-                    const reqs = approvedForPayment.filter(r => r.siteName === val);
-                    if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Site', val);
-                  }} disabled={uniqueSites.length === 0}>
+                  <Select
+                    value={filters.siteName || 'all'}
+                    onValueChange={(val) => {
+                      setFilters(f => ({ ...f, siteName: val === 'all' ? undefined : val }));
+                    }}
+                  >
                     <SelectTrigger data-testid="select-bulk-site">
-                      <SelectValue placeholder="Send by Site" />
+                      <SelectValue placeholder="All Sites" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="all">All Sites</SelectItem>
                       {uniqueSites.map(s => {
-                        const count = approvedForPayment.filter(r => r.siteName === s).length;
+                        const count = requests.filter(r => r.siteName === s).length;
                         return count > 0 ? <SelectItem key={s} value={s!}>{s} ({count})</SelectItem> : null;
                       })}
                     </SelectContent>
                   </Select>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setFilters({})}
+                    className="h-9"
+                    data-testid="button-clear-bulk-filters"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
                 </div>
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <Button
