@@ -4691,6 +4691,44 @@ const MMP = () => {
                               await Promise.all(updatePromises);
                             }
 
+                            // Cancel any linked down_payment_requests for these re-approved sites
+                            const reApprovedIds = updates.map((u: any) => u.id);
+                            if (reApprovedIds.length > 0) {
+                              try {
+                                const { data: linkedDpRequests } = await supabase
+                                  .from('down_payment_requests')
+                                  .select('id, mmp_site_entry_id, status')
+                                  .in('mmp_site_entry_id', reApprovedIds)
+                                  .in('status', ['approved', 'pending_admin', 'pending_supervisor', 'pending']);
+                                
+                                if (linkedDpRequests && linkedDpRequests.length > 0) {
+                                  for (const dpReq of linkedDpRequests) {
+                                    const { data: dpRow } = await supabase
+                                      .from('down_payment_requests')
+                                      .select('metadata')
+                                      .eq('id', dpReq.id)
+                                      .single();
+                                    const existingMeta = (dpRow?.metadata as Record<string, any>) || {};
+                                    await supabase
+                                      .from('down_payment_requests')
+                                      .update({
+                                        status: 'cancelled',
+                                        updated_at: new Date().toISOString(),
+                                        metadata: {
+                                          ...existingMeta,
+                                          cancelled_reason: 'Site re-approved and costed - advance request voided',
+                                          cancelled_at: new Date().toISOString(),
+                                          cancelled_by: currentUser?.username || currentUser?.fullName || 'System',
+                                        }
+                                      })
+                                      .eq('id', dpReq.id);
+                                  }
+                                }
+                              } catch (dpClearError) {
+                                console.error('Failed to clear linked advance requests:', dpClearError);
+                              }
+                            }
+
                             toast({
                               title: 'Bulk Cost Successful',
                               description: `Successfully approved and costed ${updates.length} site(s).`,
