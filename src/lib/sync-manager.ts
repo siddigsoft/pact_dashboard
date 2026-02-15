@@ -766,7 +766,7 @@ class SyncManager {
 
     const { data: existing, error: fetchError } = await supabase
       .from('mmp_site_entries')
-      .select('additional_data, enumerator_fee, transport_fee, cost, status, updated_at, accepted_by, claimed_by, visit_completed_by, site_name')
+      .select('additional_data, enumerator_fee, transport_fee, cost, status, updated_at, accepted_by, visit_completed_by, site_name')
       .eq('id', siteEntryId)
       .single();
 

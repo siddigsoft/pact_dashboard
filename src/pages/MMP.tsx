@@ -2015,27 +2015,7 @@ const MMP = () => {
           .order('created_at', { ascending: false })
           .limit(1000);
 
-        // Query 1b: Sites claimed by this user (claimed_by = user.id) - RPC claim sets this field
-        const { data: claimedData, error: claimedError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .eq('claimed_by', currentUser.id)
-          .order('created_at', { ascending: false })
-          .limit(1000);
-
-        if (claimedError) {
-          console.error('[MMP My Sites Load] Claimed query error:', claimedError);
-        }
-
-        // Merge accepted + claimed, deduplicate by ID
-        const seenIds = new Set<string>();
-        const mySitesData: any[] = [];
-        for (const entry of [...(acceptedData || []), ...(claimedData || [])]) {
-          if (!seenIds.has(entry.id)) {
-            seenIds.add(entry.id);
-            mySitesData.push(entry);
-          }
-        }
+        const mySitesData: any[] = acceptedData || [];
 
         if (error) {
           console.error('[MMP My Sites Load] DB Error:', error);
@@ -2651,8 +2631,8 @@ const MMP = () => {
       dispatched_at: entry.dispatched_at,
       accepted_by: entry.accepted_by,
       accepted_at: entry.accepted_at,
-      claimed_by: entry.claimed_by,
-      claimed_at: entry.claimed_at,
+      claimed_by: additionalData.claimed_by || null,
+      claimed_at: additionalData.claimed_at || null,
       cost_acknowledged: entry.cost_acknowledged ?? additionalData.cost_acknowledged,
       updated_at: entry.updated_at,
       additionalData: additionalData,
@@ -2884,7 +2864,7 @@ const MMP = () => {
     const availableSites = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
       if (status !== 'dispatched') return false;
-      if (entry.accepted_by || entry.claimed_by) return false; // Must be unclaimed
+      if (entry.accepted_by) return false; // Must be unclaimed
 
       // Filter by STATE only - users can claim any site in their state
       if (collectorStateName) {
@@ -2918,7 +2898,7 @@ const MMP = () => {
     const smartAssigned = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
       if (status !== 'assigned') return false;
-      if (entry.accepted_by !== currentUser.id && entry.claimed_by !== currentUser.id) return false;
+      if (entry.accepted_by !== currentUser.id) return false;
       return !entry.cost_acknowledged; // Exclude cost-acknowledged sites
     }).map(entry => {
       // Calculate total cost using viewer's enumerator fee
@@ -2935,14 +2915,10 @@ const MMP = () => {
       return bDate.localeCompare(aDate);
     }).slice(0, 1000);
 
-    // Filter my sites: accepted_by OR claimed_by = currentUser.id
-    // Include ALL sites accepted/claimed by the current user regardless of status.
-    // When a site is claimed via RPC, the DB sets claimed_by (not always accepted_by),
-    // so we must check both fields to find all sites belonging to this collector.
+    // Filter my sites: accepted_by = currentUser.id
+    // The claim_site_visit RPC sets accepted_by = user UUID when claiming.
     const mySites = formattedEntries.filter(entry => {
-      if (entry.accepted_by === currentUser.id) return true;
-      if (entry.claimed_by === currentUser.id) return true;
-      return false;
+      return entry.accepted_by === currentUser.id;
     }).sort((a, b) => {
       const aDate = a.created_at || a.createdAt || '';
       const bDate = b.created_at || b.createdAt || '';

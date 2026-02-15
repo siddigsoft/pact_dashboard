@@ -59,7 +59,7 @@ interface MMPSiteEntry {
  */
 export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
   const totalFee = entry.cost || (entry.enumerator_fee || 0) + (entry.transport_fee || 0);
-  const assignedTo = (entry as any).accepted_by || (entry as any).claimed_by || (entry as any).additional_data?.assigned_to || '';
+  const assignedTo = (entry as any).accepted_by || (entry as any).additional_data?.assigned_to || '';
   const assignedBy = (entry as any).additional_data?.assigned_by || entry.dispatched_by;
   const assignedAt = (entry as any).additional_data?.assigned_at || entry.dispatched_at;
   const appStatus = mapStatus(entry.status);

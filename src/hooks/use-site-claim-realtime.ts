@@ -29,11 +29,10 @@ export function useSiteClaimRealtime({
     
     const wasDispatched = oldRecord?.status?.toLowerCase() === 'dispatched';
     const isNowAssigned = newRecord?.status?.toLowerCase() === 'assigned';
-    const wasClaimed = !oldRecord?.claimed_by && newRecord?.claimed_by;
     const wasAccepted = !oldRecord?.accepted_by && newRecord?.accepted_by;
-    const claimedByUserId = newRecord?.claimed_by || newRecord?.accepted_by;
+    const claimedByUserId = newRecord?.accepted_by;
     
-    if ((wasDispatched && isNowAssigned) || wasClaimed || wasAccepted) {
+    if ((wasDispatched && isNowAssigned) || wasAccepted) {
       const isOwnClaim = currentUserId && claimedByUserId === currentUserId;
       
       if (!suppressToast && !isOwnClaim) {

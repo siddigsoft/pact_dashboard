@@ -125,22 +125,7 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
     try {
       let query = supabase
         .from('mmp_site_entries')
-        .select(`
-          id,
-          mmp_id,
-          site_name,
-          assigned_to,
-          claimed_by,
-          transport_advance_amount,
-          transport_advance_paid,
-          transport_advance_recovered,
-          recall_status,
-          recall_recovery_method,
-          recall_recovery_status,
-          recalled_at,
-          recalled_by
-        `)
-        .eq('transport_advance_paid', true);
+        .select('*');
 
       if (mmpId) {
         query = query.eq('mmp_id', mmpId);
@@ -167,7 +152,7 @@ export function RecoveryDashboard({ mmpId }: RecoveryDashboardProps) {
           mmp_name: undefined,
           site_entry_id: entry.id,
           site_name: entry.site_name,
-          data_collector_id: entry.claimed_by || entry.assigned_to,
+          data_collector_id: entry.accepted_by || entry.assigned_to,
           data_collector_name: undefined,
           original_amount: originalAmount,
           recovered_amount: recoveredAmount,

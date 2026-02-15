@@ -130,7 +130,7 @@ export function SiteVisitAuditTrail({
 
         if (mmpEntry?.claimed_at || mmpEntry?.accepted_at) {
           const claimedAt = mmpEntry?.claimed_at || mmpEntry?.accepted_at;
-          const claimedBy = mmpEntry?.claimed_by || mmpEntry?.accepted_by;
+          const claimedBy = mmpEntry?.accepted_by;
           steps.push({
             id: 'claimed',
             action: 'Site Claimed/Assigned',
