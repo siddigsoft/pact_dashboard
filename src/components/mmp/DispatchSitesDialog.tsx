@@ -272,10 +272,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     const localities = new Set<string>();
     dispatchableSiteEntries.forEach((entry) => {
       const locality = entry.locality || entry.locality_name;
+      const state = entry.state || entry.state_name;
       if (
         locality &&
         locality.trim() !== "" &&
-        (!selectedState || entry.state === selectedState)
+        (!selectedState || (state && state.trim() === selectedState))
       ) {
         localities.add(locality.trim());
       }
