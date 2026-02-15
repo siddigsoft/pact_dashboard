@@ -334,6 +334,80 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     }
   };
 
+  const handleBulkRevert = async (targetStatus: 'pending_supervisor' | 'pending_admin') => {
+    if (!currentUser || selectedIds.size === 0) return;
+    setProcessing(true);
+    let successCount = 0;
+    let failCount = 0;
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      const success = await revertToPending({
+        requestId: id,
+        revertedBy: currentUser.id,
+        revertedByName: currentUser.fullName || currentUser.email,
+        reason: `Bulk revert to ${targetStatus === 'pending_supervisor' ? 'Pending Supervisor' : 'Pending Admin'}`,
+        targetStatus,
+      });
+      if (success) successCount++; else failCount++;
+    }
+    setProcessing(false);
+    setSelectedIds(new Set());
+    toast({
+      title: `Bulk Revert Complete / اكتمال الإرجاع الجماعي`,
+      description: `${successCount} reverted${failCount > 0 ? `, ${failCount} failed` : ''}`,
+    });
+  };
+
+  const handleBulkMarkPaid = async () => {
+    if (!currentUser || selectedIds.size === 0) return;
+    setProcessing(true);
+    let successCount = 0;
+    let failCount = 0;
+    const now = new Date().toISOString();
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      const req = requests.find(r => r.id === id);
+      if (!req || req.status !== 'approved') { failCount++; continue; }
+      try {
+        const { error } = await supabase
+          .from('down_payment_requests')
+          .update({
+            status: 'fully_paid',
+            total_paid_amount: req.approvedAmount || req.requestedAmount,
+            remaining_amount: 0,
+            updated_at: now,
+          } as any)
+          .eq('id', id);
+        if (error) failCount++; else successCount++;
+      } catch { failCount++; }
+    }
+    setProcessing(false);
+    setSelectedIds(new Set());
+    await refreshRequests();
+    toast({
+      title: `Bulk Mark Paid Complete / اكتمال التحديد كمدفوع`,
+      description: `${successCount} marked as paid${failCount > 0 ? `, ${failCount} failed` : ''}`,
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!currentUser || selectedIds.size === 0) return;
+    setProcessing(true);
+    let successCount = 0;
+    let failCount = 0;
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      const success = await deleteRequest(id);
+      if (success) successCount++; else failCount++;
+    }
+    setProcessing(false);
+    setSelectedIds(new Set());
+    toast({
+      title: `Bulk Delete Complete / اكتمال الحذف الجماعي`,
+      description: `${successCount} deleted${failCount > 0 ? `, ${failCount} failed` : ''}`,
+    });
+  };
+
   const closeDialog = () => {
     setSelectedRequest(null);
     setAction(null);
@@ -1772,39 +1846,72 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </CardContent>
             </Card>
           )}
-          {selectedIds.size > 0 && processingRequests.length > 0 && (
+          {selectedIds.size > 0 && processingRequests.length > 0 && (() => {
+            const selectedProcessing = processingRequests.filter(r => selectedIds.has(r.id));
+            const approvedCount = selectedProcessing.filter(r => r.status === 'approved').length;
+            const totalAmount = selectedProcessing.reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0);
+            return (
             <Card className="mb-4 border-primary">
-              <CardContent className="p-3 flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <CheckSquare className="h-5 w-5 text-primary" />
-                  <span className="font-medium">{selectedIds.size} selected</span>
-                  <span className="text-xs text-muted-foreground">
-                    SDG {processingRequests.filter(r => selectedIds.has(r.id)).reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button size="sm" onClick={() => {
-                    const selected = processingRequests.filter(r => selectedIds.has(r.id) && r.status === 'approved');
-                    if (selected.length > 0) openBulkPaymentRequestDialog(selected, '', `${selected.length} Selected`);
-                  }} disabled={processingRequests.filter(r => selectedIds.has(r.id) && r.status === 'approved').length === 0} data-testid="button-selected-request-payment">
-                    <Mail className="h-4 w-4 mr-1" />
-                    Request Payment ({processingRequests.filter(r => selectedIds.has(r.id) && r.status === 'approved').length})
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => {
-                    const selected = processingRequests.filter(r => selectedIds.has(r.id));
-                    if (selected.length > 0) handleDownloadBulkPdf(selected, `${selected.length} Selected`);
-                  }} data-testid="button-selected-bulk-pdf">
-                    <FileText className="h-4 w-4 mr-1" />
-                    PDF ({selectedIds.size})
-                  </Button>
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <CheckSquare className="h-5 w-5 text-primary" />
+                    <span className="font-medium">{selectedIds.size} selected</span>
+                    <span className="text-xs text-muted-foreground">
+                      SDG {totalAmount.toLocaleString()}
+                    </span>
+                  </div>
                   <Button size="sm" variant="ghost" onClick={clearSelection} data-testid="button-clear-processing-selection">
                     <X className="h-4 w-4 mr-1" />
                     Clear
                   </Button>
                 </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button size="sm" onClick={() => {
+                    const selected = selectedProcessing.filter(r => r.status === 'approved');
+                    if (selected.length > 0) openBulkPaymentRequestDialog(selected, '', `${selected.length} Selected`);
+                  }} disabled={approvedCount === 0 || processing} data-testid="button-selected-request-payment">
+                    <Mail className="h-4 w-4 mr-1" />
+                    Request Payment ({approvedCount})
+                  </Button>
+                  <Button size="sm" variant="default" onClick={() => {
+                    const selected = selectedProcessing.filter(r => r.status === 'approved');
+                    if (selected.length > 0) {
+                      openActionDialog(selected[0], 'pay');
+                    }
+                  }} disabled={approvedCount === 0 || processing} data-testid="button-selected-process-payment">
+                    <DollarSign className="h-4 w-4 mr-1" />
+                    Process Payment
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleBulkMarkPaid} disabled={approvedCount === 0 || processing} data-testid="button-selected-mark-paid">
+                    <Wallet className="h-4 w-4 mr-1" />
+                    Mark Paid ({approvedCount})
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    if (selectedProcessing.length > 0) handleDownloadBulkPdf(selectedProcessing, `${selectedProcessing.length} Selected`);
+                  }} disabled={processing} data-testid="button-selected-bulk-pdf">
+                    <FileText className="h-4 w-4 mr-1" />
+                    PDF ({selectedIds.size})
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_supervisor')} disabled={processing} data-testid="button-selected-revert-supervisor">
+                    <Undo2 className="h-4 w-4 mr-1" />
+                    Revert to Pending
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleBulkRevert('pending_admin')} disabled={processing} data-testid="button-selected-revert-admin">
+                    <Undo2 className="h-4 w-4 mr-1" />
+                    Revert to Admin
+                  </Button>
+                  {isSuperAdmin && (
+                    <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={handleBulkDelete} disabled={processing} data-testid="button-selected-delete">
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete ({selectedIds.size})
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
-          )}
+            );
+          })()}
           {processingRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No requests in processing</CardContent></Card>
           ) : (
