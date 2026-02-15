@@ -112,7 +112,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState('pending');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [approvalType, setApprovalType] = useState<ApprovalType>('full');
@@ -1648,14 +1648,14 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-3 pt-0">
-                <p className="text-xs text-muted-foreground mb-3">Send payment request for multiple approved advances grouped by State, Hub, Locality, Supervisor, Enumerator, or Site.</p>
+                <p className="text-xs text-muted-foreground mb-3">Select a group below to send a bulk payment request email. Use the Filters panel above to filter the list. / اختر مجموعة لإرسال طلب دفع جماعي. استخدم لوحة التصفية أعلاه لتصفية القائمة.</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                   <Select onValueChange={(val) => {
                     const reqs = approvedForPayment.filter(r => r.stateName === val);
                     if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'State', val);
                   }} disabled={uniqueStates.length === 0}>
                     <SelectTrigger data-testid="select-bulk-state">
-                      <SelectValue placeholder="By State" />
+                      <SelectValue placeholder="Send by State" />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueStates.map(s => {
@@ -1669,7 +1669,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Hub', val);
                   }} disabled={uniqueHubs.length === 0}>
                     <SelectTrigger data-testid="select-bulk-hub">
-                      <SelectValue placeholder="By Hub" />
+                      <SelectValue placeholder="Send by Hub" />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueHubs.map(h => {
@@ -1683,7 +1683,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Locality', val);
                   }} disabled={uniqueLocalities.length === 0}>
                     <SelectTrigger data-testid="select-bulk-locality">
-                      <SelectValue placeholder="By Locality" />
+                      <SelectValue placeholder="Send by Locality" />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueLocalities.map(l => {
@@ -1700,7 +1700,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     }
                   }} disabled={uniqueSupervisors.length === 0}>
                     <SelectTrigger data-testid="select-bulk-supervisor">
-                      <SelectValue placeholder="By Supervisor" />
+                      <SelectValue placeholder="Send by Supervisor" />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueSupervisors.map(s => {
@@ -1717,7 +1717,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     }
                   }} disabled={uniqueEnumerators.length === 0}>
                     <SelectTrigger data-testid="select-bulk-enumerator">
-                      <SelectValue placeholder="By Enumerator" />
+                      <SelectValue placeholder="Send by Enumerator" />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueEnumerators.map(e => {
@@ -1731,7 +1731,7 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                     if (reqs.length > 0) openBulkPaymentRequestDialog(reqs, 'Site', val);
                   }} disabled={uniqueSites.length === 0}>
                     <SelectTrigger data-testid="select-bulk-site">
-                      <SelectValue placeholder="By Site" />
+                      <SelectValue placeholder="Send by Site" />
                     </SelectTrigger>
                     <SelectContent>
                       {uniqueSites.map(s => {
