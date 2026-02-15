@@ -139,40 +139,15 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const cleanupDeletedRequests = useCallback(async () => {
     try {
-      const { data: cancelledWithLinks } = await supabase
-        .from('down_payment_requests')
-        .select('id, metadata')
-        .eq('status', 'cancelled')
-        .not('site_visit_id', 'is', null);
-
-      if (cancelledWithLinks && cancelledWithLinks.length > 0) {
-        const deletedOnes = cancelledWithLinks.filter(r => r.metadata?.deleted === true);
-        if (deletedOnes.length > 0) {
-          const now = new Date().toISOString();
-          for (const req of deletedOnes) {
-            await supabase
-              .from('down_payment_requests')
-              .update({
-                site_visit_id: null,
-                mmp_site_entry_id: null,
-                updated_at: now,
-              } as any)
-              .eq('id', req.id);
-          }
-          console.log(`[DownPayment] Cleaned up ${deletedOnes.length} deleted requests with stale site links`);
-        }
-      }
-
       const { data: allCancelled } = await supabase
         .from('down_payment_requests')
-        .select('id, metadata, site_visit_id')
+        .select('id, metadata, site_visit_id, mmp_site_entry_id')
         .eq('status', 'cancelled');
 
       if (allCancelled && allCancelled.length > 0) {
-        const staleOnes = allCancelled.filter(r => r.site_visit_id && !r.metadata?.deleted);
-        if (staleOnes.length > 0) {
-          const now = new Date().toISOString();
-          for (const req of staleOnes) {
+        const now = new Date().toISOString();
+        for (const req of allCancelled) {
+          if (req.site_visit_id || req.mmp_site_entry_id) {
             await supabase
               .from('down_payment_requests')
               .update({
@@ -183,8 +158,19 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
               } as any)
               .eq('id', req.id);
           }
-          console.log(`[DownPayment] Cleaned up ${staleOnes.length} cancelled requests (unlinked from sites)`);
+
+          const { error: deleteError } = await supabase
+            .from('down_payment_requests')
+            .delete()
+            .eq('id', req.id)
+            .eq('status', 'cancelled');
+          if (deleteError) {
+            console.log(`[DownPayment] Could not hard-delete ${req.id} (RLS may block): ${deleteError.message}`);
+          } else {
+            console.log(`[DownPayment] Hard-deleted cancelled request ${req.id}`);
+          }
         }
+        console.log(`[DownPayment] Cleanup processed ${allCancelled.length} cancelled requests`);
       }
     } catch (e) {
       console.error('[DownPayment] Cleanup error:', e);
