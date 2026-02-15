@@ -108,7 +108,21 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const callStartTime = useRef<string | null>(null);
   
   const playRemoteAudio = useCallback((stream: MediaStream) => {
-    console.log('[Call] playRemoteAudio called, tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`));
+    const audioTracks = stream.getAudioTracks();
+    console.log('[Call] playRemoteAudio called, all tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`));
+    console.log('[Call] Audio tracks specifically:', audioTracks.length, audioTracks.map(t => `id=${t.id},ready=${t.readyState},enabled=${t.enabled},muted=${t.muted}`));
+
+    if (audioTracks.length === 0) {
+      console.warn('[Call] No audio tracks in remote stream yet, waiting...');
+    }
+
+    if (audioRef.current && audioRef.current.srcObject === stream) {
+      console.log('[Call] Audio element already using this stream, ensuring playback...');
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(err => console.error('[Call] Resume failed:', err));
+      }
+      return;
+    }
     
     if (audioRef.current) {
       audioRef.current.pause();
@@ -127,26 +141,67 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     audio.srcObject = stream;
     audio.volume = 1.0;
+
+    audio.onloadedmetadata = () => {
+      console.log('[Call] Audio metadata loaded, duration:', audio.duration, 'readyState:', audio.readyState);
+    };
+
+    audio.onplaying = () => {
+      console.log('[Call] Audio is now PLAYING');
+    };
+
+    audio.onstalled = () => {
+      console.warn('[Call] Audio playback stalled');
+    };
+
+    audio.onerror = (e) => {
+      console.error('[Call] Audio element error:', e);
+    };
     
-    const playPromise = audio.play();
-    if (playPromise) {
-      playPromise.then(() => {
-        console.log('[Call] Audio playback started successfully');
-      }).catch((err) => {
-        console.error('[Call] Audio play failed:', err);
-        setTimeout(() => {
-          audio.play().then(() => {
-            console.log('[Call] Audio retry succeeded');
-          }).catch((err2) => {
-            console.error('[Call] Audio retry also failed:', err2);
-          });
-        }, 500);
-      });
-    }
+    const tryPlay = () => {
+      if (!audioRef.current) return;
+      const playPromise = audioRef.current.play();
+      if (playPromise) {
+        playPromise.then(() => {
+          console.log('[Call] Audio playback started successfully, paused:', audioRef.current?.paused);
+        }).catch((err) => {
+          console.error('[Call] Audio play failed:', err.name, err.message);
+          setTimeout(() => {
+            if (!audioRef.current) return;
+            audioRef.current.play().then(() => {
+              console.log('[Call] Audio retry succeeded');
+            }).catch((err2) => {
+              console.error('[Call] Audio retry failed:', err2.name, err2.message);
+              setTimeout(() => {
+                if (!audioRef.current) return;
+                audioRef.current.play().catch((err3) => {
+                  console.error('[Call] Audio 3rd attempt failed:', err3.name);
+                });
+              }, 1000);
+            });
+          }, 500);
+        });
+      }
+    };
+
+    tryPlay();
 
     stream.onaddtrack = (event) => {
-      console.log('[Call] New track added to remote stream:', event.track.kind);
+      console.log('[Call] New track added to remote stream:', event.track.kind, event.track.readyState);
+      if (event.track.kind === 'audio') {
+        tryPlay();
+      }
     };
+
+    audioTracks.forEach(track => {
+      track.onunmute = () => {
+        console.log('[Call] Audio track unmuted:', track.id);
+        tryPlay();
+      };
+      track.onended = () => {
+        console.warn('[Call] Audio track ended:', track.id);
+      };
+    });
   }, []);
 
   const stopDurationTimer = useCallback(() => {
