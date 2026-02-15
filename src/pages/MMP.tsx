@@ -2004,16 +2004,38 @@ const MMP = () => {
         return;
       }
       
-      console.log('[MMP My Sites Load] Loading sites accepted by user:', currentUser?.id);
+      console.log('[MMP My Sites Load] Loading sites accepted/claimed by user:', currentUser?.id);
       
       try {
-        // Query 1: Sites accepted by this user (accepted_by = user.id)
-        const { data: mySitesData, error } = await supabase
+        // Query 1a: Sites accepted by this user (accepted_by = user.id)
+        const { data: acceptedData, error } = await supabase
           .from('mmp_site_entries')
           .select('*')
           .eq('accepted_by', currentUser.id)
           .order('created_at', { ascending: false })
           .limit(1000);
+
+        // Query 1b: Sites claimed by this user (claimed_by = user.id) - RPC claim sets this field
+        const { data: claimedData, error: claimedError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('claimed_by', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        if (claimedError) {
+          console.error('[MMP My Sites Load] Claimed query error:', claimedError);
+        }
+
+        // Merge accepted + claimed, deduplicate by ID
+        const seenIds = new Set<string>();
+        const mySitesData: any[] = [];
+        for (const entry of [...(acceptedData || []), ...(claimedData || [])]) {
+          if (!seenIds.has(entry.id)) {
+            seenIds.add(entry.id);
+            mySitesData.push(entry);
+          }
+        }
 
         if (error) {
           console.error('[MMP My Sites Load] DB Error:', error);
@@ -2100,10 +2122,10 @@ const MMP = () => {
 
         // Merge and deduplicate
         const allEntries = [...(mySitesData || []), ...dpSiteEntries];
-        const seenIds = new Set<string>();
+        const dedupIds = new Set<string>();
         const deduped = allEntries.filter(e => {
-          if (seenIds.has(e.id)) return false;
-          seenIds.add(e.id);
+          if (dedupIds.has(e.id)) return false;
+          dedupIds.add(e.id);
           return true;
         });
 
@@ -2862,7 +2884,7 @@ const MMP = () => {
     const availableSites = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
       if (status !== 'dispatched') return false;
-      if (entry.accepted_by) return false; // Must be unclaimed
+      if (entry.accepted_by || entry.claimed_by) return false; // Must be unclaimed
 
       // Filter by STATE only - users can claim any site in their state
       if (collectorStateName) {
@@ -2896,7 +2918,7 @@ const MMP = () => {
     const smartAssigned = formattedEntries.filter(entry => {
       const status = String(entry.status || '').toLowerCase();
       if (status !== 'assigned') return false;
-      if (entry.accepted_by !== currentUser.id) return false;
+      if (entry.accepted_by !== currentUser.id && entry.claimed_by !== currentUser.id) return false;
       return !entry.cost_acknowledged; // Exclude cost-acknowledged sites
     }).map(entry => {
       // Calculate total cost using viewer's enumerator fee
@@ -2913,13 +2935,14 @@ const MMP = () => {
       return bDate.localeCompare(aDate);
     }).slice(0, 1000);
 
-    // Filter my sites: accepted_by = currentUser.id
-    // Include ALL sites accepted by the current user regardless of status.
-    // When a site is claimed via RPC, status becomes "Assigned" with accepted_by set -
-    // these MUST appear in My Sites since the collector explicitly claimed them.
+    // Filter my sites: accepted_by OR claimed_by = currentUser.id
+    // Include ALL sites accepted/claimed by the current user regardless of status.
+    // When a site is claimed via RPC, the DB sets claimed_by (not always accepted_by),
+    // so we must check both fields to find all sites belonging to this collector.
     const mySites = formattedEntries.filter(entry => {
-      if (entry.accepted_by !== currentUser.id) return false;
-      return true;
+      if (entry.accepted_by === currentUser.id) return true;
+      if (entry.claimed_by === currentUser.id) return true;
+      return false;
     }).sort((a, b) => {
       const aDate = a.created_at || a.createdAt || '';
       const bDate = b.created_at || b.createdAt || '';
