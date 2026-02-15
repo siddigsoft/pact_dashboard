@@ -269,7 +269,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
       
       console.log('[DownPayment] Fetched requests:', data?.length || 0);
-      const transformed = (data || []).map(transformFromDB);
+      const transformed = (data || []).map(transformFromDB).filter(r => r.status !== 'deleted');
       
       const needsEnrichment = transformed.filter(r => (!r.stateName || !r.localityName) && r.mmpSiteEntryId);
       if (needsEnrichment.length > 0) {
@@ -852,16 +852,20 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const deleteRequest = async (requestId: string): Promise<boolean> => {
     try {
+      const now = new Date().toISOString();
       const { error } = await supabase
         .from('down_payment_requests')
-        .delete()
+        .update({
+          status: 'deleted',
+          updated_at: now,
+        } as any)
         .eq('id', requestId);
 
       if (error) throw error;
 
       toast({
         title: 'Request Deleted / تم حذف الطلب',
-        description: 'The request has been permanently removed. A new request must be submitted if needed.',
+        description: 'The request has been removed. A new request can be submitted if needed. / تم إزالة الطلب. يمكن تقديم طلب جديد إذا لزم الأمر.',
       });
 
       await refreshRequests();

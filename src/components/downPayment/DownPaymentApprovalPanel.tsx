@@ -395,15 +395,19 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     setProcessing(true);
     let successCount = 0;
     let failCount = 0;
+    const now = new Date().toISOString();
     const ids = Array.from(selectedIds);
     for (const id of ids) {
       try {
         const { error } = await supabase
           .from('down_payment_requests')
-          .delete()
+          .update({
+            status: 'deleted',
+            updated_at: now,
+          } as any)
           .eq('id', id);
-        if (error) failCount++; else successCount++;
-      } catch { failCount++; }
+        if (error) { console.error('Delete failed:', error); failCount++; } else successCount++;
+      } catch (e) { console.error('Delete error:', e); failCount++; }
     }
     setSelectedIds(new Set());
     await refreshRequests();
