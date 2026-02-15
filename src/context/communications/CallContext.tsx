@@ -4,6 +4,7 @@ import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import webRTCService, { CallEventHandler } from '@/services/WebRTCService';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { CallLogService } from '@/services/call-log.service';
 
 // Helper function to request microphone permission before starting a call
 async function requestMicrophonePermission(): Promise<{ granted: boolean; error?: string }> {
@@ -103,6 +104,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const incomingCallerId = useRef<string | null>(null);
   const callStateRef = useRef(callState);
   callStateRef.current = callState;
+  const activeCallLogId = useRef<string | null>(null);
+  const callStartTime = useRef<string | null>(null);
   
   const playRemoteAudio = useCallback((stream: MediaStream) => {
     console.log('[Call] playRemoteAudio called, tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`));
@@ -210,35 +213,92 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
       onCallAccepted: () => {
         setCallState(prev => ({ ...prev, status: 'connecting' }));
+        callStartTime.current = new Date().toISOString();
         toast({
           title: 'Call Accepted',
           description: 'Connecting...',
         });
       },
       onCallRejected: () => {
+        const participant = callStateRef.current.participant;
+        if (currentUser && participant) {
+          void CallLogService.logCall({
+            callerId: currentUser.id,
+            calleeId: participant.id,
+            direction: 'outgoing',
+            status: 'rejected',
+          });
+        }
         toast({
           title: 'Call Declined',
           description: 'The user declined your call',
           variant: 'destructive',
         });
+        activeCallLogId.current = null;
+        callStartTime.current = null;
         resetCallState();
       },
       onCallEnded: () => {
         const currentDuration = callStateRef.current.duration;
+        const participant = callStateRef.current.participant;
+        const currentStatus = callStateRef.current.status;
+        if (currentUser && participant) {
+          const wasConnected = currentDuration > 0 || currentStatus === 'connected';
+          const wasIncomingBeforeAnswer = currentStatus === 'incoming';
+          const wasOutgoing = currentStatus === 'outgoing';
+          
+          let logDirection: 'outgoing' | 'incoming' = 'outgoing';
+          let logCallerId = currentUser.id;
+          let logCalleeId = participant.id;
+          let logStatus: 'completed' | 'missed' | 'no_answer' = 'completed';
+
+          if (wasIncomingBeforeAnswer) {
+            logDirection = 'incoming';
+            logCallerId = participant.id;
+            logCalleeId = currentUser.id;
+            logStatus = 'missed';
+          } else if (wasOutgoing) {
+            logStatus = 'no_answer';
+          } else if (wasConnected) {
+            logStatus = 'completed';
+          }
+
+          void CallLogService.logCall({
+            callerId: logCallerId,
+            calleeId: logCalleeId,
+            direction: logDirection,
+            status: logStatus,
+            duration: currentDuration,
+            startedAt: callStartTime.current || undefined,
+          });
+        }
         toast({
           title: 'Call Ended',
           description: currentDuration > 0 
             ? `Duration: ${Math.floor(currentDuration / 60)}:${(currentDuration % 60).toString().padStart(2, '0')}`
             : 'Call has ended',
         });
+        activeCallLogId.current = null;
+        callStartTime.current = null;
         resetCallState();
       },
       onCallBusy: () => {
+        const participant = callStateRef.current.participant;
+        if (currentUser && participant) {
+          void CallLogService.logCall({
+            callerId: currentUser.id,
+            calleeId: participant.id,
+            direction: 'outgoing',
+            status: 'no_answer',
+          });
+        }
         toast({
           title: 'User Busy',
           description: 'The user is on another call',
           variant: 'destructive',
         });
+        activeCallLogId.current = null;
+        callStartTime.current = null;
         resetCallState();
       },
       onRemoteStream: (stream) => {
@@ -338,7 +398,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     webRTCService.rejectCall(callerId);
     
-    // Send missed call notification to the caller
+    if (currentUser) {
+      void CallLogService.logCall({
+        callerId: callerId,
+        calleeId: currentUser.id,
+        direction: 'incoming',
+        status: 'rejected',
+      });
+    }
+    
     if (currentUser) {
       NotificationTriggerService.missedCall(
         callerId,
