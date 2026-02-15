@@ -12,7 +12,7 @@ export function filterDownPayments(
     if (filters.status && filters.status.length > 0 && !filters.status.includes(req.status)) {
       return false;
     }
-    if (filters.hubId && req.hubId !== filters.hubId) {
+    if (filters.hubId && req.hubId !== filters.hubId && req.hubName?.toLowerCase() !== filters.hubId.toLowerCase()) {
       return false;
     }
     if (filters.stateName && req.stateName?.toLowerCase() !== filters.stateName.toLowerCase()) {
