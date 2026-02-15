@@ -3236,15 +3236,29 @@ const MMP = () => {
             return;
           }
 
-          // Query 1: Sites with accepted_by set directly
+          // Query 1: Sites with accepted_by set directly (only post-claim statuses)
+          // Use exclusion approach for pre-claim statuses to keep only post-claim entries
           const { data: dbEntries, error } = await supabase
             .from('mmp_site_entries')
             .select('*')
             .in('mmp_file_id', verifiedMmpIds)
             .not('accepted_by', 'is', null)
-            .not('status', 'ilike', '%completed%')
-            .not('status', 'ilike', '%rejected%')
-            .not('status', 'ilike', '%declined%')
+            .not('status', 'eq', 'approved and costed')
+            .not('status', 'eq', 'Approved and Costed')
+            .not('status', 'eq', 'costed')
+            .not('status', 'eq', 'Costed')
+            .not('status', 'eq', 'approved')
+            .not('status', 'eq', 'Approved')
+            .not('status', 'eq', 'new')
+            .not('status', 'eq', 'New')
+            .not('status', 'eq', 'verified')
+            .not('status', 'eq', 'Verified')
+            .not('status', 'eq', 'completed')
+            .not('status', 'eq', 'Completed')
+            .not('status', 'eq', 'rejected')
+            .not('status', 'eq', 'Rejected')
+            .not('status', 'eq', 'declined')
+            .not('status', 'eq', 'Declined')
             .order('accepted_at', { ascending: false })
             .limit(2000);
 
@@ -3279,9 +3293,22 @@ const MMP = () => {
                 .select('*')
                 .in('id', uniqueDpIds)
                 .in('mmp_file_id', verifiedMmpIds)
-                .not('status', 'ilike', '%completed%')
-                .not('status', 'ilike', '%rejected%')
-                .not('status', 'ilike', '%declined%')
+                .not('status', 'eq', 'approved and costed')
+                .not('status', 'eq', 'Approved and Costed')
+                .not('status', 'eq', 'costed')
+                .not('status', 'eq', 'Costed')
+                .not('status', 'eq', 'approved')
+                .not('status', 'eq', 'Approved')
+                .not('status', 'eq', 'new')
+                .not('status', 'eq', 'New')
+                .not('status', 'eq', 'verified')
+                .not('status', 'eq', 'Verified')
+                .not('status', 'eq', 'completed')
+                .not('status', 'eq', 'Completed')
+                .not('status', 'eq', 'rejected')
+                .not('status', 'eq', 'Rejected')
+                .not('status', 'eq', 'declined')
+                .not('status', 'eq', 'Declined')
                 .limit(2000);
               
               if (dpEntries) {
@@ -3323,9 +3350,22 @@ const MMP = () => {
                   .select('*')
                   .in('mmp_file_id', verifiedMmpIds)
                   .in('site_name', batch)
-                  .not('status', 'ilike', '%completed%')
-                  .not('status', 'ilike', '%rejected%')
-                  .not('status', 'ilike', '%declined%')
+                  .not('status', 'eq', 'approved and costed')
+                  .not('status', 'eq', 'Approved and Costed')
+                  .not('status', 'eq', 'costed')
+                  .not('status', 'eq', 'Costed')
+                  .not('status', 'eq', 'approved')
+                  .not('status', 'eq', 'Approved')
+                  .not('status', 'eq', 'new')
+                  .not('status', 'eq', 'New')
+                  .not('status', 'eq', 'verified')
+                  .not('status', 'eq', 'Verified')
+                  .not('status', 'eq', 'completed')
+                  .not('status', 'eq', 'Completed')
+                  .not('status', 'eq', 'rejected')
+                  .not('status', 'eq', 'Rejected')
+                  .not('status', 'eq', 'declined')
+                  .not('status', 'eq', 'Declined')
                   .limit(500);
                 
                 if (nameMatches) {
