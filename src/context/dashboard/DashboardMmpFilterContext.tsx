@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useMemo, useCallback } from 'react';
 import { useMMP } from '@/context/mmp/MMPContext';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import type { MMPFile } from '@/types';
 
 interface DashboardMmpFilterContextType {
@@ -12,12 +13,14 @@ interface DashboardMmpFilterContextType {
   availableMmps: MMPFile[];
   selectedMmps: MMPFile[];
   filterSiteVisitsByMmp: <T extends { mmpDetails?: { mmpId?: string }; mmpFileId?: string }>(visits: T[]) => T[];
+  getLiveSiteCount: (mmpId: string) => number;
 }
 
 const DashboardMmpFilterContext = createContext<DashboardMmpFilterContextType | null>(null);
 
 export function DashboardMmpFilterProvider({ children }: { children: React.ReactNode }) {
   const { mmpFiles } = useMMP();
+  const { siteVisits: allSiteVisits } = useSiteVisitContext();
   const [selectedMmpIds, setSelectedMmpIds] = useState<string[]>([]);
 
   const availableMmps = useMemo(() => {
@@ -27,6 +30,43 @@ export function DashboardMmpFilterProvider({ children }: { children: React.React
       return dateB - dateA;
     });
   }, [mmpFiles]);
+
+  const matchVisitToMmp = useCallback((visit: any, mmpId: string, mmpMmpId?: string, mmpName?: string): boolean => {
+    const fileId = visit.mmpFileId;
+    if (fileId && fileId === mmpId) return true;
+
+    const visitMmpId = visit.mmpDetails?.mmpId;
+    if (visitMmpId) {
+      if (visitMmpId === mmpId) return true;
+      if (mmpMmpId && visitMmpId === mmpMmpId) return true;
+    }
+
+    if (mmpName) {
+      const projectName = visit.mmpDetails?.projectName || visit.projectName || '';
+      if (projectName && projectName.toLowerCase() === mmpName.toLowerCase()) return true;
+    }
+
+    return false;
+  }, []);
+
+  const mmpSiteCountMap = useMemo(() => {
+    const countMap = new Map<string, number>();
+
+    for (const mmp of availableMmps) {
+      let count = 0;
+      for (const visit of allSiteVisits) {
+        if (matchVisitToMmp(visit, mmp.id, mmp.mmpId, mmp.name)) {
+          count++;
+        }
+      }
+      countMap.set(mmp.id, count);
+    }
+    return countMap;
+  }, [allSiteVisits, availableMmps, matchVisitToMmp]);
+
+  const getLiveSiteCount = useCallback((mmpId: string) => {
+    return mmpSiteCountMap.get(mmpId) || 0;
+  }, [mmpSiteCountMap]);
 
   const selectedMmps = useMemo(() => {
     if (selectedMmpIds.length === 0) return [];
@@ -51,17 +91,12 @@ export function DashboardMmpFilterProvider({ children }: { children: React.React
 
   const filterSiteVisitsByMmp = useCallback(<T extends { mmpDetails?: { mmpId?: string }; mmpFileId?: string }>(visits: T[]): T[] => {
     if (selectedMmpIds.length === 0) return visits;
-    const selectedMmpIdSet = new Set(selectedMmpIds);
-    const selectedMmpNames = new Set(availableMmps.filter(m => selectedMmpIdSet.has(m.id)).map(m => m.mmpId).filter(Boolean));
+    const selectedSet = availableMmps.filter(m => selectedMmpIds.includes(m.id));
+
     return visits.filter(visit => {
-      const fileId = (visit as any).mmpFileId;
-      if (fileId && selectedMmpIdSet.has(fileId)) return true;
-      const mmpId = visit.mmpDetails?.mmpId;
-      if (mmpId && selectedMmpIdSet.has(mmpId)) return true;
-      if (mmpId && selectedMmpNames.has(mmpId)) return true;
-      return false;
+      return selectedSet.some(mmp => matchVisitToMmp(visit, mmp.id, mmp.mmpId, mmp.name));
     });
-  }, [selectedMmpIds, availableMmps]);
+  }, [selectedMmpIds, availableMmps, matchVisitToMmp]);
 
   const value = useMemo(() => ({
     selectedMmpIds,
@@ -73,7 +108,8 @@ export function DashboardMmpFilterProvider({ children }: { children: React.React
     availableMmps,
     selectedMmps,
     filterSiteVisitsByMmp,
-  }), [selectedMmpIds, toggleMmpId, clearSelection, selectAll, isFiltering, availableMmps, selectedMmps, filterSiteVisitsByMmp]);
+    getLiveSiteCount,
+  }), [selectedMmpIds, toggleMmpId, clearSelection, selectAll, isFiltering, availableMmps, selectedMmps, filterSiteVisitsByMmp, getLiveSiteCount]);
 
   return (
     <DashboardMmpFilterContext.Provider value={value}>
