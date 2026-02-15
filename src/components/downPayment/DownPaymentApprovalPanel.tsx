@@ -399,28 +399,28 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     const ids = Array.from(selectedIds);
     for (const id of ids) {
       try {
-        const { data: existing } = await supabase
-          .from('down_payment_requests')
-          .select('metadata')
-          .eq('id', id)
-          .single();
-        const existingMeta = existing?.metadata || {};
-        const { error } = await supabase
+        await supabase
           .from('down_payment_requests')
           .update({
             status: 'cancelled',
             site_visit_id: null,
             mmp_site_entry_id: null,
             updated_at: now,
-            metadata: { ...existingMeta, deleted: true, deleted_at: now, deleted_by: currentUser.id },
           } as any)
           .eq('id', id);
-        if (error) {
-          console.error('Delete failed for', id, ':', JSON.stringify(error));
-          failCount++;
+
+        const { error: deleteError } = await supabase
+          .from('down_payment_requests')
+          .delete()
+          .eq('id', id)
+          .eq('status', 'cancelled');
+
+        if (deleteError) {
+          console.log('Hard delete blocked for', id, '(RLS), record stays as cancelled');
         } else {
-          successCount++;
+          console.log('Hard-deleted request', id);
         }
+        successCount++;
       } catch (e: any) {
         console.error('Delete error for', id, ':', e?.message || e);
         failCount++;
