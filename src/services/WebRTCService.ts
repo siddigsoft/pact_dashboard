@@ -217,6 +217,14 @@ class WebRTCService {
       const presences = presenceState[key] as any[];
       for (const p of presences) {
         if (p.userId === userId && p.inCall) {
+          if (p.callId && typeof p.callId === 'string') {
+            const callTimestamp = parseInt(p.callId.split('_')[1] || '0', 10);
+            const now = Date.now();
+            if (now - callTimestamp > 5 * 60 * 1000) {
+              console.log('[WebRTC] User presence shows inCall but callId is stale (>5min), treating as available');
+              continue;
+            }
+          }
           return true;
         }
       }
@@ -554,7 +562,13 @@ class WebRTCService {
 
     try {
       console.log('[WebRTC] Setting up local stream...');
-      await this.setupLocalStream();
+      try {
+        await this.setupLocalStream();
+      } catch (mediaError: any) {
+        console.error('[WebRTC] Microphone access failed:', mediaError);
+        this.cleanup();
+        return false;
+      }
       console.log('[WebRTC] Local stream ready');
       
       console.log('[WebRTC] Creating peer connection...');
@@ -569,6 +583,11 @@ class WebRTCService {
         callToken: this.currentCallToken,
       });
       console.log('[WebRTC] Call-request sent successfully');
+
+      const isTargetOnline = this.isUserPresent(targetUserId);
+      if (!isTargetOnline) {
+        console.log('[WebRTC] Target user not found in presence, call may not be delivered');
+      }
 
       return true;
     } catch (error) {
