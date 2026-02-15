@@ -22,6 +22,7 @@ export function MmpGlobalFilter() {
     isFiltering,
     availableMmps,
     selectedMmps,
+    getLiveSiteCount,
   } = useDashboardMmpFilter();
 
   const [open, setOpen] = useState(false);
@@ -51,7 +52,12 @@ export function MmpGlobalFilter() {
     const parts: string[] = [];
     if (mmp.hub) parts.push(mmp.hub);
     if (mmp.month && mmp.year) parts.push(`${mmp.month}/${mmp.year}`);
-    if (mmp.entries) parts.push(`${mmp.entries} sites`);
+    const liveCount = getLiveSiteCount(mmp.id);
+    if (liveCount > 0) {
+      parts.push(`${liveCount} sites`);
+    } else if (mmp.entries) {
+      parts.push(`${mmp.entries} sites`);
+    }
     return parts.join(' | ');
   };
 
