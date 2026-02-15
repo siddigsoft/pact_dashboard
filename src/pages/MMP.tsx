@@ -2578,10 +2578,7 @@ const MMP = () => {
       }).length,
       approvedCosted: allEntries.filter(e => {
         const status = String(e.status || '').toLowerCase();
-        if (status !== 'approved and costed') return false;
-        const acceptedBy = e.accepted_by || e.acceptedBy;
-        if (acceptedBy && String(acceptedBy).trim() !== '') return false;
-        if (e.dispatched_at || e.dispatchedAt) return false;
+        if (status !== 'approved and costed' && status !== 'costed') return false;
         if (dpLinkedEntryIds.has(e.id)) return false;
         if (e.site_name && dpLinkedSiteNames.has(String(e.site_name).toLowerCase())) return false;
         if (e.siteName && dpLinkedSiteNames.has(String(e.siteName).toLowerCase())) return false;
@@ -3097,9 +3094,11 @@ const MMP = () => {
             .from('mmp_site_entries')
             .select('*')
             .in('mmp_file_id', verifiedMmpIds)
-            .ilike('status', '%costed%')
-            .is('accepted_by', null)
-            .is('dispatched_at', null)
+            .or('status.ilike.%approved and costed%,status.ilike.%costed%')
+            .not('status', 'ilike', '%dispatched%')
+            .not('status', 'ilike', '%claimed%')
+            .not('status', 'ilike', '%completed%')
+            .not('status', 'ilike', '%rejected%')
             .order('created_at', { ascending: false })
             .limit(2000);
 
@@ -3671,23 +3670,20 @@ const MMP = () => {
       const ad = (row as any).additionalData || (row as any).additional_data || {};
       const assignedTo = ad.assigned_to || ad.smart_assigned_to || (row as any).assigned_to || (row as any).smart_assigned_to;
       
-      // Check categories in order of specificity
-      // Any site with accepted_by set goes to 'accepted' regardless of status
-      // (covers individually dispatched sites, claimed sites, etc.)
-      if (acceptedBy) {
-        // Exception: completed/rejected sites keep their own category
-        if (status === 'completed') return 'completed';
-        if (status === 'rejected' || status === 'declined') return 'rejected';
-        if (/inprogress|in_progress|ongoing/.test(status)) return 'ongoing';
-        return 'accepted';
-      }
-      
-      // approvedCosted: only sites that haven't been dispatched, claimed, or linked to advance requests
-      if (status.includes('approved') && status.includes('costed') && !dispatchedAt) {
+      // approvedCosted check FIRST: status-based routing takes priority over stale accepted_by
+      if (status === 'approved and costed' || status === 'costed') {
         const sName = row.siteName || (row as any).site_name || '';
         if (dpLinkedEntryIds.has(row.id)) return 'accepted';
         if (sName && dpLinkedSiteNames.has(sName.toLowerCase())) return 'accepted';
         return 'approvedCosted';
+      }
+      
+      // Any site with accepted_by set goes to 'accepted' (post-claim statuses)
+      if (acceptedBy) {
+        if (status === 'completed') return 'completed';
+        if (status === 'rejected' || status === 'declined') return 'rejected';
+        if (/inprogress|in_progress|ongoing/.test(status)) return 'ongoing';
+        return 'accepted';
       }
       if (status === 'completed') {
         return 'completed';
