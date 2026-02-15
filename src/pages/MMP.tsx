@@ -4612,8 +4612,14 @@ const MMP = () => {
                               const bothFeesPresent = (enumFee !== undefined && enumFee !== null) && (transFee !== undefined && transFee !== null);
                               const finalCost = bothFeesPresent ? Number(enumFee) + Number(transFee) : currentCost;
 
+                              const cleanedAdditionalData = { ...(entry.additional_data || {}) };
+                              delete cleanedAdditionalData.claimed_by;
+                              delete cleanedAdditionalData.claimed_at;
+                              delete cleanedAdditionalData.assigned_to;
+                              delete cleanedAdditionalData.assigned_by;
+                              delete cleanedAdditionalData.assigned_at;
                               const additional_data = {
-                                ...entry.additional_data,
+                                ...cleanedAdditionalData,
                                 ...(enumFee !== undefined ? { enumerator_fee: enumFee } : {}),
                                 ...(transFee !== undefined ? { transport_fee: transFee } : {}),
                                 ...(finalCost !== undefined ? { cost: finalCost } : {}),
@@ -4636,7 +4642,12 @@ const MMP = () => {
                             for (let i = 0; i < updates.length; i += batchSize) {
                               const batch = updates.slice(i, i + batchSize);
                               const updatePromises = batch.map(update => {
-                                const payload: any = { status: update.status, additional_data: update.additional_data };
+                                const payload: any = { 
+                                  status: update.status, 
+                                  additional_data: update.additional_data,
+                                  accepted_by: null,
+                                  accepted_at: null,
+                                };
                                 if (update.cost !== undefined) payload.cost = update.cost;
                                 if (update.enumerator_fee !== undefined) payload.enumerator_fee = update.enumerator_fee;
                                 if (update.transport_fee !== undefined) payload.transport_fee = update.transport_fee;
@@ -4682,8 +4693,14 @@ const MMP = () => {
                         const bothFeesPresent = (enumFee !== undefined && enumFee !== null) && (transFee !== undefined && transFee !== null);
                         const finalCost = bothFeesPresent ? Number(enumFee) + Number(transFee) : currentCost;
 
+                        const cleanedData = { ...(site.additional_data || site.additionalData || {}) };
+                        delete cleanedData.claimed_by;
+                        delete cleanedData.claimed_at;
+                        delete cleanedData.assigned_to;
+                        delete cleanedData.assigned_by;
+                        delete cleanedData.assigned_at;
                         const additional_data = {
-                          ...(site.additional_data || site.additionalData || {}),
+                          ...cleanedData,
                           ...(enumFee !== undefined ? { enumerator_fee: enumFee } : {}),
                           ...(transFee !== undefined ? { transport_fee: transFee } : {}),
                           ...(finalCost !== undefined ? { cost: finalCost } : {}),
@@ -4693,7 +4710,9 @@ const MMP = () => {
 
                         const payload: any = { 
                           status: 'costed', 
-                          additional_data 
+                          additional_data,
+                          accepted_by: null,
+                          accepted_at: null,
                         };
                         if (finalCost !== undefined) payload.cost = finalCost;
                         if (enumFee !== undefined) payload.enumerator_fee = enumFee;
