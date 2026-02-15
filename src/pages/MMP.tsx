@@ -4618,6 +4618,8 @@ const MMP = () => {
                               delete cleanedAdditionalData.assigned_to;
                               delete cleanedAdditionalData.assigned_by;
                               delete cleanedAdditionalData.assigned_at;
+                              delete cleanedAdditionalData.dispatched_by;
+                              delete cleanedAdditionalData.dispatched_at;
                               const additional_data = {
                                 ...cleanedAdditionalData,
                                 ...(enumFee !== undefined ? { enumerator_fee: enumFee } : {}),
@@ -4647,6 +4649,8 @@ const MMP = () => {
                                   additional_data: update.additional_data,
                                   accepted_by: null,
                                   accepted_at: null,
+                                  dispatched_at: null,
+                                  dispatched_by: null,
                                 };
                                 if (update.cost !== undefined) payload.cost = update.cost;
                                 if (update.enumerator_fee !== undefined) payload.enumerator_fee = update.enumerator_fee;
@@ -4699,6 +4703,8 @@ const MMP = () => {
                         delete cleanedData.assigned_to;
                         delete cleanedData.assigned_by;
                         delete cleanedData.assigned_at;
+                        delete cleanedData.dispatched_by;
+                        delete cleanedData.dispatched_at;
                         const additional_data = {
                           ...cleanedData,
                           ...(enumFee !== undefined ? { enumerator_fee: enumFee } : {}),
@@ -4713,6 +4719,8 @@ const MMP = () => {
                           additional_data,
                           accepted_by: null,
                           accepted_at: null,
+                          dispatched_at: null,
+                          dispatched_by: null,
                         };
                         if (finalCost !== undefined) payload.cost = finalCost;
                         if (enumFee !== undefined) payload.enumerator_fee = enumFee;

@@ -1065,13 +1065,21 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <p className="font-medium text-gray-900 mt-1">{new Date(row.dispatchedAt).toLocaleString()}</p>
                   </div>
                 )}
-                {row.acceptedBy && (
+                {row.acceptedBy && (() => {
+                  const st = (row.status || '').toLowerCase();
+                  const postClaimStatuses = ['claimed', 'accepted', 'acknowledged', 'cost and acknowledged', 'ongoing', 'inprogress', 'in_progress', 'in progress', 'completed'];
+                  return postClaimStatuses.some(s => st.includes(s));
+                })() && (
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Accepted By</Label>
                     <p className="font-medium text-gray-900 mt-1">{acceptedByName || row.acceptedBy}</p>
                   </div>
                 )}
-                {row.acceptedAt && (
+                {row.acceptedAt && (() => {
+                  const st = (row.status || '').toLowerCase();
+                  const postClaimStatuses = ['claimed', 'accepted', 'acknowledged', 'cost and acknowledged', 'ongoing', 'inprogress', 'in_progress', 'in progress', 'completed'];
+                  return postClaimStatuses.some(s => st.includes(s));
+                })() && (
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Accepted At</Label>
                     <p className="font-medium text-gray-900 mt-1">{new Date(row.acceptedAt).toLocaleString()}</p>
