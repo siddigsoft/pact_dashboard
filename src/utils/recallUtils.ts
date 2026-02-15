@@ -573,7 +573,7 @@ async function getAffectedUsers(request: RecallRequest, mmpData: any): Promise<s
       const sites = await getAffectedSites(request);
       sites.forEach((site: any) => {
         if (site.assigned_to) userIds.add(site.assigned_to);
-        if (site.claimed_by) userIds.add(site.claimed_by);
+        if (site.accepted_by) userIds.add(site.accepted_by);
       });
       break;
   }
@@ -881,7 +881,7 @@ async function createRecoveryRecords(
         recallEventId,
         mmpId,
         siteEntryId: site.id,
-        dataCollectorId: site.claimed_by || site.assigned_to,
+        dataCollectorId: site.accepted_by || site.assigned_to,
         originalAmount: site.transport_advance_amount,
         recoveredAmount: 0,
         pendingAmount: site.transport_advance_amount,
@@ -1524,7 +1524,6 @@ export async function computeRecallImpact(
 
   for (const site of affectedSites) {
     if (site.assigned_to) collectorIds.add(site.assigned_to);
-    if (site.claimed_by) collectorIds.add(site.claimed_by);
     if (site.accepted_by) collectorIds.add(site.accepted_by);
 
     if (site.transport_advance_paid && site.transport_advance_amount) {

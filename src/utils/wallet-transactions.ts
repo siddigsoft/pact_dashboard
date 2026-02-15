@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface CreateSiteVisitTransactionOptions {
   /** The site entry ID (mmp_site_entries.id) */
   siteVisitId: string;
-  /** Optional: User ID to pay. If not provided, will be determined from site entry (accepted_by > claimed_by > visit_completed_by) */
+  /** Optional: User ID to pay. If not provided, will be determined from site entry (accepted_by > visit_completed_by) */
   userId?: string;
   /** Optional: Amount to pay. If not provided, will be calculated from site entry fees */
   amount?: number;
@@ -60,7 +60,7 @@ export async function createSiteVisitWalletTransaction(
     // Step 1: Fetch site entry to get fee information and determine user to pay
     const { data: siteEntry, error: siteError } = await supabase
       .from('mmp_site_entries')
-      .select('id, site_name, site_code, status, accepted_by, claimed_by, visit_completed_by, enumerator_fee, transport_fee, cost, visit_completed_at, visit_date')
+      .select('id, site_name, site_code, status, accepted_by, visit_completed_by, enumerator_fee, transport_fee, cost, visit_completed_at, visit_date')
       .eq('id', siteVisitId)
       .single();
 
@@ -90,7 +90,7 @@ export async function createSiteVisitWalletTransaction(
       return { success: false, message: errorMsg };
     }
 
-    // Step 2: Determine user to pay (priority: accepted_by > claimed_by > visit_completed_by > providedUserId)
+    // Step 2: Determine user to pay (priority: accepted_by > visit_completed_by > providedUserId)
     // NOTE: accepted_by is stored as text, but should be a valid UUID string
     let userIdToPay: string | null = null;
     
@@ -98,21 +98,20 @@ export async function createSiteVisitWalletTransaction(
       userIdToPay = providedUserId;
       console.log(`[WalletTransaction] Using provided user ID: ${userIdToPay}`);
     } else {
-      // Priority order: accepted_by > claimed_by > visit_completed_by
+      // Priority order: accepted_by > visit_completed_by
       // Handle type mismatch: accepted_by is text, others are uuid
       const acceptedBy = siteEntry.accepted_by ? String(siteEntry.accepted_by).trim() : null;
-      const claimedBy = siteEntry.claimed_by ? String(siteEntry.claimed_by).trim() : null;
       const visitCompletedBy = siteEntry.visit_completed_by ? String(siteEntry.visit_completed_by).trim() : null;
       
-      userIdToPay = acceptedBy || claimedBy || visitCompletedBy || null;
+      userIdToPay = acceptedBy || visitCompletedBy || null;
       
       if (userIdToPay) {
-        console.log(`[WalletTransaction] Determined user to pay from site entry: ${userIdToPay} (accepted_by: ${acceptedBy}, claimed_by: ${claimedBy}, visit_completed_by: ${visitCompletedBy})`);
+        console.log(`[WalletTransaction] Determined user to pay from site entry: ${userIdToPay} (accepted_by: ${acceptedBy}, visit_completed_by: ${visitCompletedBy})`);
       }
     }
 
     if (!userIdToPay) {
-      const errorMsg = 'No user ID found for payment (checked accepted_by, claimed_by, visit_completed_by)';
+      const errorMsg = 'No user ID found for payment (checked accepted_by, visit_completed_by)';
       console.warn(`[WalletTransaction] ${errorMsg}`);
       if (showNotifications && toast) {
         toast({
@@ -530,18 +529,16 @@ export async function createSiteVisitWalletTransaction(
 
 /**
  * Helper function to determine the user ID to pay from a site entry.
- * Priority: accepted_by > claimed_by > visit_completed_by
+ * Priority: accepted_by > visit_completed_by
  */
 export function determineUserToPay(siteEntry: {
   accepted_by?: string | null;
-  claimed_by?: string | null;
   visit_completed_by?: string | null;
 }): string | null {
   const acceptedBy = siteEntry.accepted_by ? String(siteEntry.accepted_by).trim() : null;
-  const claimedBy = siteEntry.claimed_by ? String(siteEntry.claimed_by).trim() : null;
   const visitCompletedBy = siteEntry.visit_completed_by ? String(siteEntry.visit_completed_by).trim() : null;
   
-  return acceptedBy || claimedBy || visitCompletedBy || null;
+  return acceptedBy || visitCompletedBy || null;
 }
 
 /**

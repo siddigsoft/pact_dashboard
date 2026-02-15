@@ -968,7 +968,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // 1. Get the site entry details (siteVisitId is mmp_site_entries.id)
       const { data: entry, error: entryError } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, status, accepted_by, claimed_by, visit_completed_by, enumerator_fee, transport_fee, cost')
+        .select('id, site_name, status, accepted_by, visit_completed_by, enumerator_fee, transport_fee, cost')
         .eq('id', siteVisitId)
         .single();
 
@@ -981,10 +981,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       // Check multiple fields to determine who should be paid
-      const userIdToPay = entry.accepted_by || entry.claimed_by || entry.visit_completed_by;
+      const userIdToPay = entry.accepted_by || entry.visit_completed_by;
       
       if (!userIdToPay) {
-        return { success: false, message: 'Site has no user assigned (checked accepted_by, claimed_by, visit_completed_by)' };
+        return { success: false, message: 'Site has no user assigned (checked accepted_by, visit_completed_by)' };
       }
 
       // 2. Check if fee was already added (check for both old 'site_visit_fee' and new 'earning' types)
