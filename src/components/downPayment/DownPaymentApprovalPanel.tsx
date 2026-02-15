@@ -397,14 +397,20 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     let failCount = 0;
     const ids = Array.from(selectedIds);
     for (const id of ids) {
-      const success = await deleteRequest(id);
-      if (success) successCount++; else failCount++;
+      try {
+        const { error } = await supabase
+          .from('down_payment_requests')
+          .delete()
+          .eq('id', id);
+        if (error) failCount++; else successCount++;
+      } catch { failCount++; }
     }
-    setProcessing(false);
     setSelectedIds(new Set());
+    await refreshRequests();
+    setProcessing(false);
     toast({
       title: `Bulk Delete Complete / اكتمال الحذف الجماعي`,
-      description: `${successCount} deleted${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      description: `${successCount} deleted, they can now submit new requests. / تم حذف ${successCount}، يمكنهم الآن تقديم طلبات جديدة.${failCount > 0 ? ` ${failCount} failed / فشل` : ''}`,
     });
   };
 
