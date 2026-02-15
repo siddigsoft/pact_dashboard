@@ -409,6 +409,8 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
           .from('down_payment_requests')
           .update({
             status: 'cancelled',
+            site_visit_id: null,
+            mmp_site_entry_id: null,
             updated_at: now,
             metadata: { ...existingMeta, deleted: true, deleted_at: now, deleted_by: currentUser.id },
           } as any)
