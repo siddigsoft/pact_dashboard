@@ -2580,8 +2580,6 @@ const MMP = () => {
         const status = String(e.status || '').toLowerCase();
         if (status !== 'approved and costed' && status !== 'costed') return false;
         if (dpLinkedEntryIds.has(e.id)) return false;
-        if (e.site_name && dpLinkedSiteNames.has(String(e.site_name).toLowerCase())) return false;
-        if (e.siteName && dpLinkedSiteNames.has(String(e.siteName).toLowerCase())) return false;
         return true;
       }).length
     };
@@ -3119,7 +3117,6 @@ const MMP = () => {
 
           const filteredDbEntries = (dbEntries || []).filter(entry => {
             if (dpEntryIds.has(entry.id)) return false;
-            if (entry.site_name && dpSiteNames.has(entry.site_name.toLowerCase())) return false;
             return true;
           });
 
@@ -3672,9 +3669,7 @@ const MMP = () => {
       
       // approvedCosted check FIRST: status-based routing takes priority over stale accepted_by
       if (status === 'approved and costed' || status === 'costed') {
-        const sName = row.siteName || (row as any).site_name || '';
         if (dpLinkedEntryIds.has(row.id)) return 'accepted';
-        if (sName && dpLinkedSiteNames.has(sName.toLowerCase())) return 'accepted';
         return 'approvedCosted';
       }
       
