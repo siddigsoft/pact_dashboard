@@ -51,29 +51,17 @@ export type CallEventHandler = {
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
-    // Multiple STUN servers for better reliability
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    // Metered TURN servers (free tier - more reliable than openrelay)
-    {
-      urls: 'turn:a.relay.metered.ca:80',
-      username: 'e8dd65c92f6d9f4e4f3b1234',
-      credential: 'pact2024turn',
-    },
-    {
-      urls: 'turn:a.relay.metered.ca:443',
-      username: 'e8dd65c92f6d9f4e4f3b1234',
-      credential: 'pact2024turn',
-    },
-    {
-      urls: 'turn:a.relay.metered.ca:443?transport=tcp',
-      username: 'e8dd65c92f6d9f4e4f3b1234',
-      credential: 'pact2024turn',
-    },
-    // Fallback OpenRelay TURN servers
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
     {
       urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
       username: 'openrelayproject',
       credential: 'openrelayproject',
     },
@@ -81,6 +69,11 @@ const ICE_SERVERS: RTCConfiguration = {
       urls: 'turn:openrelay.metered.ca:443?transport=tcp',
       username: 'openrelayproject',
       credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:freestun.net:3478',
+      username: 'free',
+      credential: 'free',
     },
   ],
   iceCandidatePoolSize: 10,
@@ -653,20 +646,26 @@ class WebRTCService {
 
   private async setupLocalStream(enableVideo: boolean = false) {
     this.videoEnabled = enableVideo;
+    const audioConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: audioConstraints,
         video: enableVideo ? { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } : false,
       });
+      console.log('[WebRTC] Got local stream, tracks:', this.localStream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`));
     } catch (error) {
       console.error('[WebRTC] Failed to get user media with video:', error);
-      // Fallback to audio only if video fails
       try {
         this.localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: audioConstraints,
           video: false,
         });
         this.videoEnabled = false;
+        console.log('[WebRTC] Got audio-only stream, tracks:', this.localStream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`));
       } catch (audioError) {
         console.error('[WebRTC] Failed to get audio:', audioError);
         throw audioError;
@@ -717,13 +716,18 @@ class WebRTCService {
 
   private async createPeerConnection() {
     this.peerConnection = new RTCPeerConnection(ICE_SERVERS);
+    console.log('[WebRTC] PeerConnection created, signalingState:', this.peerConnection.signalingState);
 
     this.remoteStream = new MediaStream();
 
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
+      const tracks = this.localStream.getTracks();
+      console.log('[WebRTC] Adding local tracks:', tracks.map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`));
+      tracks.forEach((track) => {
         this.peerConnection?.addTrack(track, this.localStream!);
       });
+    } else {
+      console.warn('[WebRTC] No local stream when creating peer connection!');
     }
 
     this.peerConnection.ontrack = (event) => {
@@ -745,11 +749,16 @@ class WebRTCService {
 
     this.peerConnection.onicecandidate = async (event) => {
       if (event.candidate && this.targetUserId) {
+        const candidateType = event.candidate.type || 'unknown';
+        const protocol = event.candidate.protocol || 'unknown';
+        console.log(`[WebRTC] ICE candidate: type=${candidateType}, protocol=${protocol}, address=${event.candidate.address || 'hidden'}`);
         await this.sendSignal({
           type: 'ice-candidate',
           to: this.targetUserId,
           payload: event.candidate.toJSON(),
         });
+      } else if (!event.candidate) {
+        console.log('[WebRTC] ICE gathering complete');
       }
     };
 

@@ -101,6 +101,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const incomingCallerId = useRef<string | null>(null);
+  const callStateRef = useRef(callState);
+  callStateRef.current = callState;
   
   const playRemoteAudio = useCallback((stream: MediaStream) => {
     console.log('[Call] playRemoteAudio called, tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`));
@@ -222,10 +224,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetCallState();
       },
       onCallEnded: () => {
+        const currentDuration = callStateRef.current.duration;
         toast({
           title: 'Call Ended',
-          description: callState.duration > 0 
-            ? `Duration: ${Math.floor(callState.duration / 60)}:${(callState.duration % 60).toString().padStart(2, '0')}`
+          description: currentDuration > 0 
+            ? `Duration: ${Math.floor(currentDuration / 60)}:${(currentDuration % 60).toString().padStart(2, '0')}`
             : 'Call has ended',
         });
         resetCallState();
@@ -242,9 +245,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         playRemoteAudio(stream);
         setCallState(prev => ({ ...prev, status: 'connected' }));
         startDurationTimer();
+        const participantName = callStateRef.current.participant?.name || 'participant';
         toast({
           title: 'Connected',
-          description: `Now speaking with ${callState.participant?.name}`,
+          description: `Now speaking with ${participantName}`,
           variant: 'success',
         });
       },
