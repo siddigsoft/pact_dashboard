@@ -593,6 +593,39 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       if (error) throw error;
 
+      // Automatically update the linked mmp_site_entry to mark it as claimed
+      if (request.mmpSiteEntryId && request.requestedBy) {
+        const now = new Date().toISOString();
+        try {
+          const { data: existingEntry } = await supabase
+            .from('mmp_site_entries')
+            .select('additional_data')
+            .eq('id', request.mmpSiteEntryId)
+            .single();
+          
+          const existingAdditionalData = existingEntry?.additional_data || {};
+          
+          await supabase
+            .from('mmp_site_entries')
+            .update({
+              status: 'Claimed',
+              accepted_by: request.requestedBy,
+              accepted_at: now,
+              updated_at: now,
+              additional_data: {
+                ...existingAdditionalData,
+                claimed_by: data.approvedByName || request.requestedByName,
+                claimed_at: now,
+                claim_source: 'advance_request',
+                down_payment_request_id: data.requestId,
+              }
+            })
+            .eq('id', request.mmpSiteEntryId);
+        } catch (siteUpdateError) {
+          console.error('Failed to update linked site entry after advance approval:', siteUpdateError);
+        }
+      }
+
       if (request.requestedBy) {
         await NotificationTriggerService.send({
           userId: request.requestedBy,
