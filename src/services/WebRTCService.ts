@@ -727,10 +727,18 @@ class WebRTCService {
     }
 
     this.peerConnection.ontrack = (event) => {
-      event.streams[0].getTracks().forEach((track) => {
-        this.remoteStream?.addTrack(track);
-      });
-      if (this.remoteStream) {
+      console.log('[WebRTC] ontrack fired, kind:', event.track.kind, 'readyState:', event.track.readyState);
+      if (event.streams && event.streams[0]) {
+        event.streams[0].getTracks().forEach((track) => {
+          console.log('[WebRTC] Adding track from stream:', track.kind, track.id);
+          this.remoteStream?.addTrack(track);
+        });
+      } else {
+        console.log('[WebRTC] No streams in event, adding track directly:', event.track.kind);
+        this.remoteStream?.addTrack(event.track);
+      }
+      if (this.remoteStream && this.remoteStream.getTracks().length > 0) {
+        console.log('[WebRTC] Remote stream tracks:', this.remoteStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
         this.eventHandlers?.onRemoteStream(this.remoteStream);
       }
     };

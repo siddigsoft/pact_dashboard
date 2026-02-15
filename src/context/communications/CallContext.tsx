@@ -103,11 +103,45 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const incomingCallerId = useRef<string | null>(null);
   
   const playRemoteAudio = useCallback((stream: MediaStream) => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
+    console.log('[Call] playRemoteAudio called, tracks:', stream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`));
+    
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.srcObject = null;
+      audioRef.current.remove();
+      audioRef.current = null;
     }
-    audioRef.current.srcObject = stream;
-    audioRef.current.play().catch(console.error);
+    
+    const audio = document.createElement('audio');
+    audio.autoplay = true;
+    (audio as any).playsInline = true;
+    audio.setAttribute('playsinline', 'true');
+    audio.style.display = 'none';
+    document.body.appendChild(audio);
+    audioRef.current = audio;
+    
+    audio.srcObject = stream;
+    audio.volume = 1.0;
+    
+    const playPromise = audio.play();
+    if (playPromise) {
+      playPromise.then(() => {
+        console.log('[Call] Audio playback started successfully');
+      }).catch((err) => {
+        console.error('[Call] Audio play failed:', err);
+        setTimeout(() => {
+          audio.play().then(() => {
+            console.log('[Call] Audio retry succeeded');
+          }).catch((err2) => {
+            console.error('[Call] Audio retry also failed:', err2);
+          });
+        }, 500);
+      });
+    }
+
+    stream.onaddtrack = (event) => {
+      console.log('[Call] New track added to remote stream:', event.track.kind);
+    };
   }, []);
 
   const stopDurationTimer = useCallback(() => {
@@ -132,6 +166,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resetCallState = useCallback(() => {
     stopDurationTimer();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.srcObject = null;
+      audioRef.current.remove();
+      audioRef.current = null;
+    }
     setCallState({
       status: 'idle',
       participant: null,
@@ -141,9 +181,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     setIsVideoEnabled(false);
     incomingCallerId.current = null;
-    if (audioRef.current) {
-      audioRef.current.srcObject = null;
-    }
   }, [stopDurationTimer]);
 
   useEffect(() => {
