@@ -399,15 +399,30 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     const ids = Array.from(selectedIds);
     for (const id of ids) {
       try {
+        const { data: existing } = await supabase
+          .from('down_payment_requests')
+          .select('metadata')
+          .eq('id', id)
+          .single();
+        const existingMeta = existing?.metadata || {};
         const { error } = await supabase
           .from('down_payment_requests')
           .update({
-            status: 'deleted',
+            status: 'cancelled',
             updated_at: now,
+            metadata: { ...existingMeta, deleted: true, deleted_at: now, deleted_by: currentUser.id },
           } as any)
           .eq('id', id);
-        if (error) { console.error('Delete failed:', error); failCount++; } else successCount++;
-      } catch (e) { console.error('Delete error:', e); failCount++; }
+        if (error) {
+          console.error('Delete failed for', id, ':', JSON.stringify(error));
+          failCount++;
+        } else {
+          successCount++;
+        }
+      } catch (e: any) {
+        console.error('Delete error for', id, ':', e?.message || e);
+        failCount++;
+      }
     }
     setSelectedIds(new Set());
     await refreshRequests();

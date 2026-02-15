@@ -269,7 +269,11 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       }
       
       console.log('[DownPayment] Fetched requests:', data?.length || 0);
-      const transformed = (data || []).map(transformFromDB).filter(r => r.status !== 'deleted');
+      const transformed = (data || []).map(transformFromDB).filter(r => {
+        if (r.status === 'deleted') return false;
+        if (r.status === 'cancelled' && r.metadata?.deleted) return false;
+        return true;
+      });
       
       const needsEnrichment = transformed.filter(r => (!r.stateName || !r.localityName) && r.mmpSiteEntryId);
       if (needsEnrichment.length > 0) {
@@ -853,11 +857,18 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   const deleteRequest = async (requestId: string): Promise<boolean> => {
     try {
       const now = new Date().toISOString();
+      const { data: existing } = await supabase
+        .from('down_payment_requests')
+        .select('metadata')
+        .eq('id', requestId)
+        .single();
+      const existingMeta = existing?.metadata || {};
       const { error } = await supabase
         .from('down_payment_requests')
         .update({
-          status: 'deleted',
+          status: 'cancelled',
           updated_at: now,
+          metadata: { ...existingMeta, deleted: true, deleted_at: now },
         } as any)
         .eq('id', requestId);
 
