@@ -87,32 +87,39 @@ async function getIceServers(): Promise<RTCConfiguration> {
   }
 
   try {
-    const response = await fetch(CLOUDFLARE_TURN_CREDS_URL);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
+    const response = await fetch(CLOUDFLARE_TURN_CREDS_URL, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
     if (response.ok) {
       const creds = await response.json();
-      console.log('[WebRTC] Got fresh Cloudflare TURN credentials');
-      cachedIceConfig = {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun.cloudflare.com:3478' },
-          {
-            urls: creds.urls.filter((u: string) => u.startsWith('turn')),
-            username: creds.username,
-            credential: creds.credential,
-          },
-          {
-            urls: 'turn:freestun.net:3478',
-            username: 'free',
-            credential: 'free',
-          },
-        ],
-        iceCandidatePoolSize: 10,
-        iceTransportPolicy: 'all',
-        bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require',
-      };
-      cacheTimestamp = Date.now();
-      return cachedIceConfig;
+      if (creds && creds.urls && creds.username && creds.credential) {
+        console.log('[WebRTC] Got fresh Cloudflare TURN credentials');
+        cachedIceConfig = {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun.cloudflare.com:3478' },
+            {
+              urls: creds.urls.filter((u: string) => u.startsWith('turn')),
+              username: creds.username,
+              credential: creds.credential,
+            },
+            {
+              urls: 'turn:freestun.net:3478',
+              username: 'free',
+              credential: 'free',
+            },
+          ],
+          iceCandidatePoolSize: 10,
+          iceTransportPolicy: 'all',
+          bundlePolicy: 'max-bundle',
+          rtcpMuxPolicy: 'require',
+        };
+        cacheTimestamp = Date.now();
+        return cachedIceConfig;
+      }
     }
   } catch (err) {
     console.warn('[WebRTC] Failed to fetch Cloudflare TURN creds, using defaults:', err);
@@ -491,28 +498,33 @@ class WebRTCService {
   ) {
     if (!this.currentUserId) return;
 
-    // Use the same predictable channel format as the receiver listens on
     const channelName = `calls:user:${targetUserId}`;
     
     let channel = this.callChannels.get(channelName);
     if (!channel) {
       channel = supabase.channel(channelName);
-      // Wait for subscription to complete before sending
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Channel subscription timeout'));
-        }, 5000);
-        
-        channel!.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            clearTimeout(timeout);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            console.warn('[WebRTC] Channel subscription timeout for:', channelName);
             resolve();
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            clearTimeout(timeout);
-            reject(new Error(`Channel subscription failed: ${status}`));
-          }
+          }, 8000);
+          
+          channel!.subscribe((status) => {
+            console.log('[WebRTC] Send channel status for', channelName, ':', status);
+            if (status === 'SUBSCRIBED') {
+              clearTimeout(timeout);
+              resolve();
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              clearTimeout(timeout);
+              console.error('[WebRTC] Channel subscription failed:', status);
+              resolve();
+            }
+          });
         });
-      });
+      } catch (subError) {
+        console.error('[WebRTC] Channel subscription error:', subError);
+      }
       this.callChannels.set(channelName, channel);
     }
     
@@ -562,15 +574,16 @@ class WebRTCService {
 
   async initiateCall(targetUserId: string): Promise<boolean> {
     console.log('[WebRTC] Initiating call to:', targetUserId);
+    console.log('[WebRTC] State check: currentUserId=', this.currentUserId, 'currentCallId=', this.currentCallId);
     
     if (!this.currentUserId) {
-      console.error('[WebRTC] Cannot initiate call: no current user');
+      console.error('[WebRTC] Cannot initiate call: no current user. Service may not be initialized.');
       return false;
     }
 
     if (this.currentCallId) {
-      console.warn('[WebRTC] Already in a call:', this.currentCallId);
-      return false;
+      console.warn('[WebRTC] Already in a call:', this.currentCallId, '- forcing cleanup');
+      this.cleanup();
     }
 
     // Check if target user is already in a call via presence
@@ -589,8 +602,12 @@ class WebRTCService {
     console.log('[WebRTC] Call ID:', this.currentCallId);
 
     // Update our presence to show we're in a call with token for verification
-    await this.updateUserPresenceWithToken(true, this.currentCallId, this.currentCallToken);
-    console.log('[WebRTC] Presence updated');
+    try {
+      await this.updateUserPresenceWithToken(true, this.currentCallId, this.currentCallToken);
+      console.log('[WebRTC] Presence updated');
+    } catch (presenceError) {
+      console.warn('[WebRTC] Presence update failed, continuing anyway:', presenceError);
+    }
 
     try {
       console.log('[WebRTC] Setting up local stream...');
@@ -601,11 +618,11 @@ class WebRTCService {
         this.cleanup();
         return false;
       }
-      console.log('[WebRTC] Local stream ready');
+      console.log('[WebRTC] Local stream ready, tracks:', this.localStream?.getTracks().map(t => `${t.kind}:${t.readyState}`));
       
       console.log('[WebRTC] Creating peer connection...');
       await this.createPeerConnection();
-      console.log('[WebRTC] Peer connection created');
+      console.log('[WebRTC] Peer connection created, state:', this.peerConnection?.signalingState);
 
       console.log('[WebRTC] Sending call-request signal...');
       await this.sendSignalToUser(targetUserId, {
@@ -617,8 +634,9 @@ class WebRTCService {
       console.log('[WebRTC] Call-request sent successfully');
 
       const isTargetOnline = this.isUserPresent(targetUserId);
+      console.log('[WebRTC] Target user online:', isTargetOnline);
       if (!isTargetOnline) {
-        console.log('[WebRTC] Target user not found in presence, call may not be delivered');
+        console.warn('[WebRTC] Target user not found in presence, call may not be delivered');
       }
 
       return true;
