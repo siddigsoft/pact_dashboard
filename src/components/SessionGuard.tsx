@@ -5,10 +5,13 @@ import { useToast } from '@/hooks/use-toast';
 
 const KEEPALIVE_INTERVAL = 3 * 60 * 1000;
 const IDLE_THRESHOLD = 5 * 60 * 1000;
+const DEBOUNCE_MS = 2000;
 
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const lastActivityRef = useRef(Date.now());
+  const checkInProgressRef = useRef(false);
+  const lastCheckRef = useRef(0);
 
   const trackActivity = useCallback(() => {
     lastActivityRef.current = Date.now();
@@ -18,18 +21,29 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     const idleTime = Date.now() - lastActivityRef.current;
     if (idleTime < IDLE_THRESHOLD) return;
 
-    const isValid = await ensureValidSession();
-    if (!isValid) {
-      toast({
-        title: 'Session expired',
-        description: 'Your session has timed out. Please log in again.',
-        variant: 'destructive',
-      });
-      return;
-    }
+    const now = Date.now();
+    if (now - lastCheckRef.current < DEBOUNCE_MS) return;
+    if (checkInProgressRef.current) return;
 
-    queryClient.invalidateQueries();
-    lastActivityRef.current = Date.now();
+    checkInProgressRef.current = true;
+    lastCheckRef.current = now;
+
+    try {
+      const isValid = await ensureValidSession();
+      if (!isValid) {
+        toast({
+          title: 'Session expired',
+          description: 'Your session has timed out. Please log in again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      queryClient.invalidateQueries();
+      lastActivityRef.current = Date.now();
+    } finally {
+      checkInProgressRef.current = false;
+    }
   }, [toast]);
 
   useEffect(() => {
