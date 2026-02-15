@@ -1772,12 +1772,61 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
               </CardContent>
             </Card>
           )}
+          {selectedIds.size > 0 && processingRequests.length > 0 && (
+            <Card className="mb-4 border-primary">
+              <CardContent className="p-3 flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="h-5 w-5 text-primary" />
+                  <span className="font-medium">{selectedIds.size} selected</span>
+                  <span className="text-xs text-muted-foreground">
+                    SDG {processingRequests.filter(r => selectedIds.has(r.id)).reduce((s, r) => s + (r.approvedAmount || r.requestedAmount), 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button size="sm" onClick={() => {
+                    const selected = processingRequests.filter(r => selectedIds.has(r.id) && r.status === 'approved');
+                    if (selected.length > 0) openBulkPaymentRequestDialog(selected, '', `${selected.length} Selected`);
+                  }} disabled={processingRequests.filter(r => selectedIds.has(r.id) && r.status === 'approved').length === 0} data-testid="button-selected-request-payment">
+                    <Mail className="h-4 w-4 mr-1" />
+                    Request Payment ({processingRequests.filter(r => selectedIds.has(r.id) && r.status === 'approved').length})
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const selected = processingRequests.filter(r => selectedIds.has(r.id));
+                    if (selected.length > 0) handleDownloadBulkPdf(selected, `${selected.length} Selected`);
+                  }} data-testid="button-selected-bulk-pdf">
+                    <FileText className="h-4 w-4 mr-1" />
+                    PDF ({selectedIds.size})
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={clearSelection} data-testid="button-clear-processing-selection">
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {processingRequests.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground">No requests in processing</CardContent></Card>
           ) : (
             <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Checkbox
+                  checked={processingRequests.length > 0 && processingRequests.every(r => selectedIds.has(r.id))}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      selectAll(processingRequests);
+                    } else {
+                      clearSelection();
+                    }
+                  }}
+                  data-testid="checkbox-select-all-processing"
+                />
+                <Button variant="ghost" size="sm" onClick={() => selectAll(processingRequests)} data-testid="button-select-all-processing">
+                  Select All ({processingRequests.length})
+                </Button>
+              </div>
               {processingRequests.map(request => (
-                <RequestCard key={request.id} request={request} />
+                <RequestCard key={request.id} request={request} showCheckbox />
               ))}
             </div>
           )}
