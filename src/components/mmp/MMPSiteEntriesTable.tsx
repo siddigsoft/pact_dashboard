@@ -605,8 +605,9 @@ const MMPSiteEntriesTable = ({
                             className="w-full bg-blue-600 hover:bg-blue-700"
                           />
                         )}
-                        {/* Show Request Advance button for accepted/ongoing/in-progress sites with transport budget */}
-                        {(site.status?.toLowerCase() === 'accepted' || 
+                        {/* Show Request Advance button for claimed/accepted/ongoing/in-progress sites with transport budget */}
+                        {(site.status?.toLowerCase() === 'claimed' || 
+                          site.status?.toLowerCase() === 'accepted' || 
                           site.status?.toLowerCase() === 'ongoing' || 
                           site.status?.toLowerCase() === 'in progress' || 
                           site.status?.toLowerCase() === 'in_progress') && 
@@ -620,7 +621,7 @@ const MMPSiteEntriesTable = ({
                         )}
                         {showVisitActions ? (
                           <>
-                            {['accepted', 'assigned', 'verified', 'approved', 'dispatched'].includes(site.status?.toLowerCase()) && onStartVisit && (
+                            {['claimed', 'accepted', 'assigned', 'verified', 'approved', 'dispatched'].includes(site.status?.toLowerCase()) && onStartVisit && (
                               <Button 
                                 size="sm" 
                                 onClick={() => onStartVisit(site)} 
