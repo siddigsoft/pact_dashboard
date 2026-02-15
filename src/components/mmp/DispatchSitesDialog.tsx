@@ -404,18 +404,24 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     if (dispatchType === "open") {
       return excludeAlreadyDispatchedOrClaimed(siteEntries);
     }
-    if (dispatchType === "state" && selectedState) {
-      return excludeAlreadyDispatchedOrClaimed(siteEntries.filter((entry) => {
+
+    let filtered = siteEntries;
+
+    if (selectedState) {
+      filtered = filtered.filter((entry) => {
         const state = entry.state || entry.state_name;
         return state && state.trim() === selectedState;
-      }));
-    } else if (dispatchType === "locality" && selectedLocality) {
-      return excludeAlreadyDispatchedOrClaimed(siteEntries.filter((entry) => {
+      });
+    }
+
+    if (selectedLocality) {
+      filtered = filtered.filter((entry) => {
         const locality = entry.locality || entry.locality_name;
         return locality && locality.trim() === selectedLocality;
-      }));
+      });
     }
-    return excludeAlreadyDispatchedOrClaimed(siteEntries);
+
+    return excludeAlreadyDispatchedOrClaimed(filtered);
   }, [siteEntries, dispatchType, selectedState, selectedLocality]);
 
   // Select all sites
