@@ -1624,6 +1624,11 @@ const MMP = () => {
               .limit(1000);
 
             if (!mySitesError && mySitesData) {
+              const preClaimStatuses = new Set(['approved and costed', 'costed', 'dispatched', 'verified', 'approved', 'pending', 'rejected']);
+              const activeSites = mySitesData.filter((entry: any) => {
+                const status = (entry.status || '').trim().toLowerCase();
+                return !preClaimStatuses.has(status);
+              });
               const formatEntries = (entries: any[]) => entries.map(entry => {
                 const enumeratorFee = entry.enumerator_fee;
                 const transportFee = entry.transport_fee;
@@ -1638,7 +1643,7 @@ const MMP = () => {
                 };
               });
 
-              const formattedMySites = formatEntries(mySitesData);
+              const formattedMySites = formatEntries(activeSites);
               setEnumeratorMySites(formattedMySites);
               console.log('✅ Enumerator My Sites updated:', formattedMySites.length, 'sites');
             }
@@ -2008,10 +2013,12 @@ const MMP = () => {
       
       try {
         // Query 1a: Sites accepted by this user (accepted_by = user.id)
+        // Exclude pre-claim statuses - sites sent back to earlier workflow stages shouldn't appear in My Sites
         const { data: acceptedData, error } = await supabase
           .from('mmp_site_entries')
           .select('*')
           .eq('accepted_by', currentUser.id)
+          .not('status', 'in', '("Approved and Costed","approved and costed","Costed","costed","Dispatched","dispatched","Verified","verified","Approved","approved","Pending","pending","Rejected","rejected")')
           .order('created_at', { ascending: false })
           .limit(1000);
 
@@ -2100,12 +2107,15 @@ const MMP = () => {
           }
         }
 
-        // Merge and deduplicate
+        // Merge and deduplicate, excluding sites that have been sent back to pre-claim statuses
+        const preClaimStatuses = new Set(['approved and costed', 'costed', 'dispatched', 'verified', 'approved', 'pending', 'rejected']);
         const allEntries = [...(mySitesData || []), ...dpSiteEntries];
         const dedupIds = new Set<string>();
         const deduped = allEntries.filter(e => {
           if (dedupIds.has(e.id)) return false;
           dedupIds.add(e.id);
+          const status = (e.status || '').trim().toLowerCase();
+          if (preClaimStatuses.has(status)) return false;
           return true;
         });
 
@@ -2578,9 +2588,7 @@ const MMP = () => {
       }).length,
       approvedCosted: allEntries.filter(e => {
         const status = String(e.status || '').toLowerCase();
-        if (status !== 'approved and costed' && status !== 'costed') return false;
-        if (dpLinkedEntryIds.has(e.id)) return false;
-        return true;
+        return status === 'approved and costed' || status === 'costed';
       }).length
     };
   }, [mmpFiles, dpLinkedEntryIds, dpLinkedSiteNames]);
@@ -2910,10 +2918,14 @@ const MMP = () => {
       return bDate.localeCompare(aDate);
     }).slice(0, 1000);
 
-    // Filter my sites: accepted_by = currentUser.id
+    // Filter my sites: accepted_by = currentUser.id, excluding pre-claim statuses
     // The claim_site_visit RPC sets accepted_by = user UUID when claiming.
+    const preClaimStatusSet = new Set(['approved and costed', 'costed', 'dispatched', 'verified', 'approved', 'pending', 'rejected']);
     const mySites = formattedEntries.filter(entry => {
-      return entry.accepted_by === currentUser.id;
+      if (entry.accepted_by !== currentUser.id) return false;
+      const status = (entry.status || '').trim().toLowerCase();
+      if (preClaimStatusSet.has(status)) return false;
+      return true;
     }).sort((a, b) => {
       const aDate = a.created_at || a.createdAt || '';
       const bDate = b.created_at || b.createdAt || '';
@@ -3106,21 +3118,7 @@ const MMP = () => {
             return;
           }
 
-          // Also exclude sites linked to down_payment_requests (assigned via advance requests)
-          const { data: dpRequests } = await supabase
-            .from('down_payment_requests')
-            .select('mmp_site_entry_id, site_name')
-            .in('status', ['approved', 'partially_paid', 'fully_paid', 'pending_admin', 'pending_supervisor']);
-
-          const dpEntryIds = new Set((dpRequests || []).filter((dp: any) => dp.mmp_site_entry_id).map((dp: any) => dp.mmp_site_entry_id));
-          const dpSiteNames = new Set((dpRequests || []).filter((dp: any) => dp.site_name).map((dp: any) => dp.site_name.toLowerCase()));
-
-          const filteredDbEntries = (dbEntries || []).filter(entry => {
-            if (dpEntryIds.has(entry.id)) return false;
-            return true;
-          });
-
-          const formattedEntries = filteredDbEntries.map(entry => {
+          const formattedEntries = (dbEntries || []).map(entry => {
             const formatted = formatSiteEntry(entry);
             return {
               ...formatted,
@@ -3669,7 +3667,6 @@ const MMP = () => {
       
       // approvedCosted check FIRST: status-based routing takes priority over stale accepted_by
       if (status === 'approved and costed' || status === 'costed') {
-        if (dpLinkedEntryIds.has(row.id)) return 'accepted';
         return 'approvedCosted';
       }
       
