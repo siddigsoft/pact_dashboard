@@ -225,10 +225,12 @@ const MMPSiteEntriesTable = ({
   };
 
   const handleView = (site: any) => {
-    // Check if this is an accepted site that needs Start Visit
+    // Check if this is an accepted/claimed/assigned site that needs Start Visit
+    const siteStatus = site.status?.toLowerCase() || '';
+    const siteOwner = site.accepted_by || site.acceptedBy || site.assigned_to || site.assignedTo;
     const isAcceptedSite = showVisitActions && 
-                          site.status?.toLowerCase() === 'accepted' && 
-                          site.accepted_by === currentUserId;
+                          ['accepted', 'claimed', 'assigned'].includes(siteStatus) && 
+                          siteOwner === currentUserId;
     
     if (isAcceptedSite && onStartVisit) {
       onStartVisit(site);
@@ -237,8 +239,8 @@ const MMPSiteEntriesTable = ({
 
     // Check if this is an ongoing site that needs Complete Visit
     const isOngoingSite = showVisitActions && 
-                         site.status?.toLowerCase() === 'ongoing' && 
-                         site.accepted_by === currentUserId;
+                         ['ongoing', 'in_progress', 'inprogress', 'in progress'].includes(siteStatus) && 
+                         siteOwner === currentUserId;
     
     if (isOngoingSite && onCompleteVisit) {
       onCompleteVisit(site);
