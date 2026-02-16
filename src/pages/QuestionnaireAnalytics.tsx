@@ -1049,6 +1049,197 @@ const QuestionnaireAnalytics = () => {
     XLSX.writeFile(wb, 'tracker_report.xlsx');
   }, [trackerData]);
 
+  const exportActivityByStateExcel = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    const rows: any[] = [];
+    trackerData.stateBreakdown.forEach(sb => {
+      sb.activities.filter(a => a.questionnaires > 0).forEach(a => {
+        rows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires, 'PDM Sites': isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : '-' });
+      });
+      const pdmQ = sb.activities.filter(a => a.questionnaires > 0 && isPdmActivity(a.activity)).reduce((s, a) => s + a.questionnaires, 0);
+      rows.push({ State: sb.state, Activity: 'Total', Sites: sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0), Questionnaires: sb.totalQ, 'PDM Sites': pdmQ ? Math.ceil(pdmQ / 7) : '-' });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity by State');
+    XLSX.writeFile(wb, 'tracker_activity_by_state.xlsx');
+  }, [trackerData]);
+
+  const exportActivityByStatePdf = useCallback(() => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    let y = 15;
+    doc.setFontSize(16);
+    doc.setTextColor(33, 33, 33);
+    doc.text('Tracker - Activity by State', 14, y);
+    y += 10;
+    trackerData.stateBreakdown.forEach(sb => {
+      if (y > 250) { doc.addPage(); y = 15; }
+      doc.setFontSize(12);
+      doc.setTextColor(33, 33, 33);
+      doc.text(`${sb.state} (${sb.totalQ} Q)`, 14, y);
+      y += 2;
+      const actRows = sb.activities.filter(a => a.questionnaires > 0).map(a => [a.activity, String(a.sites), String(a.questionnaires), isPdmActivity(a.activity) ? String(Math.ceil(a.questionnaires / 7)) : '-']);
+      const pdmQ = sb.activities.filter(a => a.questionnaires > 0 && isPdmActivity(a.activity)).reduce((s, a) => s + a.questionnaires, 0);
+      actRows.push(['Total', String(sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0)), String(sb.totalQ), pdmQ ? String(Math.ceil(pdmQ / 7)) : '-']);
+      autoTable(doc, {
+        head: [['Activity', 'Sites', 'Questionnaires', 'PDM Sites']],
+        body: actRows,
+        startY: y,
+        margin: { left: 14, right: 14 },
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        didParseCell: (data: any) => { if (data.row.index === actRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; } },
+      });
+      y = (doc as any).lastAutoTable.finalY + 8;
+    });
+    doc.save('tracker_activity_by_state.pdf');
+  }, [trackerData]);
+
+  const exportTrackerPerHubExcel = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    trackerData.hubTrackers.forEach(ht => {
+      const htRows: any[] = [];
+      ht.matrix.forEach(row => {
+        const r: any = { Activity: row.activity };
+        ht.states.forEach((st, si) => {
+          r[`${st} Sites`] = row.cells[si].sites;
+          r[`${st} Actual`] = row.cells[si].questionnaires;
+          r[`${st} PDM Sites`] = isPdmActivity(row.activity) ? Math.ceil(row.cells[si].questionnaires / 7) : 0;
+          r[`${st} DC`] = row.cells[si].collectors;
+        });
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0; r['Total DC'] = row.totalCollectors;
+        htRows.push(r);
+      });
+      const htTotal: any = { Activity: 'Total' };
+      ht.colTotals.forEach((ct, ci) => {
+        const pdmColQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmColQ ? Math.ceil(pdmColQ / 7) : 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+      });
+      const htPdmTotalQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmTotalQ ? Math.ceil(htPdmTotalQ / 7) : 0; htTotal['Total DC'] = ht.grandCollectors;
+      htRows.push(htTotal);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `${ht.hub}`.slice(0, 31));
+    });
+    XLSX.writeFile(wb, 'tracker_per_hub.xlsx');
+  }, [trackerData]);
+
+  const exportTrackerPerHubPdf = useCallback(() => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    let y = 15;
+    doc.setFontSize(16);
+    doc.setTextColor(33, 33, 33);
+    doc.text('Tracker per Hub', 14, y);
+    y += 10;
+    trackerData.hubTrackers.forEach(ht => {
+      if (y > 170) { doc.addPage(); y = 15; }
+      doc.setFontSize(13);
+      doc.setTextColor(33, 33, 33);
+      doc.text(`${ht.hub} — ${ht.grandQ} Q, ${ht.grandSites} Sites, ${ht.grandCollectors} DC`, 14, y);
+      y += 2;
+      const headers = ['Activity'];
+      ht.states.forEach(st => { headers.push(`${st} Sites`, `${st} Actual`, `${st} PDM`, `${st} DC`); });
+      headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
+      const bodyRows = ht.matrix.map(row => {
+        const r = [row.activity];
+        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors)); });
+        r.push(String(row.totalSites), String(row.totalQ), isPdmActivity(row.activity) ? String(Math.ceil(row.totalQ / 7)) : '-', String(row.totalCollectors));
+        return r;
+      });
+      const totR = ['Total'];
+      ht.colTotals.forEach((ct, ci) => {
+        const pdmColQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+        totR.push(String(ct.sites), String(ct.questionnaires), pdmColQ ? String(Math.ceil(pdmColQ / 7)) : '-', String(ct.collectors));
+      });
+      const htPdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      totR.push(String(ht.grandSites), String(ht.grandQ), htPdmQ ? String(Math.ceil(htPdmQ / 7)) : '-', String(ht.grandCollectors));
+      bodyRows.push(totR);
+      autoTable(doc, {
+        head: [headers],
+        body: bodyRows,
+        startY: y,
+        margin: { left: 10, right: 10 },
+        styles: { fontSize: 6, cellPadding: 1.5 },
+        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        didParseCell: (data: any) => { if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; } },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    });
+    doc.save('tracker_per_hub.pdf');
+  }, [trackerData]);
+
+  const exportTrackerPerStateExcel = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    trackerData.stateTrackers.forEach(st => {
+      const stRows: any[] = [];
+      st.matrix.forEach(row => {
+        const r: any = { Activity: row.activity };
+        st.localities.forEach((loc, li) => {
+          r[`${loc} Sites`] = row.cells[li].sites;
+          r[`${loc} Actual`] = row.cells[li].questionnaires;
+          r[`${loc} PDM Sites`] = isPdmActivity(row.activity) ? Math.ceil(row.cells[li].questionnaires / 7) : 0;
+          r[`${loc} DC`] = row.cells[li].collectors;
+        });
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0; r['Total DC'] = row.totalCollectors;
+        stRows.push(r);
+      });
+      const stTotal: any = { Activity: 'Total' };
+      st.colTotals.forEach((ct, ci) => {
+        const pdmColQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmColQ ? Math.ceil(pdmColQ / 7) : 0; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+      });
+      const stPdmTotalQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmTotalQ ? Math.ceil(stPdmTotalQ / 7) : 0; stTotal['Total DC'] = st.grandCollectors;
+      stRows.push(stTotal);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `${st.state}`.slice(0, 31));
+    });
+    XLSX.writeFile(wb, 'tracker_per_state.xlsx');
+  }, [trackerData]);
+
+  const exportTrackerPerStatePdf = useCallback(() => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    let y = 15;
+    doc.setFontSize(16);
+    doc.setTextColor(33, 33, 33);
+    doc.text('Tracker per State', 14, y);
+    y += 10;
+    trackerData.stateTrackers.forEach(st => {
+      if (y > 170) { doc.addPage(); y = 15; }
+      doc.setFontSize(13);
+      doc.setTextColor(33, 33, 33);
+      doc.text(`${st.state} — ${st.grandQ} Q, ${st.grandSites} Sites, ${st.grandCollectors} DC`, 14, y);
+      y += 2;
+      const headers = ['Activity'];
+      st.localities.forEach(loc => { headers.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM`, `${loc} DC`); });
+      headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
+      const bodyRows = st.matrix.map(row => {
+        const r = [row.activity];
+        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors)); });
+        r.push(String(row.totalSites), String(row.totalQ), isPdmActivity(row.activity) ? String(Math.ceil(row.totalQ / 7)) : '-', String(row.totalCollectors));
+        return r;
+      });
+      const totR = ['Total'];
+      st.colTotals.forEach((ct, ci) => {
+        const pdmColQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+        totR.push(String(ct.sites), String(ct.questionnaires), pdmColQ ? String(Math.ceil(pdmColQ / 7)) : '-', String(ct.collectors));
+      });
+      const stPdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      totR.push(String(st.grandSites), String(st.grandQ), stPdmQ ? String(Math.ceil(stPdmQ / 7)) : '-', String(st.grandCollectors));
+      bodyRows.push(totR);
+      autoTable(doc, {
+        head: [headers],
+        body: bodyRows,
+        startY: y,
+        margin: { left: 10, right: 10 },
+        styles: { fontSize: 6, cellPadding: 1.5 },
+        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        didParseCell: (data: any) => { if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; } },
+      });
+      y = (doc as any).lastAutoTable.finalY + 10;
+    });
+    doc.save('tracker_per_state.pdf');
+  }, [trackerData]);
+
   const exportCollectorPdf = useCallback((collector: CollectorDetail) => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     let y = 15;
@@ -2363,11 +2554,25 @@ const QuestionnaireAnalytics = () => {
               {trackerData.stateBreakdown.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Globe className="h-5 w-5 text-primary" />
-                      Tracker - Activity by State
-                    </CardTitle>
-                    <CardDescription>Activity breakdown per state</CardDescription>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Globe className="h-5 w-5 text-primary" />
+                          Tracker - Activity by State
+                        </CardTitle>
+                        <CardDescription>Activity breakdown per state</CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportActivityByStateExcel} data-testid="button-export-act-state-excel">
+                          <Download className="h-4 w-4" />
+                          Excel
+                        </Button>
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportActivityByStatePdf} data-testid="button-export-act-state-pdf">
+                          <FileDown className="h-4 w-4" />
+                          PDF
+                        </Button>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
@@ -2428,11 +2633,25 @@ const QuestionnaireAnalytics = () => {
               {trackerData.hubTrackers.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Building2 className="h-5 w-5 text-primary" />
-                      Tracker per Hub
-                    </CardTitle>
-                    <CardDescription>Each hub: Activity (rows) x State (columns) with Sites, Questionnaires & Collectors</CardDescription>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Building2 className="h-5 w-5 text-primary" />
+                          Tracker per Hub
+                        </CardTitle>
+                        <CardDescription>Each hub: Activity (rows) x State (columns) with Sites, Questionnaires & Collectors</CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerPerHubExcel} data-testid="button-export-hub-tracker-excel">
+                          <Download className="h-4 w-4" />
+                          Excel
+                        </Button>
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerPerHubPdf} data-testid="button-export-hub-tracker-pdf">
+                          <FileDown className="h-4 w-4" />
+                          PDF
+                        </Button>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {trackerData.hubTrackers.map(ht => (
@@ -2527,11 +2746,25 @@ const QuestionnaireAnalytics = () => {
               {trackerData.stateTrackers.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <MapPin className="h-5 w-5 text-primary" />
-                      Tracker per State
-                    </CardTitle>
-                    <CardDescription>Each state: Activity (rows) x Locality (columns) with Sites, Questionnaires & Collectors</CardDescription>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <MapPin className="h-5 w-5 text-primary" />
+                          Tracker per State
+                        </CardTitle>
+                        <CardDescription>Each state: Activity (rows) x Locality (columns) with Sites, Questionnaires & Collectors</CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerPerStateExcel} data-testid="button-export-state-tracker-excel">
+                          <Download className="h-4 w-4" />
+                          Excel
+                        </Button>
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerPerStatePdf} data-testid="button-export-state-tracker-pdf">
+                          <FileDown className="h-4 w-4" />
+                          PDF
+                        </Button>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {trackerData.stateTrackers.map(st => (
