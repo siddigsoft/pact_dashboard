@@ -1270,14 +1270,13 @@ const QuestionnaireAnalytics = () => {
     doc.setTextColor(45, 45, 60);
     doc.setFont('helvetica', 'bold');
     doc.text('Collector Name:', ml + 4, y);
-    doc.setFont('helvetica', 'normal');
     if (hasArabic) {
       doc.setFont('Amiri', 'normal');
-      doc.text(collector.name, ml + 40, y);
-      doc.setFont('helvetica', 'normal');
     } else {
-      doc.text(collector.name, ml + 40, y);
+      doc.setFont('helvetica', 'normal');
     }
+    doc.text(collector.name, ml + 40, y);
+    doc.setFont('helvetica', 'normal');
     y += 6;
     doc.setFont('helvetica', 'bold');
     doc.text('Device ID:', ml + 4, y);
@@ -1302,7 +1301,7 @@ const QuestionnaireAnalytics = () => {
       y += 2;
       const variantRows = collector.nameVariants.map((v: any, i: number) => [String(i + 1), v.name, String(v.count)]);
       variantRows.unshift(['★', collector.name, String(collector.count - collector.nameVariants.reduce((s: number, v: any) => s + v.count, 0))]);
-      y = styledAutoTable(doc, [['#', 'Name', 'Count']], variantRows, y, { fontSize: 8 });
+      y = styledAutoTable(doc, [['#', 'Name', 'Count']], variantRows, y, { fontSize: 8, useArabicFont: hasArabic });
       y += 6;
     }
 
@@ -1315,7 +1314,7 @@ const QuestionnaireAnalytics = () => {
     const actRows = collector.activities.map((a: any, i: number) => [String(i + 1), a.name, String(a.count)]);
     const actTotal = collector.activities.reduce((s: number, a: any) => s + a.count, 0);
     actRows.push(['', 'Total', String(actTotal)]);
-    y = styledAutoTable(doc, [['#', 'Activity', 'Count']], actRows, y, { fontSize: 9, boldLastRow: true });
+    y = styledAutoTable(doc, [['#', 'Activity', 'Count']], actRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
     y += 6;
 
     if (y > 240) { doc.addPage(); addPageHeader(doc, 'Data Collector Report'); y = 18; }
@@ -1325,7 +1324,7 @@ const QuestionnaireAnalytics = () => {
     doc.text('Localities Breakdown', ml, y);
     y += 2;
     const locRows = collector.localities.map((l: any, i: number) => [String(i + 1), l.name, String(l.count)]);
-    y = styledAutoTable(doc, [['#', 'Locality', 'Count']], locRows, y, { fontSize: 9 });
+    y = styledAutoTable(doc, [['#', 'Locality', 'Count']], locRows, y, { fontSize: 9, useArabicFont: hasArabic });
 
     addAllFooters(doc);
 

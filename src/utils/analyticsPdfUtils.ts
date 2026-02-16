@@ -185,12 +185,18 @@ export function styledAutoTable(
     fontSize?: number;
     boldLastRow?: boolean;
     columnStyles?: Record<number, any>;
+    useArabicFont?: boolean;
   }
 ) {
   const opts = options || {};
   const fs = opts.fontSize || 8;
-  const fontList = (doc as any).getFontList?.() || {};
-  const hasAmiri = !!fontList['Amiri'];
+  let amiriAvailable = opts.useArabicFont || false;
+  if (!amiriAvailable) {
+    try {
+      const fl = doc.getFontList();
+      amiriAvailable = !!fl['Amiri'];
+    } catch { amiriAvailable = false; }
+  }
   autoTable(doc, {
     head,
     body,
@@ -227,11 +233,27 @@ export function styledAutoTable(
         data.cell.styles.fillColor = [226, 232, 240];
         data.cell.styles.textColor = C.dark;
       }
-      if (hasAmiri && data.section === 'body') {
-        const cellText = String(data.cell.raw ?? '');
+      if (amiriAvailable && data.section === 'body') {
+        const raw = data.cell.raw;
+        const cellText = typeof raw === 'string' ? raw : Array.isArray(data.cell.text) ? data.cell.text.join('') : String(raw ?? '');
         if (hasArabicChars(cellText)) {
           data.cell.styles.font = 'Amiri';
+          data.cell.styles.fontStyle = 'normal';
         }
+      }
+    },
+    willDrawCell: (data: any) => {
+      if (amiriAvailable && data.section === 'body') {
+        const raw = data.cell.raw;
+        const cellText = typeof raw === 'string' ? raw : Array.isArray(data.cell.text) ? data.cell.text.join('') : String(raw ?? '');
+        if (hasArabicChars(cellText)) {
+          doc.setFont('Amiri', 'normal');
+        }
+      }
+    },
+    didDrawCell: (data: any) => {
+      if (amiriAvailable && data.section === 'body') {
+        doc.setFont('helvetica', 'normal');
       }
     },
   });
