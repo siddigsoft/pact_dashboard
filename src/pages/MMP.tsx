@@ -459,6 +459,7 @@ const MMP = () => {
   const [siteHubFilter, setSiteHubFilter] = useState<string>('all');
   const [siteStateFilter, setSiteStateFilter] = useState<string>('all');
   const [siteLocalityFilter, setSiteLocalityFilter] = useState<string>('all');
+  const [siteMmpFilter, setSiteMmpFilter] = useState<string>('all');
   
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual' | 'open'>('open');
@@ -2676,6 +2677,16 @@ const MMP = () => {
     });
   }, [categorizedMMPs.verified]);
 
+  const mmpFilterOptions = useMemo(() => {
+    const verifiedMMPs = categorizedMMPs.verified || [];
+    return verifiedMMPs.map(mmp => ({
+      id: mmp.id,
+      label: mmp.name || mmp.id.substring(0, 8),
+      uploadDate: mmp.uploadedAt || '',
+      siteCount: (mmp.siteEntries || []).length
+    })).sort((a, b) => (b.uploadDate || '').localeCompare(a.uploadDate || ''));
+  }, [categorizedMMPs.verified]);
+
   // Memoized filter options for dispatched site entries
   const dispatchedFilterOptions = useMemo(() => {
     const states = new Set<string>();
@@ -2770,6 +2781,13 @@ const MMP = () => {
   const applyGlobalFilters = useCallback((entries: any[]) => {
     let filtered = entries;
     
+    if (siteMmpFilter !== 'all') {
+      filtered = filtered.filter(entry => {
+        const entryMmpId = entry.mmp_file_id || entry.mmpId || '';
+        return entryMmpId === siteMmpFilter;
+      });
+    }
+    
     if (siteStatusFilter !== 'all') {
       filtered = filtered.filter(entry => {
         const status = entry.status || '';
@@ -2799,7 +2817,7 @@ const MMP = () => {
     }
     
     return filtered;
-  }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter]);
+  }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter, siteMmpFilter]);
 
   // Filtered dispatched entries based on state/locality selection
   const filteredDispatchedEntries = useMemo(() => {
@@ -2824,8 +2842,8 @@ const MMP = () => {
 
   // Check if global filters are active
   const hasActiveGlobalFilters = useMemo(() => {
-    return siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all';
-  }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter]);
+    return siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all' || siteMmpFilter !== 'all';
+  }, [siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter, siteMmpFilter]);
 
   // Note: verifiedTabSiteEntryCounts is now derived from precomputedSubcategorySites
   // which is calculated after buildSiteRowsFromMMPs is defined (around line 2736)
@@ -3841,6 +3859,14 @@ const MMP = () => {
     }
     
     return verifiedCategorySiteRows.filter(entry => {
+      // MMP filter
+      if (siteMmpFilter !== 'all') {
+        const entryMmpId = entry.mmpId || entry.mmp_file_id || '';
+        if (entryMmpId !== siteMmpFilter) {
+          return false;
+        }
+      }
+      
       // Status filter
       if (siteStatusFilter !== 'all') {
         const status = entry.status || '';
@@ -3875,7 +3901,7 @@ const MMP = () => {
       
       return true;
     });
-  }, [verifiedCategorySiteRows, hasActiveGlobalFilters, siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter]);
+  }, [verifiedCategorySiteRows, hasActiveGlobalFilters, siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter, siteMmpFilter]);
 
   // Group verified site rows by MMP for display
   const verifiedVisibleMMPs = useMemo(() => {
@@ -4489,6 +4515,24 @@ const MMP = () => {
                         <span className="text-sm font-medium text-muted-foreground">Filters:</span>
                       </div>
                       
+                      {/* MMP File Filter */}
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs text-muted-foreground">MMP:</label>
+                        <Select value={siteMmpFilter} onValueChange={setSiteMmpFilter}>
+                          <SelectTrigger className="w-[200px] h-8 text-xs" data-testid="select-mmp-filter">
+                            <SelectValue placeholder="All MMPs" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All MMPs ({mmpFilterOptions.length})</SelectItem>
+                            {mmpFilterOptions.map(mmp => (
+                              <SelectItem key={mmp.id} value={mmp.id}>
+                                {mmp.label} ({mmp.siteCount} sites)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
                       {/* Status Filter */}
                       <div className="flex items-center gap-1.5">
                         <label className="text-xs text-muted-foreground">Status:</label>
@@ -4565,11 +4609,12 @@ const MMP = () => {
                       </div>
                       
                       {/* Clear Filters Button */}
-                      {(siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all') && (
+                      {(siteMmpFilter !== 'all' || siteStatusFilter !== 'all' || siteHubFilter !== 'all' || siteStateFilter !== 'all' || siteLocalityFilter !== 'all') && (
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => {
+                            setSiteMmpFilter('all');
                             setSiteStatusFilter('all');
                             setSiteHubFilter('all');
                             setSiteStateFilter('all');
