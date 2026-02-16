@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, Fragment } from 'react';
+import { useState, useCallback, useMemo, Fragment, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,7 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -43,6 +46,18 @@ interface ActivitySiteItem {
   children?: SummaryItem[];
 }
 
+interface SavedSession {
+  id: string;
+  name: string;
+  fileName: string;
+  savedAt: string;
+  rowCount: number;
+  data: QuestionnaireRow[];
+}
+
+const STORAGE_KEY = 'pact_questionnaire_sessions';
+const SESSION_VERSION = 1;
+
 const DEFAULT_COLUMN_MAP = {
   hub: 16,
   state: 17,
@@ -68,10 +83,66 @@ const QuestionnaireAnalytics = () => {
   const [fileName, setFileName] = useState<string>('');
   const [activeTab, setActiveTab] = useState('overview');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterHub, setFilterHub] = useState('all');
-  const [filterState, setFilterState] = useState('all');
-  const [filterActivity, setFilterActivity] = useState('all');
+  const [filterHubs, setFilterHubs] = useState<string[]>([]);
+  const [filterStates, setFilterStates] = useState<string[]>([]);
+  const [filterActivities, setFilterActivities] = useState<string[]>([]);
+  const [filterLocalities, setFilterLocalities] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showLoadDialog, setShowLoadDialog] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [currentSessionName, setCurrentSessionName] = useState('');
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const sessions: SavedSession[] = (Array.isArray(parsed) ? parsed : [])
+          .filter((s: any) => s && s.id && s.name && Array.isArray(s.data))
+          .map((s: any) => ({ ...s, data: s.data || [] }));
+        setSavedSessions(sessions);
+      }
+    } catch {}
+  }, []);
+
+  const saveSession = useCallback(() => {
+    if (!saveName.trim() || data.length === 0) return;
+    const session: SavedSession = {
+      id: Date.now().toString(),
+      name: saveName.trim(),
+      fileName,
+      savedAt: new Date().toISOString(),
+      rowCount: data.length,
+      data,
+    };
+    const updated = [...savedSessions, session];
+    setSavedSessions(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    setCurrentSessionName(saveName.trim());
+    setShowSaveDialog(false);
+    setSaveName('');
+  }, [saveName, data, fileName, savedSessions]);
+
+  const loadSession = useCallback((session: SavedSession) => {
+    setData(session.data);
+    setFileName(session.fileName);
+    setCurrentSessionName(session.name);
+    setFilterHubs([]);
+    setFilterStates([]);
+    setFilterActivities([]);
+    setFilterLocalities([]);
+    setSearchQuery('');
+    setShowLoadDialog(false);
+  }, []);
+
+  const deleteSession = useCallback((id: string) => {
+    const updated = savedSessions.filter(s => s.id !== id);
+    setSavedSessions(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  }, [savedSessions]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -111,9 +182,11 @@ const QuestionnaireAnalytics = () => {
         })).filter(row => row.hub || row.state || row.dataCollector);
 
         setData(rows);
-        setFilterHub('all');
-        setFilterState('all');
-        setFilterActivity('all');
+        setCurrentSessionName('');
+        setFilterHubs([]);
+        setFilterStates([]);
+        setFilterActivities([]);
+        setFilterLocalities([]);
         setSearchQuery('');
       } catch (err) {
         console.error('Error parsing Excel file:', err);
@@ -124,9 +197,10 @@ const QuestionnaireAnalytics = () => {
 
   const filteredData = useMemo(() => {
     let result = data;
-    if (filterHub !== 'all') result = result.filter(r => r.hub === filterHub);
-    if (filterState !== 'all') result = result.filter(r => r.state === filterState);
-    if (filterActivity !== 'all') result = result.filter(r => r.activity === filterActivity);
+    if (filterHubs.length > 0) result = result.filter(r => filterHubs.includes(r.hub));
+    if (filterStates.length > 0) result = result.filter(r => filterStates.includes(r.state));
+    if (filterActivities.length > 0) result = result.filter(r => filterActivities.includes(r.activity));
+    if (filterLocalities.length > 0) result = result.filter(r => filterLocalities.includes(r.locality));
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(r =>
@@ -140,11 +214,26 @@ const QuestionnaireAnalytics = () => {
       );
     }
     return result;
-  }, [data, filterHub, filterState, filterActivity, searchQuery]);
+  }, [data, filterHubs, filterStates, filterActivities, filterLocalities, searchQuery]);
 
   const uniqueHubs = useMemo(() => [...new Set(data.map(r => r.hub))].filter(Boolean).sort(), [data]);
   const uniqueStates = useMemo(() => [...new Set(data.map(r => r.state))].filter(Boolean).sort(), [data]);
   const uniqueActivities = useMemo(() => [...new Set(data.map(r => r.activity))].filter(Boolean).sort(), [data]);
+  const uniqueLocalities = useMemo(() => [...new Set(data.map(r => r.locality))].filter(Boolean).sort(), [data]);
+
+  const activeFilterCount = filterHubs.length + filterStates.length + filterActivities.length + filterLocalities.length;
+
+  const toggleFilter = (arr: string[], setArr: (v: string[]) => void, val: string) => {
+    setArr(arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val]);
+  };
+
+  const clearAllFilters = () => {
+    setFilterHubs([]);
+    setFilterStates([]);
+    setFilterActivities([]);
+    setFilterLocalities([]);
+    setSearchQuery('');
+  };
 
   const buildSummary = useCallback((items: QuestionnaireRow[], key: keyof QuestionnaireRow): SummaryItem[] => {
     const counts = new Map<string, number>();
@@ -472,29 +561,50 @@ const QuestionnaireAnalytics = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Questionnaire Analytics</h1>
-          <p className="text-muted-foreground mt-1">Upload Excel data to analyze questionnaire submissions by Hub, State, Locality, Activity, and Data Collector</p>
+          <p className="text-muted-foreground mt-1">
+            {currentSessionName ? (
+              <span className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1"><FolderOpen className="h-3 w-3" />{currentSessionName}</Badge>
+                <span className="text-xs">({fileName})</span>
+              </span>
+            ) : 'Upload Excel data to analyze questionnaire submissions'}
+          </p>
         </div>
-        {data.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2" data-testid="button-export">
-                <Download className="h-4 w-4" />
-                Export
-                <ChevronDown className="h-3 w-3" />
+        <div className="flex items-center gap-2 flex-wrap">
+          {savedSessions.length > 0 && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowLoadDialog(true)} data-testid="button-load">
+              <FolderOpen className="h-4 w-4" />
+              Saved ({savedSessions.length})
+            </Button>
+          )}
+          {data.length > 0 && (
+            <>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setSaveName(currentSessionName || fileName.replace(/\.[^.]+$/, '')); setShowSaveDialog(true); }} data-testid="button-save">
+                <Save className="h-4 w-4" />
+                Save
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Export to Excel
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportToPdf} data-testid="button-export-pdf">
-                <FileDown className="h-4 w-4 mr-2" />
-                Export to PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-export">
+                    <Download className="h-4 w-4" />
+                    Export
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Export to Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToPdf} data-testid="button-export-pdf">
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Export to PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -564,54 +674,109 @@ const QuestionnaireAnalytics = () => {
           </div>
 
           <Card className="p-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, hub, state, activity..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                  data-testid="input-search"
-                />
-              </div>
-              <Select value={filterHub} onValueChange={setFilterHub}>
-                <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-hub-filter">
-                  <SelectValue placeholder="All Hubs" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Hubs</SelectItem>
-                  {uniqueHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={filterState} onValueChange={setFilterState}>
-                <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-state-filter">
-                  <SelectValue placeholder="All States" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All States</SelectItem>
-                  {uniqueStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={filterActivity} onValueChange={setFilterActivity}>
-                <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-activity-filter">
-                  <SelectValue placeholder="All Activities" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Activities</SelectItem>
-                  {uniqueActivities.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {(filterHub !== 'all' || filterState !== 'all' || filterActivity !== 'all' || searchQuery) && (
-                <Button variant="ghost" size="icon" onClick={() => { setFilterHub('all'); setFilterState('all'); setFilterActivity('all'); setSearchQuery(''); }} data-testid="button-clear-filters">
-                  <X className="h-4 w-4" />
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name, hub, state, activity..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-search"
+                  />
+                </div>
+                <Button variant={showFilterPanel ? 'default' : 'outline'} className="gap-2" onClick={() => setShowFilterPanel(!showFilterPanel)} data-testid="button-toggle-filters">
+                  <Filter className="h-4 w-4" />
+                  Filters
+                  {activeFilterCount > 0 && <Badge variant="secondary" className="ml-1 h-5 px-1.5">{activeFilterCount}</Badge>}
                 </Button>
+                {(activeFilterCount > 0 || searchQuery) && (
+                  <Button variant="ghost" size="sm" className="gap-1" onClick={clearAllFilters} data-testid="button-clear-filters">
+                    <X className="h-4 w-4" />
+                    Clear All
+                  </Button>
+                )}
+              </div>
+
+              {activeFilterCount > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {filterHubs.map(h => (
+                    <Badge key={`fh-${h}`} variant="secondary" className="gap-1 cursor-pointer" onClick={() => toggleFilter(filterHubs, setFilterHubs, h)}>
+                      Hub: {h} <X className="h-3 w-3" />
+                    </Badge>
+                  ))}
+                  {filterStates.map(s => (
+                    <Badge key={`fs-${s}`} variant="secondary" className="gap-1 cursor-pointer" onClick={() => toggleFilter(filterStates, setFilterStates, s)}>
+                      State: {s} <X className="h-3 w-3" />
+                    </Badge>
+                  ))}
+                  {filterLocalities.map(l => (
+                    <Badge key={`fl-${l}`} variant="secondary" className="gap-1 cursor-pointer" onClick={() => toggleFilter(filterLocalities, setFilterLocalities, l)}>
+                      Locality: {l} <X className="h-3 w-3" />
+                    </Badge>
+                  ))}
+                  {filterActivities.map(a => (
+                    <Badge key={`fa-${a}`} variant="secondary" className="gap-1 cursor-pointer" onClick={() => toggleFilter(filterActivities, setFilterActivities, a)}>
+                      Activity: {a} <X className="h-3 w-3" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {showFilterPanel && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-3 border-t">
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground mb-2 block">HUBS</Label>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {uniqueHubs.map(h => (
+                        <div key={h} className="flex items-center gap-2">
+                          <Checkbox checked={filterHubs.includes(h)} onCheckedChange={() => toggleFilter(filterHubs, setFilterHubs, h)} id={`hub-${h}`} data-testid={`checkbox-hub-${h}`} />
+                          <label htmlFor={`hub-${h}`} className="text-sm cursor-pointer flex-1 truncate">{h}</label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground mb-2 block">STATES</Label>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {uniqueStates.map(s => (
+                        <div key={s} className="flex items-center gap-2">
+                          <Checkbox checked={filterStates.includes(s)} onCheckedChange={() => toggleFilter(filterStates, setFilterStates, s)} id={`state-${s}`} data-testid={`checkbox-state-${s}`} />
+                          <label htmlFor={`state-${s}`} className="text-sm cursor-pointer flex-1 truncate">{s}</label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground mb-2 block">LOCALITIES</Label>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {uniqueLocalities.map(l => (
+                        <div key={l} className="flex items-center gap-2">
+                          <Checkbox checked={filterLocalities.includes(l)} onCheckedChange={() => toggleFilter(filterLocalities, setFilterLocalities, l)} id={`loc-${l}`} data-testid={`checkbox-locality-${l}`} />
+                          <label htmlFor={`loc-${l}`} className="text-sm cursor-pointer flex-1 truncate">{l}</label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground mb-2 block">ACTIVITIES</Label>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {uniqueActivities.map(a => (
+                        <div key={a} className="flex items-center gap-2">
+                          <Checkbox checked={filterActivities.includes(a)} onCheckedChange={() => toggleFilter(filterActivities, setFilterActivities, a)} id={`act-${a}`} data-testid={`checkbox-activity-${a}`} />
+                          <label htmlFor={`act-${a}`} className="text-sm cursor-pointer flex-1 truncate">{a}</label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </Card>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-4 sm:grid-cols-7 w-full">
+            <TabsList className="grid grid-cols-4 sm:grid-cols-8 w-full">
               <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
               <TabsTrigger value="hub" data-testid="tab-hub">Hub</TabsTrigger>
               <TabsTrigger value="state" data-testid="tab-state">State</TabsTrigger>
@@ -619,6 +784,7 @@ const QuestionnaireAnalytics = () => {
               <TabsTrigger value="sites" data-testid="tab-sites">Sites</TabsTrigger>
               <TabsTrigger value="activity" data-testid="tab-activity">Activity (PDM)</TabsTrigger>
               <TabsTrigger value="collector" data-testid="tab-collector">Collector</TabsTrigger>
+              <TabsTrigger value="tracker" data-testid="tab-tracker">Tracker</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4 mt-4">
@@ -886,9 +1052,194 @@ const QuestionnaireAnalytics = () => {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            <TabsContent value="tracker" className="mt-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Layers className="h-5 w-5 text-primary" />
+                    Tracker - Cross-Tab Summary
+                  </CardTitle>
+                  <CardDescription>Activity (PDM) breakdown by Hub with questionnaire counts (Actual) and site counts</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    {(() => {
+                      const hubs = [...new Set(filteredData.map(r => r.hub))].filter(Boolean).sort();
+                      const activities = [...new Set(filteredData.map(r => r.activity))].filter(Boolean).sort();
+
+                      type CellData = { questionnaires: number; siteNames: string[] };
+                      const matrix: Record<string, Record<string, CellData>> = {};
+                      const siteSetMatrix: Record<string, Record<string, Set<string>>> = {};
+
+                      filteredData.forEach(row => {
+                        if (!row.activity || !row.hub) return;
+                        if (!siteSetMatrix[row.activity]) siteSetMatrix[row.activity] = {};
+                        if (!siteSetMatrix[row.activity][row.hub]) siteSetMatrix[row.activity][row.hub] = new Set();
+                        if (!matrix[row.activity]) matrix[row.activity] = {};
+                        if (!matrix[row.activity][row.hub]) matrix[row.activity][row.hub] = { questionnaires: 0, siteNames: [] };
+                        matrix[row.activity][row.hub].questionnaires++;
+                        if (row.activitySite) siteSetMatrix[row.activity][row.hub].add(row.activitySite);
+                      });
+
+                      activities.forEach(act => {
+                        hubs.forEach(hub => {
+                          if (!matrix[act]) matrix[act] = {};
+                          if (!matrix[act][hub]) matrix[act][hub] = { questionnaires: 0, siteNames: [] };
+                          matrix[act][hub].siteNames = [...(siteSetMatrix[act]?.[hub] || [])];
+                        });
+                      });
+
+                      const hubTotals: Record<string, { questionnaires: number; sites: number }> = {};
+                      const rowTotals: Record<string, { questionnaires: number; sites: number }> = {};
+                      let grandQ = 0;
+                      const grandSiteSet = new Set<string>();
+
+                      hubs.forEach(hub => { hubTotals[hub] = { questionnaires: 0, sites: 0 }; });
+                      activities.forEach(act => {
+                        let rq = 0;
+                        const rSites = new Set<string>();
+                        hubs.forEach(hub => {
+                          const cell = matrix[act][hub];
+                          rq += cell.questionnaires;
+                          cell.siteNames.forEach(s => { rSites.add(s); grandSiteSet.add(s); });
+                          hubTotals[hub].questionnaires += cell.questionnaires;
+                        });
+                        rowTotals[act] = { questionnaires: rq, sites: rSites.size };
+                        grandQ += rq;
+                      });
+
+                      hubs.forEach(hub => {
+                        const hubSiteSet = new Set<string>();
+                        activities.forEach(act => {
+                          matrix[act][hub].siteNames.forEach(s => hubSiteSet.add(s));
+                        });
+                        hubTotals[hub].sites = hubSiteSet.size;
+                      });
+
+                      return (
+                        <table className="w-full text-sm border-collapse" data-testid="table-tracker">
+                          <thead>
+                            <tr className="bg-muted/50">
+                              <th className="text-left py-2 px-3 font-medium border min-w-[200px] sticky left-0 bg-muted/50 z-10">Activity (PDM)</th>
+                              {hubs.map(hub => (
+                                <th key={hub} className="text-center py-2 px-3 font-medium border min-w-[120px]" colSpan={2}>{hub}</th>
+                              ))}
+                              <th className="text-center py-2 px-3 font-medium border min-w-[120px] bg-primary/10" colSpan={2}>Grand Total</th>
+                            </tr>
+                            <tr className="bg-muted/30">
+                              <th className="text-left py-1 px-3 text-xs font-medium border sticky left-0 bg-muted/30 z-10"></th>
+                              {hubs.map(hub => (
+                                <Fragment key={hub}>
+                                  <th className="text-center py-1 px-2 text-xs font-medium border text-blue-600">Sites</th>
+                                  <th className="text-center py-1 px-2 text-xs font-medium border text-green-600">Actual</th>
+                                </Fragment>
+                              ))}
+                              <th className="text-center py-1 px-2 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
+                              <th className="text-center py-1 px-2 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {activities.map((act, i) => (
+                              <tr key={act} className={i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}>
+                                <td className={`py-2 px-3 font-medium border sticky left-0 z-10 ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>{act}</td>
+                                {hubs.map(hub => {
+                                  const cell = matrix[act][hub];
+                                  return (
+                                    <Fragment key={hub}>
+                                      <td className="text-center py-2 px-2 border text-blue-600 font-mono text-xs">{cell.siteNames.length || '-'}</td>
+                                      <td className="text-center py-2 px-2 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
+                                    </Fragment>
+                                  );
+                                })}
+                                <td className="text-center py-2 px-2 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{rowTotals[act].sites}</td>
+                                <td className="text-center py-2 px-2 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{rowTotals[act].questionnaires}</td>
+                              </tr>
+                            ))}
+                            <tr className="bg-muted/50 font-semibold">
+                              <td className="py-2 px-3 border sticky left-0 bg-muted/50 z-10">Grand Total</td>
+                              {hubs.map(hub => (
+                                <Fragment key={hub}>
+                                  <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs">{hubTotals[hub].sites}</td>
+                                  <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs">{hubTotals[hub].questionnaires}</td>
+                                </Fragment>
+                              ))}
+                              <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs bg-primary/10">{grandSiteSet.size}</td>
+                              <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs bg-primary/10">{grandQ}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      );
+                    })()}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </>
       )}
+
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Save className="h-5 w-5" /> Save Session</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="session-name">Session Name</Label>
+              <Input
+                id="session-name"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                placeholder="e.g., November 2025 Tracker"
+                className="mt-1"
+                data-testid="input-session-name"
+                onKeyDown={(e) => { if (e.key === 'Enter') saveSession(); }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">File: {fileName} | {data.length} rows</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveDialog(false)}>Cancel</Button>
+            <Button onClick={saveSession} disabled={!saveName.trim()} data-testid="button-confirm-save">Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showLoadDialog} onOpenChange={setShowLoadDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><FolderOpen className="h-5 w-5" /> Saved Sessions</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+            {savedSessions.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No saved sessions yet</p>
+            ) : (
+              savedSessions.map(session => (
+                <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30 transition-colors" data-testid={`session-${session.id}`}>
+                  <button type="button" className="flex-1 min-w-0 cursor-pointer text-left" onClick={() => loadSession(session)} data-testid={`button-session-select-${session.id}`}>
+                    <div className="font-medium truncate">{session.name}</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
+                      <Clock className="h-3 w-3" />
+                      {format(new Date(session.savedAt), 'MMM d, yyyy h:mm a')}
+                      <span className="text-muted-foreground/60">|</span>
+                      <span>{session.rowCount} rows</span>
+                      <span className="text-muted-foreground/60">|</span>
+                      <span className="truncate">{session.fileName}</span>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-2 ml-2">
+                    <Button size="sm" variant="outline" onClick={() => loadSession(session)} data-testid={`button-load-${session.id}`}>Load</Button>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteSession(session.id)} data-testid={`button-delete-${session.id}`}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
