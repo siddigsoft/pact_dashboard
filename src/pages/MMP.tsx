@@ -5697,23 +5697,20 @@ const MMP = () => {
                         } else if (mySitesSubTab === 'ongoing') {
                           // Outbox: Show completed visits that are not yet synced (from offline DB)
                           sitesToShow = unsyncedCompletedVisits;
-                        } else {
-                          // Sent: Show ONLY completed visits that are synced (from DB, excluding unsynced offline visits)
-                          // Must strictly exclude sites with non-completed statuses (accepted, claimed, in progress, etc.)
-                          const inboxStatuses = new Set(['claimed', 'accepted', 'acknowledged', 'costandacknowledged']);
-                          const draftStatuses = new Set(['in progress', 'ongoing', 'inprogress', 'in_progress']);
+                        } else if (mySitesSubTab === 'completed') {
+                          // Sent: Show ONLY completed/finished/done visits - nothing else
                           sitesToShow = enumeratorMySites.filter(site => {
                             const status = (site.status || '').toLowerCase().trim();
-                            const normalizedStatus = status.replace(/[-_\s]/g, '');
-                            // Explicitly exclude sites that belong to Inbox or Drafts tabs
-                            if (inboxStatuses.has(normalizedStatus)) return false;
-                            if (draftStatuses.has(normalizedStatus)) return false;
-                            const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
+                            // ONLY include sites with completed/finished/done status
+                            const isCompleted = status === 'completed' || status.includes('completed') || status.includes('finished') || status.includes('done');
                             if (!isCompleted) return false;
                             // Exclude sites that are still unsynced in offline DB
                             const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
                             return !isUnsynced;
                           });
+                        } else {
+                          // Fallback: show nothing (should not reach here)
+                          sitesToShow = [];
                         }
                       } else {
                         sitesToShow = enumeratorSmartAssigned;
@@ -5743,7 +5740,7 @@ const MMP = () => {
                           editable={enumeratorSubTab === 'mySites' && mySitesSubTab !== 'completed'}
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
                           onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
-                          onStartVisit={handleStartVisit}
+                          onStartVisit={mySitesSubTab === 'completed' ? undefined : handleStartVisit}
                           onCompleteVisit={
                             enumeratorSubTab === 'mySites' 
                               && (mySitesSubTab === 'pending' 
