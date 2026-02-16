@@ -85,32 +85,29 @@ const ReviewAssignCoordinators: React.FC = () => {
           return;
         }
 
-        // Step 1.5: Fetch site entries on demand (they're not loaded with initial MMP list for performance)
         let mmpWithEntries = mmp;
         if (!mmp.siteEntries || mmp.siteEntries.length === 0) {
           try {
-            const entries = await fetchSiteEntriesForMMP(id);
+            const entries = await Promise.race([
+              fetchSiteEntriesForMMP(id),
+              new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error('Timeout loading site entries')), 15000))
+            ]);
             mmpWithEntries = { ...mmp, siteEntries: entries };
           } catch (err) {
             console.error('Failed to fetch site entries:', err);
-            toast({
-              title: "Warning",
-              description: "Could not load site entries. Please refresh the page.",
-              variant: "destructive"
-            });
+            mmpWithEntries = { ...mmp, siteEntries: mmp.siteEntries || [] };
           }
         }
 
         setMmpFile(mmpWithEntries);
         
-        // Step 2: Load forwarded sites from database BEFORE rendering
-        // This prevents errors and ensures correct state from the start
         setLoadingForwardedStates(true);
         try {
-          const siteEntries = await fetchForwardedSiteEntries(id);
+          const siteEntries = await Promise.race([
+            fetchForwardedSiteEntries(id),
+            new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 10000))
+          ]);
           
-          // Find sites that have been forwarded
-          // Check both new forwarded_at column and legacy dispatched_at/additional_data
           const forwarded = new Set<string>();
           const statePermitIds = new Set<string>();
           siteEntries.forEach((entry: any) => {
@@ -119,7 +116,6 @@ const ReviewAssignCoordinators: React.FC = () => {
             const hasAssignedTo = !!(entry.additional_data?.assigned_to);
             const hasStatePermit = !!(entry.additional_data?.state_permit_attached);
             
-            // Site is forwarded if any of these conditions are true
             if (hasForwardedAt || hasDispatchedAt || hasAssignedTo) {
               forwarded.add(entry.id);
             }
@@ -132,11 +128,6 @@ const ReviewAssignCoordinators: React.FC = () => {
           setStatePermitSiteIds(statePermitIds);
         } catch (err) {
           console.error('Failed to load forwarded sites:', err);
-          toast({
-            title: "Warning",
-            description: "Could not load forwarded site states. Please refresh the page.",
-            variant: "destructive"
-          });
           setForwardedSiteIds(new Set());
         } finally {
           setLoadingForwardedStates(false);
@@ -145,11 +136,14 @@ const ReviewAssignCoordinators: React.FC = () => {
         // Step 3: Load hubs, states and localities from database
         setLoadingLocations(true);
         try {
-          const [hubsData, hubStatesData, statesData, localitiesData] = await Promise.all([
-            fetchHubs(),
-            fetchHubStates(),
-            fetchStates(),
-            fetchLocalities()
+          const [hubsData, hubStatesData, statesData, localitiesData] = await Promise.race([
+            Promise.all([
+              fetchHubs(),
+              fetchHubStates(),
+              fetchStates(),
+              fetchLocalities()
+            ]),
+            new Promise<[any[], any[], any[], any[]]>((_, reject) => setTimeout(() => reject(new Error('Timeout loading locations')), 15000))
           ]);
           
           setHubs(hubsData);
