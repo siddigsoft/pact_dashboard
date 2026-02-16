@@ -2396,6 +2396,7 @@ const QuestionnaireAnalytics = () => {
                                     <th className="text-left py-1.5 px-2 font-medium text-xs">Activity</th>
                                     <th className="text-right py-1.5 px-2 font-medium text-xs">Sites</th>
                                     <th className="text-right py-1.5 px-2 font-medium text-xs">Questionnaires</th>
+                                    <th className="text-right py-1.5 px-2 font-medium text-xs text-amber-600">PDM Sites</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -2404,12 +2405,14 @@ const QuestionnaireAnalytics = () => {
                                       <td className="py-1.5 px-2">{a.activity}</td>
                                       <td className="py-1.5 px-2 text-right text-blue-600 text-xs">{a.sites}</td>
                                       <td className="py-1.5 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{a.questionnaires}</Badge></td>
+                                      <td className="py-1.5 px-2 text-right text-amber-600 font-mono text-xs">{isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : '-'}</td>
                                     </tr>
                                   ))}
                                   <tr className="bg-muted/50 font-semibold">
                                     <td className="py-1.5 px-2">Total</td>
                                     <td className="py-1.5 px-2 text-right text-blue-700 text-xs">{sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0)}</td>
                                     <td className="py-1.5 px-2 text-right"><Badge className="font-mono text-xs">{sb.totalQ}</Badge></td>
+                                    <td className="py-1.5 px-2 text-right text-amber-700 font-mono text-xs">{(() => { const pdmQ = sb.activities.filter(a => a.questionnaires > 0 && isPdmActivity(a.activity)).reduce((s, a) => s + a.questionnaires, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
                                   </tr>
                                 </tbody>
                               </table>
