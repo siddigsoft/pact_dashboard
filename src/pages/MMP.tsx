@@ -82,7 +82,7 @@ const SitesDisplayTable = React.memo(function SitesDisplayTable({ siteRows, mmpI
               verified_at: entry.verified_at || undefined,
               verification_notes: entry.verification_notes || undefined,
               status: entry.status || 'Pending',
-              // Map to camelCase for MMPSiteEntriesTable
+              mmpName: entry.mmpName || mmp.name,
               siteName: entry.site_name || entry.siteName,
               siteCode: entry.site_code || entry.siteCode,
               hubOffice: entry.hub_office || entry.hubOffice,
@@ -3138,10 +3138,12 @@ const MMP = () => {
 
           const formattedEntries = (dbEntries || []).map(entry => {
             const formatted = formatSiteEntry(entry);
+            const parentMmp = mmpFiles.find(m => m.id === entry.mmp_file_id);
             return {
               ...formatted,
               mmp_file_id: entry.mmp_file_id,
               mmpId: entry.mmp_file_id,
+              mmpName: parentMmp?.name || '',
             };
           });
 
@@ -3208,10 +3210,12 @@ const MMP = () => {
           const formatted = formatSiteEntry(entry);
           const transportFee = Number(formatted.transport_fee) || 0;
           const totalCost = viewerEnumeratorFee + transportFee;
+          const parentMmp = mmpFiles.find(m => m.id === entry.mmp_file_id);
           return {
             ...formatted,
             mmp_file_id: entry.mmp_file_id,
             mmpId: entry.mmp_file_id,
+            mmpName: parentMmp?.name || '',
             enumerator_fee: formatted.enumerator_fee || viewerEnumeratorFee,
             cost: totalCost
           };
@@ -3436,10 +3440,12 @@ const MMP = () => {
 
           const formattedEntries = deduped.map(entry => {
             const formatted = formatSiteEntry(entry);
+            const parentMmp = mmpFiles.find(m => m.id === entry.mmp_file_id);
             return {
               ...formatted,
               mmp_file_id: entry.mmp_file_id,
               mmpId: entry.mmp_file_id,
+              mmpName: parentMmp?.name || '',
             };
           });
 
@@ -3468,7 +3474,11 @@ const MMP = () => {
       setLoadingOngoing(false);
 
       const formattedEntries = verifiedSiteEntries
-      .map(formatSiteEntry)
+      .map(entry => {
+        const formatted = formatSiteEntry(entry);
+        const parentMmp = mmpFiles.find(m => m.id === (entry.mmp_file_id || entry.mmpId));
+        return { ...formatted, mmpName: formatted.mmpName || parentMmp?.name || '' };
+      })
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
         return /inprogress|in_progress|ongoing/.test(status);
@@ -3479,8 +3489,6 @@ const MMP = () => {
       const bDate = (b as any).updated_at || (b as any).createdAt || '';
       return bDate.localeCompare(aDate);
     });
-
-        
 
         setOngoingSiteEntries(formattedEntries);
         // Update count when entries are loaded (count is also loaded separately for badge)
@@ -3504,7 +3512,11 @@ const MMP = () => {
       setLoadingCompleted(false);
 
       const formattedEntries = verifiedSiteEntries
-      .map(formatSiteEntry)
+      .map(entry => {
+        const formatted = formatSiteEntry(entry);
+        const parentMmp = mmpFiles.find(m => m.id === (entry.mmp_file_id || entry.mmpId));
+        return { ...formatted, mmpName: formatted.mmpName || parentMmp?.name || '' };
+      })
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
         return status === "completed";
@@ -3534,7 +3546,11 @@ const MMP = () => {
 
       setLoadingRejected(false);
       const formattedEntries = verifiedSiteEntries
-      .map(formatSiteEntry)
+      .map(entry => {
+        const formatted = formatSiteEntry(entry);
+        const parentMmp = mmpFiles.find(m => m.id === (entry.mmp_file_id || entry.mmpId));
+        return { ...formatted, mmpName: formatted.mmpName || parentMmp?.name || '' };
+      })
       .filter(entry =>{
         const status = String(entry.status || '').toLowerCase();
         return status === "rejected";
@@ -3749,6 +3765,7 @@ const MMP = () => {
           const row = {
             id: siteId,
             mmpId: mmp.id,
+            mmpName: mmp.name || '',
             siteName: se.siteName || se.siteCode || se.state || 'Site',
             siteCode: se.siteCode,
             state: se.state,
@@ -4024,6 +4041,7 @@ const MMP = () => {
           const siteRow: SiteVisitRow = {
             id: entry.id || `${mmpId}-${entry.site_code || entry.siteCode}`,
             mmpId: mmpId,
+            mmpName: mmp.name || '',
             siteName: entry.site_name || entry.siteName || entry.site_code || entry.siteCode || 'Site',
             siteCode: entry.site_code || entry.siteCode || undefined,
             state: entry.state || undefined,

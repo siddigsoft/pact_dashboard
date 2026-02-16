@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 export interface SiteVisitRow {
   id: string;
   mmpId: string;
+  mmpName?: string;
   siteName: string;
   siteCode?: string;
   state?: string;
