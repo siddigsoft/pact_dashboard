@@ -2400,12 +2400,17 @@ const QuestionnaireAnalytics = () => {
                                 </thead>
                                 <tbody>
                                   {sb.activities.filter(a => a.questionnaires > 0).map(a => (
-                                    <tr key={a.activity} className="border-b last:border-0">
+                                    <tr key={a.activity} className="border-b">
                                       <td className="py-1.5 px-2">{a.activity}</td>
                                       <td className="py-1.5 px-2 text-right text-blue-600 text-xs">{a.sites}</td>
                                       <td className="py-1.5 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{a.questionnaires}</Badge></td>
                                     </tr>
                                   ))}
+                                  <tr className="bg-muted/50 font-semibold">
+                                    <td className="py-1.5 px-2">Total</td>
+                                    <td className="py-1.5 px-2 text-right text-blue-700 text-xs">{sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0)}</td>
+                                    <td className="py-1.5 px-2 text-right"><Badge className="font-mono text-xs">{sb.totalQ}</Badge></td>
+                                  </tr>
                                 </tbody>
                               </table>
                             </div>
