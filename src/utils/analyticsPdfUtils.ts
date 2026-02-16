@@ -20,6 +20,8 @@ const C = {
 
 export { C, autoTable };
 
+const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
 export async function loadLogoAsDataUrl(): Promise<string | null> {
   try {
     const resp = await fetch('/pact-logo.png');
@@ -119,8 +121,13 @@ export async function drawPdfHeader(
   if (subtitle) {
     doc.setFontSize(9);
     doc.setTextColor(...C.label);
-    doc.setFont('helvetica', 'normal');
+    if (hasArabic && ARABIC_RE.test(subtitle)) {
+      doc.setFont('Amiri', 'normal');
+    } else {
+      doc.setFont('helvetica', 'normal');
+    }
     doc.text(subtitle, ml, y);
+    doc.setFont('helvetica', 'normal');
     y += 6;
   }
 
@@ -164,6 +171,10 @@ export function addAllFooters(doc: jsPDF) {
   }
 }
 
+function hasArabicChars(text: string): boolean {
+  return ARABIC_RE.test(text);
+}
+
 export function styledAutoTable(
   doc: jsPDF,
   head: string[][],
@@ -178,6 +189,8 @@ export function styledAutoTable(
 ) {
   const opts = options || {};
   const fs = opts.fontSize || 8;
+  const fontList = (doc as any).getFontList?.() || {};
+  const hasAmiri = !!fontList['Amiri'];
   autoTable(doc, {
     head,
     body,
@@ -191,6 +204,7 @@ export function styledAutoTable(
       textColor: C.body,
       overflow: 'linebreak',
       halign: 'left',
+      font: 'helvetica',
     },
     headStyles: {
       fillColor: C.navy,
@@ -212,6 +226,12 @@ export function styledAutoTable(
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.fillColor = [226, 232, 240];
         data.cell.styles.textColor = C.dark;
+      }
+      if (hasAmiri && data.section === 'body') {
+        const cellText = String(data.cell.raw ?? '');
+        if (hasArabicChars(cellText)) {
+          data.cell.styles.font = 'Amiri';
+        }
       }
     },
   });
