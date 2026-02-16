@@ -2479,10 +2479,49 @@ const QuestionnaireAnalytics = () => {
                       </CardTitle>
                       <CardDescription>Cross-tab: Activities (rows) x Hubs (columns) with Sites, Questionnaires & Collectors</CardDescription>
                     </div>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={exportTrackerToExcel} data-testid="button-export-tracker">
-                      <Download className="h-4 w-4" />
-                      Export Tracker
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerToExcel} data-testid="button-export-tracker">
+                        <Download className="h-4 w-4" />
+                        Excel
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
+                        const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
+                        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                        let y = 15;
+                        doc.setFontSize(16);
+                        doc.setTextColor(33, 33, 33);
+                        doc.text('Tracker - Activity by Hub', 14, y);
+                        y += 8;
+                        const headers = ['Activity'];
+                        hubs.forEach(h => { headers.push(`${h} Sites`, `${h} Actual`, `${h} PDM`, `${h} DC`); });
+                        headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
+                        const bodyRows = matrix.map(row => {
+                          const r = [row.activity];
+                          row.cells.forEach(c => { r.push(String(c.sites || '-'), String(c.questionnaires || '-'), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors || '-')); });
+                          r.push(String(row.totalSites), String(row.totalQ), isPdmActivity(row.activity) ? String(Math.ceil(row.totalQ / 7)) : '-', String(row.totalCollectors));
+                          return r;
+                        });
+                        const totR = ['Grand Total'];
+                        hubTotals.forEach((ht, hi) => {
+                          const pdmHubQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0);
+                          totR.push(String(ht.sites), String(ht.questionnaires), pdmHubQ ? String(Math.ceil(pdmHubQ / 7)) : '-', String(ht.collectors));
+                        });
+                        const pdmGrandQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+                        totR.push(String(grandSites), String(grandQ), pdmGrandQ ? String(Math.ceil(pdmGrandQ / 7)) : '-', String(grandCollectors));
+                        bodyRows.push(totR);
+                        autoTable(doc, {
+                          head: [headers], body: bodyRows, startY: y, margin: { left: 10, right: 10 },
+                          styles: { fontSize: 6, cellPadding: 1.5 },
+                          headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
+                          alternateRowStyles: { fillColor: [245, 247, 250] },
+                          didParseCell: (data: any) => { if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; } },
+                        });
+                        doc.save('tracker_activity_by_hub.pdf');
+                      }} data-testid="button-export-tracker-pdf">
+                        <FileDown className="h-4 w-4" />
+                        PDF
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
