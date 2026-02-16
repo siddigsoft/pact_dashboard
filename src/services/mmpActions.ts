@@ -404,11 +404,26 @@ export async function fetchLocalities() {
 
 // Fetch forwarded site entries for an MMP
 export async function fetchForwardedSiteEntries(mmpFileId: string) {
-  const { data, error } = await supabase
-    .from('mmp_site_entries')
-    .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id, dispatched_at, additional_data')
-    .eq('mmp_file_id', mmpFileId);
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('mmp_site_entries')
+      .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id, dispatched_at, additional_data')
+      .eq('mmp_file_id', mmpFileId);
+    if (error) {
+      if (error.message?.includes('column') || error.code === '42703') {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('mmp_site_entries')
+          .select('id, dispatched_at, additional_data')
+          .eq('mmp_file_id', mmpFileId);
+        if (fallbackError) throw fallbackError;
+        return fallbackData || [];
+      }
+      throw error;
+    }
+    return data || [];
+  } catch (err) {
+    console.error('fetchForwardedSiteEntries error:', err);
+    return [];
+  }
 }
 
