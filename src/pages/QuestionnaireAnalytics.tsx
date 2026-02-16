@@ -588,17 +588,19 @@ const QuestionnaireAnalytics = () => {
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(collRows), 'By Collector');
 
-    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
+    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors, hubTrackers, stateTrackers } = trackerData;
     const trackerRows: any[] = [];
     matrix.forEach(row => {
       const r: any = { Activity: row.activity };
       hubs.forEach((hub, hi) => {
         r[`${hub} Sites`] = row.cells[hi].sites;
         r[`${hub} Actual`] = row.cells[hi].questionnaires;
+        r[`${hub} PDM Sites`] = row.cells[hi].questionnaires ? Math.ceil(row.cells[hi].questionnaires / 7) : 0;
         r[`${hub} Collectors`] = row.cells[hi].collectors;
       });
       r['Total Sites'] = row.totalSites;
       r['Total Actual'] = row.totalQ;
+      r['Total PDM Sites'] = Math.ceil(row.totalQ / 7);
       r['Total Collectors'] = row.totalCollectors;
       trackerRows.push(r);
     });
@@ -606,13 +608,61 @@ const QuestionnaireAnalytics = () => {
     hubs.forEach((hub, hi) => {
       totalRow[`${hub} Sites`] = hubTotals[hi].sites;
       totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
+      totalRow[`${hub} PDM Sites`] = Math.ceil(hubTotals[hi].questionnaires / 7);
       totalRow[`${hub} Collectors`] = hubTotals[hi].collectors;
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
+    totalRow['Total PDM Sites'] = Math.ceil(grandQ / 7);
     totalRow['Total Collectors'] = grandCollectors;
     trackerRows.push(totalRow);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trackerRows), 'Tracker');
+
+    hubTrackers.forEach(ht => {
+      const htRows: any[] = [];
+      ht.matrix.forEach(row => {
+        const r: any = { Activity: row.activity };
+        ht.states.forEach((st, si) => {
+          r[`${st} Sites`] = row.cells[si].sites;
+          r[`${st} Actual`] = row.cells[si].questionnaires;
+          r[`${st} PDM Sites`] = row.cells[si].questionnaires ? Math.ceil(row.cells[si].questionnaires / 7) : 0;
+          r[`${st} DC`] = row.cells[si].collectors;
+        });
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.ceil(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        htRows.push(r);
+      });
+      const htTotal: any = { Activity: 'Total' };
+      ht.colTotals.forEach((ct, ci) => {
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = Math.ceil(ct.questionnaires / 7); htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+      });
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = Math.ceil(ht.grandQ / 7); htTotal['Total DC'] = ht.grandCollectors;
+      htRows.push(htTotal);
+      const sheetName = `Hub-${ht.hub}`.slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), sheetName);
+    });
+
+    stateTrackers.forEach(st => {
+      const stRows: any[] = [];
+      st.matrix.forEach(row => {
+        const r: any = { Activity: row.activity };
+        st.localities.forEach((loc, li) => {
+          r[`${loc} Sites`] = row.cells[li].sites;
+          r[`${loc} Actual`] = row.cells[li].questionnaires;
+          r[`${loc} PDM Sites`] = row.cells[li].questionnaires ? Math.ceil(row.cells[li].questionnaires / 7) : 0;
+          r[`${loc} DC`] = row.cells[li].collectors;
+        });
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.ceil(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        stRows.push(r);
+      });
+      const stTotal: any = { Activity: 'Total' };
+      st.colTotals.forEach((ct, ci) => {
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = Math.ceil(ct.questionnaires / 7); stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+      });
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = Math.ceil(st.grandQ / 7); stTotal['Total DC'] = st.grandCollectors;
+      stRows.push(stTotal);
+      const sheetName = `State-${st.state}`.slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), sheetName);
+    });
 
     XLSX.writeFile(wb, 'questionnaire_analytics.xlsx');
   }, [hubSummary, stateSummary, localitySummary, siteSummary, activityBreakdown, collectorDetails, trackerData]);
@@ -674,12 +724,65 @@ const QuestionnaireAnalytics = () => {
     addSection('By Data Collector', ['#', 'Device ID', 'Collector', 'Activities', 'Questionnaires', '%'],
       collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.activities.map(a => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']));
 
+    const { hubs: tHubs, matrix: tMatrix, hubTotals: tHubTotals, grandQ: tGrandQ, grandSites: tGrandSites, grandCollectors: tGrandCollectors, hubTrackers: tHubTrackers, stateTrackers: tStateTrackers } = trackerData;
+
+    if (tHubs.length > 0 && tMatrix.length > 0) {
+      const tHeaders = ['Activity'];
+      tHubs.forEach(h => { tHeaders.push(`${h} Sites`, `${h} Actual`, `${h} PDM Sites`, `${h} DC`); });
+      tHeaders.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
+      const tRows = tMatrix.map(row => {
+        const r = [row.activity];
+        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
+        r.push(String(row.totalSites), String(row.totalQ), String(Math.ceil(row.totalQ / 7)), String(row.totalCollectors));
+        return r;
+      });
+      const tTotalRow = ['Grand Total'];
+      tHubTotals.forEach(ht => { tTotalRow.push(String(ht.sites), String(ht.questionnaires), String(Math.ceil(ht.questionnaires / 7)), String(ht.collectors)); });
+      tTotalRow.push(String(tGrandSites), String(tGrandQ), String(Math.ceil(tGrandQ / 7)), String(tGrandCollectors));
+      tRows.push(tTotalRow);
+      addSection('Tracker - Activity x Hub', tHeaders, tRows);
+    }
+
+    tHubTrackers.forEach(ht => {
+      const headers = ['Activity'];
+      ht.states.forEach(st => { headers.push(`${st} Sites`, `${st} Actual`, `${st} PDM Sites`, `${st} DC`); });
+      headers.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
+      const rows = ht.matrix.map(row => {
+        const r = [row.activity];
+        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
+        r.push(String(row.totalSites), String(row.totalQ), String(Math.ceil(row.totalQ / 7)), String(row.totalCollectors));
+        return r;
+      });
+      const totR = ['Total'];
+      ht.colTotals.forEach(ct => { totR.push(String(ct.sites), String(ct.questionnaires), String(Math.ceil(ct.questionnaires / 7)), String(ct.collectors)); });
+      totR.push(String(ht.grandSites), String(ht.grandQ), String(Math.ceil(ht.grandQ / 7)), String(ht.grandCollectors));
+      rows.push(totR);
+      addSection(`Hub: ${ht.hub} (Activity x State)`, headers, rows);
+    });
+
+    tStateTrackers.forEach(st => {
+      const headers = ['Activity'];
+      st.localities.forEach(loc => { headers.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM Sites`, `${loc} DC`); });
+      headers.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
+      const rows2 = st.matrix.map(row => {
+        const r = [row.activity];
+        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
+        r.push(String(row.totalSites), String(row.totalQ), String(Math.ceil(row.totalQ / 7)), String(row.totalCollectors));
+        return r;
+      });
+      const totR2 = ['Total'];
+      st.colTotals.forEach(ct => { totR2.push(String(ct.sites), String(ct.questionnaires), String(Math.ceil(ct.questionnaires / 7)), String(ct.collectors)); });
+      totR2.push(String(st.grandSites), String(st.grandQ), String(Math.ceil(st.grandQ / 7)), String(st.grandCollectors));
+      rows2.push(totR2);
+      addSection(`State: ${st.state} (Activity x Locality)`, headers, rows2);
+    });
+
     doc.save('questionnaire_analytics.pdf');
-  }, [filteredData, hubSummary, stateSummary, localitySummary, activityBreakdown, collectorDetails]);
+  }, [filteredData, hubSummary, stateSummary, localitySummary, activityBreakdown, collectorDetails, trackerData]);
 
   const exportTrackerToExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
-    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors, stateBreakdown } = trackerData;
+    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors, stateBreakdown, hubTrackers, stateTrackers } = trackerData;
 
     const rows: any[] = [];
     matrix.forEach(row => {
@@ -687,22 +790,26 @@ const QuestionnaireAnalytics = () => {
       hubs.forEach((hub, hi) => {
         r[`${hub} Sites`] = row.cells[hi].sites;
         r[`${hub} Actual`] = row.cells[hi].questionnaires;
-        r[`${hub} Collectors`] = row.cells[hi].collectors;
+        r[`${hub} PDM Sites`] = row.cells[hi].questionnaires ? Math.ceil(row.cells[hi].questionnaires / 7) : 0;
+        r[`${hub} DC`] = row.cells[hi].collectors;
       });
       r['Total Sites'] = row.totalSites;
       r['Total Actual'] = row.totalQ;
-      r['Total Collectors'] = row.totalCollectors;
+      r['Total PDM Sites'] = Math.ceil(row.totalQ / 7);
+      r['Total DC'] = row.totalCollectors;
       rows.push(r);
     });
     const totalRow: any = { Activity: 'Grand Total' };
     hubs.forEach((hub, hi) => {
       totalRow[`${hub} Sites`] = hubTotals[hi].sites;
       totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
-      totalRow[`${hub} Collectors`] = hubTotals[hi].collectors;
+      totalRow[`${hub} PDM Sites`] = Math.ceil(hubTotals[hi].questionnaires / 7);
+      totalRow[`${hub} DC`] = hubTotals[hi].collectors;
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
-    totalRow['Total Collectors'] = grandCollectors;
+    totalRow['Total PDM Sites'] = Math.ceil(grandQ / 7);
+    totalRow['Total DC'] = grandCollectors;
     rows.push(totalRow);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity x Hub');
 
@@ -710,11 +817,55 @@ const QuestionnaireAnalytics = () => {
     stateBreakdown.forEach(sb => {
       sb.activities.forEach(a => {
         if (a.questionnaires > 0) {
-          stateRows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires });
+          stateRows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires, 'PDM Sites': Math.ceil(a.questionnaires / 7) });
         }
       });
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stateRows), 'Activity x State');
+
+    hubTrackers.forEach(ht => {
+      const htRows: any[] = [];
+      ht.matrix.forEach(row => {
+        const r: any = { Activity: row.activity };
+        ht.states.forEach((st, si) => {
+          r[`${st} Sites`] = row.cells[si].sites;
+          r[`${st} Actual`] = row.cells[si].questionnaires;
+          r[`${st} PDM Sites`] = row.cells[si].questionnaires ? Math.ceil(row.cells[si].questionnaires / 7) : 0;
+          r[`${st} DC`] = row.cells[si].collectors;
+        });
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.ceil(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        htRows.push(r);
+      });
+      const htTotal: any = { Activity: 'Total' };
+      ht.colTotals.forEach((ct, ci) => {
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = Math.ceil(ct.questionnaires / 7); htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+      });
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = Math.ceil(ht.grandQ / 7); htTotal['Total DC'] = ht.grandCollectors;
+      htRows.push(htTotal);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `Hub-${ht.hub}`.slice(0, 31));
+    });
+
+    stateTrackers.forEach(st => {
+      const stRows: any[] = [];
+      st.matrix.forEach(row => {
+        const r: any = { Activity: row.activity };
+        st.localities.forEach((loc, li) => {
+          r[`${loc} Sites`] = row.cells[li].sites;
+          r[`${loc} Actual`] = row.cells[li].questionnaires;
+          r[`${loc} PDM Sites`] = row.cells[li].questionnaires ? Math.ceil(row.cells[li].questionnaires / 7) : 0;
+          r[`${loc} DC`] = row.cells[li].collectors;
+        });
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.ceil(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        stRows.push(r);
+      });
+      const stTotal: any = { Activity: 'Total' };
+      st.colTotals.forEach((ct, ci) => {
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = Math.ceil(ct.questionnaires / 7); stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+      });
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = Math.ceil(st.grandQ / 7); stTotal['Total DC'] = st.grandCollectors;
+      stRows.push(stTotal);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `State-${st.state}`.slice(0, 31));
+    });
 
     XLSX.writeFile(wb, 'tracker_report.xlsx');
   }, [trackerData]);
@@ -1529,9 +1680,9 @@ const QuestionnaireAnalytics = () => {
                         <tr className="bg-muted/50">
                           <th className="text-left py-2 px-3 font-medium border min-w-[200px] sticky left-0 bg-muted/50 z-10">Activity</th>
                           {trackerData.hubs.map(hub => (
-                            <th key={hub} className="text-center py-2 px-3 font-medium border min-w-[150px]" colSpan={3}>{hub}</th>
+                            <th key={hub} className="text-center py-2 px-3 font-medium border min-w-[180px]" colSpan={4}>{hub}</th>
                           ))}
-                          <th className="text-center py-2 px-3 font-medium border min-w-[150px] bg-primary/10" colSpan={3}>Grand Total</th>
+                          <th className="text-center py-2 px-3 font-medium border min-w-[180px] bg-primary/10" colSpan={4}>Grand Total</th>
                         </tr>
                         <tr className="bg-muted/30">
                           <th className="text-left py-1 px-3 text-xs font-medium border sticky left-0 bg-muted/30 z-10"></th>
@@ -1539,11 +1690,13 @@ const QuestionnaireAnalytics = () => {
                             <Fragment key={hub}>
                               <th className="text-center py-1 px-2 text-xs font-medium border text-blue-600">Sites</th>
                               <th className="text-center py-1 px-2 text-xs font-medium border text-green-600">Actual</th>
+                              <th className="text-center py-1 px-2 text-xs font-medium border text-amber-600">PDM Sites</th>
                               <th className="text-center py-1 px-2 text-xs font-medium border text-purple-600">DC</th>
                             </Fragment>
                           ))}
                           <th className="text-center py-1 px-2 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
                           <th className="text-center py-1 px-2 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
+                          <th className="text-center py-1 px-2 text-xs font-medium border text-amber-600 bg-primary/5">PDM Sites</th>
                           <th className="text-center py-1 px-2 text-xs font-medium border text-purple-600 bg-primary/5">DC</th>
                         </tr>
                       </thead>
@@ -1555,11 +1708,13 @@ const QuestionnaireAnalytics = () => {
                               <Fragment key={trackerData.hubs[ci]}>
                                 <td className="text-center py-2 px-2 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
                                 <td className="text-center py-2 px-2 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
+                                <td className="text-center py-2 px-2 border text-amber-600 font-mono text-xs">{cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
                                 <td className="text-center py-2 px-2 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
                               </Fragment>
                             ))}
                             <td className="text-center py-2 px-2 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
                             <td className="text-center py-2 px-2 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
+                            <td className="text-center py-2 px-2 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{Math.ceil(row.totalQ / 7)}</td>
                             <td className="text-center py-2 px-2 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
                           </tr>
                         ))}
@@ -1569,11 +1724,13 @@ const QuestionnaireAnalytics = () => {
                             <Fragment key={trackerData.hubs[hi]}>
                               <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs">{ht.sites}</td>
                               <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs">{ht.questionnaires}</td>
+                              <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs">{Math.ceil(ht.questionnaires / 7)}</td>
                               <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs">{ht.collectors}</td>
                             </Fragment>
                           ))}
                           <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs bg-primary/10">{trackerData.grandSites}</td>
                           <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs bg-primary/10">{trackerData.grandQ}</td>
+                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{Math.ceil(trackerData.grandQ / 7)}</td>
                           <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs bg-primary/10">{trackerData.grandCollectors}</td>
                         </tr>
                       </tbody>
@@ -1675,9 +1832,9 @@ const QuestionnaireAnalytics = () => {
                                 <tr className="bg-muted/50">
                                   <th className="text-left py-2 px-3 font-medium border min-w-[180px] sticky left-0 bg-muted/50 z-10">Activity</th>
                                   {ht.states.map(st => (
-                                    <th key={st} className="text-center py-2 px-3 font-medium border min-w-[130px]" colSpan={3}>{st}</th>
+                                    <th key={st} className="text-center py-2 px-3 font-medium border min-w-[160px]" colSpan={4}>{st}</th>
                                   ))}
-                                  <th className="text-center py-2 px-3 font-medium border min-w-[130px] bg-primary/10" colSpan={3}>Total</th>
+                                  <th className="text-center py-2 px-3 font-medium border min-w-[160px] bg-primary/10" colSpan={4}>Total</th>
                                 </tr>
                                 <tr className="bg-muted/30">
                                   <th className="border sticky left-0 bg-muted/30 z-10"></th>
@@ -1685,11 +1842,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={st}>
                                       <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600">Sites</th>
                                       <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600">Actual</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-amber-600">PDM</th>
                                       <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600">DC</th>
                                     </Fragment>
                                   ))}
                                   <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
                                   <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
+                                  <th className="text-center py-1 px-1.5 text-xs font-medium border text-amber-600 bg-primary/5">PDM</th>
                                   <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600 bg-primary/5">DC</th>
                                 </tr>
                               </thead>
@@ -1701,11 +1860,13 @@ const QuestionnaireAnalytics = () => {
                                       <Fragment key={ht.states[ci]}>
                                         <td className="text-center py-1.5 px-1.5 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
                                       </Fragment>
                                     ))}
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{Math.ceil(row.totalQ / 7)}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
                                   </tr>
                                 ))}
@@ -1715,11 +1876,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={ht.states[ci]}>
                                       <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
                                       <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{Math.ceil(ct.questionnaires / 7)}</td>
                                       <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
                                     </Fragment>
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{ht.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{ht.grandQ}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{Math.ceil(ht.grandQ / 7)}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{ht.grandCollectors}</td>
                                 </tr>
                               </tbody>
@@ -1768,9 +1931,9 @@ const QuestionnaireAnalytics = () => {
                                 <tr className="bg-muted/50">
                                   <th className="text-left py-2 px-3 font-medium border min-w-[180px] sticky left-0 bg-muted/50 z-10">Activity</th>
                                   {st.localities.map(loc => (
-                                    <th key={loc} className="text-center py-2 px-3 font-medium border min-w-[130px]" colSpan={3}>{loc}</th>
+                                    <th key={loc} className="text-center py-2 px-3 font-medium border min-w-[160px]" colSpan={4}>{loc}</th>
                                   ))}
-                                  <th className="text-center py-2 px-3 font-medium border min-w-[130px] bg-primary/10" colSpan={3}>Total</th>
+                                  <th className="text-center py-2 px-3 font-medium border min-w-[160px] bg-primary/10" colSpan={4}>Total</th>
                                 </tr>
                                 <tr className="bg-muted/30">
                                   <th className="border sticky left-0 bg-muted/30 z-10"></th>
@@ -1778,11 +1941,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={loc}>
                                       <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600">Sites</th>
                                       <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600">Actual</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-amber-600">PDM</th>
                                       <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600">DC</th>
                                     </Fragment>
                                   ))}
                                   <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
                                   <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
+                                  <th className="text-center py-1 px-1.5 text-xs font-medium border text-amber-600 bg-primary/5">PDM</th>
                                   <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600 bg-primary/5">DC</th>
                                 </tr>
                               </thead>
@@ -1794,11 +1959,13 @@ const QuestionnaireAnalytics = () => {
                                       <Fragment key={st.localities[ci]}>
                                         <td className="text-center py-1.5 px-1.5 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
                                       </Fragment>
                                     ))}
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{Math.ceil(row.totalQ / 7)}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
                                   </tr>
                                 ))}
@@ -1808,11 +1975,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={st.localities[ci]}>
                                       <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
                                       <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{Math.ceil(ct.questionnaires / 7)}</td>
                                       <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
                                     </Fragment>
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{st.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{st.grandQ}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{Math.ceil(st.grandQ / 7)}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{st.grandCollectors}</td>
                                 </tr>
                               </tbody>
