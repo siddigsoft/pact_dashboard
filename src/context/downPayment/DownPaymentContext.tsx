@@ -653,7 +653,7 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
           await supabase
             .from('mmp_site_entries')
             .update({
-              status: 'Claimed',
+              status: 'accepted',
               accepted_by: request.requestedBy,
               accepted_at: now,
               updated_at: now,
