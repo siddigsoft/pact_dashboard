@@ -14,6 +14,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
+import { drawPdfHeader, styledAutoTable, addAllFooters, addPageHeader, loadArabicFont, arText, C } from '@/utils/analyticsPdfUtils';
+import { exportFormattedExcel, exportFormattedTrackerExcel } from '@/utils/analyticsExcelUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 
 interface QuestionnaireRow {
@@ -1063,34 +1065,24 @@ const QuestionnaireAnalytics = () => {
     XLSX.writeFile(wb, 'tracker_activity_by_state.xlsx');
   }, [trackerData]);
 
-  const exportActivityByStatePdf = useCallback(() => {
+  const exportActivityByStatePdf = useCallback(async () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    let y = 15;
-    doc.setFontSize(16);
-    doc.setTextColor(33, 33, 33);
-    doc.text('Tracker - Activity by State', 14, y);
-    y += 10;
-    trackerData.stateBreakdown.forEach(sb => {
-      if (y > 250) { doc.addPage(); y = 15; }
-      doc.setFontSize(12);
-      doc.setTextColor(33, 33, 33);
+    let y = await drawPdfHeader(doc, 'Tracker - Activity by State', 'المتتبع - النشاط حسب الولاية');
+    
+    trackerData.stateBreakdown.forEach((sb: any) => {
+      if (y > 240) { doc.addPage(); addPageHeader(doc, 'Activity by State'); y = 18; }
+      doc.setFontSize(11);
+      doc.setTextColor(15, 32, 65);
+      doc.setFont('helvetica', 'bold');
       doc.text(`${sb.state} (${sb.totalQ} Q)`, 14, y);
       y += 2;
-      const actRows = sb.activities.filter(a => a.questionnaires > 0).map(a => [a.activity, String(a.sites), String(a.questionnaires), isPdmActivity(a.activity) ? String(Math.ceil(a.questionnaires / 7)) : '-']);
-      const pdmQ = sb.activities.filter(a => a.questionnaires > 0 && isPdmActivity(a.activity)).reduce((s, a) => s + a.questionnaires, 0);
-      actRows.push(['Total', String(sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0)), String(sb.totalQ), pdmQ ? String(Math.ceil(pdmQ / 7)) : '-']);
-      autoTable(doc, {
-        head: [['Activity', 'Sites', 'Questionnaires', 'PDM Sites']],
-        body: actRows,
-        startY: y,
-        margin: { left: 14, right: 14 },
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
-        didParseCell: (data: any) => { if (data.row.index === actRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; } },
-      });
-      y = (doc as any).lastAutoTable.finalY + 8;
+      const actRows = sb.activities.filter((a: any) => a.questionnaires > 0).map((a: any) => [a.activity, String(a.sites), String(a.questionnaires), isPdmActivity(a.activity) ? String(Math.ceil(a.questionnaires / 7)) : '-']);
+      const pdmQ = sb.activities.filter((a: any) => a.questionnaires > 0 && isPdmActivity(a.activity)).reduce((s: number, a: any) => s + a.questionnaires, 0);
+      actRows.push(['Total', String(sb.activities.filter((a: any) => a.questionnaires > 0).reduce((s: number, a: any) => s + a.sites, 0)), String(sb.totalQ), pdmQ ? String(Math.ceil(pdmQ / 7)) : '-']);
+      y = styledAutoTable(doc, [['Activity', 'Sites', 'Questionnaires', 'PDM Sites']], actRows, y, { boldLastRow: true });
+      y += 8;
     });
+    addAllFooters(doc);
     doc.save('tracker_activity_by_state.pdf');
   }, [trackerData]);
 
@@ -1122,48 +1114,38 @@ const QuestionnaireAnalytics = () => {
     XLSX.writeFile(wb, 'tracker_per_hub.xlsx');
   }, [trackerData]);
 
-  const exportTrackerPerHubPdf = useCallback(() => {
+  const exportTrackerPerHubPdf = useCallback(async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    let y = 15;
-    doc.setFontSize(16);
-    doc.setTextColor(33, 33, 33);
-    doc.text('Tracker per Hub', 14, y);
-    y += 10;
-    trackerData.hubTrackers.forEach(ht => {
-      if (y > 170) { doc.addPage(); y = 15; }
-      doc.setFontSize(13);
-      doc.setTextColor(33, 33, 33);
+    let y = await drawPdfHeader(doc, 'Tracker per Hub', 'المتتبع لكل محور');
+    
+    trackerData.hubTrackers.forEach((ht: any) => {
+      if (y > 170) { doc.addPage(); addPageHeader(doc, 'Tracker per Hub'); y = 18; }
+      doc.setFontSize(11);
+      doc.setTextColor(15, 32, 65);
+      doc.setFont('helvetica', 'bold');
       doc.text(`${ht.hub} — ${ht.grandQ} Q, ${ht.grandSites} Sites, ${ht.grandCollectors} DC`, 14, y);
       y += 2;
       const headers = ['Activity'];
-      ht.states.forEach(st => { headers.push(`${st} Sites`, `${st} Actual`, `${st} PDM`, `${st} DC`); });
+      ht.states.forEach((st: string) => { headers.push(`${st} Sites`, `${st} Actual`, `${st} PDM`, `${st} DC`); });
       headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
-      const bodyRows = ht.matrix.map(row => {
+      const bodyRows = ht.matrix.map((row: any) => {
         const r = [row.activity];
-        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors)); });
+        row.cells.forEach((c: any) => { r.push(String(c.sites || '-'), String(c.questionnaires || '-'), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors || '-')); });
         r.push(String(row.totalSites), String(row.totalQ), isPdmActivity(row.activity) ? String(Math.ceil(row.totalQ / 7)) : '-', String(row.totalCollectors));
         return r;
       });
       const totR = ['Total'];
-      ht.colTotals.forEach((ct, ci) => {
-        const pdmColQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+      ht.colTotals.forEach((ct: any, ci: number) => {
+        const pdmColQ = ht.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[ci].questionnaires, 0);
         totR.push(String(ct.sites), String(ct.questionnaires), pdmColQ ? String(Math.ceil(pdmColQ / 7)) : '-', String(ct.collectors));
       });
-      const htPdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      const htPdmQ = ht.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
       totR.push(String(ht.grandSites), String(ht.grandQ), htPdmQ ? String(Math.ceil(htPdmQ / 7)) : '-', String(ht.grandCollectors));
       bodyRows.push(totR);
-      autoTable(doc, {
-        head: [headers],
-        body: bodyRows,
-        startY: y,
-        margin: { left: 10, right: 10 },
-        styles: { fontSize: 6, cellPadding: 1.5 },
-        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
-        didParseCell: (data: any) => { if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; } },
-      });
-      y = (doc as any).lastAutoTable.finalY + 10;
+      y = styledAutoTable(doc, [headers], bodyRows, y, { fontSize: 6, margin: { left: 10, right: 10 }, boldLastRow: true });
+      y += 10;
     });
+    addAllFooters(doc);
     doc.save('tracker_per_hub.pdf');
   }, [trackerData]);
 
@@ -1195,106 +1177,116 @@ const QuestionnaireAnalytics = () => {
     XLSX.writeFile(wb, 'tracker_per_state.xlsx');
   }, [trackerData]);
 
-  const exportTrackerPerStatePdf = useCallback(() => {
+  const exportTrackerPerStatePdf = useCallback(async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    let y = 15;
-    doc.setFontSize(16);
-    doc.setTextColor(33, 33, 33);
-    doc.text('Tracker per State', 14, y);
-    y += 10;
-    trackerData.stateTrackers.forEach(st => {
-      if (y > 170) { doc.addPage(); y = 15; }
-      doc.setFontSize(13);
-      doc.setTextColor(33, 33, 33);
+    let y = await drawPdfHeader(doc, 'Tracker per State', 'المتتبع لكل ولاية');
+    
+    trackerData.stateTrackers.forEach((st: any) => {
+      if (y > 170) { doc.addPage(); addPageHeader(doc, 'Tracker per State'); y = 18; }
+      doc.setFontSize(11);
+      doc.setTextColor(15, 32, 65);
+      doc.setFont('helvetica', 'bold');
       doc.text(`${st.state} — ${st.grandQ} Q, ${st.grandSites} Sites, ${st.grandCollectors} DC`, 14, y);
       y += 2;
       const headers = ['Activity'];
-      st.localities.forEach(loc => { headers.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM`, `${loc} DC`); });
+      st.localities.forEach((loc: string) => { headers.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM`, `${loc} DC`); });
       headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
-      const bodyRows = st.matrix.map(row => {
+      const bodyRows = st.matrix.map((row: any) => {
         const r = [row.activity];
-        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors)); });
+        row.cells.forEach((c: any) => { r.push(String(c.sites || '-'), String(c.questionnaires || '-'), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors || '-')); });
         r.push(String(row.totalSites), String(row.totalQ), isPdmActivity(row.activity) ? String(Math.ceil(row.totalQ / 7)) : '-', String(row.totalCollectors));
         return r;
       });
       const totR = ['Total'];
-      st.colTotals.forEach((ct, ci) => {
-        const pdmColQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+      st.colTotals.forEach((ct: any, ci: number) => {
+        const pdmColQ = st.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[ci].questionnaires, 0);
         totR.push(String(ct.sites), String(ct.questionnaires), pdmColQ ? String(Math.ceil(pdmColQ / 7)) : '-', String(ct.collectors));
       });
-      const stPdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      const stPdmQ = st.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
       totR.push(String(st.grandSites), String(st.grandQ), stPdmQ ? String(Math.ceil(stPdmQ / 7)) : '-', String(st.grandCollectors));
       bodyRows.push(totR);
-      autoTable(doc, {
-        head: [headers],
-        body: bodyRows,
-        startY: y,
-        margin: { left: 10, right: 10 },
-        styles: { fontSize: 6, cellPadding: 1.5 },
-        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
-        didParseCell: (data: any) => { if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; } },
-      });
-      y = (doc as any).lastAutoTable.finalY + 10;
+      y = styledAutoTable(doc, [headers], bodyRows, y, { fontSize: 6, margin: { left: 10, right: 10 }, boldLastRow: true });
+      y += 10;
     });
+    addAllFooters(doc);
     doc.save('tracker_per_state.pdf');
   }, [trackerData]);
 
-  const exportCollectorPdf = useCallback((collector: CollectorDetail) => {
+  const exportCollectorPdf = useCallback(async (collector: CollectorDetail) => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    let y = 15;
-    doc.setFontSize(16);
-    doc.setTextColor(33, 33, 33);
-    doc.text(`Data Collector Report: ${collector.name}`, 14, y);
-    y += 8;
+    const pw = doc.internal.pageSize.width;
+    const ml = 14;
+    const mr = 14;
+
+    let y = await drawPdfHeader(doc, `Data Collector Report`, 'تقرير جامع البيانات', `${collector.name} — ${collector.count} questionnaires (${collector.percentage.toFixed(1)}%)`);
+    const hasArabic = await loadArabicFont(doc);
+
+    doc.setFillColor(245, 247, 252);
+    doc.setDrawColor(200, 205, 215);
+    doc.roundedRect(ml, y, pw - ml - mr, 24, 2, 2, 'FD');
+    y += 6;
     doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Device ID: ${collector.deviceId || '-'}`, 14, y);
-    y += 6;
-    doc.text(`Hub(s): ${collector.hubs.join(', ')} | State(s): ${collector.states.join(', ')}`, 14, y);
-    y += 6;
-    doc.text(`Total Questionnaires: ${collector.count} (${collector.percentage.toFixed(1)}%)`, 14, y);
-    y += 8;
-    if (collector.nameVariants.length > 0) {
-      doc.setFontSize(10);
-      doc.setTextColor(180, 120, 0);
-      doc.text(`Name Variants (${collector.nameVariants.length}):`, 14, y);
-      y += 5;
-      doc.setFontSize(9);
-      collector.nameVariants.forEach(v => {
-        doc.text(`  ${v.name} — ${v.count} questionnaires`, 14, y);
-        y += 4;
-      });
-      y += 4;
+    doc.setTextColor(45, 45, 60);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Collector Name:', ml + 4, y);
+    doc.setFont('helvetica', 'normal');
+    if (hasArabic) {
+      doc.setFont('Amiri', 'normal');
+      doc.text(collector.name, ml + 40, y);
+      doc.setFont('helvetica', 'normal');
     } else {
+      doc.text(collector.name, ml + 40, y);
+    }
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Device ID:', ml + 4, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(collector.deviceId || '-', ml + 40, y);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Hub(s):', ml + 4, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(collector.hubs.join(', '), ml + 40, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text('State(s):', pw / 2, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(collector.states.join(', '), pw / 2 + 20, y);
+    y += 10;
+
+    if (collector.nameVariants.length > 0) {
+      doc.setFontSize(11);
+      doc.setTextColor(15, 32, 65);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Name Variants (${collector.nameVariants.length + 1})`, ml, y);
       y += 2;
+      const variantRows = collector.nameVariants.map((v: any, i: number) => [String(i + 1), v.name, String(v.count)]);
+      variantRows.unshift(['★', collector.name, String(collector.count - collector.nameVariants.reduce((s: number, v: any) => s + v.count, 0))]);
+      y = styledAutoTable(doc, [['#', 'Name', 'Count']], variantRows, y, { fontSize: 8 });
+      y += 6;
     }
 
-    const addTable = (title: string, headers: string[], rows: string[][]) => {
-      if (y > 250) { doc.addPage(); y = 15; }
-      doc.setFontSize(12);
-      doc.setTextColor(33, 33, 33);
-      doc.text(title, 14, y);
-      y += 2;
-      autoTable(doc, {
-        head: [headers],
-        body: rows,
-        startY: y,
-        margin: { left: 14, right: 14 },
-        styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
-        didDrawPage: () => { y = 15; },
-      });
-      y = (doc as any).lastAutoTable.finalY + 12;
-    };
+    if (y > 240) { doc.addPage(); addPageHeader(doc, 'Data Collector Report'); y = 18; }
+    doc.setFontSize(11);
+    doc.setTextColor(15, 32, 65);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Activities Breakdown', ml, y);
+    y += 2;
+    const actRows = collector.activities.map((a: any, i: number) => [String(i + 1), a.name, String(a.count)]);
+    const actTotal = collector.activities.reduce((s: number, a: any) => s + a.count, 0);
+    actRows.push(['', 'Total', String(actTotal)]);
+    y = styledAutoTable(doc, [['#', 'Activity', 'Count']], actRows, y, { fontSize: 9, boldLastRow: true });
+    y += 6;
 
-    addTable('Activities Breakdown', ['#', 'Activity', 'Count'],
-      [...collector.activities.map((a, i) => [String(i + 1), a.name, String(a.count)]),
-       ['', 'Total', String(collector.activities.reduce((s, a) => s + a.count, 0))]]);
+    if (y > 240) { doc.addPage(); addPageHeader(doc, 'Data Collector Report'); y = 18; }
+    doc.setFontSize(11);
+    doc.setTextColor(15, 32, 65);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Localities Breakdown', ml, y);
+    y += 2;
+    const locRows = collector.localities.map((l: any, i: number) => [String(i + 1), l.name, String(l.count)]);
+    y = styledAutoTable(doc, [['#', 'Locality', 'Count']], locRows, y, { fontSize: 9 });
 
-    addTable('Localities Breakdown', ['#', 'Locality', 'Count'],
-      collector.localities.map((l, i) => [String(i + 1), l.name, String(l.count)]));
+    addAllFooters(doc);
 
     const safeName = collector.name.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_').slice(0, 30);
     doc.save(`collector_${safeName}.pdf`);
@@ -1348,48 +1340,151 @@ const QuestionnaireAnalytics = () => {
     XLSX.writeFile(wb, 'hub_drilldown.xlsx');
   }, [hubDrilldown]);
 
-  const exportHubDrilldownPdf = useCallback(() => {
+  const exportHubDrilldownPdf = useCallback(async () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    let y = 15;
-    doc.setFontSize(16);
-    doc.setTextColor(33, 33, 33);
-    doc.text('Hub Distribution - Drilldown Report', 14, y);
-    y += 10;
-
-    hubDrilldown.forEach(hub => {
-      if (y > 170) { doc.addPage(); y = 15; }
-      doc.setFontSize(13);
-      doc.setTextColor(33, 33, 33);
+    let y = await drawPdfHeader(doc, 'Hub Distribution - Drilldown Report', 'التوزيع حسب المحور');
+    
+    hubDrilldown.forEach((hub: any) => {
+      if (y > 170) { doc.addPage(); addPageHeader(doc, 'Hub Drilldown'); y = 18; }
+      doc.setFontSize(12);
+      doc.setTextColor(15, 32, 65);
+      doc.setFont('helvetica', 'bold');
       doc.text(`${hub.name} — ${hub.questionnaires} questionnaires, ${hub.sites} sites (${hub.percentage.toFixed(1)}%)`, 14, y);
       y += 8;
-
-      hub.states.forEach(st => {
-        if (y > 170) { doc.addPage(); y = 15; }
-        doc.setFontSize(11);
+      hub.states.forEach((st: any) => {
+        if (y > 170) { doc.addPage(); addPageHeader(doc, 'Hub Drilldown'); y = 18; }
+        doc.setFontSize(10);
         doc.setTextColor(60, 60, 180);
+        doc.setFont('helvetica', 'bold');
         doc.text(`  State: ${st.name} — ${st.questionnaires} Q, ${st.sites} sites (${st.percentage.toFixed(1)}%)`, 14, y);
         y += 3;
-
-        const actRows = st.activities.map(act => {
-          const locNames = act.localities.map(l => `${l.name} (${l.questionnaires})`).join(', ');
+        const actRows = st.activities.map((act: any) => {
+          const locNames = act.localities.map((l: any) => `${l.name} (${l.questionnaires})`).join(', ');
           return [act.name, String(act.sites), String(act.questionnaires), act.percentage.toFixed(1) + '%', locNames];
         });
-        autoTable(doc, {
-          head: [['Activity', 'Sites', 'Q', '%', 'Localities']],
-          body: actRows,
-          startY: y,
+        y = styledAutoTable(doc, [['Activity', 'Sites', 'Q', '%', 'Localities']], actRows, y, {
+          fontSize: 7,
           margin: { left: 20, right: 14 },
-          styles: { fontSize: 8, cellPadding: 2 },
-          headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
-          alternateRowStyles: { fillColor: [245, 247, 250] },
           columnStyles: { 4: { cellWidth: 80 } },
         });
-        y = (doc as any).lastAutoTable.finalY + 8;
+        y += 8;
       });
       y += 4;
     });
-
+    addAllFooters(doc);
     doc.save('hub_drilldown.pdf');
+  }, [hubDrilldown]);
+
+  const exportMainTrackerPdf = useCallback(async () => {
+    const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    let y = await drawPdfHeader(doc, 'Tracker - Activity by Hub', 'المتتبع - النشاط حسب المحور');
+    
+    const headers = ['Activity'];
+    hubs.forEach((h: string) => { headers.push(`${h} Sites`, `${h} Actual`, `${h} PDM`, `${h} DC`); });
+    headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
+    const bodyRows = matrix.map((row: any) => {
+      const r = [row.activity];
+      row.cells.forEach((c: any) => { r.push(String(c.sites || '-'), String(c.questionnaires || '-'), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors || '-')); });
+      r.push(String(row.totalSites), String(row.totalQ), isPdmActivity(row.activity) ? String(Math.ceil(row.totalQ / 7)) : '-', String(row.totalCollectors));
+      return r;
+    });
+    const totR = ['Grand Total'];
+    hubTotals.forEach((ht: any, hi: number) => {
+      const pdmHubQ = matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[hi].questionnaires, 0);
+      totR.push(String(ht.sites), String(ht.questionnaires), pdmHubQ ? String(Math.ceil(pdmHubQ / 7)) : '-', String(ht.collectors));
+    });
+    const pdmGrandQ = matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
+    totR.push(String(grandSites), String(grandQ), pdmGrandQ ? String(Math.ceil(pdmGrandQ / 7)) : '-', String(grandCollectors));
+    bodyRows.push(totR);
+    y = styledAutoTable(doc, [headers], bodyRows, y, { fontSize: 6, margin: { left: 10, right: 10 }, boldLastRow: true });
+    addAllFooters(doc);
+    doc.save('tracker_activity_by_hub.pdf');
+  }, [trackerData]);
+
+  const exportMainTrackerFormattedExcel = useCallback(async () => {
+    await exportFormattedTrackerExcel(trackerData, isPdmActivity, 'tracker_activity_by_hub.xlsx');
+  }, [trackerData]);
+
+  const exportActivityByStateFormattedExcel = useCallback(async () => {
+    const sheets = trackerData.stateBreakdown.map(sb => {
+      const acts = sb.activities.filter((a: any) => a.questionnaires > 0);
+      const pdmQ = acts.filter((a: any) => isPdmActivity(a.activity)).reduce((s: number, a: any) => s + a.questionnaires, 0);
+      return {
+        title: sb.state,
+        headers: ['Activity', 'Sites', 'Questionnaires', 'PDM Sites'],
+        rows: acts.map((a: any) => [a.activity, a.sites, a.questionnaires, isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : '-']),
+        totalRow: ['Total', acts.reduce((s: number, a: any) => s + a.sites, 0), sb.totalQ, pdmQ ? Math.ceil(pdmQ / 7) : '-'],
+      };
+    });
+    await exportFormattedExcel(sheets, 'tracker_activity_by_state.xlsx');
+  }, [trackerData]);
+
+  const exportTrackerPerHubFormattedExcel = useCallback(async () => {
+    const sheets = trackerData.hubTrackers.map((ht: any) => {
+      const headers = ['Activity'];
+      ht.states.forEach((st: string) => { headers.push(`${st} Sites`, `${st} Actual`, `${st} PDM`, `${st} DC`); });
+      headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
+      const rows = ht.matrix.map((row: any) => {
+        const r: (string|number)[] = [row.activity];
+        row.cells.forEach((c: any) => { r.push(c.sites || '-', c.questionnaires || '-', isPdmActivity(row.activity) && c.questionnaires ? Math.ceil(c.questionnaires / 7) : '-', c.collectors || '-'); });
+        r.push(row.totalSites, row.totalQ, isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : '-', row.totalCollectors);
+        return r;
+      });
+      const totR: (string|number)[] = ['Total'];
+      ht.colTotals.forEach((ct: any, ci: number) => {
+        const pdmColQ = ht.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[ci].questionnaires, 0);
+        totR.push(ct.sites, ct.questionnaires, pdmColQ ? Math.ceil(pdmColQ / 7) : '-', ct.collectors);
+      });
+      const htPdmQ = ht.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
+      totR.push(ht.grandSites, ht.grandQ, htPdmQ ? Math.ceil(htPdmQ / 7) : '-', ht.grandCollectors);
+      return { title: ht.hub, headers, rows, totalRow: totR };
+    });
+    await exportFormattedExcel(sheets, 'tracker_per_hub.xlsx');
+  }, [trackerData]);
+
+  const exportTrackerPerStateFormattedExcel = useCallback(async () => {
+    const sheets = trackerData.stateTrackers.map((st: any) => {
+      const headers = ['Activity'];
+      st.localities.forEach((loc: string) => { headers.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM`, `${loc} DC`); });
+      headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
+      const rows = st.matrix.map((row: any) => {
+        const r: (string|number)[] = [row.activity];
+        row.cells.forEach((c: any) => { r.push(c.sites || '-', c.questionnaires || '-', isPdmActivity(row.activity) && c.questionnaires ? Math.ceil(c.questionnaires / 7) : '-', c.collectors || '-'); });
+        r.push(row.totalSites, row.totalQ, isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : '-', row.totalCollectors);
+        return r;
+      });
+      const totR: (string|number)[] = ['Total'];
+      st.colTotals.forEach((ct: any, ci: number) => {
+        const pdmColQ = st.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[ci].questionnaires, 0);
+        totR.push(ct.sites, ct.questionnaires, pdmColQ ? Math.ceil(pdmColQ / 7) : '-', ct.collectors);
+      });
+      const stPdmQ = st.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
+      totR.push(st.grandSites, st.grandQ, stPdmQ ? Math.ceil(stPdmQ / 7) : '-', st.grandCollectors);
+      return { title: st.state, headers, rows, totalRow: totR };
+    });
+    await exportFormattedExcel(sheets, 'tracker_per_state.xlsx');
+  }, [trackerData]);
+
+  const exportHubDrilldownFormattedExcel = useCallback(async () => {
+    const sheets = [{
+      title: 'Hub Drilldown',
+      headers: ['Level', 'Hub', 'State', 'Activity', 'Locality', 'Sites', 'Questionnaires', '%'],
+      rows: [] as (string|number)[][],
+    }];
+    hubDrilldown.forEach((hub: any) => {
+      sheets[0].rows.push(['Hub', hub.name, '', '', '', hub.sites, hub.questionnaires, hub.percentage.toFixed(1) + '%']);
+      hub.states.forEach((st: any) => {
+        sheets[0].rows.push(['State', hub.name, st.name, '', '', st.sites, st.questionnaires, st.percentage.toFixed(1) + '%']);
+        st.activities.forEach((act: any) => {
+          sheets[0].rows.push(['Activity', hub.name, st.name, act.name, '', act.sites, act.questionnaires, act.percentage.toFixed(1) + '%']);
+          act.localities.forEach((loc: any) => {
+            sheets[0].rows.push(['Locality', hub.name, st.name, act.name, loc.name, loc.sites, loc.questionnaires, loc.percentage.toFixed(1) + '%']);
+          });
+        });
+      });
+    });
+    await exportFormattedExcel(sheets, 'hub_drilldown.xlsx');
   }, [hubDrilldown]);
 
   const hubDrilldownTable = (
@@ -1404,16 +1499,28 @@ const QuestionnaireAnalytics = () => {
               </CardTitle>
               <CardDescription>{hubDrilldown.length} unique hubs found — click a hub to see states, then activities, then localities</CardDescription>
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={exportHubDrilldownExcel} data-testid="button-export-hub-excel">
-                <Download className="h-4 w-4" />
-                Excel
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={exportHubDrilldownPdf} data-testid="button-export-hub-pdf">
-                <FileDown className="h-4 w-4" />
-                PDF
-              </Button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-drilldown">
+                  <Download className="h-4 w-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportHubDrilldownPdf}>
+                  <FileDown className="h-4 w-4 mr-2" />
+                  PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportHubDrilldownExcel}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportHubDrilldownFormattedExcel}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Formatted Excel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardHeader>
         <CardContent>
@@ -2479,49 +2586,28 @@ const QuestionnaireAnalytics = () => {
                       </CardTitle>
                       <CardDescription>Cross-tab: Activities (rows) x Hubs (columns) with Sites, Questionnaires & Collectors</CardDescription>
                     </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerToExcel} data-testid="button-export-tracker">
-                        <Download className="h-4 w-4" />
-                        Excel
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
-                        const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
-                        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-                        let y = 15;
-                        doc.setFontSize(16);
-                        doc.setTextColor(33, 33, 33);
-                        doc.text('Tracker - Activity by Hub', 14, y);
-                        y += 8;
-                        const headers = ['Activity'];
-                        hubs.forEach(h => { headers.push(`${h} Sites`, `${h} Actual`, `${h} PDM`, `${h} DC`); });
-                        headers.push('Total Sites', 'Total Actual', 'Total PDM', 'Total DC');
-                        const bodyRows = matrix.map(row => {
-                          const r = [row.activity];
-                          row.cells.forEach(c => { r.push(String(c.sites || '-'), String(c.questionnaires || '-'), isPdmActivity(row.activity) && c.questionnaires ? String(Math.ceil(c.questionnaires / 7)) : '-', String(c.collectors || '-')); });
-                          r.push(String(row.totalSites), String(row.totalQ), isPdmActivity(row.activity) ? String(Math.ceil(row.totalQ / 7)) : '-', String(row.totalCollectors));
-                          return r;
-                        });
-                        const totR = ['Grand Total'];
-                        hubTotals.forEach((ht, hi) => {
-                          const pdmHubQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0);
-                          totR.push(String(ht.sites), String(ht.questionnaires), pdmHubQ ? String(Math.ceil(pdmHubQ / 7)) : '-', String(ht.collectors));
-                        });
-                        const pdmGrandQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-                        totR.push(String(grandSites), String(grandQ), pdmGrandQ ? String(Math.ceil(pdmGrandQ / 7)) : '-', String(grandCollectors));
-                        bodyRows.push(totR);
-                        autoTable(doc, {
-                          head: [headers], body: bodyRows, startY: y, margin: { left: 10, right: 10 },
-                          styles: { fontSize: 6, cellPadding: 1.5 },
-                          headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
-                          alternateRowStyles: { fillColor: [245, 247, 250] },
-                          didParseCell: (data: any) => { if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; } },
-                        });
-                        doc.save('tracker_activity_by_hub.pdf');
-                      }} data-testid="button-export-tracker-pdf">
-                        <FileDown className="h-4 w-4" />
-                        PDF
-                      </Button>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-tracker">
+                          <Download className="h-4 w-4" />
+                          Export
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={exportMainTrackerPdf}>
+                          <FileDown className="h-4 w-4 mr-2" />
+                          PDF
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={exportTrackerToExcel}>
+                          <FileSpreadsheet className="h-4 w-4 mr-2" />
+                          Excel
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={exportMainTrackerFormattedExcel}>
+                          <FileSpreadsheet className="h-4 w-4 mr-2" />
+                          Formatted Excel
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -2601,16 +2687,28 @@ const QuestionnaireAnalytics = () => {
                         </CardTitle>
                         <CardDescription>Activity breakdown per state</CardDescription>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportActivityByStateExcel} data-testid="button-export-act-state-excel">
-                          <Download className="h-4 w-4" />
-                          Excel
-                        </Button>
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportActivityByStatePdf} data-testid="button-export-act-state-pdf">
-                          <FileDown className="h-4 w-4" />
-                          PDF
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-act-state">
+                            <Download className="h-4 w-4" />
+                            Export
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={exportActivityByStatePdf}>
+                            <FileDown className="h-4 w-4 mr-2" />
+                            PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportActivityByStateExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Excel
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportActivityByStateFormattedExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Formatted Excel
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -2680,16 +2778,28 @@ const QuestionnaireAnalytics = () => {
                         </CardTitle>
                         <CardDescription>Each hub: Activity (rows) x State (columns) with Sites, Questionnaires & Collectors</CardDescription>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerPerHubExcel} data-testid="button-export-hub-tracker-excel">
-                          <Download className="h-4 w-4" />
-                          Excel
-                        </Button>
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerPerHubPdf} data-testid="button-export-hub-tracker-pdf">
-                          <FileDown className="h-4 w-4" />
-                          PDF
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-tracker">
+                            <Download className="h-4 w-4" />
+                            Export
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={exportTrackerPerHubPdf}>
+                            <FileDown className="h-4 w-4 mr-2" />
+                            PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportTrackerPerHubExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Excel
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportTrackerPerHubFormattedExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Formatted Excel
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -2793,16 +2903,28 @@ const QuestionnaireAnalytics = () => {
                         </CardTitle>
                         <CardDescription>Each state: Activity (rows) x Locality (columns) with Sites, Questionnaires & Collectors</CardDescription>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerPerStateExcel} data-testid="button-export-state-tracker-excel">
-                          <Download className="h-4 w-4" />
-                          Excel
-                        </Button>
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={exportTrackerPerStatePdf} data-testid="button-export-state-tracker-pdf">
-                          <FileDown className="h-4 w-4" />
-                          PDF
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-state-tracker">
+                            <Download className="h-4 w-4" />
+                            Export
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={exportTrackerPerStatePdf}>
+                            <FileDown className="h-4 w-4 mr-2" />
+                            PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportTrackerPerStateExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Excel
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportTrackerPerStateFormattedExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Formatted Excel
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
