@@ -59,6 +59,7 @@ interface CollectorDetail {
   localities: { name: string; count: number }[];
   hubs: string[];
   states: string[];
+  nameVariants: { name: string; count: number }[];
 }
 
 interface SavedSession {
@@ -352,35 +353,67 @@ const QuestionnaireAnalytics = () => {
   }, [filteredData]);
 
   const collectorDetails = useMemo((): CollectorDetail[] => {
-    const map = new Map<string, { count: number; deviceId: string; activities: Map<string, number>; localities: Map<string, number>; hubs: Set<string>; states: Set<string> }>();
+    const deviceMap = new Map<string, { names: Map<string, number>; activities: Map<string, number>; localities: Map<string, number>; hubs: Set<string>; states: Set<string>; count: number }>();
+    const noDeviceMap = new Map<string, { activities: Map<string, number>; localities: Map<string, number>; hubs: Set<string>; states: Set<string>; count: number }>();
+
     filteredData.forEach(row => {
       const name = row.dataCollector || '(Empty)';
-      if (!map.has(name)) map.set(name, { count: 0, deviceId: '', activities: new Map(), localities: new Map(), hubs: new Set(), states: new Set() });
-      const entry = map.get(name)!;
-      entry.count++;
-      if (!entry.deviceId && row.deviceId) entry.deviceId = row.deviceId;
-      if (row.activity) {
-        entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
+      const devId = row.deviceId?.trim() || '';
+
+      if (devId) {
+        if (!deviceMap.has(devId)) deviceMap.set(devId, { names: new Map(), activities: new Map(), localities: new Map(), hubs: new Set(), states: new Set(), count: 0 });
+        const entry = deviceMap.get(devId)!;
+        entry.count++;
+        entry.names.set(name, (entry.names.get(name) || 0) + 1);
+        if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
+        if (row.locality) entry.localities.set(row.locality, (entry.localities.get(row.locality) || 0) + 1);
+        if (row.hub) entry.hubs.add(row.hub);
+        if (row.state) entry.states.add(row.state);
+      } else {
+        if (!noDeviceMap.has(name)) noDeviceMap.set(name, { activities: new Map(), localities: new Map(), hubs: new Set(), states: new Set(), count: 0 });
+        const entry = noDeviceMap.get(name)!;
+        entry.count++;
+        if (row.activity) entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
+        if (row.locality) entry.localities.set(row.locality, (entry.localities.get(row.locality) || 0) + 1);
+        if (row.hub) entry.hubs.add(row.hub);
+        if (row.state) entry.states.add(row.state);
       }
-      if (row.locality) {
-        entry.localities.set(row.locality, (entry.localities.get(row.locality) || 0) + 1);
-      }
-      if (row.hub) entry.hubs.add(row.hub);
-      if (row.state) entry.states.add(row.state);
     });
+
     const total = filteredData.length;
-    return [...map.entries()]
-      .map(([name, d]) => ({
-        name,
-        deviceId: d.deviceId,
+    const results: CollectorDetail[] = [];
+
+    deviceMap.forEach((d, devId) => {
+      const nameVariants = [...d.names.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count);
+      const primaryName = nameVariants[0]?.name || '(Empty)';
+      results.push({
+        name: primaryName,
+        deviceId: devId,
         count: d.count,
         percentage: total > 0 ? (d.count / total) * 100 : 0,
         activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
         localities: [...d.localities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
         hubs: [...d.hubs],
         states: [...d.states],
-      }))
-      .sort((a, b) => b.count - a.count);
+        nameVariants: nameVariants.length > 1 ? nameVariants : [],
+      });
+    });
+
+    noDeviceMap.forEach((d, name) => {
+      results.push({
+        name,
+        deviceId: '',
+        count: d.count,
+        percentage: total > 0 ? (d.count / total) * 100 : 0,
+        activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
+        localities: [...d.localities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
+        hubs: [...d.hubs],
+        states: [...d.states],
+        nameVariants: [],
+      });
+    });
+
+    return results.sort((a, b) => b.count - a.count);
   }, [filteredData]);
 
   const toggleExpand = (key: string) => {
@@ -583,6 +616,7 @@ const QuestionnaireAnalytics = () => {
       '#': i + 1,
       'Device ID': c.deviceId || '-',
       'Data Collector': c.name,
+      'Name Variants': c.nameVariants.length > 0 ? c.nameVariants.map(v => `${v.name} (${v.count})`).join(', ') : '',
       Hub: c.hubs.join(', '),
       State: c.states.join(', '),
       'Total Activities': c.activities.reduce((s, a) => s + a.count, 0),
@@ -596,8 +630,12 @@ const QuestionnaireAnalytics = () => {
     const usedSheetNames = new Set<string>();
     collectorDetails.forEach((c, ci) => {
       const detailRows: any[] = [];
-      detailRows.push({ Section: 'COLLECTOR INFO', Field: 'Name', Value: c.name });
+      detailRows.push({ Section: 'COLLECTOR INFO', Field: 'Name (Primary)', Value: c.name });
       detailRows.push({ Section: '', Field: 'Device ID', Value: c.deviceId || '-' });
+      if (c.nameVariants.length > 0) {
+        detailRows.push({ Section: '', Field: 'Name Variants', Value: '' });
+        c.nameVariants.forEach(v => detailRows.push({ Section: '', Field: `  ${v.name}`, Value: v.count }));
+      }
       detailRows.push({ Section: '', Field: 'Hub(s)', Value: c.hubs.join(', ') });
       detailRows.push({ Section: '', Field: 'State(s)', Value: c.states.join(', ') });
       detailRows.push({ Section: '', Field: 'Total Questionnaires', Value: c.count });
@@ -748,8 +786,8 @@ const QuestionnaireAnalytics = () => {
     addSection('By Activity', ['Activity', 'Sites', 'Questionnaires', '%'],
       activityBreakdown.map(a => [a.name, String(a.siteCount), String(a.questionnaireCount), a.percentage.toFixed(1) + '%']));
 
-    addSection('By Data Collector', ['#', 'Device ID', 'Collector', 'Hub', 'State', 'Activities', 'Total', 'Q', '%'],
-      collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), c.activities.map(a => a.name).join(', '), String(c.activities.reduce((s, a) => s + a.count, 0)), String(c.count), c.percentage.toFixed(1) + '%']));
+    addSection('By Data Collector', ['#', 'Device ID', 'Collector', 'Variants', 'Hub', 'State', 'Activities', 'Total', 'Q', '%'],
+      collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.nameVariants.length > 0 ? c.nameVariants.map(v => v.name).join(', ') : '', c.hubs.join(', '), c.states.join(', '), c.activities.map(a => a.name).join(', '), String(c.activities.reduce((s, a) => s + a.count, 0)), String(c.count), c.percentage.toFixed(1) + '%']));
 
     collectorDetails.forEach(c => {
       doc.addPage();
@@ -761,7 +799,15 @@ const QuestionnaireAnalytics = () => {
       doc.setFontSize(10);
       doc.setTextColor(100, 100, 100);
       doc.text(`Device ID: ${c.deviceId || '-'} | Hub: ${c.hubs.join(', ')} | State: ${c.states.join(', ')} | Questionnaires: ${c.count} (${c.percentage.toFixed(1)}%)`, 14, y);
-      y += 10;
+      y += 8;
+      if (c.nameVariants.length > 0) {
+        doc.setFontSize(9);
+        doc.setTextColor(180, 120, 0);
+        doc.text(`Name Variants: ${c.nameVariants.map(v => `${v.name} (${v.count})`).join(', ')}`, 14, y);
+        y += 8;
+      } else {
+        y += 2;
+      }
 
       addSection('Activities Breakdown', ['Activity', 'Count'],
         [...c.activities.map(a => [a.name, String(a.count)]), ['Total', String(c.activities.reduce((s, a) => s + a.count, 0))]]);
@@ -930,7 +976,21 @@ const QuestionnaireAnalytics = () => {
     doc.text(`Hub(s): ${collector.hubs.join(', ')} | State(s): ${collector.states.join(', ')}`, 14, y);
     y += 6;
     doc.text(`Total Questionnaires: ${collector.count} (${collector.percentage.toFixed(1)}%)`, 14, y);
-    y += 10;
+    y += 8;
+    if (collector.nameVariants.length > 0) {
+      doc.setFontSize(10);
+      doc.setTextColor(180, 120, 0);
+      doc.text(`Name Variants (${collector.nameVariants.length}):`, 14, y);
+      y += 5;
+      doc.setFontSize(9);
+      collector.nameVariants.forEach(v => {
+        doc.text(`  ${v.name} — ${v.count} questionnaires`, 14, y);
+        y += 4;
+      });
+      y += 4;
+    } else {
+      y += 2;
+    }
 
     const addTable = (title: string, headers: string[], rows: string[][]) => {
       if (y > 250) { doc.addPage(); y = 15; }
@@ -1761,19 +1821,26 @@ const QuestionnaireAnalytics = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {collectorDetails.map((item, i) => (
-                      <div key={item.name} className="border rounded-lg">
+                    {collectorDetails.map((item, i) => {
+                      const expandKey = `coll-${item.deviceId || item.name}`;
+                      return (
+                      <div key={item.deviceId || item.name} className="border rounded-lg">
                         <button
                           type="button"
                           className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
-                          onClick={() => toggleExpand(`coll-${item.name}`)}
+                          onClick={() => toggleExpand(expandKey)}
                           data-testid={`button-collector-expand-${i}`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}</span>
                             <div className="min-w-0">
                               <span className="font-medium block truncate">{item.name}</span>
-                              {item.deviceId && <span className="text-xs text-muted-foreground font-mono">{item.deviceId}</span>}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {item.deviceId && <span className="text-xs text-muted-foreground font-mono">{item.deviceId}</span>}
+                                {item.nameVariants.length > 0 && (
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">{item.nameVariants.length} name variants</Badge>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
@@ -1781,11 +1848,28 @@ const QuestionnaireAnalytics = () => {
                             <Badge variant="outline" className="text-xs">{item.localities.length} localities</Badge>
                             <Badge variant="secondary" className="font-mono">{item.count}</Badge>
                             <span className="text-xs text-muted-foreground">{item.percentage.toFixed(1)}%</span>
-                            {expandedRows.has(`coll-${item.name}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            {expandedRows.has(expandKey) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </div>
                         </button>
-                        {expandedRows.has(`coll-${item.name}`) && (
+                        {expandedRows.has(expandKey) && (
                           <div className="border-t px-3 pb-3 space-y-3 mt-0">
+                            {item.nameVariants.length > 0 && (
+                              <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
+                                <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1.5 flex items-center gap-1">
+                                  <Users className="h-3 w-3" /> NAME VARIANTS (same device)
+                                </h4>
+                                <div className="space-y-0.5">
+                                  {item.nameVariants.map((v, vi) => (
+                                    <div key={vi} className="flex items-center justify-between text-sm px-2 py-0.5">
+                                      <span className={`truncate ${vi === 0 ? 'font-medium text-amber-800 dark:text-amber-300' : 'text-muted-foreground'}`}>
+                                        {vi === 0 ? '★ ' : ''}{v.name}
+                                      </span>
+                                      <Badge variant="outline" className="font-mono text-xs ml-1">{v.count}</Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                               <div>
                                 <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
@@ -1840,7 +1924,8 @@ const QuestionnaireAnalytics = () => {
                           </div>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
