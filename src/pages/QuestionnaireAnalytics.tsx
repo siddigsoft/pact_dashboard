@@ -58,6 +58,7 @@ interface CollectorDetail {
   activities: { name: string; count: number }[];
   localities: { name: string; count: number }[];
   hubs: string[];
+  states: string[];
 }
 
 interface SavedSession {
@@ -351,10 +352,10 @@ const QuestionnaireAnalytics = () => {
   }, [filteredData]);
 
   const collectorDetails = useMemo((): CollectorDetail[] => {
-    const map = new Map<string, { count: number; deviceId: string; activities: Map<string, number>; localities: Map<string, number>; hubs: Set<string> }>();
+    const map = new Map<string, { count: number; deviceId: string; activities: Map<string, number>; localities: Map<string, number>; hubs: Set<string>; states: Set<string> }>();
     filteredData.forEach(row => {
       const name = row.dataCollector || '(Empty)';
-      if (!map.has(name)) map.set(name, { count: 0, deviceId: '', activities: new Map(), localities: new Map(), hubs: new Set() });
+      if (!map.has(name)) map.set(name, { count: 0, deviceId: '', activities: new Map(), localities: new Map(), hubs: new Set(), states: new Set() });
       const entry = map.get(name)!;
       entry.count++;
       if (!entry.deviceId && row.deviceId) entry.deviceId = row.deviceId;
@@ -365,6 +366,7 @@ const QuestionnaireAnalytics = () => {
         entry.localities.set(row.locality, (entry.localities.get(row.locality) || 0) + 1);
       }
       if (row.hub) entry.hubs.add(row.hub);
+      if (row.state) entry.states.add(row.state);
     });
     const total = filteredData.length;
     return [...map.entries()]
@@ -376,6 +378,7 @@ const QuestionnaireAnalytics = () => {
         activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
         localities: [...d.localities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
         hubs: [...d.hubs],
+        states: [...d.states],
       }))
       .sort((a, b) => b.count - a.count);
   }, [filteredData]);
@@ -581,12 +584,36 @@ const QuestionnaireAnalytics = () => {
       'Device ID': c.deviceId || '-',
       'Data Collector': c.name,
       Hub: c.hubs.join(', '),
+      State: c.states.join(', '),
+      'Total Activities': c.activities.reduce((s, a) => s + a.count, 0),
       Activities: c.activities.map(a => `${a.name} (${a.count})`).join(', '),
       Localities: c.localities.map(l => `${l.name} (${l.count})`).join(', '),
       Questionnaires: c.count,
       '%': c.percentage.toFixed(1) + '%',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(collRows), 'By Collector');
+
+    const usedSheetNames = new Set<string>();
+    collectorDetails.forEach((c, ci) => {
+      const detailRows: any[] = [];
+      detailRows.push({ Section: 'COLLECTOR INFO', Field: 'Name', Value: c.name });
+      detailRows.push({ Section: '', Field: 'Device ID', Value: c.deviceId || '-' });
+      detailRows.push({ Section: '', Field: 'Hub(s)', Value: c.hubs.join(', ') });
+      detailRows.push({ Section: '', Field: 'State(s)', Value: c.states.join(', ') });
+      detailRows.push({ Section: '', Field: 'Total Questionnaires', Value: c.count });
+      detailRows.push({ Section: '', Field: 'Percentage', Value: c.percentage.toFixed(1) + '%' });
+      detailRows.push({ Section: '' });
+      detailRows.push({ Section: 'ACTIVITIES', Field: 'Activity', Value: 'Count' });
+      c.activities.forEach(a => detailRows.push({ Section: '', Field: a.name, Value: a.count }));
+      detailRows.push({ Section: '', Field: 'Total', Value: c.activities.reduce((s, a) => s + a.count, 0) });
+      detailRows.push({ Section: '' });
+      detailRows.push({ Section: 'LOCALITIES', Field: 'Locality', Value: 'Count' });
+      c.localities.forEach(l => detailRows.push({ Section: '', Field: l.name, Value: l.count }));
+      let sheetName = `DC-${c.name}`.replace(/[\\/*?[\]:]/g, '').slice(0, 28);
+      if (usedSheetNames.has(sheetName)) sheetName = `${sheetName.slice(0, 25)}-${ci + 1}`;
+      usedSheetNames.add(sheetName);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailRows), sheetName.slice(0, 31));
+    });
 
     const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors, hubTrackers, stateTrackers } = trackerData;
     const trackerRows: any[] = [];
@@ -721,8 +748,27 @@ const QuestionnaireAnalytics = () => {
     addSection('By Activity', ['Activity', 'Sites', 'Questionnaires', '%'],
       activityBreakdown.map(a => [a.name, String(a.siteCount), String(a.questionnaireCount), a.percentage.toFixed(1) + '%']));
 
-    addSection('By Data Collector', ['#', 'Device ID', 'Collector', 'Activities', 'Questionnaires', '%'],
-      collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.activities.map(a => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']));
+    addSection('By Data Collector', ['#', 'Device ID', 'Collector', 'Hub', 'State', 'Activities', 'Total', 'Q', '%'],
+      collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), c.activities.map(a => a.name).join(', '), String(c.activities.reduce((s, a) => s + a.count, 0)), String(c.count), c.percentage.toFixed(1) + '%']));
+
+    collectorDetails.forEach(c => {
+      doc.addPage();
+      y = 15;
+      doc.setFontSize(14);
+      doc.setTextColor(33, 33, 33);
+      doc.text(`Collector: ${c.name}`, 14, y);
+      y += 8;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Device ID: ${c.deviceId || '-'} | Hub: ${c.hubs.join(', ')} | State: ${c.states.join(', ')} | Questionnaires: ${c.count} (${c.percentage.toFixed(1)}%)`, 14, y);
+      y += 10;
+
+      addSection('Activities Breakdown', ['Activity', 'Count'],
+        [...c.activities.map(a => [a.name, String(a.count)]), ['Total', String(c.activities.reduce((s, a) => s + a.count, 0))]]);
+
+      addSection('Localities Breakdown', ['Locality', 'Count'],
+        c.localities.map(l => [l.name, String(l.count)]));
+    });
 
     const { hubs: tHubs, matrix: tMatrix, hubTotals: tHubTotals, grandQ: tGrandQ, grandSites: tGrandSites, grandCollectors: tGrandCollectors, hubTrackers: tHubTrackers, stateTrackers: tStateTrackers } = trackerData;
 
@@ -870,6 +916,52 @@ const QuestionnaireAnalytics = () => {
     XLSX.writeFile(wb, 'tracker_report.xlsx');
   }, [trackerData]);
 
+  const exportCollectorPdf = useCallback((collector: CollectorDetail) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    let y = 15;
+    doc.setFontSize(16);
+    doc.setTextColor(33, 33, 33);
+    doc.text(`Data Collector Report: ${collector.name}`, 14, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Device ID: ${collector.deviceId || '-'}`, 14, y);
+    y += 6;
+    doc.text(`Hub(s): ${collector.hubs.join(', ')} | State(s): ${collector.states.join(', ')}`, 14, y);
+    y += 6;
+    doc.text(`Total Questionnaires: ${collector.count} (${collector.percentage.toFixed(1)}%)`, 14, y);
+    y += 10;
+
+    const addTable = (title: string, headers: string[], rows: string[][]) => {
+      if (y > 250) { doc.addPage(); y = 15; }
+      doc.setFontSize(12);
+      doc.setTextColor(33, 33, 33);
+      doc.text(title, 14, y);
+      y += 2;
+      autoTable(doc, {
+        head: [headers],
+        body: rows,
+        startY: y,
+        margin: { left: 14, right: 14 },
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        didDrawPage: () => { y = 15; },
+      });
+      y = (doc as any).lastAutoTable.finalY + 12;
+    };
+
+    addTable('Activities Breakdown', ['#', 'Activity', 'Count'],
+      [...collector.activities.map((a, i) => [String(i + 1), a.name, String(a.count)]),
+       ['', 'Total', String(collector.activities.reduce((s, a) => s + a.count, 0))]]);
+
+    addTable('Localities Breakdown', ['#', 'Locality', 'Count'],
+      collector.localities.map((l, i) => [String(i + 1), l.name, String(l.count)]));
+
+    const safeName = collector.name.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_').slice(0, 30);
+    doc.save(`collector_${safeName}.pdf`);
+  }, []);
+
   const SummaryTableWithSites = ({ items, label, icon: Icon }: { items: SummaryWithSites[]; label: string; icon: React.ElementType }) => (
     <Card>
       <CardHeader className="pb-3">
@@ -967,7 +1059,11 @@ const QuestionnaireAnalytics = () => {
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={exportToPdf} data-testid="button-export-pdf">
                     <FileDown className="h-4 w-4 mr-2" />
-                    Export All to PDF
+                    Export Full PDF (with Collector Details)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportTrackerToExcel} data-testid="button-export-tracker-menu">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Export Tracker to Excel
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1680,7 +1776,7 @@ const QuestionnaireAnalytics = () => {
                               {item.deviceId && <span className="text-xs text-muted-foreground font-mono">{item.deviceId}</span>}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
                             <Badge variant="outline" className="text-xs">{item.activities.length} activities</Badge>
                             <Badge variant="outline" className="text-xs">{item.localities.length} localities</Badge>
                             <Badge variant="secondary" className="font-mono">{item.count}</Badge>
@@ -1692,7 +1788,10 @@ const QuestionnaireAnalytics = () => {
                           <div className="border-t px-3 pb-3 space-y-3 mt-0">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                               <div>
-                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><Activity className="h-3 w-3" /> ACTIVITIES</h4>
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                                  <Activity className="h-3 w-3" /> ACTIVITIES
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1">{item.activities.reduce((s, a) => s + a.count, 0)} total</Badge>
+                                </h4>
                                 <div className="space-y-1">
                                   {item.activities.map(a => (
                                     <div key={a.name} className="flex items-center justify-between text-sm px-2 py-1 bg-muted/30 rounded">
@@ -1714,14 +1813,30 @@ const QuestionnaireAnalytics = () => {
                                 </div>
                               </div>
                             </div>
-                            {item.hubs.length > 0 && (
-                              <div>
-                                <h4 className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1"><Building2 className="h-3 w-3" /> HUBS</h4>
-                                <div className="flex flex-wrap gap-1">
-                                  {item.hubs.map(h => <Badge key={h} variant="outline" className="text-xs">{h}</Badge>)}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {item.hubs.length > 0 && (
+                                <div>
+                                  <h4 className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1"><Building2 className="h-3 w-3" /> HUBS</h4>
+                                  <div className="flex flex-wrap gap-1">
+                                    {item.hubs.map(h => <Badge key={h} variant="outline" className="text-xs">{h}</Badge>)}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
+                              {item.states.length > 0 && (
+                                <div>
+                                  <h4 className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1"><Globe className="h-3 w-3" /> STATES</h4>
+                                  <div className="flex flex-wrap gap-1">
+                                    {item.states.map(s => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex justify-end pt-1">
+                              <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => exportCollectorPdf(item)} data-testid={`button-export-collector-pdf-${i}`}>
+                                <FileDown className="h-3 w-3" />
+                                Export PDF
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
