@@ -177,27 +177,36 @@ export function styledAutoTable(
   }
 ) {
   const opts = options || {};
+  const fs = opts.fontSize || 8;
   autoTable(doc, {
     head,
     body,
     startY,
     margin: opts.margin || { left: 14, right: 14 },
     styles: {
-      fontSize: opts.fontSize || 8,
-      cellPadding: 2.5,
+      fontSize: fs,
+      cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
       lineColor: [200, 205, 215],
       lineWidth: 0.2,
       textColor: C.body,
+      overflow: 'linebreak',
+      halign: 'left',
     },
     headStyles: {
       fillColor: C.navy,
       textColor: C.white,
       fontStyle: 'bold',
-      fontSize: (opts.fontSize || 8) - 0.5,
-      cellPadding: 3,
+      fontSize: fs,
+      cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 },
+      halign: 'center',
     },
     alternateRowStyles: { fillColor: C.bgLight },
-    columnStyles: opts.columnStyles,
+    columnStyles: {
+      0: { halign: 'left', fontStyle: 'bold', ...(opts.columnStyles?.[0] || {}) },
+      ...Object.fromEntries(
+        head[0].slice(1).map((_, i) => [i + 1, { halign: 'center', overflow: 'visible' as const, ...(opts.columnStyles?.[i + 1] || {}) }])
+      ),
+    },
     didParseCell: (data: any) => {
       if (opts.boldLastRow && data.row.index === body.length - 1 && data.section === 'body') {
         data.cell.styles.fontStyle = 'bold';
