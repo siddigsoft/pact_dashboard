@@ -83,6 +83,7 @@
     "date-fns": "^3.6.0",
     "docx": "^9.5.1",
     "embla-carousel-react": "^8.3.0",
+    "exceljs": "^4.4.0",
     "face-api.js": "^0.22.2",
     "file-saver": "^2.0.5",
     "firebase": "^11.10.0",
