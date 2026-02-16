@@ -177,7 +177,8 @@ const ReviewAssignCoordinators: React.FC = () => {
     };
 
     loadData();
-  }, [id, navigate, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // Convert Set to sorted array for stable dependency comparison
   const forwardedSiteIdsArray = useMemo(() => {
