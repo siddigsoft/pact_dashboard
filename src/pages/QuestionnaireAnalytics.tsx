@@ -813,146 +813,152 @@ const QuestionnaireAnalytics = () => {
     XLSX.writeFile(wb, 'questionnaire_analytics.xlsx');
   }, [hubSummary, stateSummary, localitySummary, siteSummary, activityBreakdown, collectorDetails, trackerData]);
 
-  const exportToPdf = useCallback(() => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-    const margin = 14;
-    let y = 15;
+  const exportToPdf = useCallback(async () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    let y = await drawPdfHeader(doc, 'Questionnaire Analytics Report', 'تقرير تحليل الاستبيانات',
+      `Total: ${filteredData.length} Questionnaires  |  ${new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size} Sites`);
+    const hasArabic = await loadArabicFont(doc);
 
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text('PACT Command Center', margin, y);
-    doc.text(`Generated: ${format(new Date(), 'PPP')}`, pageWidth - margin - 55, y);
-    y += 10;
+    const totalQ = filteredData.length;
+    const totalSites = new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size;
 
-    doc.setFontSize(18);
-    doc.setTextColor(0);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Questionnaire Analytics Report', margin, y);
-    y += 8;
+    const hubRows = hubSummary.map((h, i) => [String(i + 1), h.name, String(h.sites), String(h.questionnaires), h.percentage.toFixed(1) + '%']);
+    hubRows.push(['', 'Total', String(totalSites), String(totalQ), '100%']);
+    y = styledAutoTable(doc, [['#', 'Hub', 'Sites', 'Questionnaires', '%']], hubRows, y - 2, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+    y += 4;
 
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(80);
-    doc.text(`Total Questionnaires: ${filteredData.length} | Sites: ${new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size}`, margin, y);
-    y += 12;
+    if (y > 220) { doc.addPage(); addPageHeader(doc, 'By State'); y = 18; }
+    doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('By State', 14, y); y += 3;
+    const stateRows = stateSummary.map((s, i) => [String(i + 1), s.name, String(s.sites), String(s.questionnaires), s.percentage.toFixed(1) + '%']);
+    stateRows.push(['', 'Total', String(totalSites), String(totalQ), '100%']);
+    y = styledAutoTable(doc, [['#', 'State', 'Sites', 'Questionnaires', '%']], stateRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+    y += 4;
 
-    const addSection = (title: string, headers: string[], rows: string[][]) => {
-      if (y > doc.internal.pageSize.height - 40) { doc.addPage(); y = 15; }
-      doc.setFontSize(13);
-      doc.setTextColor(0);
-      doc.setFont('helvetica', 'bold');
-      doc.text(title, margin, y);
-      y += 2;
-      autoTable(doc, {
-        startY: y, head: [headers], body: rows,
-        margin: { left: margin, right: margin },
-        styles: { fontSize: 8, cellPadding: 2 },
-        headStyles: { fillColor: [41, 98, 255], textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
-        didDrawPage: () => { y = 15; },
-      });
-      y = (doc as any).lastAutoTable.finalY + 12;
-    };
+    if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Locality'); y = 18; }
+    doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('By Locality', 14, y); y += 3;
+    const locRows = localitySummary.map((l, i) => [String(i + 1), l.name, String(l.sites), String(l.questionnaires), l.percentage.toFixed(1) + '%']);
+    locRows.push(['', 'Total', String(totalSites), String(totalQ), '100%']);
+    y = styledAutoTable(doc, [['#', 'Locality', 'Sites', 'Questionnaires', '%']], locRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+    y += 4;
 
-    addSection('By Hub', ['#', 'Hub', 'Sites', 'Questionnaires', '%'],
-      hubSummary.map((h, i) => [String(i + 1), h.name, String(h.sites), String(h.questionnaires), h.percentage.toFixed(1) + '%']));
+    if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Activity'); y = 18; }
+    doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('By Activity', 14, y); y += 3;
+    const pdmSitesTotal = activityBreakdown.reduce((s, a) => s + (isPdmActivity(a.name) ? Math.ceil(a.questionnaireCount / 7) : 0), 0);
+    const actRows = activityBreakdown.map(a => [a.name, String(a.siteCount), String(a.questionnaireCount), isPdmActivity(a.name) ? String(Math.ceil(a.questionnaireCount / 7)) : '-', a.percentage.toFixed(1) + '%']);
+    actRows.push(['Total', String(totalSites), String(totalQ), pdmSitesTotal > 0 ? String(pdmSitesTotal) : '-', '100%']);
+    y = styledAutoTable(doc, [['Activity', 'Sites', 'Questionnaires', 'PDM Sites', '%']], actRows, y, { fontSize: 9, boldLastRow: true, columnStyles: { 0: { cellWidth: 65 } }, useArabicFont: hasArabic });
+    y += 4;
 
-    addSection('By State', ['#', 'State', 'Sites', 'Questionnaires', '%'],
-      stateSummary.map((s, i) => [String(i + 1), s.name, String(s.sites), String(s.questionnaires), s.percentage.toFixed(1) + '%']));
-
-    addSection('By Locality', ['#', 'Locality', 'Sites', 'Questionnaires', '%'],
-      localitySummary.map((l, i) => [String(i + 1), l.name, String(l.sites), String(l.questionnaires), l.percentage.toFixed(1) + '%']));
-
-    addSection('By Activity', ['Activity', 'Sites', 'Questionnaires', '%'],
-      activityBreakdown.map(a => [a.name, String(a.siteCount), String(a.questionnaireCount), a.percentage.toFixed(1) + '%']));
-
-    addSection('By Data Collector', ['#', 'Device ID', 'Collector', 'Variants', 'Hub', 'State', 'Activities', 'Total', 'Q', '%'],
-      collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.nameVariants.length > 0 ? c.nameVariants.map(v => v.name).join(', ') : '', c.hubs.join(', '), c.states.join(', '), c.activities.map(a => a.name).join(', '), String(c.activities.reduce((s, a) => s + a.count, 0)), String(c.count), c.percentage.toFixed(1) + '%']));
+    if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Data Collector'); y = 18; }
+    doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('By Data Collector', 14, y); y += 3;
+    const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
+    dcRows.push(['', '', 'Total', '', '', '', String(totalQ), '100%']);
+    y = styledAutoTable(doc, [['#', 'Device ID', 'Collector', 'Hub', 'State', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 7, boldLastRow: true, useArabicFont: hasArabic });
+    y += 4;
 
     collectorDetails.forEach(c => {
       doc.addPage();
-      y = 15;
-      doc.setFontSize(14);
-      doc.setTextColor(33, 33, 33);
-      doc.text(`Collector: ${c.name}`, 14, y);
-      y += 8;
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Device ID: ${c.deviceId || '-'} | Hub: ${c.hubs.join(', ')} | State: ${c.states.join(', ')} | Questionnaires: ${c.count} (${c.percentage.toFixed(1)}%)`, 14, y);
-      y += 8;
+      addPageHeader(doc, 'Data Collector Report');
+      y = 18;
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('Collector:', 14, y);
+      if (hasArabic) { doc.setFont('Amiri', 'normal'); }
+      doc.text(c.name, 42, y);
+      doc.setFont('helvetica', 'normal');
+      y += 5;
+      doc.setFontSize(9); doc.setTextColor(90, 95, 110);
+      doc.text(`Device ID: ${c.deviceId || '-'}  |  Hub: ${c.hubs.join(', ')}  |  State: ${c.states.join(', ')}  |  ${c.count} Q (${c.percentage.toFixed(1)}%)`, 14, y);
+      y += 6;
       if (c.nameVariants.length > 0) {
-        doc.setFontSize(9);
-        doc.setTextColor(180, 120, 0);
-        doc.text(`Name Variants: ${c.nameVariants.map(v => `${v.name} (${v.count})`).join(', ')}`, 14, y);
-        y += 8;
-      } else {
-        y += 2;
+        doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text(`Name Variants (${c.nameVariants.length + 1})`, 14, y); y += 3;
+        const vRows = c.nameVariants.map((v: any, i: number) => [String(i + 1), v.name, String(v.count)]);
+        vRows.unshift(['Primary', c.name, String(c.count - c.nameVariants.reduce((s: number, v: any) => s + v.count, 0))]);
+        y = styledAutoTable(doc, [['#', 'Name', 'Count']], vRows, y, { fontSize: 8, useArabicFont: hasArabic });
+        y += 4;
       }
-
-      addSection('Activities Breakdown', ['Activity', 'Count'],
-        [...c.activities.map(a => [a.name, String(a.count)]), ['Total', String(c.activities.reduce((s, a) => s + a.count, 0))]]);
-
-      addSection('Localities Breakdown', ['Locality', 'Count'],
-        c.localities.map(l => [l.name, String(l.count)]));
+      doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('Activities', 14, y); y += 3;
+      const caRows = c.activities.map((a: any, i: number) => [String(i + 1), a.name, String(a.count)]);
+      caRows.push(['', 'Total', String(c.count)]);
+      y = styledAutoTable(doc, [['#', 'Activity', 'Count']], caRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+      y += 4;
+      if (y > 240) { doc.addPage(); addPageHeader(doc, 'Data Collector Report'); y = 18; }
+      doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('Localities', 14, y); y += 3;
+      const clRows = c.localities.map((l: any, i: number) => [String(i + 1), l.name, String(l.count)]);
+      clRows.push(['', 'Total', String(c.count)]);
+      y = styledAutoTable(doc, [['#', 'Locality', 'Count']], clRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
     });
 
     const { hubs: tHubs, matrix: tMatrix, hubTotals: tHubTotals, grandQ: tGrandQ, grandSites: tGrandSites, grandCollectors: tGrandCollectors, hubTrackers: tHubTrackers, stateTrackers: tStateTrackers } = trackerData;
 
     if (tHubs.length > 0 && tMatrix.length > 0) {
-      const tHeaders = ['Activity'];
-      tHubs.forEach(h => { tHeaders.push(`${h} Sites`, `${h} Actual`, `${h} PDM Sites`, `${h} DC`); });
-      tHeaders.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
-      const tRows = tMatrix.map(row => {
-        const r = [row.activity];
-        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(isPdmActivity(row.activity) && c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
-        r.push(String(row.totalSites), String(row.totalQ), String(isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0), String(row.totalCollectors));
-        return r;
+      doc.addPage(); addPageHeader(doc, 'Tracker - Activity by Hub'); y = 18;
+      doc.setFontSize(13); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('Tracker — Activity by Hub', 14, y); y += 6;
+
+      tHubs.forEach((hub: string, hi: number) => {
+        if (y > 220) { doc.addPage(); addPageHeader(doc, 'Activity by Hub'); y = 18; }
+        doc.setFontSize(11); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text(hub, 14, y); y += 3;
+        const aRows = tMatrix.filter(row => row.cells[hi].questionnaires > 0 || row.cells[hi].sites > 0).map(row => [
+          row.activity, String(row.cells[hi].sites || '-'), String(row.cells[hi].questionnaires || '-'),
+          isPdmActivity(row.activity) && row.cells[hi].questionnaires ? String(Math.ceil(row.cells[hi].questionnaires / 7)) : '-',
+          String(row.cells[hi].collectors || '-'),
+        ]);
+        const hubPdm = tMatrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0) : 0), 0);
+        aRows.push(['Total', String(tHubTotals[hi].sites), String(tHubTotals[hi].questionnaires), hubPdm ? String(hubPdm) : '-', String(tHubTotals[hi].collectors)]);
+        y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], aRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
+        y += 6;
       });
-      const tTotalRow = ['Grand Total'];
-      tHubTotals.forEach((ht, idx) => { const pdmSitesCol = tMatrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[idx].questionnaires ? Math.ceil(r.cells[idx].questionnaires / 7) : 0) : r.cells[idx].questionnaires), 0); tTotalRow.push(String(ht.sites), String(ht.questionnaires), String(pdmSitesCol || 0), String(ht.collectors)); });
-      const pdmSitesGrandPdf = tMatrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
-      tTotalRow.push(String(tGrandSites), String(tGrandQ), String(pdmSitesGrandPdf || 0), String(tGrandCollectors));
-      tRows.push(tTotalRow);
-      addSection('Tracker - Activity x Hub', tHeaders, tRows);
     }
 
     tHubTrackers.forEach(ht => {
-      const headers = ['Activity'];
-      ht.states.forEach(st => { headers.push(`${st} Sites`, `${st} Actual`, `${st} PDM Sites`, `${st} DC`); });
-      headers.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
-      const rows = ht.matrix.map(row => {
-        const r = [row.activity];
-        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(isPdmActivity(row.activity) && c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
-        r.push(String(row.totalSites), String(row.totalQ), String(isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0), String(row.totalCollectors));
-        return r;
+      doc.addPage(); addPageHeader(doc, `Hub: ${ht.hub}`); y = 18;
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text(`${ht.hub} — by State`, 14, y); y += 5;
+      ht.states.forEach((st: string, si: number) => {
+        if (y > 240) { doc.addPage(); addPageHeader(doc, `Hub: ${ht.hub}`); y = 18; }
+        doc.setFontSize(10); doc.setTextColor(41, 98, 255); doc.setFont('helvetica', 'bold');
+        doc.text(`State: ${st}`, 18, y); y += 3;
+        const sRows = ht.matrix.filter(row => row.cells[si].questionnaires > 0 || row.cells[si].sites > 0).map(row => [
+          row.activity, String(row.cells[si].sites || '-'), String(row.cells[si].questionnaires || '-'),
+          isPdmActivity(row.activity) && row.cells[si].questionnaires ? String(Math.ceil(row.cells[si].questionnaires / 7)) : '-',
+          String(row.cells[si].collectors || '-'),
+        ]);
+        const colPdm = ht.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[si].questionnaires ? Math.ceil(r.cells[si].questionnaires / 7) : 0) : 0), 0);
+        sRows.push(['Total', String(ht.colTotals[si].sites), String(ht.colTotals[si].questionnaires), colPdm ? String(colPdm) : '-', String(ht.colTotals[si].collectors)]);
+        y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], sRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
+        y += 5;
       });
-      const totR = ['Total'];
-      ht.colTotals.forEach((ct, ci) => { const pdmSitesCol = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0); totR.push(String(ct.sites), String(ct.questionnaires), String(pdmSitesCol || 0), String(ct.collectors)); });
-      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
-      totR.push(String(ht.grandSites), String(ht.grandQ), String(htPdmSitesGrand || 0), String(ht.grandCollectors));
-      rows.push(totR);
-      addSection(`Hub: ${ht.hub} (Activity x State)`, headers, rows);
     });
 
     tStateTrackers.forEach(st => {
-      const headers = ['Activity'];
-      st.localities.forEach(loc => { headers.push(`${loc} Sites`, `${loc} Actual`, `${loc} PDM Sites`, `${loc} DC`); });
-      headers.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
-      const rows2 = st.matrix.map(row => {
-        const r = [row.activity];
-        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(isPdmActivity(row.activity) && c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
-        r.push(String(row.totalSites), String(row.totalQ), String(isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0), String(row.totalCollectors));
-        return r;
+      doc.addPage(); addPageHeader(doc, `State: ${st.state}`); y = 18;
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text(`${st.state} — by Locality`, 14, y); y += 5;
+      st.localities.forEach((loc: string, li: number) => {
+        if (y > 240) { doc.addPage(); addPageHeader(doc, `State: ${st.state}`); y = 18; }
+        doc.setFontSize(10); doc.setTextColor(41, 98, 255); doc.setFont('helvetica', 'bold');
+        doc.text(`Locality: ${loc}`, 18, y); y += 3;
+        const lRows = st.matrix.filter(row => row.cells[li].questionnaires > 0 || row.cells[li].sites > 0).map(row => [
+          row.activity, String(row.cells[li].sites || '-'), String(row.cells[li].questionnaires || '-'),
+          isPdmActivity(row.activity) && row.cells[li].questionnaires ? String(Math.ceil(row.cells[li].questionnaires / 7)) : '-',
+          String(row.cells[li].collectors || '-'),
+        ]);
+        const locPdm = st.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[li].questionnaires ? Math.ceil(r.cells[li].questionnaires / 7) : 0) : 0), 0);
+        lRows.push(['Total', String(st.colTotals[li].sites), String(st.colTotals[li].questionnaires), locPdm ? String(locPdm) : '-', String(st.colTotals[li].collectors)]);
+        y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], lRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
+        y += 5;
       });
-      const totR2 = ['Total'];
-      st.colTotals.forEach((ct, ci) => { const pdmSitesCol = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0); totR2.push(String(ct.sites), String(ct.questionnaires), String(pdmSitesCol || 0), String(ct.collectors)); });
-      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
-      totR2.push(String(st.grandSites), String(st.grandQ), String(stPdmSitesGrand || 0), String(st.grandCollectors));
-      rows2.push(totR2);
-      addSection(`State: ${st.state} (Activity x Locality)`, headers, rows2);
     });
 
+    addAllFooters(doc);
     doc.save('questionnaire_analytics.pdf');
   }, [filteredData, hubSummary, stateSummary, localitySummary, activityBreakdown, collectorDetails, trackerData]);
 
