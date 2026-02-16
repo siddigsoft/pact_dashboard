@@ -5440,11 +5440,14 @@ const MMP = () => {
                             Sent
                             <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').toLowerCase();
-                                // Only count completed sites that are NOT in unsynced list (synced completed)
+                                const status = (site.status || '').toLowerCase().trim();
+                                const normalizedStatus = status.replace(/[-_\s]/g, '');
+                                const inboxStatuses = new Set(['claimed', 'accepted', 'acknowledged', 'costandacknowledged']);
+                                const draftStatuses = new Set(['in progress', 'ongoing', 'inprogress', 'in_progress']);
+                                if (inboxStatuses.has(normalizedStatus)) return false;
+                                if (draftStatuses.has(normalizedStatus)) return false;
                                 const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
                                 if (!isCompleted) return false;
-                                // Exclude sites that are still unsynced in offline DB
                                 const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
                                 return !isUnsynced;
                               }).length}
@@ -5695,9 +5698,16 @@ const MMP = () => {
                           // Outbox: Show completed visits that are not yet synced (from offline DB)
                           sitesToShow = unsyncedCompletedVisits;
                         } else {
-                          // Sent: Show completed visits that are synced (from DB, excluding unsynced offline visits)
+                          // Sent: Show ONLY completed visits that are synced (from DB, excluding unsynced offline visits)
+                          // Must strictly exclude sites with non-completed statuses (accepted, claimed, in progress, etc.)
+                          const inboxStatuses = new Set(['claimed', 'accepted', 'acknowledged', 'costandacknowledged']);
+                          const draftStatuses = new Set(['in progress', 'ongoing', 'inprogress', 'in_progress']);
                           sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').toLowerCase();
+                            const status = (site.status || '').toLowerCase().trim();
+                            const normalizedStatus = status.replace(/[-_\s]/g, '');
+                            // Explicitly exclude sites that belong to Inbox or Drafts tabs
+                            if (inboxStatuses.has(normalizedStatus)) return false;
+                            if (draftStatuses.has(normalizedStatus)) return false;
                             const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
                             if (!isCompleted) return false;
                             // Exclude sites that are still unsynced in offline DB
@@ -5728,6 +5738,7 @@ const MMP = () => {
                         </Card>
                       ) : (
                         <MMPSiteEntriesTable 
+                          key={`enumerator-${enumeratorSubTab}-${mySitesSubTab}`}
                           siteEntries={sitesToShow} 
                           editable={enumeratorSubTab === 'mySites' && mySitesSubTab !== 'completed'}
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
