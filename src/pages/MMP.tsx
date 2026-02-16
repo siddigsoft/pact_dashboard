@@ -3806,25 +3806,58 @@ const MMP = () => {
     );
   }, [precomputedSubcategorySites]);
 
-  // Use precomputed count for newSites badge
-  const newSitesVerifiedCount = precomputedSubcategorySites.newSites.length;
+  const filterSubcategoryRows = useCallback((rows: any[]) => {
+    if (!hasActiveGlobalFilters) return rows;
+    return rows.filter(entry => {
+      if (siteMmpFilter !== 'all') {
+        const entryMmpId = entry.mmpId || entry.mmp_file_id || '';
+        if (entryMmpId !== siteMmpFilter) return false;
+      }
+      if (siteStatusFilter !== 'all') {
+        const status = entry.status || '';
+        if (status.toLowerCase() !== siteStatusFilter.toLowerCase()) return false;
+      }
+      if (siteHubFilter !== 'all') {
+        const hub = entry.hub || entry.hubName || entry.hubOffice || entry.hub_office || '';
+        if (hub !== siteHubFilter) return false;
+      }
+      if (siteStateFilter !== 'all') {
+        const state = entry.state || entry.stateName || '';
+        if (state !== siteStateFilter) return false;
+      }
+      if (siteLocalityFilter !== 'all') {
+        const locality = entry.locality || entry.localityName || '';
+        if (locality !== siteLocalityFilter) return false;
+      }
+      return true;
+    });
+  }, [hasActiveGlobalFilters, siteMmpFilter, siteStatusFilter, siteHubFilter, siteStateFilter, siteLocalityFilter]);
 
-  const verifiedTabSiteEntryCounts = useMemo(() => ({
-    verified: precomputedSubcategorySites.newSites.length,
-    dispatched: dispatchedCount > 0 || dispatchedSiteEntries.length > 0 
-      ? (dispatchedCount || dispatchedSiteEntries.length) 
-      : precomputedSubcategorySites.dispatched.length,
-    accepted: acceptedCount > 0 || acceptedSiteEntries.length > 0
-      ? (acceptedCount || acceptedSiteEntries.length)
-      : precomputedSubcategorySites.accepted.length,
-    smartAssigned: precomputedSubcategorySites.smartAssigned.length,
-    ongoing: precomputedSubcategorySites.ongoing.length,
-    completed: precomputedSubcategorySites.completed.length,
-    rejected: precomputedSubcategorySites.rejected.length,
-    approvedCosted: approvedCostedCount > 0 || approvedCostedSiteEntries.length > 0
-      ? (approvedCostedCount || approvedCostedSiteEntries.length)
-      : precomputedSubcategorySites.approvedCosted.length
-  }), [precomputedSubcategorySites, dispatchedCount, dispatchedSiteEntries.length, acceptedCount, acceptedSiteEntries.length, approvedCostedCount, approvedCostedSiteEntries.length]);
+  const newSitesVerifiedCount = useMemo(() => 
+    filterSubcategoryRows(precomputedSubcategorySites.newSites).length,
+  [precomputedSubcategorySites.newSites, filterSubcategoryRows]);
+
+  const verifiedTabSiteEntryCounts = useMemo(() => {
+    const filteredDispatched = filterSubcategoryRows(
+      dispatchedSiteEntries.length > 0 ? dispatchedSiteEntries : precomputedSubcategorySites.dispatched
+    );
+    const filteredAccepted = filterSubcategoryRows(
+      acceptedSiteEntries.length > 0 ? acceptedSiteEntries : precomputedSubcategorySites.accepted
+    );
+    const filteredApprovedCosted = filterSubcategoryRows(
+      approvedCostedSiteEntries.length > 0 ? approvedCostedSiteEntries : precomputedSubcategorySites.approvedCosted
+    );
+    return {
+      verified: filterSubcategoryRows(precomputedSubcategorySites.newSites).length,
+      dispatched: filteredDispatched.length,
+      accepted: filteredAccepted.length,
+      smartAssigned: filterSubcategoryRows(precomputedSubcategorySites.smartAssigned).length,
+      ongoing: filterSubcategoryRows(precomputedSubcategorySites.ongoing).length,
+      completed: filterSubcategoryRows(precomputedSubcategorySites.completed).length,
+      rejected: filterSubcategoryRows(precomputedSubcategorySites.rejected).length,
+      approvedCosted: filteredApprovedCosted.length,
+    };
+  }, [precomputedSubcategorySites, dispatchedSiteEntries, acceptedSiteEntries, approvedCostedSiteEntries, filterSubcategoryRows]);
 
   // Verified site rows per subcategory (all roles seeing Verified tab)
   // Uses precomputed data for consistency with badge counts
