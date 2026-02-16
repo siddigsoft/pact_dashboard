@@ -483,7 +483,14 @@ const MMPSiteEntriesTable = ({
                       <div className="flex-1 space-y-2">
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <h3 className="font-semibold text-lg">{row.siteName || 'Unnamed Site'}</h3>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-semibold text-lg">{row.siteName || 'Unnamed Site'}</h3>
+                              {row.mmpName && row.mmpName !== '—' && (
+                                <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-300">
+                                  {row.mmpName}
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-sm text-muted-foreground">{row.siteCode || '—'} • {row.state || '—'}, {row.locality || '—'}</p>
                           </div>
                           {(() => {
