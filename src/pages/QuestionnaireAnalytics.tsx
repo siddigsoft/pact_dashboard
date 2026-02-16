@@ -33,6 +33,15 @@ interface SummaryItem {
   children?: SummaryItem[];
 }
 
+interface ActivitySiteItem {
+  name: string;
+  siteCount: number;
+  questionnaireCount: number;
+  percentage: number;
+  sites: { name: string; count: number; percentage: number }[];
+  children?: SummaryItem[];
+}
+
 const COLUMN_MAP = {
   hub: 16,
   state: 17,
@@ -156,7 +165,34 @@ const QuestionnaireAnalytics = () => {
   const hubSummary = useMemo(() => buildSummary(filteredData, 'hub'), [filteredData, buildSummary]);
   const stateSummary = useMemo(() => buildSummary(filteredData, 'state'), [filteredData, buildSummary]);
   const localitySummary = useMemo(() => buildSummary(filteredData, 'locality'), [filteredData, buildSummary]);
-  const activitySummary = useMemo(() => buildNestedSummary(filteredData, 'activity', 'subActivity'), [filteredData, buildNestedSummary]);
+  const activitySubSummary = useMemo(() => buildNestedSummary(filteredData, 'activity', 'subActivity'), [filteredData, buildNestedSummary]);
+
+  const activitySummary = useMemo((): ActivitySiteItem[] => {
+    const actMap = new Map<string, Map<string, number>>();
+    filteredData.forEach(row => {
+      const act = row.activity || '(Empty)';
+      const site = row.activitySite || '(Empty)';
+      if (!actMap.has(act)) actMap.set(act, new Map());
+      const siteMap = actMap.get(act)!;
+      siteMap.set(site, (siteMap.get(site) || 0) + 1);
+    });
+    const totalQ = filteredData.length;
+    return [...actMap.entries()]
+      .map(([name, siteMap]) => {
+        const questionnaireCount = [...siteMap.values()].reduce((a, b) => a + b, 0);
+        const sites = [...siteMap.entries()]
+          .map(([siteName, count]) => ({ name: siteName, count, percentage: questionnaireCount > 0 ? (count / questionnaireCount) * 100 : 0 }))
+          .sort((a, b) => b.count - a.count);
+        return {
+          name,
+          siteCount: siteMap.size,
+          questionnaireCount,
+          percentage: totalQ > 0 ? (questionnaireCount / totalQ) * 100 : 0,
+          sites,
+        };
+      })
+      .sort((a, b) => b.siteCount - a.siteCount);
+  }, [filteredData]);
   const collectorSummary = useMemo(() => buildSummary(filteredData, 'dataCollector'), [filteredData, buildSummary]);
 
   const collectorByHub = useMemo(() => {
@@ -205,13 +241,13 @@ const QuestionnaireAnalytics = () => {
 
     const actRows: any[] = [];
     activitySummary.forEach(a => {
-      actRows.push({ Activity: a.name, 'Sub-Activity': '', 'Total': a.count, 'Percentage': a.percentage.toFixed(1) + '%' });
-      a.children?.forEach(c => {
-        actRows.push({ Activity: '', 'Sub-Activity': c.name, 'Total': c.count, 'Percentage': c.percentage.toFixed(1) + '%' });
+      actRows.push({ 'Activity (PDM)': a.name, 'Site Name': '', 'Sites Count': a.siteCount, 'Questionnaires': a.questionnaireCount, '%': a.percentage.toFixed(1) + '%' });
+      a.sites.forEach(s => {
+        actRows.push({ 'Activity (PDM)': '', 'Site Name': s.name, 'Sites Count': '', 'Questionnaires': s.count, '%': s.percentage.toFixed(1) + '%' });
       });
     });
     const actWs = XLSX.utils.json_to_sheet(actRows);
-    XLSX.utils.book_append_sheet(wb, actWs, 'By Activity');
+    XLSX.utils.book_append_sheet(wb, actWs, 'By Activity (PDM)');
 
     const collData = collectorSummary.map(c => ({ 'Data Collector': c.name, 'Total Questionnaires': c.count, 'Percentage': c.percentage.toFixed(1) + '%' }));
     const collWs = XLSX.utils.json_to_sheet(collData);
@@ -297,14 +333,14 @@ const QuestionnaireAnalytics = () => {
 
     const actRows: string[][] = [];
     activitySummary.forEach(a => {
-      actRows.push([a.name, '', String(a.count), a.percentage.toFixed(1) + '%']);
-      a.children?.forEach(c => {
-        actRows.push(['', '  ' + c.name, String(c.count), c.percentage.toFixed(1) + '%']);
+      actRows.push([a.name, '', String(a.siteCount), String(a.questionnaireCount)]);
+      a.sites.forEach(s => {
+        actRows.push(['', '  ' + s.name, '', String(s.count)]);
       });
     });
     addSection(
-      'Summary by Activity / Sub-Activity',
-      ['Activity', 'Sub-Activity', 'Total', '%'],
+      'Summary by Activity (PDM) - Sites & Questionnaires',
+      ['Activity (PDM)', 'Site Name', 'Sites', 'Questionnaires'],
       actRows
     );
 
@@ -526,7 +562,7 @@ const QuestionnaireAnalytics = () => {
               <TabsTrigger value="hub" data-testid="tab-hub">Hub</TabsTrigger>
               <TabsTrigger value="state" data-testid="tab-state">State</TabsTrigger>
               <TabsTrigger value="locality" data-testid="tab-locality">Locality</TabsTrigger>
-              <TabsTrigger value="activity" data-testid="tab-activity">Activity</TabsTrigger>
+              <TabsTrigger value="activity" data-testid="tab-activity">Activity (PDM)</TabsTrigger>
               <TabsTrigger value="collector" data-testid="tab-collector">Collector</TabsTrigger>
             </TabsList>
 
@@ -539,7 +575,7 @@ const QuestionnaireAnalytics = () => {
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Activity className="h-5 w-5 text-primary" />
-                    By Activity & Sub-Activity
+                    By Activity (PDM)
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -548,9 +584,9 @@ const QuestionnaireAnalytics = () => {
                       <thead>
                         <tr className="border-b bg-muted/50">
                           <th className="text-left py-2 px-3 font-medium w-8"></th>
-                          <th className="text-left py-2 px-3 font-medium">Activity</th>
-                          <th className="text-right py-2 px-3 font-medium">Total</th>
-                          <th className="text-right py-2 px-3 font-medium">%</th>
+                          <th className="text-left py-2 px-3 font-medium">Activity (PDM)</th>
+                          <th className="text-right py-2 px-3 font-medium">Sites</th>
+                          <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -562,23 +598,23 @@ const QuestionnaireAnalytics = () => {
                               data-testid={`row-activity-${item.name}`}
                             >
                               <td className="py-2 px-3">
-                                {item.children && item.children.length > 0 && (
+                                {item.sites.length > 0 && (
                                   expandedRows.has(item.name) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
                                 )}
                               </td>
                               <td className="py-2 px-3 font-medium">{item.name}</td>
-                              <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.count}</Badge></td>
-                              <td className="py-2 px-3 text-right text-muted-foreground">{item.percentage.toFixed(1)}%</td>
+                              <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.siteCount}</Badge></td>
+                              <td className="py-2 px-3 text-right text-muted-foreground">{item.questionnaireCount}</td>
                             </tr>
-                            {expandedRows.has(item.name) && item.children?.map(child => (
-                              <tr key={`${item.name}-${child.name}`} className="border-b bg-muted/20">
+                            {expandedRows.has(item.name) && item.sites.map(site => (
+                              <tr key={`${item.name}-${site.name}`} className="border-b bg-muted/20">
                                 <td className="py-1.5 px-3" />
                                 <td className="py-1.5 px-3 pl-8 text-muted-foreground flex items-center gap-2">
-                                  <Layers className="h-3 w-3" />
-                                  {child.name}
+                                  <MapPin className="h-3 w-3" />
+                                  {site.name}
                                 </td>
-                                <td className="py-1.5 px-3 text-right"><Badge variant="outline" className="font-mono text-xs">{child.count}</Badge></td>
-                                <td className="py-1.5 px-3 text-right text-muted-foreground text-xs">{child.percentage.toFixed(1)}%</td>
+                                <td className="py-1.5 px-3" />
+                                <td className="py-1.5 px-3 text-right"><Badge variant="outline" className="font-mono text-xs">{site.count}</Badge></td>
                               </tr>
                             ))}
                           </Fragment>
@@ -586,8 +622,8 @@ const QuestionnaireAnalytics = () => {
                         <tr className="bg-muted/50 font-semibold">
                           <td className="py-2 px-3" />
                           <td className="py-2 px-3">Total</td>
-                          <td className="py-2 px-3 text-right"><Badge className="font-mono">{activitySummary.reduce((a, b) => a + b.count, 0)}</Badge></td>
-                          <td className="py-2 px-3 text-right">100%</td>
+                          <td className="py-2 px-3 text-right"><Badge className="font-mono">{activitySummary.reduce((a, b) => a + b.siteCount, 0)}</Badge></td>
+                          <td className="py-2 px-3 text-right">{activitySummary.reduce((a, b) => a + b.questionnaireCount, 0)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -613,9 +649,9 @@ const QuestionnaireAnalytics = () => {
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Activity className="h-5 w-5 text-primary" />
-                    By Activity & Sub-Activity
+                    By Activity (PDM) &mdash; Sites & Questionnaires
                   </CardTitle>
-                  <CardDescription>{activitySummary.length} activities found</CardDescription>
+                  <CardDescription>{activitySummary.length} activities, {activitySummary.reduce((a, b) => a + b.siteCount, 0)} total sites</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
@@ -623,9 +659,9 @@ const QuestionnaireAnalytics = () => {
                       <thead>
                         <tr className="border-b bg-muted/50">
                           <th className="text-left py-2 px-3 font-medium w-8"></th>
-                          <th className="text-left py-2 px-3 font-medium">Activity</th>
-                          <th className="text-right py-2 px-3 font-medium">Total</th>
-                          <th className="text-right py-2 px-3 font-medium">%</th>
+                          <th className="text-left py-2 px-3 font-medium">Activity (PDM)</th>
+                          <th className="text-right py-2 px-3 font-medium">Sites</th>
+                          <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
                           <th className="py-2 px-3 font-medium w-32">Distribution</th>
                         </tr>
                       </thead>
@@ -637,31 +673,31 @@ const QuestionnaireAnalytics = () => {
                               onClick={() => toggleExpand(`act-${item.name}`)}
                             >
                               <td className="py-2 px-3">
-                                {item.children && item.children.length > 0 && (
+                                {item.sites.length > 0 && (
                                   expandedRows.has(`act-${item.name}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
                                 )}
                               </td>
                               <td className="py-2 px-3 font-medium">{item.name}</td>
-                              <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.count}</Badge></td>
-                              <td className="py-2 px-3 text-right text-muted-foreground">{item.percentage.toFixed(1)}%</td>
+                              <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.siteCount}</Badge></td>
+                              <td className="py-2 px-3 text-right text-muted-foreground">{item.questionnaireCount}</td>
                               <td className="py-2 px-3">
                                 <div className="w-full bg-muted rounded-full h-2">
                                   <div className="bg-primary rounded-full h-2" style={{ width: `${Math.min(item.percentage, 100)}%` }} />
                                 </div>
                               </td>
                             </tr>
-                            {expandedRows.has(`act-${item.name}`) && item.children?.map(child => (
-                              <tr key={`${item.name}-${child.name}`} className="border-b bg-blue-50/50 dark:bg-blue-900/10">
+                            {expandedRows.has(`act-${item.name}`) && item.sites.map(site => (
+                              <tr key={`${item.name}-${site.name}`} className="border-b bg-blue-50/50 dark:bg-blue-900/10">
                                 <td className="py-1.5 px-3" />
                                 <td className="py-1.5 px-3 pl-8 flex items-center gap-2">
-                                  <Layers className="h-3 w-3 text-blue-500" />
-                                  <span className="text-blue-700 dark:text-blue-300">{child.name}</span>
+                                  <MapPin className="h-3 w-3 text-blue-500" />
+                                  <span className="text-blue-700 dark:text-blue-300">{site.name}</span>
                                 </td>
-                                <td className="py-1.5 px-3 text-right"><Badge variant="outline" className="font-mono text-xs">{child.count}</Badge></td>
-                                <td className="py-1.5 px-3 text-right text-muted-foreground text-xs">{child.percentage.toFixed(1)}%</td>
+                                <td className="py-1.5 px-3" />
+                                <td className="py-1.5 px-3 text-right"><Badge variant="outline" className="font-mono text-xs">{site.count}</Badge></td>
                                 <td className="py-1.5 px-3">
                                   <div className="w-full bg-muted rounded-full h-1.5">
-                                    <div className="bg-blue-400 rounded-full h-1.5" style={{ width: `${Math.min(child.percentage, 100)}%` }} />
+                                    <div className="bg-blue-400 rounded-full h-1.5" style={{ width: `${Math.min(site.percentage, 100)}%` }} />
                                   </div>
                                 </td>
                               </tr>
@@ -671,8 +707,8 @@ const QuestionnaireAnalytics = () => {
                         <tr className="bg-muted/50 font-semibold">
                           <td className="py-2 px-3" />
                           <td className="py-2 px-3">Total</td>
-                          <td className="py-2 px-3 text-right"><Badge className="font-mono">{activitySummary.reduce((a, b) => a + b.count, 0)}</Badge></td>
-                          <td className="py-2 px-3 text-right">100%</td>
+                          <td className="py-2 px-3 text-right"><Badge className="font-mono">{activitySummary.reduce((a, b) => a + b.siteCount, 0)}</Badge></td>
+                          <td className="py-2 px-3 text-right">{activitySummary.reduce((a, b) => a + b.questionnaireCount, 0)}</td>
                           <td />
                         </tr>
                       </tbody>
