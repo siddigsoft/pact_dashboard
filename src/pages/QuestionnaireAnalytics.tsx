@@ -124,6 +124,9 @@ const QuestionnaireAnalytics = () => {
   const [saveName, setSaveName] = useState('');
   const [currentSessionName, setCurrentSessionName] = useState('');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [drillExpandedHubs, setDrillExpandedHubs] = useState<Set<string>>(new Set());
+  const [drillExpandedStates, setDrillExpandedStates] = useState<Set<string>>(new Set());
+  const [drillExpandedActivities, setDrillExpandedActivities] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -1088,47 +1091,121 @@ const QuestionnaireAnalytics = () => {
     doc.save(`collector_${safeName}.pdf`);
   }, []);
 
-  const HubDrilldownTable = () => {
-    const [expandedHubs, setExpandedHubs] = useState<Set<string>>(new Set());
-    const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set());
-    const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
+  const toggleDrillHub = useCallback((hub: string) => {
+    setDrillExpandedHubs(prev => {
+      const n = new Set(prev);
+      if (n.has(hub)) {
+        n.delete(hub);
+        setDrillExpandedStates(sp => { const ns = new Set<string>(); sp.forEach(k => { if (!k.startsWith(`${hub}::`)) ns.add(k); }); return ns; });
+        setDrillExpandedActivities(ap => { const na = new Set<string>(); ap.forEach(k => { if (!k.startsWith(`${hub}::`)) na.add(k); }); return na; });
+      } else {
+        n.add(hub);
+      }
+      return n;
+    });
+  }, []);
+  const toggleDrillState = useCallback((key: string) => {
+    setDrillExpandedStates(prev => {
+      const n = new Set(prev);
+      if (n.has(key)) {
+        n.delete(key);
+        setDrillExpandedActivities(ap => { const na = new Set<string>(); ap.forEach(k => { if (!k.startsWith(`${key}::`)) na.add(k); }); return na; });
+      } else {
+        n.add(key);
+      }
+      return n;
+    });
+  }, []);
+  const toggleDrillActivity = useCallback((key: string) => {
+    setDrillExpandedActivities(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }, []);
 
-    const toggleHub = (hub: string) => {
-      setExpandedHubs(prev => {
-        const n = new Set(prev);
-        if (n.has(hub)) {
-          n.delete(hub);
-          setExpandedStates(sp => { const ns = new Set<string>(); sp.forEach(k => { if (!k.startsWith(`${hub}::`)) ns.add(k); }); return ns; });
-          setExpandedActivities(ap => { const na = new Set<string>(); ap.forEach(k => { if (!k.startsWith(`${hub}::`)) na.add(k); }); return na; });
-        } else {
-          n.add(hub);
-        }
-        return n;
+  const exportHubDrilldownExcel = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    const rows: any[] = [];
+    hubDrilldown.forEach(hub => {
+      rows.push({ Level: 'Hub', Hub: hub.name, State: '', Activity: '', Locality: '', Sites: hub.sites, Questionnaires: hub.questionnaires, '%': hub.percentage.toFixed(1) + '%' });
+      hub.states.forEach(st => {
+        rows.push({ Level: 'State', Hub: hub.name, State: st.name, Activity: '', Locality: '', Sites: st.sites, Questionnaires: st.questionnaires, '%': st.percentage.toFixed(1) + '%' });
+        st.activities.forEach(act => {
+          rows.push({ Level: 'Activity', Hub: hub.name, State: st.name, Activity: act.name, Locality: '', Sites: act.sites, Questionnaires: act.questionnaires, '%': act.percentage.toFixed(1) + '%' });
+          act.localities.forEach(loc => {
+            rows.push({ Level: 'Locality', Hub: hub.name, State: st.name, Activity: act.name, Locality: loc.name, Sites: loc.sites, Questionnaires: loc.questionnaires, '%': loc.percentage.toFixed(1) + '%' });
+          });
+        });
       });
-    };
-    const toggleState = (key: string) => {
-      setExpandedStates(prev => {
-        const n = new Set(prev);
-        if (n.has(key)) {
-          n.delete(key);
-          setExpandedActivities(ap => { const na = new Set<string>(); ap.forEach(k => { if (!k.startsWith(`${key}::`)) na.add(k); }); return na; });
-        } else {
-          n.add(key);
-        }
-        return n;
-      });
-    };
-    const toggleActivity = (key: string) => setExpandedActivities(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Hub Drilldown');
+    XLSX.writeFile(wb, 'hub_drilldown.xlsx');
+  }, [hubDrilldown]);
 
-    return (
+  const exportHubDrilldownPdf = useCallback(() => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    let y = 15;
+    doc.setFontSize(16);
+    doc.setTextColor(33, 33, 33);
+    doc.text('Hub Distribution - Drilldown Report', 14, y);
+    y += 10;
+
+    hubDrilldown.forEach(hub => {
+      if (y > 170) { doc.addPage(); y = 15; }
+      doc.setFontSize(13);
+      doc.setTextColor(33, 33, 33);
+      doc.text(`${hub.name} — ${hub.questionnaires} questionnaires, ${hub.sites} sites (${hub.percentage.toFixed(1)}%)`, 14, y);
+      y += 8;
+
+      hub.states.forEach(st => {
+        if (y > 170) { doc.addPage(); y = 15; }
+        doc.setFontSize(11);
+        doc.setTextColor(60, 60, 180);
+        doc.text(`  State: ${st.name} — ${st.questionnaires} Q, ${st.sites} sites (${st.percentage.toFixed(1)}%)`, 14, y);
+        y += 3;
+
+        const actRows = st.activities.map(act => {
+          const locNames = act.localities.map(l => `${l.name} (${l.questionnaires})`).join(', ');
+          return [act.name, String(act.sites), String(act.questionnaires), act.percentage.toFixed(1) + '%', locNames];
+        });
+        autoTable(doc, {
+          head: [['Activity', 'Sites', 'Q', '%', 'Localities']],
+          body: actRows,
+          startY: y,
+          margin: { left: 20, right: 14 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [245, 247, 250] },
+          columnStyles: { 4: { cellWidth: 80 } },
+        });
+        y = (doc as any).lastAutoTable.finalY + 8;
+      });
+      y += 4;
+    });
+
+    doc.save('hub_drilldown.pdf');
+  }, [hubDrilldown]);
+
+  const hubDrilldownTable = (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Building2 className="h-5 w-5 text-primary" />
-            By Hub
-            <Badge variant="outline" className="text-xs ml-1">Click to drill down</Badge>
-          </CardTitle>
-          <CardDescription>{hubDrilldown.length} unique hubs found — click a hub to see states, then activities, then localities</CardDescription>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Building2 className="h-5 w-5 text-primary" />
+                By Hub
+                <Badge variant="outline" className="text-xs ml-1">Click to drill down</Badge>
+              </CardTitle>
+              <CardDescription>{hubDrilldown.length} unique hubs found — click a hub to see states, then activities, then localities</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={exportHubDrilldownExcel} data-testid="button-export-hub-excel">
+                <Download className="h-4 w-4" />
+                Excel
+              </Button>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={exportHubDrilldownPdf} data-testid="button-export-hub-pdf">
+                <FileDown className="h-4 w-4" />
+                PDF
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -1145,12 +1222,12 @@ const QuestionnaireAnalytics = () => {
               </thead>
               <tbody>
                 {hubDrilldown.map((hub, hi) => {
-                  const hubExpanded = expandedHubs.has(hub.name);
+                  const hubExpanded = drillExpandedHubs.has(hub.name);
                   return (
                     <Fragment key={hub.name}>
                       <tr
                         className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
-                        onClick={() => toggleHub(hub.name)}
+                        onClick={() => toggleDrillHub(hub.name)}
                         data-testid={`row-hub-drill-${hi}`}
                       >
                         <td className="py-2 px-3 text-muted-foreground">{hi + 1}</td>
@@ -1173,12 +1250,12 @@ const QuestionnaireAnalytics = () => {
                       </tr>
                       {hubExpanded && hub.states.map((state, si) => {
                         const stateKey = `${hub.name}::${state.name}`;
-                        const stateExpanded = expandedStates.has(stateKey);
+                        const stateExpanded = drillExpandedStates.has(stateKey);
                         return (
                           <Fragment key={stateKey}>
                             <tr
                               className="border-b hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors cursor-pointer bg-blue-50/30 dark:bg-blue-950/10"
-                              onClick={() => toggleState(stateKey)}
+                              onClick={() => toggleDrillState(stateKey)}
                               data-testid={`row-state-drill-${hi}-${si}`}
                             >
                               <td className="py-2 px-3" />
@@ -1201,12 +1278,12 @@ const QuestionnaireAnalytics = () => {
                             </tr>
                             {stateExpanded && state.activities.map((act, ai) => {
                               const actKey = `${stateKey}::${act.name}`;
-                              const actExpanded = expandedActivities.has(actKey);
+                              const actExpanded = drillExpandedActivities.has(actKey);
                               return (
                                 <Fragment key={actKey}>
                                   <tr
                                     className="border-b hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 transition-colors cursor-pointer bg-emerald-50/30 dark:bg-emerald-950/10"
-                                    onClick={() => toggleActivity(actKey)}
+                                    onClick={() => toggleDrillActivity(actKey)}
                                     data-testid={`row-activity-drill-${hi}-${si}-${ai}`}
                                   >
                                     <td className="py-2 px-3" />
@@ -1271,8 +1348,7 @@ const QuestionnaireAnalytics = () => {
           </div>
         </CardContent>
       </Card>
-    );
-  };
+  );
 
   const SummaryTableWithSites = ({ items, label, icon: Icon }: { items: SummaryWithSites[]; label: string; icon: React.ElementType }) => (
     <Card>
@@ -1829,7 +1905,7 @@ const QuestionnaireAnalytics = () => {
                   </div>
                 </CardContent>
               </Card>
-              <HubDrilldownTable />
+              {hubDrilldownTable}
             </TabsContent>
 
             <TabsContent value="state" className="mt-4 space-y-4">
