@@ -8,11 +8,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 
 interface QuestionnaireRow {
   hub: string;
@@ -66,6 +67,8 @@ interface SavedSession {
   rowCount: number;
   data: QuestionnaireRow[];
 }
+
+const CHART_COLORS = ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#0891b2', '#dc2626', '#ca8a04', '#4f46e5', '#0d9488', '#e11d48', '#7c3aed', '#059669'];
 
 const STORAGE_KEY = 'pact_questionnaire_sessions';
 
@@ -896,20 +899,111 @@ const QuestionnaireAnalytics = () => {
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid grid-cols-4 sm:grid-cols-8 w-full">
-              <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-              <TabsTrigger value="hub" data-testid="tab-hub">Hub</TabsTrigger>
-              <TabsTrigger value="state" data-testid="tab-state">State</TabsTrigger>
-              <TabsTrigger value="locality" data-testid="tab-locality">Locality</TabsTrigger>
-              <TabsTrigger value="sites" data-testid="tab-sites">Sites</TabsTrigger>
-              <TabsTrigger value="activity" data-testid="tab-activity">Activity</TabsTrigger>
-              <TabsTrigger value="collector" data-testid="tab-collector">Collector</TabsTrigger>
-              <TabsTrigger value="tracker" data-testid="tab-tracker">Tracker</TabsTrigger>
+              <TabsTrigger value="overview" data-testid="tab-overview" className="gap-1">
+                <BarChart3 className="h-3 w-3 hidden sm:inline" />Overview
+              </TabsTrigger>
+              <TabsTrigger value="hub" data-testid="tab-hub" className="gap-1">
+                Hub <Badge variant="secondary" className="h-4 px-1 text-[10px] font-mono">{hubSummary.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="state" data-testid="tab-state" className="gap-1">
+                State <Badge variant="secondary" className="h-4 px-1 text-[10px] font-mono">{stateSummary.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="locality" data-testid="tab-locality" className="gap-1">
+                Locality <Badge variant="secondary" className="h-4 px-1 text-[10px] font-mono">{localitySummary.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="sites" data-testid="tab-sites" className="gap-1">
+                Sites <Badge variant="secondary" className="h-4 px-1 text-[10px] font-mono">{siteSummary.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="activity" data-testid="tab-activity" className="gap-1">
+                Activity <Badge variant="secondary" className="h-4 px-1 text-[10px] font-mono">{activityBreakdown.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="collector" data-testid="tab-collector" className="gap-1">
+                Collector <Badge variant="secondary" className="h-4 px-1 text-[10px] font-mono">{collectorDetails.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="tracker" data-testid="tab-tracker" className="gap-1">
+                <Layers className="h-3 w-3 hidden sm:inline" />Tracker
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4 mt-4">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <SummaryTableWithSites items={hubSummary} label="Hub" icon={Building2} />
-                <SummaryTableWithSites items={stateSummary} label="State" icon={MapPin} />
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base"><Building2 className="h-4 w-4 text-primary" /> Questionnaires by Hub</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={hubSummary.slice(0, 10).map(h => ({ name: h.name.length > 12 ? h.name.slice(0, 12) + '...' : h.name, Sites: h.sites, Questionnaires: h.questionnaires }))}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" height={60} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                        <Bar dataKey="Sites" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Questionnaires" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                        <Legend />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base"><PieChart className="h-4 w-4 text-primary" /> Distribution by Activity</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <RechartsPie>
+                        <Pie
+                          data={activityBreakdown.map(a => ({ name: a.name, value: a.questionnaireCount }))}
+                          cx="50%" cy="50%" outerRadius={90} innerRadius={40}
+                          dataKey="value" nameKey="name" paddingAngle={2}
+                          label={({ name, percent }) => `${name.length > 10 ? name.slice(0, 10) + '..' : name} ${(percent * 100).toFixed(0)}%`}
+                          labelLine={{ strokeWidth: 1 }}
+                        >
+                          {activityBreakdown.map((_, i) => (
+                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                      </RechartsPie>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base"><MapPin className="h-4 w-4 text-primary" /> Sites & Questionnaires by State</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={stateSummary.slice(0, 10).map(s => ({ name: s.name.length > 12 ? s.name.slice(0, 12) + '...' : s.name, Sites: s.sites, Questionnaires: s.questionnaires }))}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-25} textAnchor="end" height={60} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                        <Bar dataKey="Sites" fill="#0891b2" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Questionnaires" fill="#ea580c" radius={[4, 4, 0, 0]} />
+                        <Legend />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base"><Users className="h-4 w-4 text-primary" /> Top 10 Data Collectors</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={collectorDetails.slice(0, 10).map(c => ({ name: c.name.length > 12 ? c.name.slice(0, 12) + '...' : c.name, Questionnaires: c.count }))} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 10 }} />
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                        <Bar dataKey="Questionnaires" fill="#9333ea" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
               </div>
               <Card>
                 <CardHeader className="pb-3">
@@ -917,6 +1011,7 @@ const QuestionnaireAnalytics = () => {
                     <Activity className="h-5 w-5 text-primary" />
                     By Activity
                   </CardTitle>
+                  <CardDescription>{activityBreakdown.length} activities, {activityBreakdown.reduce((a, b) => a + b.questionnaireCount, 0)} total questionnaires</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
@@ -927,6 +1022,7 @@ const QuestionnaireAnalytics = () => {
                           <th className="text-left py-2 px-3 font-medium">Activity</th>
                           <th className="text-right py-2 px-3 font-medium">Sites</th>
                           <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
+                          <th className="text-right py-2 px-3 font-medium">%</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -942,7 +1038,8 @@ const QuestionnaireAnalytics = () => {
                               </td>
                               <td className="py-2 px-3 font-medium">{item.name}</td>
                               <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-600">{item.siteCount}</Badge></td>
-                              <td className="py-2 px-3 text-right text-muted-foreground">{item.questionnaireCount}</td>
+                              <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.questionnaireCount}</Badge></td>
+                              <td className="py-2 px-3 text-right text-muted-foreground">{item.percentage.toFixed(1)}%</td>
                             </tr>
                             {expandedRows.has(item.name) && item.siteList.map(site => (
                               <tr key={`${item.name}-${site.name}`} className="border-b bg-muted/20">
@@ -953,6 +1050,7 @@ const QuestionnaireAnalytics = () => {
                                 </td>
                                 <td className="py-1.5 px-3" />
                                 <td className="py-1.5 px-3 text-right"><Badge variant="outline" className="font-mono text-xs">{site.count}</Badge></td>
+                                <td className="py-1.5 px-3 text-right text-xs text-muted-foreground">{site.percentage.toFixed(1)}%</td>
                               </tr>
                             ))}
                           </Fragment>
@@ -961,7 +1059,8 @@ const QuestionnaireAnalytics = () => {
                           <td className="py-2 px-3" />
                           <td className="py-2 px-3">Total</td>
                           <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-700">{activityBreakdown.reduce((a, b) => a + b.siteCount, 0)}</Badge></td>
-                          <td className="py-2 px-3 text-right">{activityBreakdown.reduce((a, b) => a + b.questionnaireCount, 0)}</td>
+                          <td className="py-2 px-3 text-right"><Badge className="font-mono">{activityBreakdown.reduce((a, b) => a + b.questionnaireCount, 0)}</Badge></td>
+                          <td className="py-2 px-3 text-right">100%</td>
                         </tr>
                       </tbody>
                     </table>
@@ -970,30 +1069,141 @@ const QuestionnaireAnalytics = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="hub" className="mt-4">
+            <TabsContent value="hub" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4 text-primary" /> Hub Distribution</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={hubSummary.map(h => ({ name: h.name.length > 14 ? h.name.slice(0, 14) + '..' : h.name, Sites: h.sites, Questionnaires: h.questionnaires }))}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={65} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                        <Bar dataKey="Sites" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Questionnaires" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                        <Legend />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <RechartsPie>
+                        <Pie data={hubSummary.map(h => ({ name: h.name, value: h.questionnaires }))} cx="50%" cy="50%" outerRadius={90} innerRadius={35} dataKey="value" paddingAngle={2}>
+                          {hubSummary.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                        </Pie>
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                        <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: 11 }} />
+                      </RechartsPie>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
               <SummaryTableWithSites items={hubSummary} label="Hub" icon={Building2} />
             </TabsContent>
 
-            <TabsContent value="state" className="mt-4">
+            <TabsContent value="state" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4 text-primary" /> State Distribution</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <ResponsiveContainer width="100%" height={Math.max(200, stateSummary.length * 28)}>
+                      <BarChart data={stateSummary.map(s => ({ name: s.name.length > 14 ? s.name.slice(0, 14) + '..' : s.name, Sites: s.sites, Questionnaires: s.questionnaires }))} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis dataKey="name" type="category" width={110} tick={{ fontSize: 10 }} />
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                        <Bar dataKey="Sites" fill="#0891b2" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="Questionnaires" fill="#ea580c" radius={[0, 4, 4, 0]} />
+                        <Legend />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <RechartsPie>
+                        <Pie data={stateSummary.map(s => ({ name: s.name, value: s.questionnaires }))} cx="50%" cy="50%" outerRadius={90} innerRadius={35} dataKey="value" paddingAngle={2}>
+                          {stateSummary.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                        </Pie>
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                        <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: 11 }} />
+                      </RechartsPie>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
               <SummaryTableWithSites items={stateSummary} label="State" icon={MapPin} />
             </TabsContent>
 
-            <TabsContent value="locality" className="mt-4">
+            <TabsContent value="locality" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4 text-primary" /> Top 15 Localities</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={localitySummary.slice(0, 15).map(l => ({ name: l.name.length > 14 ? l.name.slice(0, 14) + '..' : l.name, Sites: l.sites, Questionnaires: l.questionnaires }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" height={70} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                      <Bar dataKey="Sites" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Questionnaires" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                      <Legend />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
               <SummaryTableWithSites items={localitySummary} label="Locality" icon={MapPin} />
             </TabsContent>
 
-            <TabsContent value="sites" className="mt-4">
+            <TabsContent value="sites" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4 text-primary" /> Top 15 Sites by Questionnaires</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={siteSummary.slice(0, 15).map(s => ({ name: s.name.length > 14 ? s.name.slice(0, 14) + '..' : s.name, Questionnaires: s.questionnaires }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" height={70} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                      <Bar dataKey="Questionnaires" fill="#dc2626" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
               <SummaryTableWithSites items={siteSummary} label="Site" icon={MapPin} />
             </TabsContent>
 
             <TabsContent value="activity" className="mt-4 space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4 text-primary" /> Activity Comparison</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={activityBreakdown.map(a => ({ name: a.name.length > 14 ? a.name.slice(0, 14) + '..' : a.name, Sites: a.siteCount, Questionnaires: a.questionnaireCount, Collectors: a.byCollector.length }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={65} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                      <Bar dataKey="Sites" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Questionnaires" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Collectors" fill="#9333ea" radius={[4, 4, 0, 0]} />
+                      <Legend />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Activity className="h-5 w-5 text-primary" />
                     By Activity &mdash; Full Breakdown
                   </CardTitle>
-                  <CardDescription>{activityBreakdown.length} activities, {activityBreakdown.reduce((a, b) => a + b.siteCount, 0)} total sites</CardDescription>
+                  <CardDescription>{activityBreakdown.length} activities, {activityBreakdown.reduce((a, b) => a + b.siteCount, 0)} total sites, {activityBreakdown.reduce((a, b) => a + b.questionnaireCount, 0)} questionnaires</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -1106,12 +1316,30 @@ const QuestionnaireAnalytics = () => {
 
             <TabsContent value="collector" className="space-y-4 mt-4">
               <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4 text-primary" /> Top 15 Data Collectors</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={Math.min(400, Math.max(200, Math.min(collectorDetails.length, 15) * 26))}>
+                    <BarChart data={collectorDetails.slice(0, 15).map(c => ({ name: c.name.length > 16 ? c.name.slice(0, 16) + '..' : c.name, Questionnaires: c.count }))} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} />
+                      <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} />
+                      <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                      <Bar dataKey="Questionnaires" fill="#9333ea" radius={[0, 4, 4, 0]}>
+                        {collectorDetails.slice(0, 15).map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+              <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Users className="h-5 w-5 text-primary" />
                     By Data Collector
                   </CardTitle>
-                  <CardDescription>{collectorDetails.length} unique data collectors found</CardDescription>
+                  <CardDescription>{collectorDetails.length} unique data collectors, {collectorDetails.reduce((a, b) => a + b.count, 0)} total questionnaires</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
