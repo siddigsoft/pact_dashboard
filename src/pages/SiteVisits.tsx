@@ -984,9 +984,6 @@ const SiteVisits = () => {
 
       <SiteVisitStats 
         visits={(() => {
-          // For field workers (data collectors and coordinators), show:
-          // - All dispatched visits (for dispatched stat)
-          // - Their assigned/accepted/ongoing/completed visits (for other stats)
           if (isFieldWorker && currentUser?.id) {
             const dispatchedVisits = siteVisits.filter(visit => 
               visit.status?.toLowerCase() === 'dispatched'
@@ -999,7 +996,17 @@ const SiteVisits = () => {
             });
             return [...dispatchedVisits, ...userAssignedVisits];
           }
-          // For other users, show all visits they can view
+          if (isSupervisor && supervisorHubName) {
+            const hubName = supervisorHubName.toLowerCase().trim();
+            return siteVisits.filter(visit => {
+              const visitHub = (visit.hub || '').toLowerCase().trim();
+              if (!visitHub) return false;
+              return visitHub === hubName || 
+                     visitHub.includes(hubName) ||
+                     (visitHub.length > 0 && hubName.includes(visitHub));
+            });
+          }
+          if (isSuperAdmin) return siteVisits;
           const canViewAll = canViewAllSiteVisits();
           return canViewAll 
             ? siteVisits 
