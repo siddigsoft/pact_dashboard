@@ -182,6 +182,7 @@ const QuestionnaireAnalytics = () => {
   const hubSummary = useMemo(() => buildSummary(filteredData, 'hub'), [filteredData, buildSummary]);
   const stateSummary = useMemo(() => buildSummary(filteredData, 'state'), [filteredData, buildSummary]);
   const localitySummary = useMemo(() => buildSummary(filteredData, 'locality'), [filteredData, buildSummary]);
+  const siteSummary = useMemo(() => buildSummary(filteredData, 'activitySite'), [filteredData, buildSummary]);
   const activitySubSummary = useMemo(() => buildNestedSummary(filteredData, 'activity', 'subActivity'), [filteredData, buildNestedSummary]);
 
   const activitySummary = useMemo((): ActivitySiteItem[] => {
@@ -278,6 +279,10 @@ const QuestionnaireAnalytics = () => {
     const localityWs = XLSX.utils.json_to_sheet(localityData);
     XLSX.utils.book_append_sheet(wb, localityWs, 'By Locality');
 
+    const siteData = siteSummary.map(s => ({ 'Site Name': s.name, 'Total Questionnaires': s.count, 'Percentage': s.percentage.toFixed(1) + '%' }));
+    const siteWs = XLSX.utils.json_to_sheet(siteData);
+    XLSX.utils.book_append_sheet(wb, siteWs, 'By Site');
+
     const actRows: any[] = [];
     activitySummary.forEach(a => {
       actRows.push({ 'Activity (PDM)': a.name, 'Site Name': '', 'Sites Count': a.siteCount, 'Questionnaires': a.questionnaireCount, '%': a.percentage.toFixed(1) + '%' });
@@ -302,7 +307,7 @@ const QuestionnaireAnalytics = () => {
     XLSX.utils.book_append_sheet(wb, collHubWs, 'Collectors by Hub');
 
     XLSX.writeFile(wb, 'questionnaire_analytics.xlsx');
-  }, [hubSummary, stateSummary, localitySummary, activitySummary, collectorSummary, collectorByHub]);
+  }, [hubSummary, stateSummary, localitySummary, siteSummary, activitySummary, collectorSummary, collectorByHub]);
 
   const exportToPdf = useCallback(() => {
     const doc = new jsPDF();
@@ -370,6 +375,12 @@ const QuestionnaireAnalytics = () => {
       localitySummary.map(l => [l.name, String(l.count), l.percentage.toFixed(1) + '%'])
     );
 
+    addSection(
+      'Summary by Site',
+      ['Site Name', 'Questionnaires', '%'],
+      siteSummary.map(s => [s.name, String(s.count), s.percentage.toFixed(1) + '%'])
+    );
+
     const actRows: string[][] = [];
     activitySummary.forEach(a => {
       actRows.push([a.name, '', String(a.siteCount), String(a.questionnaireCount)]);
@@ -402,7 +413,7 @@ const QuestionnaireAnalytics = () => {
     );
 
     doc.save('questionnaire_analytics.pdf');
-  }, [filteredData, hubSummary, stateSummary, localitySummary, activitySummary, collectorSummary, collectorByHub]);
+  }, [filteredData, hubSummary, stateSummary, localitySummary, siteSummary, activitySummary, collectorSummary, collectorByHub]);
 
   const SummaryTable = ({ items, label, icon: Icon }: { items: SummaryItem[]; label: string; icon: React.ElementType }) => (
     <Card>
@@ -525,10 +536,14 @@ const QuestionnaireAnalytics = () => {
 
       {data.length > 0 && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
             <Card className="p-3 text-center">
               <div className="text-2xl font-bold text-primary">{filteredData.length}</div>
               <div className="text-xs text-muted-foreground mt-1">Total Questionnaires</div>
+            </Card>
+            <Card className="p-3 text-center">
+              <div className="text-2xl font-bold text-teal-600">{new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size}</div>
+              <div className="text-xs text-muted-foreground mt-1">Unique Sites</div>
             </Card>
             <Card className="p-3 text-center">
               <div className="text-2xl font-bold text-blue-600">{new Set(filteredData.map(r => r.hub)).size}</div>
@@ -596,11 +611,12 @@ const QuestionnaireAnalytics = () => {
           </Card>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full">
+            <TabsList className="grid grid-cols-4 sm:grid-cols-7 w-full">
               <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
               <TabsTrigger value="hub" data-testid="tab-hub">Hub</TabsTrigger>
               <TabsTrigger value="state" data-testid="tab-state">State</TabsTrigger>
               <TabsTrigger value="locality" data-testid="tab-locality">Locality</TabsTrigger>
+              <TabsTrigger value="sites" data-testid="tab-sites">Sites</TabsTrigger>
               <TabsTrigger value="activity" data-testid="tab-activity">Activity (PDM)</TabsTrigger>
               <TabsTrigger value="collector" data-testid="tab-collector">Collector</TabsTrigger>
             </TabsList>
@@ -681,6 +697,10 @@ const QuestionnaireAnalytics = () => {
 
             <TabsContent value="locality" className="mt-4">
               <SummaryTable items={localitySummary} label="Locality" icon={MapPin} />
+            </TabsContent>
+
+            <TabsContent value="sites" className="mt-4">
+              <SummaryTable items={siteSummary} label="Site" icon={MapPin} />
             </TabsContent>
 
             <TabsContent value="activity" className="mt-4">
