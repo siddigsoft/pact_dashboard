@@ -8,7 +8,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock } from 'lucide-react';
+import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -92,7 +93,20 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
   dataCollector: ['data collector', 'datacollector', 'enumerator', 'collector name', 'اسم الجامع', 'data_collector'],
 };
 
+const AccessDenied = () => (
+  <div className="flex items-center justify-center h-[60vh]">
+    <Card className="max-w-md w-full">
+      <CardContent className="pt-6 text-center">
+        <Lock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+        <h2 className="text-lg font-semibold mb-2">Access Restricted</h2>
+        <p className="text-sm text-muted-foreground">Only Super Admins can access the Questionnaire Analytics page.</p>
+      </CardContent>
+    </Card>
+  </div>
+);
+
 const QuestionnaireAnalytics = () => {
+  const { isSuperAdmin } = useAuthorization();
   const [data, setData] = useState<QuestionnaireRow[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [activeTab, setActiveTab] = useState('overview');
@@ -677,6 +691,10 @@ const QuestionnaireAnalytics = () => {
       </CardContent>
     </Card>
   );
+
+  if (!isSuperAdmin()) {
+    return <AccessDenied />;
+  }
 
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6 max-w-7xl">
