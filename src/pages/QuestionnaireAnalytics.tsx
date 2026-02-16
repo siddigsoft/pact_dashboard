@@ -5,8 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { format } from 'date-fns';
 
 interface QuestionnaireRow {
   hub: string;
@@ -225,6 +229,106 @@ const QuestionnaireAnalytics = () => {
     XLSX.writeFile(wb, 'questionnaire_analytics.xlsx');
   }, [hubSummary, stateSummary, localitySummary, activitySummary, collectorSummary, collectorByHub]);
 
+  const exportToPdf = useCallback(() => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const margin = 14;
+    let y = 15;
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text('PACT Command Center', margin, y);
+    doc.text(`Generated: ${format(new Date(), 'PPP')}`, pageWidth - margin - 55, y);
+    y += 10;
+
+    doc.setFontSize(18);
+    doc.setTextColor(0);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Questionnaire Analytics Report', margin, y);
+    y += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(80);
+    doc.text(`Total Questionnaires: ${filteredData.length}`, margin, y);
+    y += 12;
+
+    const addSection = (title: string, headers: string[], rows: string[][]) => {
+      if (y > doc.internal.pageSize.height - 40) {
+        doc.addPage();
+        y = 15;
+      }
+      doc.setFontSize(13);
+      doc.setTextColor(0);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, margin, y);
+      y += 2;
+
+      autoTable(doc, {
+        startY: y,
+        head: [headers],
+        body: rows,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [41, 98, 255], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        didDrawPage: () => { y = 15; },
+      });
+      y = (doc as any).lastAutoTable.finalY + 12;
+    };
+
+    addSection(
+      'Summary by Hub',
+      ['Hub', 'Total', '%'],
+      hubSummary.map(h => [h.name, String(h.count), h.percentage.toFixed(1) + '%'])
+    );
+
+    addSection(
+      'Summary by State',
+      ['State', 'Total', '%'],
+      stateSummary.map(s => [s.name, String(s.count), s.percentage.toFixed(1) + '%'])
+    );
+
+    addSection(
+      'Summary by Locality',
+      ['Locality', 'Total', '%'],
+      localitySummary.map(l => [l.name, String(l.count), l.percentage.toFixed(1) + '%'])
+    );
+
+    const actRows: string[][] = [];
+    activitySummary.forEach(a => {
+      actRows.push([a.name, '', String(a.count), a.percentage.toFixed(1) + '%']);
+      a.children?.forEach(c => {
+        actRows.push(['', '  ' + c.name, String(c.count), c.percentage.toFixed(1) + '%']);
+      });
+    });
+    addSection(
+      'Summary by Activity / Sub-Activity',
+      ['Activity', 'Sub-Activity', 'Total', '%'],
+      actRows
+    );
+
+    addSection(
+      'Summary by Data Collector',
+      ['Data Collector', 'Total', '%'],
+      collectorSummary.map(c => [c.name, String(c.count), c.percentage.toFixed(1) + '%'])
+    );
+
+    const collHubRows: string[][] = [];
+    collectorByHub.forEach(h => {
+      h.collectors.forEach(c => {
+        collHubRows.push([h.hub, c.name, String(c.count)]);
+      });
+    });
+    addSection(
+      'Data Collectors by Hub',
+      ['Hub', 'Data Collector', 'Total'],
+      collHubRows
+    );
+
+    doc.save('questionnaire_analytics.pdf');
+  }, [filteredData, hubSummary, stateSummary, localitySummary, activitySummary, collectorSummary, collectorByHub]);
+
   const SummaryTable = ({ items, label, icon: Icon }: { items: SummaryItem[]; label: string; icon: React.ElementType }) => (
     <Card>
       <CardHeader className="pb-3">
@@ -285,10 +389,25 @@ const QuestionnaireAnalytics = () => {
           <p className="text-muted-foreground mt-1">Upload Excel data to analyze questionnaire submissions by Hub, State, Locality, Activity, and Data Collector</p>
         </div>
         {data.length > 0 && (
-          <Button onClick={exportToExcel} variant="outline" className="gap-2" data-testid="button-export">
-            <Download className="h-4 w-4" />
-            Export Summary
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2" data-testid="button-export">
+                <Download className="h-4 w-4" />
+                Export
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Export to Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportToPdf} data-testid="button-export-pdf">
+                <FileDown className="h-4 w-4 mr-2" />
+                Export to PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
