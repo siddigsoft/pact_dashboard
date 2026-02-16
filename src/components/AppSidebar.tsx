@@ -328,7 +328,7 @@
     if (!isHidden('/documents') && (isSuperAdmin || isAdmin || isICT || isFinancialAdmin || isAuditor)) {
       dataItems.push({ id: 'documents', title: "Documents", url: "/documents", icon: FileText, priority: 5, isPinned: isPinned('/documents') });
     }
-    if (!isHidden('/questionnaire-analytics') && (isSuperAdmin || isAdmin || isICT || isFOM)) {
+    if (!isHidden('/questionnaire-analytics') && isSuperAdmin) {
       dataItems.push({ id: 'questionnaire-analytics', title: "Questionnaire Analytics", url: "/questionnaire-analytics", icon: BarChart3, priority: 7, isPinned: isPinned('/questionnaire-analytics') });
     }
     if (!isHidden('/map') && (isSuperAdmin || isAdmin || isFOM)) {
