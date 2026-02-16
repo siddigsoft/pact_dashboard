@@ -420,6 +420,84 @@ const QuestionnaireAnalytics = () => {
       }
     });
 
+    const hubStateActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
+    const stateLocalActMatrix: Record<string, Record<string, Record<string, { q: number; sites: Set<string>; collectors: Set<string> }>>> = {};
+    filteredData.forEach(row => {
+      if (!row.activity || !row.hub || !row.state) return;
+      if (!hubStateActMatrix[row.hub]) hubStateActMatrix[row.hub] = {};
+      if (!hubStateActMatrix[row.hub][row.activity]) hubStateActMatrix[row.hub][row.activity] = {};
+      if (!hubStateActMatrix[row.hub][row.activity][row.state]) hubStateActMatrix[row.hub][row.activity][row.state] = { q: 0, sites: new Set(), collectors: new Set() };
+      hubStateActMatrix[row.hub][row.activity][row.state].q++;
+      if (row.activitySite) hubStateActMatrix[row.hub][row.activity][row.state].sites.add(row.activitySite);
+      if (row.dataCollector) hubStateActMatrix[row.hub][row.activity][row.state].collectors.add(row.dataCollector);
+
+      if (!row.locality) return;
+      if (!stateLocalActMatrix[row.state]) stateLocalActMatrix[row.state] = {};
+      if (!stateLocalActMatrix[row.state][row.activity]) stateLocalActMatrix[row.state][row.activity] = {};
+      if (!stateLocalActMatrix[row.state][row.activity][row.locality]) stateLocalActMatrix[row.state][row.activity][row.locality] = { q: 0, sites: new Set(), collectors: new Set() };
+      stateLocalActMatrix[row.state][row.activity][row.locality].q++;
+      if (row.activitySite) stateLocalActMatrix[row.state][row.activity][row.locality].sites.add(row.activitySite);
+      if (row.dataCollector) stateLocalActMatrix[row.state][row.activity][row.locality].collectors.add(row.dataCollector);
+    });
+
+    const hubTrackers = hubs.map(hub => {
+      const hubStates = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.state))].filter(Boolean).sort();
+      const hubActivities = [...new Set(filteredData.filter(r => r.hub === hub).map(r => r.activity))].filter(Boolean).sort();
+      const mRows = hubActivities.map(act => {
+        const cells = hubStates.map(st => ({
+          questionnaires: hubStateActMatrix[hub]?.[act]?.[st]?.q || 0,
+          sites: hubStateActMatrix[hub]?.[act]?.[st]?.sites?.size || 0,
+          collectors: hubStateActMatrix[hub]?.[act]?.[st]?.collectors?.size || 0,
+        }));
+        const totalQ = cells.reduce((a, c) => a + c.questionnaires, 0);
+        const allSites = new Set<string>();
+        const allColl = new Set<string>();
+        hubStates.forEach(st => {
+          (hubStateActMatrix[hub]?.[act]?.[st]?.sites || new Set<string>()).forEach(s => allSites.add(s));
+          (hubStateActMatrix[hub]?.[act]?.[st]?.collectors || new Set<string>()).forEach(c => allColl.add(c));
+        });
+        return { activity: act, cells, totalQ, totalSites: allSites.size, totalCollectors: allColl.size };
+      });
+      const colTotals = hubStates.map((st, si) => ({
+        questionnaires: mRows.reduce((a, r) => a + r.cells[si].questionnaires, 0),
+        sites: new Set(filteredData.filter(r => r.hub === hub && r.state === st && r.activitySite).map(r => r.activitySite)).size,
+        collectors: new Set(filteredData.filter(r => r.hub === hub && r.state === st && r.dataCollector).map(r => r.dataCollector)).size,
+      }));
+      const gQ = mRows.reduce((a, r) => a + r.totalQ, 0);
+      const gS = new Set(filteredData.filter(r => r.hub === hub && r.activitySite).map(r => r.activitySite)).size;
+      const gC = new Set(filteredData.filter(r => r.hub === hub && r.dataCollector).map(r => r.dataCollector)).size;
+      return { hub, states: hubStates, activities: hubActivities, matrix: mRows, colTotals, grandQ: gQ, grandSites: gS, grandCollectors: gC };
+    }).filter(h => h.grandQ > 0);
+
+    const stateTrackers = states.map(state => {
+      const stLocalities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.locality))].filter(Boolean).sort();
+      const stActivities = [...new Set(filteredData.filter(r => r.state === state).map(r => r.activity))].filter(Boolean).sort();
+      const mRows = stActivities.map(act => {
+        const cells = stLocalities.map(loc => ({
+          questionnaires: stateLocalActMatrix[state]?.[act]?.[loc]?.q || 0,
+          sites: stateLocalActMatrix[state]?.[act]?.[loc]?.sites?.size || 0,
+          collectors: stateLocalActMatrix[state]?.[act]?.[loc]?.collectors?.size || 0,
+        }));
+        const totalQ = cells.reduce((a, c) => a + c.questionnaires, 0);
+        const allSites = new Set<string>();
+        const allColl = new Set<string>();
+        stLocalities.forEach(loc => {
+          (stateLocalActMatrix[state]?.[act]?.[loc]?.sites || new Set<string>()).forEach(s => allSites.add(s));
+          (stateLocalActMatrix[state]?.[act]?.[loc]?.collectors || new Set<string>()).forEach(c => allColl.add(c));
+        });
+        return { activity: act, cells, totalQ, totalSites: allSites.size, totalCollectors: allColl.size };
+      });
+      const colTotals = stLocalities.map((loc, li) => ({
+        questionnaires: mRows.reduce((a, r) => a + r.cells[li].questionnaires, 0),
+        sites: new Set(filteredData.filter(r => r.state === state && r.locality === loc && r.activitySite).map(r => r.activitySite)).size,
+        collectors: new Set(filteredData.filter(r => r.state === state && r.locality === loc && r.dataCollector).map(r => r.dataCollector)).size,
+      }));
+      const gQ = mRows.reduce((a, r) => a + r.totalQ, 0);
+      const gS = new Set(filteredData.filter(r => r.state === state && r.activitySite).map(r => r.activitySite)).size;
+      const gC = new Set(filteredData.filter(r => r.state === state && r.dataCollector).map(r => r.dataCollector)).size;
+      return { state, localities: stLocalities, activities: stActivities, matrix: mRows, colTotals, grandQ: gQ, grandSites: gS, grandCollectors: gC };
+    }).filter(s => s.grandQ > 0);
+
     const matrix = activities.map(act => {
       const cells = hubs.map(hub => ({
         questionnaires: qMatrix[act]?.[hub] || 0,
@@ -470,7 +548,7 @@ const QuestionnaireAnalytics = () => {
       return { state, activities: actData, totalQ: actData.reduce((a, d) => a + d.questionnaires, 0) };
     }).filter(s => s.totalQ > 0);
 
-    return { hubs, activities, matrix, hubTotals, grandQ, grandSites: grandSites.size, grandCollectors: grandColl.size, stateBreakdown };
+    return { hubs, activities, matrix, hubTotals, grandQ, grandSites: grandSites.size, grandCollectors: grandColl.size, stateBreakdown, hubTrackers, stateTrackers };
   }, [filteredData]);
 
   const exportToExcel = useCallback(() => {
@@ -1557,6 +1635,192 @@ const QuestionnaireAnalytics = () => {
                         </div>
                       ))}
                     </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {trackerData.hubTrackers.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Building2 className="h-5 w-5 text-primary" />
+                      Tracker per Hub
+                    </CardTitle>
+                    <CardDescription>Each hub: Activity (rows) x State (columns) with Sites, Questionnaires & Collectors</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {trackerData.hubTrackers.map(ht => (
+                      <div key={ht.hub} className="border rounded-lg">
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
+                          onClick={() => toggleExpand(`hub-tracker-${ht.hub}`)}
+                          data-testid={`button-hub-tracker-${ht.hub}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-blue-600" />
+                            <span className="font-semibold">{ht.hub}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="font-mono text-blue-600">{ht.grandSites} Sites</Badge>
+                            <Badge variant="secondary" className="font-mono">{ht.grandQ} Q</Badge>
+                            <Badge variant="outline" className="font-mono text-purple-600">{ht.grandCollectors} DC</Badge>
+                            {expandedRows.has(`hub-tracker-${ht.hub}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </div>
+                        </button>
+                        {expandedRows.has(`hub-tracker-${ht.hub}`) && (
+                          <div className="border-t overflow-x-auto">
+                            <table className="w-full text-sm border-collapse" data-testid={`table-hub-tracker-${ht.hub}`}>
+                              <thead>
+                                <tr className="bg-muted/50">
+                                  <th className="text-left py-2 px-3 font-medium border min-w-[180px] sticky left-0 bg-muted/50 z-10">Activity</th>
+                                  {ht.states.map(st => (
+                                    <th key={st} className="text-center py-2 px-3 font-medium border min-w-[130px]" colSpan={3}>{st}</th>
+                                  ))}
+                                  <th className="text-center py-2 px-3 font-medium border min-w-[130px] bg-primary/10" colSpan={3}>Total</th>
+                                </tr>
+                                <tr className="bg-muted/30">
+                                  <th className="border sticky left-0 bg-muted/30 z-10"></th>
+                                  {ht.states.map(st => (
+                                    <Fragment key={st}>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600">Sites</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600">Actual</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600">DC</th>
+                                    </Fragment>
+                                  ))}
+                                  <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
+                                  <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
+                                  <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600 bg-primary/5">DC</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ht.matrix.map((row, i) => (
+                                  <tr key={row.activity} className={i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}>
+                                    <td className={`py-1.5 px-3 font-medium border sticky left-0 z-10 text-sm ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>{row.activity}</td>
+                                    {row.cells.map((cell, ci) => (
+                                      <Fragment key={ht.states[ci]}>
+                                        <td className="text-center py-1.5 px-1.5 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
+                                      </Fragment>
+                                    ))}
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
+                                  </tr>
+                                ))}
+                                <tr className="bg-muted/50 font-semibold">
+                                  <td className="py-2 px-3 border sticky left-0 bg-muted/50 z-10">Total</td>
+                                  {ht.colTotals.map((ct, ci) => (
+                                    <Fragment key={ht.states[ci]}>
+                                      <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
+                                      <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
+                                      <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
+                                    </Fragment>
+                                  ))}
+                                  <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{ht.grandSites}</td>
+                                  <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{ht.grandQ}</td>
+                                  <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{ht.grandCollectors}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {trackerData.stateTrackers.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <MapPin className="h-5 w-5 text-primary" />
+                      Tracker per State
+                    </CardTitle>
+                    <CardDescription>Each state: Activity (rows) x Locality (columns) with Sites, Questionnaires & Collectors</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {trackerData.stateTrackers.map(st => (
+                      <div key={st.state} className="border rounded-lg">
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
+                          onClick={() => toggleExpand(`state-tracker-${st.state}`)}
+                          data-testid={`button-state-tracker-${st.state}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-orange-600" />
+                            <span className="font-semibold">{st.state}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline" className="font-mono text-blue-600">{st.grandSites} Sites</Badge>
+                            <Badge variant="secondary" className="font-mono">{st.grandQ} Q</Badge>
+                            <Badge variant="outline" className="font-mono text-purple-600">{st.grandCollectors} DC</Badge>
+                            {expandedRows.has(`state-tracker-${st.state}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </div>
+                        </button>
+                        {expandedRows.has(`state-tracker-${st.state}`) && (
+                          <div className="border-t overflow-x-auto">
+                            <table className="w-full text-sm border-collapse" data-testid={`table-state-tracker-${st.state}`}>
+                              <thead>
+                                <tr className="bg-muted/50">
+                                  <th className="text-left py-2 px-3 font-medium border min-w-[180px] sticky left-0 bg-muted/50 z-10">Activity</th>
+                                  {st.localities.map(loc => (
+                                    <th key={loc} className="text-center py-2 px-3 font-medium border min-w-[130px]" colSpan={3}>{loc}</th>
+                                  ))}
+                                  <th className="text-center py-2 px-3 font-medium border min-w-[130px] bg-primary/10" colSpan={3}>Total</th>
+                                </tr>
+                                <tr className="bg-muted/30">
+                                  <th className="border sticky left-0 bg-muted/30 z-10"></th>
+                                  {st.localities.map(loc => (
+                                    <Fragment key={loc}>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600">Sites</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600">Actual</th>
+                                      <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600">DC</th>
+                                    </Fragment>
+                                  ))}
+                                  <th className="text-center py-1 px-1.5 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
+                                  <th className="text-center py-1 px-1.5 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
+                                  <th className="text-center py-1 px-1.5 text-xs font-medium border text-purple-600 bg-primary/5">DC</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {st.matrix.map((row, i) => (
+                                  <tr key={row.activity} className={i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}>
+                                    <td className={`py-1.5 px-3 font-medium border sticky left-0 z-10 text-sm ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>{row.activity}</td>
+                                    {row.cells.map((cell, ci) => (
+                                      <Fragment key={st.localities[ci]}>
+                                        <td className="text-center py-1.5 px-1.5 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
+                                      </Fragment>
+                                    ))}
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
+                                  </tr>
+                                ))}
+                                <tr className="bg-muted/50 font-semibold">
+                                  <td className="py-2 px-3 border sticky left-0 bg-muted/50 z-10">Total</td>
+                                  {st.colTotals.map((ct, ci) => (
+                                    <Fragment key={st.localities[ci]}>
+                                      <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
+                                      <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
+                                      <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
+                                    </Fragment>
+                                  ))}
+                                  <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{st.grandSites}</td>
+                                  <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{st.grandQ}</td>
+                                  <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{st.grandCollectors}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </CardContent>
                 </Card>
               )}
