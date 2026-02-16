@@ -19,6 +19,7 @@ export interface ResetSiteVisitParams {
   deletedBy: string;
   deletedByName: string;
   deletedByRole: string;
+  targetStatus?: 'new' | 'approved' | 'assigned' | 'dispatched';
 }
 
 export interface DeleteWalletTransactionParams {
@@ -516,20 +517,31 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
   const resetSiteVisit = async (params: ResetSiteVisitParams): Promise<boolean> => {
     try {
-      const { siteVisitId, reason, deletedBy, deletedByName, deletedByRole } = params;
+      const { siteVisitId, reason, deletedBy, deletedByName, deletedByRole, targetStatus = 'assigned' } = params;
       const errors: string[] = [];
 
-      // 1. Get the site visit details first
+      await supabase.auth.getSession();
+
       const { data: siteVisit, error: fetchError } = await supabase
         .from('mmp_site_entries')
         .select('*, accepted_by, supervisor_id, site_name, site_code, status')
         .eq('id', siteVisitId)
-        .single();
+        .maybeSingle();
 
-      if (fetchError || !siteVisit) {
+      if (fetchError) {
+        console.error('Reset site visit fetch error:', fetchError);
         toast({
           title: 'Error',
-          description: 'Site visit not found',
+          description: `Failed to fetch site visit: ${fetchError.message}`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      if (!siteVisit) {
+        toast({
+          title: 'Error',
+          description: 'Site visit not found. It may have been deleted or you may not have permission.',
           variant: 'destructive',
         });
         return false;
@@ -538,27 +550,39 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       const dataCollectorId = siteVisit.accepted_by;
       const supervisorId = siteVisit.supervisor_id;
 
-      // 2. Find related wallet transactions
+      const resetFields: Record<string, any> = {
+        status: targetStatus,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (targetStatus === 'new' || targetStatus === 'approved') {
+        resetFields.accepted_by = null;
+        resetFields.accepted_at = null;
+        resetFields.visit_completed_at = null;
+        resetFields.completion_notes = null;
+        resetFields.gps_coordinates = null;
+        resetFields.signature_data = null;
+        resetFields.visit_completed_by = null;
+      } else if (targetStatus === 'dispatched' || targetStatus === 'assigned') {
+        resetFields.visit_completed_at = null;
+        resetFields.completion_notes = null;
+        resetFields.gps_coordinates = null;
+        resetFields.signature_data = null;
+        resetFields.visit_completed_by = null;
+      }
+
       const { data: transactions, error: txnFetchError } = await supabase
         .from('wallet_transactions')
         .select('*')
         .or(`site_visit_id.eq.${siteVisitId},related_site_visit_id.eq.${siteVisitId}`);
 
       if (txnFetchError) {
-        throw new Error(`Failed to fetch related transactions: ${txnFetchError.message}`);
+        errors.push(`Failed to fetch transactions: ${txnFetchError.message}`);
       }
 
-      // 3. Reset the site visit status FIRST (most important operation)
       const { error: updateError } = await supabase
         .from('mmp_site_entries')
-        .update({
-          status: 'assigned',
-          visit_completed_at: null,
-          completion_notes: null,
-          gps_coordinates: null,
-          signature_data: null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(resetFields)
         .eq('id', siteVisitId);
 
       if (updateError) {
@@ -640,9 +664,8 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      // 6. Send notifications (non-critical - don't fail if these fail)
       const notificationTitle = 'Site Visit Status Reset';
-      const notificationMessage = `Site visit "${siteVisit.site_name}" (${siteVisit.site_code}) has been reset to incomplete by ${deletedByName}. Reason: ${reason}`;
+      const notificationMessage = `Site visit "${siteVisit.site_name}" (${siteVisit.site_code}) has been reset to "${targetStatus}" by ${deletedByName}. Reason: ${reason}`;
 
       if (dataCollectorId) {
         await sendNotificationToUser(
@@ -677,7 +700,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       } else {
         toast({
           title: 'Site Visit Reset',
-          description: 'Site visit has been reset to incomplete and related transactions removed',
+          description: `Site visit has been reset to "${targetStatus}" and related transactions removed`,
         });
       }
 

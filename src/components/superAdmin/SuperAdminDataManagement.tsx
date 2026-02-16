@@ -268,6 +268,7 @@ export function SuperAdminDataManagement() {
 
   const [reason, setReason] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [resetTargetStatus, setResetTargetStatus] = useState<'new' | 'approved' | 'assigned' | 'dispatched'>('dispatched');
 
   const loadSiteVisits = async () => {
     setLoading(true);
@@ -513,6 +514,7 @@ export function SuperAdminDataManagement() {
       deletedBy: currentUser.id,
       deletedByName: currentUser.name || currentUser.email || 'Super Admin',
       deletedByRole: currentUser.role || 'superadmin',
+      targetStatus: resetTargetStatus,
     });
 
     setProcessing(false);
@@ -520,6 +522,7 @@ export function SuperAdminDataManagement() {
       setShowResetSiteVisitDialog(false);
       setSelectedSiteVisit(null);
       setReason('');
+      setResetTargetStatus('dispatched');
       loadSiteVisits();
     }
   };
@@ -2023,7 +2026,7 @@ export function SuperAdminDataManagement() {
               Reset Site Visit
             </DialogTitle>
             <DialogDescription>
-              Reset this completed visit back to assigned status.
+              Reset this completed visit back to a previous status.
             </DialogDescription>
           </DialogHeader>
 
@@ -2035,7 +2038,25 @@ export function SuperAdminDataManagement() {
                 <p className="text-sm">
                   <span className="text-muted-foreground">Collector:</span> {selectedSiteVisit?.accepted_by_name}
                 </p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Current Status:</span> {selectedSiteVisit?.status}
+                </p>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reset-target-status">Reset To <span className="text-destructive">*</span></Label>
+              <Select value={resetTargetStatus} onValueChange={(v) => setResetTargetStatus(v as any)}>
+                <SelectTrigger data-testid="select-reset-target-status">
+                  <SelectValue placeholder="Select target status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">New (unprocessed)</SelectItem>
+                  <SelectItem value="approved">Approved (ready for dispatch)</SelectItem>
+                  <SelectItem value="dispatched">Dispatched (awaiting claim)</SelectItem>
+                  <SelectItem value="assigned">Assigned (claimed by collector)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -2053,7 +2074,11 @@ export function SuperAdminDataManagement() {
             <div className="bg-muted/50 p-3 rounded-lg">
               <p className="text-sm font-medium mb-2">This action will:</p>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li className="flex items-center gap-2"><XCircle className="h-3 w-3 text-red-500" /> Change status to "assigned"</li>
+                <li className="flex items-center gap-2"><XCircle className="h-3 w-3 text-red-500" /> Change status to "{resetTargetStatus}"</li>
+                {(resetTargetStatus === 'new' || resetTargetStatus === 'approved') && (
+                  <li className="flex items-center gap-2"><XCircle className="h-3 w-3 text-red-500" /> Remove collector assignment</li>
+                )}
+                <li className="flex items-center gap-2"><XCircle className="h-3 w-3 text-red-500" /> Clear completion data</li>
                 <li className="flex items-center gap-2"><XCircle className="h-3 w-3 text-red-500" /> Delete associated wallet transaction</li>
                 <li className="flex items-center gap-2"><XCircle className="h-3 w-3 text-red-500" /> Adjust wallet balance</li>
                 <li className="flex items-center gap-2"><CheckCircle className="h-3 w-3 text-green-500" /> Notify collector and supervisor</li>
