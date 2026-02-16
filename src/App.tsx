@@ -108,6 +108,7 @@ const MobileSignatureAdmin = lazy(() => import('./pages/MobileSignatureAdmin'));
 const MobileCallScheduling = lazy(() => import('./pages/MobileCallScheduling'));
 const MobileDocumentSync = lazy(() => import('./pages/MobileDocumentSync'));
 const ReconciliationDashboard = lazy(() => import('./pages/ReconciliationDashboard'));
+const QuestionnaireAnalytics = lazy(() => import('./pages/QuestionnaireAnalytics'));
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'));
 const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
@@ -257,6 +258,7 @@ const AppRoutes = () => {
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/cost-submission" element={<CostSubmission />} />
         <Route path="/cost-submission/reports" element={<CostSubmissionReports />} />
+        <Route path="/questionnaire-analytics" element={<QuestionnaireAnalytics />} />
         <Route path="/mobile-cost-submission" element={<MobileCostSubmission />} />
         <Route path="/site-visits" element={<SiteVisits />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
