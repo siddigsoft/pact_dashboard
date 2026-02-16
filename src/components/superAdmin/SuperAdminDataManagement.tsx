@@ -828,16 +828,28 @@ export function SuperAdminDataManagement() {
   // Get unique values for claimed sites filters
   const claimedSitesFilterOptions = useMemo(() => {
     const states = [...new Set(claimedSites.map(s => s.state).filter(Boolean))].sort();
+
+    const stateFiltered = claimedSites.filter(s => stateFilter === 'all' || s.state === stateFilter);
+
     const localities = [...new Set(
-      claimedSites
-        .filter(s => stateFilter === 'all' || s.state === stateFilter)
-        .map(s => s.locality)
+      stateFiltered.map(s => s.locality).filter(Boolean)
+    )].sort();
+
+    const stateLocalityFiltered = stateFiltered.filter(s => localityFilter === 'all' || s.locality === localityFilter);
+
+    const activities = [...new Set(
+      stateLocalityFiltered.map(s => s.main_activity).filter(Boolean)
+    )].sort();
+
+    const claimedByUsers = [...new Set(
+      stateLocalityFiltered
+        .filter(s => activityFilter === 'all' || s.main_activity === activityFilter)
+        .map(s => s.accepted_by_name)
         .filter(Boolean)
     )].sort();
-    const activities = [...new Set(claimedSites.map(s => s.main_activity).filter(Boolean))].sort();
-    const claimedByUsers = [...new Set(claimedSites.map(s => s.accepted_by_name).filter(Boolean))].sort();
+
     return { states, localities, activities, claimedByUsers };
-  }, [claimedSites, stateFilter]);
+  }, [claimedSites, stateFilter, localityFilter, activityFilter]);
 
   const filteredDispatchedSites = useMemo(() => {
     return dispatchedSites.filter(site => {
@@ -1451,7 +1463,10 @@ export function SuperAdminDataManagement() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Activity</Label>
-                  <Select value={activityFilter} onValueChange={setActivityFilter}>
+                  <Select value={activityFilter} onValueChange={(val) => {
+                    setActivityFilter(val);
+                    setClaimedByFilter('all');
+                  }}>
                     <SelectTrigger data-testid="select-activity-filter">
                       <SelectValue placeholder="All Activities" />
                     </SelectTrigger>
@@ -1468,6 +1483,8 @@ export function SuperAdminDataManagement() {
                   <Select value={stateFilter} onValueChange={(val) => {
                     setStateFilter(val);
                     setLocalityFilter('all');
+                    setActivityFilter('all');
+                    setClaimedByFilter('all');
                   }}>
                     <SelectTrigger data-testid="select-state-filter">
                       <SelectValue placeholder="All States" />
@@ -1482,7 +1499,11 @@ export function SuperAdminDataManagement() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Locality</Label>
-                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                  <Select value={localityFilter} onValueChange={(val) => {
+                    setLocalityFilter(val);
+                    setActivityFilter('all');
+                    setClaimedByFilter('all');
+                  }}>
                     <SelectTrigger data-testid="select-locality-filter">
                       <SelectValue placeholder="All Localities" />
                     </SelectTrigger>
@@ -1645,6 +1666,7 @@ export function SuperAdminDataManagement() {
                   <Select value={stateFilter} onValueChange={(val) => {
                     setStateFilter(val);
                     setLocalityFilter('all');
+                    setActivityFilter('all');
                   }}>
                     <SelectTrigger data-testid="select-dispatched-state-filter">
                       <SelectValue placeholder="All States" />
