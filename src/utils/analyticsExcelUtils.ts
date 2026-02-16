@@ -247,7 +247,53 @@ interface FilteredRow {
   activity?: string;
   dataCollector?: string;
   activitySite?: string;
+  deviceId?: string;
 }
+
+const isPdmActivity = (activity: string) => /pdm/i.test(activity);
+
+interface MergedCollector {
+  primaryName: string;
+  activities: Map<string, number>;
+  nameVariants: number;
+}
+
+function mergeCollectorsByDevice(
+  rows: { collector: string; deviceId: string; activity: string; abbr: string }[]
+): MergedCollector[] {
+  const deviceMap = new Map<string, { names: Map<string, number>; activities: Map<string, number> }>();
+  const noDeviceMap = new Map<string, { activities: Map<string, number> }>();
+
+  rows.forEach(r => {
+    const devId = r.deviceId?.trim() || '';
+    if (devId) {
+      if (!deviceMap.has(devId)) deviceMap.set(devId, { names: new Map(), activities: new Map() });
+      const entry = deviceMap.get(devId)!;
+      entry.names.set(r.collector, (entry.names.get(r.collector) || 0) + 1);
+      entry.activities.set(r.abbr, (entry.activities.get(r.abbr) || 0) + 1);
+    } else {
+      if (!noDeviceMap.has(r.collector)) noDeviceMap.set(r.collector, { activities: new Map() });
+      const entry = noDeviceMap.get(r.collector)!;
+      entry.activities.set(r.abbr, (entry.activities.get(r.abbr) || 0) + 1);
+    }
+  });
+
+  const results: MergedCollector[] = [];
+  deviceMap.forEach(d => {
+    const nameEntries = [...d.names.entries()].sort((a, b) => b[1] - a[1]);
+    results.push({
+      primaryName: nameEntries[0]?.[0] || '(Unknown)',
+      activities: d.activities,
+      nameVariants: nameEntries.length,
+    });
+  });
+  noDeviceMap.forEach((d, name) => {
+    results.push({ primaryName: name, activities: d.activities, nameVariants: 0 });
+  });
+  return results.sort((a, b) => a.primaryName.localeCompare(b.primaryName));
+}
+
+const DETAIL_COLS = [...ACTIVITY_COLS, 'PDM Sites'];
 
 export async function exportCoverageTrackerExcel(
   filteredData: FilteredRow[],
@@ -259,7 +305,7 @@ export async function exportCoverageTrackerExcel(
 
   const monthLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
-  const hubStateCollectorMap = new Map<string, Map<string, Map<string, Map<string, number>>>>();
+  const hubStateRows = new Map<string, Map<string, { collector: string; deviceId: string; activity: string; abbr: string }[]>>();
   const hubStateMap = new Map<string, Map<string, Map<string, number>>>();
   const hubOrder: string[] = [];
   const hubSet = new Set<string>();
@@ -270,16 +316,14 @@ export async function exportCoverageTrackerExcel(
     const state = row.state;
     const collector = row.dataCollector || '(Unknown)';
     const abbr = activityAbbrev(row.activity);
+    const deviceId = row.deviceId?.trim() || '';
 
     if (!hubSet.has(hub)) { hubSet.add(hub); hubOrder.push(hub); }
 
-    if (!hubStateCollectorMap.has(hub)) hubStateCollectorMap.set(hub, new Map());
-    const stateMap = hubStateCollectorMap.get(hub)!;
-    if (!stateMap.has(state)) stateMap.set(state, new Map());
-    const collMap = stateMap.get(state)!;
-    if (!collMap.has(collector)) collMap.set(collector, new Map());
-    const actMap = collMap.get(collector)!;
-    actMap.set(abbr, (actMap.get(abbr) || 0) + 1);
+    if (!hubStateRows.has(hub)) hubStateRows.set(hub, new Map());
+    const sr = hubStateRows.get(hub)!;
+    if (!sr.has(state)) sr.set(state, []);
+    sr.get(state)!.push({ collector, deviceId, activity: row.activity!, abbr });
 
     if (!hubStateMap.has(hub)) hubStateMap.set(hub, new Map());
     const hsm = hubStateMap.get(hub)!;
@@ -290,7 +334,7 @@ export async function exportCoverageTrackerExcel(
 
   hubOrder.sort();
 
-  const headers = ['Hub', 'State', 'Data Collector', ...ACTIVITY_COLS, 'Overall Site Total'];
+  const headers = ['Hub', 'State', 'Data Collector', ...DETAIL_COLS, 'Overall Site Total'];
 
   const ws = wb.addWorksheet(monthLabel.slice(0, 31));
 
@@ -306,7 +350,7 @@ export async function exportCoverageTrackerExcel(
     return hRow;
   }
 
-  function addGreenTotalRow(sheet: ExcelJS.Worksheet, label: string, totals: Map<string, number>, colOffset: number) {
+  function addGreenTotalRow(sheet: ExcelJS.Worksheet, label: string, totals: Map<string, number>, pdmSites: number, colOffset: number) {
     const vals: (string | number)[] = [];
     for (let i = 0; i < colOffset - 1; i++) vals.push('');
     vals.push(label);
@@ -316,6 +360,30 @@ export async function exportCoverageTrackerExcel(
       vals.push(v);
       overall += v;
     });
+    vals.push(pdmSites);
+    vals.push(overall);
+    const row = sheet.addRow(vals);
+    row.eachCell((cell, ci) => {
+      cell.fill = GREEN_FILL;
+      cell.font = GREEN_FONT;
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > colOffset ? 'center' : 'left', vertical: 'middle' };
+    });
+    row.height = 22;
+    return row;
+  }
+
+  function addGreenTotalRowSummary(sheet: ExcelJS.Worksheet, label: string, totals: Map<string, number>, pdmSites: number, colOffset: number) {
+    const vals: (string | number)[] = [];
+    for (let i = 0; i < colOffset - 1; i++) vals.push('');
+    vals.push(label);
+    let overall = 0;
+    ACTIVITY_COLS.forEach(col => {
+      const v = totals.get(col) || 0;
+      vals.push(v);
+      overall += v;
+    });
+    vals.push(pdmSites);
     vals.push(overall);
     const row = sheet.addRow(vals);
     row.eachCell((cell, ci) => {
@@ -329,26 +397,30 @@ export async function exportCoverageTrackerExcel(
   }
 
   hubOrder.forEach(hub => {
-    const stateMap = hubStateCollectorMap.get(hub);
+    const stateMap = hubStateRows.get(hub);
     if (!stateMap) return;
     const states = [...stateMap.keys()].sort();
 
     states.forEach(state => {
       addSectionHeaderRow(ws, headers);
-      const collMap = stateMap.get(state)!;
-      const collectors = [...collMap.keys()].sort();
+      const stateRowData = stateMap.get(state)!;
+      const merged = mergeCollectorsByDevice(stateRowData);
       const stateTotals = new Map<string, number>();
+      let statePdmSites = 0;
 
-      collectors.forEach(collector => {
-        const actMap = collMap.get(collector)!;
-        const vals: (string | number)[] = [hub, state, collector];
+      merged.forEach(mc => {
+        const vals: (string | number)[] = [hub, state, mc.primaryName];
         let rowTotal = 0;
         ACTIVITY_COLS.forEach(col => {
-          const v = actMap.get(col) || 0;
+          const v = mc.activities.get(col) || 0;
           vals.push(v || '');
           rowTotal += v;
           stateTotals.set(col, (stateTotals.get(col) || 0) + v);
         });
+        const pdmCount = mc.activities.get('PDM') || 0;
+        const pdmSites = pdmCount > 0 ? Math.ceil(pdmCount / 7) : 0;
+        vals.push(pdmSites || '');
+        statePdmSites += pdmSites;
         vals.push(rowTotal || '');
         const dataRow = ws.addRow(vals);
         dataRow.eachCell((cell, ci) => {
@@ -359,7 +431,7 @@ export async function exportCoverageTrackerExcel(
         dataRow.height = 20;
       });
 
-      addGreenTotalRow(ws, `Total ${state}`, stateTotals, 3);
+      addGreenTotalRow(ws, `Total ${state}`, stateTotals, statePdmSites, 3);
       ws.addRow([]);
     });
   });
@@ -373,7 +445,7 @@ export async function exportCoverageTrackerExcel(
   titleRow.height = 26;
   ws2.addRow([]);
 
-  const summaryHeaders = ['HUB', 'State', ...ACTIVITY_COLS, 'Overall Site Total'];
+  const summaryHeaders = ['HUB', 'State', ...DETAIL_COLS, 'Overall Site Total'];
   const sHdrRow = ws2.addRow(summaryHeaders);
   sHdrRow.eachCell((cell, ci) => {
     cell.fill = headerFill();
@@ -384,12 +456,14 @@ export async function exportCoverageTrackerExcel(
   sHdrRow.height = 22;
 
   const grandTotals = new Map<string, number>();
+  let grandPdmSites = 0;
 
   hubOrder.forEach(hub => {
     const hsm = hubStateMap.get(hub);
     if (!hsm) return;
     const states = [...hsm.keys()].sort();
     const hubTotals = new Map<string, number>();
+    let hubPdmSites = 0;
 
     states.forEach(state => {
       const am = hsm.get(state)!;
@@ -402,6 +476,10 @@ export async function exportCoverageTrackerExcel(
         hubTotals.set(col, (hubTotals.get(col) || 0) + v);
         grandTotals.set(col, (grandTotals.get(col) || 0) + v);
       });
+      const pdmCount = am.get('PDM') || 0;
+      const pdmSites = pdmCount > 0 ? Math.ceil(pdmCount / 7) : 0;
+      hubPdmSites += pdmSites;
+      vals.push(pdmSites);
       vals.push(rowTotal);
       const dataRow = ws2.addRow(vals);
       dataRow.eachCell((cell, ci) => {
@@ -412,7 +490,8 @@ export async function exportCoverageTrackerExcel(
       dataRow.height = 20;
     });
 
-    addGreenTotalRow(ws2, `Total ${hub}`, hubTotals, 2);
+    grandPdmSites += hubPdmSites;
+    addGreenTotalRowSummary(ws2, `Total ${hub}`, hubTotals, hubPdmSites, 2);
   });
 
   const overallVals: (string | number)[] = ['', 'Overall Total'];
@@ -422,6 +501,7 @@ export async function exportCoverageTrackerExcel(
     overallVals.push(v);
     grandOverall += v;
   });
+  overallVals.push(grandPdmSites);
   overallVals.push(grandOverall);
   const grandRow = ws2.addRow(overallVals);
   grandRow.eachCell((cell, ci) => {
