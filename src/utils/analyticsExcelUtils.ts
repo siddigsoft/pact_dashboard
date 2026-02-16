@@ -226,3 +226,214 @@ export async function exportFormattedTrackerExcel(
   const buffer = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
 }
+
+const ACTIVITY_COLS = ['AM', 'DM', 'MDM', 'PDM', 'Warehouse'];
+
+function activityAbbrev(name: string): string {
+  if (/implementation.*monitoring|aim/i.test(name)) return 'AM';
+  if (/^distribution\s+monitoring|^dm$/i.test(name)) return 'DM';
+  if (/market.*diversion|mdm/i.test(name)) return 'MDM';
+  if (/post.*distribution|pdm/i.test(name)) return 'PDM';
+  if (/warehouse|whm/i.test(name)) return 'Warehouse';
+  return name;
+}
+
+const GREEN_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF107838' } };
+const GREEN_FONT: Partial<ExcelJS.Font> = { bold: true, color: { argb: WHITE }, size: 10, name: 'Calibri' };
+
+interface FilteredRow {
+  hub?: string;
+  state?: string;
+  activity?: string;
+  dataCollector?: string;
+  activitySite?: string;
+}
+
+export async function exportCoverageTrackerExcel(
+  filteredData: FilteredRow[],
+  filename: string
+) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'PACT Command Center';
+  wb.created = new Date();
+
+  const monthLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const hubStateCollectorMap = new Map<string, Map<string, Map<string, Map<string, number>>>>();
+  const hubStateMap = new Map<string, Map<string, Map<string, number>>>();
+  const hubOrder: string[] = [];
+  const hubSet = new Set<string>();
+
+  filteredData.forEach(row => {
+    if (!row.hub || !row.state || !row.activity) return;
+    const hub = row.hub;
+    const state = row.state;
+    const collector = row.dataCollector || '(Unknown)';
+    const abbr = activityAbbrev(row.activity);
+
+    if (!hubSet.has(hub)) { hubSet.add(hub); hubOrder.push(hub); }
+
+    if (!hubStateCollectorMap.has(hub)) hubStateCollectorMap.set(hub, new Map());
+    const stateMap = hubStateCollectorMap.get(hub)!;
+    if (!stateMap.has(state)) stateMap.set(state, new Map());
+    const collMap = stateMap.get(state)!;
+    if (!collMap.has(collector)) collMap.set(collector, new Map());
+    const actMap = collMap.get(collector)!;
+    actMap.set(abbr, (actMap.get(abbr) || 0) + 1);
+
+    if (!hubStateMap.has(hub)) hubStateMap.set(hub, new Map());
+    const hsm = hubStateMap.get(hub)!;
+    if (!hsm.has(state)) hsm.set(state, new Map());
+    const am = hsm.get(state)!;
+    am.set(abbr, (am.get(abbr) || 0) + 1);
+  });
+
+  hubOrder.sort();
+
+  const headers = ['Hub', 'State', 'Data Collector', ...ACTIVITY_COLS, 'Overall Site Total'];
+
+  const ws = wb.addWorksheet(monthLabel.slice(0, 31));
+
+  function addSectionHeaderRow(sheet: ExcelJS.Worksheet, hdrs: string[]) {
+    const hRow = sheet.addRow(hdrs);
+    hRow.eachCell((cell, ci) => {
+      cell.fill = headerFill();
+      cell.font = headerFont(10);
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle' };
+    });
+    hRow.height = 22;
+    return hRow;
+  }
+
+  function addGreenTotalRow(sheet: ExcelJS.Worksheet, label: string, totals: Map<string, number>, colOffset: number) {
+    const vals: (string | number)[] = [];
+    for (let i = 0; i < colOffset - 1; i++) vals.push('');
+    vals.push(label);
+    let overall = 0;
+    ACTIVITY_COLS.forEach(col => {
+      const v = totals.get(col) || 0;
+      vals.push(v);
+      overall += v;
+    });
+    vals.push(overall);
+    const row = sheet.addRow(vals);
+    row.eachCell((cell, ci) => {
+      cell.fill = GREEN_FILL;
+      cell.font = GREEN_FONT;
+      cell.border = thinBorder();
+      cell.alignment = { horizontal: ci > colOffset ? 'center' : 'left', vertical: 'middle' };
+    });
+    row.height = 22;
+    return row;
+  }
+
+  hubOrder.forEach(hub => {
+    const stateMap = hubStateCollectorMap.get(hub);
+    if (!stateMap) return;
+    const states = [...stateMap.keys()].sort();
+
+    states.forEach(state => {
+      addSectionHeaderRow(ws, headers);
+      const collMap = stateMap.get(state)!;
+      const collectors = [...collMap.keys()].sort();
+      const stateTotals = new Map<string, number>();
+
+      collectors.forEach(collector => {
+        const actMap = collMap.get(collector)!;
+        const vals: (string | number)[] = [hub, state, collector];
+        let rowTotal = 0;
+        ACTIVITY_COLS.forEach(col => {
+          const v = actMap.get(col) || 0;
+          vals.push(v || '');
+          rowTotal += v;
+          stateTotals.set(col, (stateTotals.get(col) || 0) + v);
+        });
+        vals.push(rowTotal || '');
+        const dataRow = ws.addRow(vals);
+        dataRow.eachCell((cell, ci) => {
+          cell.border = thinBorder();
+          cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle' };
+          cell.font = bodyFont(10);
+        });
+        dataRow.height = 20;
+      });
+
+      addGreenTotalRow(ws, `Total ${state}`, stateTotals, 3);
+      ws.addRow([]);
+    });
+  });
+
+  autoFitColumns(ws);
+
+  const summarySheetName = `TPM Tracker ${monthLabel}`.slice(0, 31);
+  const ws2 = wb.addWorksheet(summarySheetName);
+  const titleRow = ws2.addRow([`TPM Tracker for ${monthLabel}`]);
+  titleRow.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  titleRow.height = 26;
+  ws2.addRow([]);
+
+  const summaryHeaders = ['HUB', 'State', ...ACTIVITY_COLS, 'Overall Site Total'];
+  const sHdrRow = ws2.addRow(summaryHeaders);
+  sHdrRow.eachCell((cell, ci) => {
+    cell.fill = headerFill();
+    cell.font = headerFont(10);
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+  });
+  sHdrRow.height = 22;
+
+  const grandTotals = new Map<string, number>();
+
+  hubOrder.forEach(hub => {
+    const hsm = hubStateMap.get(hub);
+    if (!hsm) return;
+    const states = [...hsm.keys()].sort();
+    const hubTotals = new Map<string, number>();
+
+    states.forEach(state => {
+      const am = hsm.get(state)!;
+      const vals: (string | number)[] = [hub, state];
+      let rowTotal = 0;
+      ACTIVITY_COLS.forEach(col => {
+        const v = am.get(col) || 0;
+        vals.push(v);
+        rowTotal += v;
+        hubTotals.set(col, (hubTotals.get(col) || 0) + v);
+        grandTotals.set(col, (grandTotals.get(col) || 0) + v);
+      });
+      vals.push(rowTotal);
+      const dataRow = ws2.addRow(vals);
+      dataRow.eachCell((cell, ci) => {
+        cell.border = thinBorder();
+        cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+        cell.font = bodyFont(10);
+      });
+      dataRow.height = 20;
+    });
+
+    addGreenTotalRow(ws2, `Total ${hub}`, hubTotals, 2);
+  });
+
+  const overallVals: (string | number)[] = ['', 'Overall Total'];
+  let grandOverall = 0;
+  ACTIVITY_COLS.forEach(col => {
+    const v = grandTotals.get(col) || 0;
+    overallVals.push(v);
+    grandOverall += v;
+  });
+  overallVals.push(grandOverall);
+  const grandRow = ws2.addRow(overallVals);
+  grandRow.eachCell((cell, ci) => {
+    cell.fill = GREEN_FILL;
+    cell.font = GREEN_FONT;
+    cell.border = thinBorder();
+    cell.alignment = { horizontal: ci > 2 ? 'center' : 'left', vertical: 'middle' };
+  });
+  grandRow.height = 22;
+
+  autoFitColumns(ws2);
+
+  const buf = await wb.xlsx.writeBuffer();
+  saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
+}
