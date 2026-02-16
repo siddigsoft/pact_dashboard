@@ -131,6 +131,7 @@ const QuestionnaireAnalytics = () => {
   const [drillExpandedHubs, setDrillExpandedHubs] = useState<Set<string>>(new Set());
   const [drillExpandedStates, setDrillExpandedStates] = useState<Set<string>>(new Set());
   const [drillExpandedActivities, setDrillExpandedActivities] = useState<Set<string>>(new Set());
+  const [drillExpandedLocalities, setDrillExpandedLocalities] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -356,6 +357,7 @@ const QuestionnaireAnalytics = () => {
             name: loc,
             questionnaires: ld.q,
             sites: ld.sites.size,
+            siteNames: [...ld.sites].sort(),
             percentage: ad.q > 0 ? (ld.q / ad.q) * 100 : 0,
           })).sort((a, b) => b.questionnaires - a.questionnaires),
         })).sort((a, b) => b.questionnaires - a.questionnaires),
@@ -1359,18 +1361,24 @@ const QuestionnaireAnalytics = () => {
   const toggleDrillActivity = useCallback((key: string) => {
     setDrillExpandedActivities(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
   }, []);
+  const toggleDrillLocality = useCallback((key: string) => {
+    setDrillExpandedLocalities(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }, []);
 
   const exportHubDrilldownExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
     const rows: any[] = [];
     hubDrilldown.forEach(hub => {
-      rows.push({ Level: 'Hub', Hub: hub.name, State: '', Activity: '', Locality: '', Sites: hub.sites, Questionnaires: hub.questionnaires, '%': hub.percentage.toFixed(1) + '%' });
+      rows.push({ Level: 'Hub', Hub: hub.name, State: '', Activity: '', Locality: '', 'Site Name': '', Sites: hub.sites, Questionnaires: hub.questionnaires, '%': hub.percentage.toFixed(1) + '%' });
       hub.states.forEach(st => {
-        rows.push({ Level: 'State', Hub: hub.name, State: st.name, Activity: '', Locality: '', Sites: st.sites, Questionnaires: st.questionnaires, '%': st.percentage.toFixed(1) + '%' });
+        rows.push({ Level: 'State', Hub: hub.name, State: st.name, Activity: '', Locality: '', 'Site Name': '', Sites: st.sites, Questionnaires: st.questionnaires, '%': st.percentage.toFixed(1) + '%' });
         st.activities.forEach(act => {
-          rows.push({ Level: 'Activity', Hub: hub.name, State: st.name, Activity: act.name, Locality: '', Sites: act.sites, Questionnaires: act.questionnaires, '%': act.percentage.toFixed(1) + '%' });
+          rows.push({ Level: 'Activity', Hub: hub.name, State: st.name, Activity: act.name, Locality: '', 'Site Name': '', Sites: act.sites, Questionnaires: act.questionnaires, '%': act.percentage.toFixed(1) + '%' });
           act.localities.forEach(loc => {
-            rows.push({ Level: 'Locality', Hub: hub.name, State: st.name, Activity: act.name, Locality: loc.name, Sites: loc.sites, Questionnaires: loc.questionnaires, '%': loc.percentage.toFixed(1) + '%' });
+            rows.push({ Level: 'Locality', Hub: hub.name, State: st.name, Activity: act.name, Locality: loc.name, 'Site Name': '', Sites: loc.sites, Questionnaires: loc.questionnaires, '%': loc.percentage.toFixed(1) + '%' });
+            loc.siteNames.forEach(sn => {
+              rows.push({ Level: 'Site', Hub: hub.name, State: st.name, Activity: act.name, Locality: loc.name, 'Site Name': sn, Sites: '', Questionnaires: '', '%': '' });
+            });
           });
         });
       });
@@ -1380,35 +1388,59 @@ const QuestionnaireAnalytics = () => {
   }, [hubDrilldown]);
 
   const exportHubDrilldownPdf = useCallback(async () => {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     let y = await drawPdfHeader(doc, 'Hub Distribution - Drilldown Report', 'التوزيع حسب المحور');
     
     hubDrilldown.forEach((hub: any) => {
-      if (y > 170) { doc.addPage(); addPageHeader(doc, 'Hub Drilldown'); y = 18; }
-      doc.setFontSize(12);
+      if (y > 220) { doc.addPage(); addPageHeader(doc, 'Hub Drilldown'); y = 18; }
+      doc.setFontSize(13);
       doc.setTextColor(15, 32, 65);
       doc.setFont('helvetica', 'bold');
-      doc.text(`${hub.name} — ${hub.questionnaires} questionnaires, ${hub.sites} sites (${hub.percentage.toFixed(1)}%)`, 14, y);
-      y += 8;
+      doc.text(hub.name, 14, y);
+      doc.setFontSize(9);
+      doc.setTextColor(90, 95, 110);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${hub.questionnaires} Questionnaires  |  ${hub.sites} Sites  |  ${hub.percentage.toFixed(1)}%`, 14, y + 5);
+      y += 10;
+
       hub.states.forEach((st: any) => {
-        if (y > 170) { doc.addPage(); addPageHeader(doc, 'Hub Drilldown'); y = 18; }
+        if (y > 240) { doc.addPage(); addPageHeader(doc, 'Hub Drilldown'); y = 18; }
         doc.setFontSize(10);
-        doc.setTextColor(60, 60, 180);
+        doc.setTextColor(41, 98, 255);
         doc.setFont('helvetica', 'bold');
-        doc.text(`  State: ${st.name} — ${st.questionnaires} Q, ${st.sites} sites (${st.percentage.toFixed(1)}%)`, 14, y);
-        y += 3;
-        const actRows = st.activities.map((act: any) => {
-          const locNames = act.localities.map((l: any) => `${l.name} (${l.questionnaires})`).join(', ');
-          return [act.name, String(act.sites), String(act.questionnaires), act.percentage.toFixed(1) + '%', locNames];
+        doc.text(`State: ${st.name} — ${st.questionnaires} Q, ${st.sites} sites`, 18, y);
+        y += 4;
+
+        st.activities.forEach((act: any) => {
+          if (y > 250) { doc.addPage(); addPageHeader(doc, 'Hub Drilldown'); y = 18; }
+          doc.setFontSize(9);
+          doc.setTextColor(16, 185, 129);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${act.name} — ${act.questionnaires} Q, ${act.sites} sites`, 22, y);
+          y += 3;
+
+          act.localities.forEach((loc: any) => {
+            if (y > 255) { doc.addPage(); addPageHeader(doc, 'Hub Drilldown'); y = 18; }
+            doc.setFontSize(8);
+            doc.setTextColor(217, 119, 6);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${loc.name} — ${loc.questionnaires} Q, ${loc.sites} sites`, 26, y);
+            y += 3;
+            if (loc.siteNames && loc.siteNames.length > 0) {
+              const siteRows = loc.siteNames.map((sn: string, idx: number) => [String(idx + 1), sn]);
+              y = styledAutoTable(doc, [['#', 'Site Name']], siteRows, y, {
+                fontSize: 8,
+                margin: { left: 30, right: 14 },
+                columnStyles: { 0: { cellWidth: 10, halign: 'center', fontStyle: 'normal' }, 1: { cellWidth: 120 } },
+              });
+              y += 3;
+            }
+          });
+          y += 2;
         });
-        y = styledAutoTable(doc, [['Activity', 'Sites', 'Q', '%', 'Localities']], actRows, y, {
-          fontSize: 7,
-          margin: { left: 20, right: 14 },
-          columnStyles: { 4: { cellWidth: 80 } },
-        });
-        y += 8;
+        y += 4;
       });
-      y += 4;
+      y += 6;
     });
     addAllFooters(doc);
     doc.save('hub_drilldown.pdf');
@@ -1531,17 +1563,20 @@ const QuestionnaireAnalytics = () => {
   const exportHubDrilldownFormattedExcel = useCallback(async () => {
     const sheets = [{
       title: 'Hub Drilldown',
-      headers: ['Level', 'Hub', 'State', 'Activity', 'Locality', 'Sites', 'Questionnaires', '%'],
+      headers: ['Level', 'Hub', 'State', 'Activity', 'Locality', 'Site Name', 'Sites', 'Questionnaires', '%'],
       rows: [] as (string|number)[][],
     }];
     hubDrilldown.forEach((hub: any) => {
-      sheets[0].rows.push(['Hub', hub.name, '', '', '', hub.sites, hub.questionnaires, hub.percentage.toFixed(1) + '%']);
+      sheets[0].rows.push(['Hub', hub.name, '', '', '', '', hub.sites, hub.questionnaires, hub.percentage.toFixed(1) + '%']);
       hub.states.forEach((st: any) => {
-        sheets[0].rows.push(['State', hub.name, st.name, '', '', st.sites, st.questionnaires, st.percentage.toFixed(1) + '%']);
+        sheets[0].rows.push(['State', hub.name, st.name, '', '', '', st.sites, st.questionnaires, st.percentage.toFixed(1) + '%']);
         st.activities.forEach((act: any) => {
-          sheets[0].rows.push(['Activity', hub.name, st.name, act.name, '', act.sites, act.questionnaires, act.percentage.toFixed(1) + '%']);
+          sheets[0].rows.push(['Activity', hub.name, st.name, act.name, '', '', act.sites, act.questionnaires, act.percentage.toFixed(1) + '%']);
           act.localities.forEach((loc: any) => {
-            sheets[0].rows.push(['Locality', hub.name, st.name, act.name, loc.name, loc.sites, loc.questionnaires, loc.percentage.toFixed(1) + '%']);
+            sheets[0].rows.push(['Locality', hub.name, st.name, act.name, loc.name, '', loc.sites, loc.questionnaires, loc.percentage.toFixed(1) + '%']);
+            loc.siteNames.forEach((sn: string) => {
+              sheets[0].rows.push(['Site', hub.name, st.name, act.name, loc.name, sn, '', '', '']);
+            });
           });
         });
       });
@@ -1682,29 +1717,52 @@ const QuestionnaireAnalytics = () => {
                                       </div>
                                     </td>
                                   </tr>
-                                  {actExpanded && act.localities.map((loc, li) => (
-                                    <tr
-                                      key={`${actKey}::${loc.name}`}
-                                      className="border-b bg-amber-50/30 dark:bg-amber-950/10"
-                                      data-testid={`row-locality-drill-${hi}-${si}-${ai}-${li}`}
-                                    >
-                                      <td className="py-1.5 px-3" />
-                                      <td className="py-1.5 px-3 pl-24">
-                                        <div className="flex items-center gap-2 text-xs">
-                                          <MapPin className="h-3 w-3 text-amber-600 flex-shrink-0" />
-                                          {loc.name}
-                                        </div>
-                                      </td>
-                                      <td className="py-1.5 px-3 text-right"><span className="font-mono text-xs text-muted-foreground">{loc.sites}</span></td>
-                                      <td className="py-1.5 px-3 text-right"><span className="font-mono text-xs">{loc.questionnaires}</span></td>
-                                      <td className="py-1.5 px-3 text-right text-muted-foreground text-xs">{loc.percentage.toFixed(1)}%</td>
-                                      <td className="py-1.5 px-3">
-                                        <div className="w-full bg-muted rounded-full h-1">
-                                          <div className="bg-amber-500 rounded-full h-1 transition-all" style={{ width: `${Math.min(loc.percentage, 100)}%` }} />
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {actExpanded && act.localities.map((loc, li) => {
+                                    const locKey = `${actKey}::${loc.name}`;
+                                    const locExpanded = drillExpandedLocalities.has(locKey);
+                                    return (
+                                      <Fragment key={locKey}>
+                                        <tr
+                                          className="border-b bg-amber-50/30 dark:bg-amber-950/10 cursor-pointer hover:bg-amber-100/40 dark:hover:bg-amber-950/20 transition-colors"
+                                          onClick={() => toggleDrillLocality(locKey)}
+                                          data-testid={`row-locality-drill-${hi}-${si}-${ai}-${li}`}
+                                        >
+                                          <td className="py-1.5 px-3" />
+                                          <td className="py-1.5 px-3 pl-24">
+                                            <div className="flex items-center gap-2 text-xs">
+                                              {locExpanded ? <ChevronUp className="h-3 w-3 text-amber-600 flex-shrink-0" /> : <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
+                                              <MapPin className="h-3 w-3 text-amber-600 flex-shrink-0" />
+                                              {loc.name}
+                                              {loc.siteNames.length > 0 && <Badge variant="outline" className="text-[10px] px-1 py-0">{loc.siteNames.length} sites</Badge>}
+                                            </div>
+                                          </td>
+                                          <td className="py-1.5 px-3 text-right"><span className="font-mono text-xs text-muted-foreground">{loc.sites}</span></td>
+                                          <td className="py-1.5 px-3 text-right"><span className="font-mono text-xs">{loc.questionnaires}</span></td>
+                                          <td className="py-1.5 px-3 text-right text-muted-foreground text-xs">{loc.percentage.toFixed(1)}%</td>
+                                          <td className="py-1.5 px-3">
+                                            <div className="w-full bg-muted rounded-full h-1">
+                                              <div className="bg-amber-500 rounded-full h-1 transition-all" style={{ width: `${Math.min(loc.percentage, 100)}%` }} />
+                                            </div>
+                                          </td>
+                                        </tr>
+                                        {locExpanded && loc.siteNames.map((siteName, sni) => (
+                                          <tr
+                                            key={`${locKey}::site-${sni}`}
+                                            className="border-b bg-purple-50/30 dark:bg-purple-950/10"
+                                            data-testid={`row-site-drill-${hi}-${si}-${ai}-${li}-${sni}`}
+                                          >
+                                            <td className="py-1 px-3" />
+                                            <td className="py-1 px-3 pl-32" colSpan={5}>
+                                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <span className="w-4 text-center text-[10px] text-purple-500">{sni + 1}.</span>
+                                                {siteName}
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </Fragment>
+                                    );
+                                  })}
                                 </Fragment>
                               );
                             })}
