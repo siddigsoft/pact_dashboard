@@ -407,11 +407,16 @@ const ReviewAssignCoordinators: React.FC = () => {
     return acc;
   }, {} as Record<string, any[]>);
 
-  // All coordinators in the system
-  const allCoordinators = users.filter(u => u.role === 'coordinator');
+  const allCoordinators = useMemo(() => 
+    users.filter(u => u.role === 'coordinator').map(c => ({
+      ...c,
+      stateId: normalizeStateId(c.stateId) || c.stateId,
+      localityId: c.localityId ? (normalizeLocalityId(c.localityId, normalizeStateId(c.stateId) || c.stateId || '') || c.localityId) : c.localityId,
+    })),
+    [users]
+  );
 
-  // All supervisors in the system
-  const allSupervisors = users.filter(u => u.role === 'supervisor');
+  const allSupervisors = useMemo(() => users.filter(u => u.role === 'supervisor'), [users]);
 
   // Helper to get recommended coordinator for a group
   function getRecommendedCoordinator(stateId: string, localityId: string) {
