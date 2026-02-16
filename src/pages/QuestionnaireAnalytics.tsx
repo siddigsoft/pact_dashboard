@@ -20,6 +20,7 @@ interface QuestionnaireRow {
   activity: string;
   subActivity: string;
   dataCollector: string;
+  deviceId: string;
   supervisor: string;
   date: string;
   siteId: string;
@@ -42,7 +43,7 @@ interface ActivitySiteItem {
   children?: SummaryItem[];
 }
 
-const COLUMN_MAP = {
+const DEFAULT_COLUMN_MAP = {
   hub: 16,
   state: 17,
   locality: 18,
@@ -50,10 +51,16 @@ const COLUMN_MAP = {
   activity: 24,
   subActivity: 25,
   dataCollector: 11,
+  deviceId: 8,
   supervisor: 12,
   date: 10,
   siteId: 21,
   partner: 22,
+};
+
+const HEADER_KEYWORDS: Record<string, string[]> = {
+  deviceId: ['deviceid', 'device_id', 'معرف الجهاز', 'device id', 'device identifier', 'imei'],
+  dataCollector: ['data collector', 'datacollector', 'enumerator', 'collector name', 'اسم الجامع', 'data_collector'],
 };
 
 const QuestionnaireAnalytics = () => {
@@ -79,18 +86,28 @@ const QuestionnaireAnalytics = () => {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
+        const colMap = { ...DEFAULT_COLUMN_MAP };
+        if (rawData.length > 0) {
+          const headerRow = rawData[0].map((h: any) => (h || '').toString().toLowerCase().trim());
+          Object.entries(HEADER_KEYWORDS).forEach(([field, keywords]) => {
+            const idx = headerRow.findIndex((h: string) => keywords.some(kw => h.includes(kw)));
+            if (idx >= 0) (colMap as any)[field] = idx;
+          });
+        }
+
         const rows: QuestionnaireRow[] = rawData.slice(1).map((row) => ({
-          hub: (row[COLUMN_MAP.hub] || '').toString().trim(),
-          state: (row[COLUMN_MAP.state] || '').toString().trim(),
-          locality: (row[COLUMN_MAP.locality] || '').toString().trim(),
-          activitySite: (row[COLUMN_MAP.activitySite] || '').toString().trim(),
-          activity: (row[COLUMN_MAP.activity] || '').toString().trim(),
-          subActivity: (row[COLUMN_MAP.subActivity] || '').toString().trim(),
-          dataCollector: (row[COLUMN_MAP.dataCollector] || '').toString().trim(),
-          supervisor: (row[COLUMN_MAP.supervisor] || '').toString().trim(),
-          date: (row[COLUMN_MAP.date] || '').toString().trim(),
-          siteId: (row[COLUMN_MAP.siteId] || '').toString().trim(),
-          partner: (row[COLUMN_MAP.partner] || '').toString().trim(),
+          hub: (row[colMap.hub] || '').toString().trim(),
+          state: (row[colMap.state] || '').toString().trim(),
+          locality: (row[colMap.locality] || '').toString().trim(),
+          activitySite: (row[colMap.activitySite] || '').toString().trim(),
+          activity: (row[colMap.activity] || '').toString().trim(),
+          subActivity: (row[colMap.subActivity] || '').toString().trim(),
+          dataCollector: (row[colMap.dataCollector] || '').toString().trim(),
+          deviceId: (row[colMap.deviceId] || '').toString().trim(),
+          supervisor: (row[colMap.supervisor] || '').toString().trim(),
+          date: (row[colMap.date] || '').toString().trim(),
+          siteId: (row[colMap.siteId] || '').toString().trim(),
+          partner: (row[colMap.partner] || '').toString().trim(),
         })).filter(row => row.hub || row.state || row.dataCollector);
 
         setData(rows);
@@ -193,23 +210,45 @@ const QuestionnaireAnalytics = () => {
       })
       .sort((a, b) => b.siteCount - a.siteCount);
   }, [filteredData]);
-  const collectorSummary = useMemo(() => buildSummary(filteredData, 'dataCollector'), [filteredData, buildSummary]);
+  const collectorSummary = useMemo(() => {
+    const collMap = new Map<string, { count: number; deviceId: string }>();
+    filteredData.forEach(row => {
+      const name = row.dataCollector || '(Empty)';
+      const existing = collMap.get(name);
+      if (existing) {
+        existing.count++;
+        if (!existing.deviceId && row.deviceId) existing.deviceId = row.deviceId;
+      } else {
+        collMap.set(name, { count: 1, deviceId: row.deviceId || '' });
+      }
+    });
+    const total = filteredData.length;
+    return [...collMap.entries()]
+      .map(([name, { count, deviceId }]) => ({ name, count, deviceId, percentage: total > 0 ? (count / total) * 100 : 0 }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredData]);
 
   const collectorByHub = useMemo(() => {
-    const hubMap = new Map<string, Map<string, number>>();
+    const hubMap = new Map<string, Map<string, { count: number; deviceId: string }>>();
     filteredData.forEach(row => {
       const hub = row.hub || '(Empty)';
       const collector = row.dataCollector || '(Empty)';
       if (!hubMap.has(hub)) hubMap.set(hub, new Map());
       const cMap = hubMap.get(hub)!;
-      cMap.set(collector, (cMap.get(collector) || 0) + 1);
+      const existing = cMap.get(collector);
+      if (existing) {
+        existing.count++;
+        if (!existing.deviceId && row.deviceId) existing.deviceId = row.deviceId;
+      } else {
+        cMap.set(collector, { count: 1, deviceId: row.deviceId || '' });
+      }
     });
     return [...hubMap.entries()]
       .map(([hub, collectors]) => ({
         hub,
-        total: [...collectors.values()].reduce((a, b) => a + b, 0),
+        total: [...collectors.values()].reduce((a, b) => a + b.count, 0),
         collectors: [...collectors.entries()]
-          .map(([name, count]) => ({ name, count }))
+          .map(([name, { count, deviceId }]) => ({ name, count, deviceId }))
           .sort((a, b) => b.count - a.count),
       }))
       .sort((a, b) => b.total - a.total);
@@ -249,14 +288,14 @@ const QuestionnaireAnalytics = () => {
     const actWs = XLSX.utils.json_to_sheet(actRows);
     XLSX.utils.book_append_sheet(wb, actWs, 'By Activity (PDM)');
 
-    const collData = collectorSummary.map(c => ({ 'Data Collector': c.name, 'Total Questionnaires': c.count, 'Percentage': c.percentage.toFixed(1) + '%' }));
+    const collData = collectorSummary.map(c => ({ 'معرف الجهاز (Device ID)': c.deviceId, 'Data Collector': c.name, 'Total Questionnaires': c.count, 'Percentage': c.percentage.toFixed(1) + '%' }));
     const collWs = XLSX.utils.json_to_sheet(collData);
     XLSX.utils.book_append_sheet(wb, collWs, 'By Data Collector');
 
     const collHubRows: any[] = [];
     collectorByHub.forEach(h => {
       h.collectors.forEach(c => {
-        collHubRows.push({ Hub: h.hub, 'Data Collector': c.name, 'Total Questionnaires': c.count });
+        collHubRows.push({ Hub: h.hub, 'معرف الجهاز (Device ID)': c.deviceId, 'Data Collector': c.name, 'Total Questionnaires': c.count });
       });
     });
     const collHubWs = XLSX.utils.json_to_sheet(collHubRows);
@@ -346,19 +385,19 @@ const QuestionnaireAnalytics = () => {
 
     addSection(
       'Summary by Data Collector',
-      ['Data Collector', 'Total', '%'],
-      collectorSummary.map(c => [c.name, String(c.count), c.percentage.toFixed(1) + '%'])
+      ['Device ID', 'Data Collector', 'Total', '%'],
+      collectorSummary.map(c => [c.deviceId || '-', c.name, String(c.count), c.percentage.toFixed(1) + '%'])
     );
 
     const collHubRows: string[][] = [];
     collectorByHub.forEach(h => {
       h.collectors.forEach(c => {
-        collHubRows.push([h.hub, c.name, String(c.count)]);
+        collHubRows.push([h.hub, c.deviceId || '-', c.name, String(c.count)]);
       });
     });
     addSection(
       'Data Collectors by Hub',
-      ['Hub', 'Data Collector', 'Total'],
+      ['Hub', 'Device ID', 'Data Collector', 'Total'],
       collHubRows
     );
 
@@ -719,7 +758,57 @@ const QuestionnaireAnalytics = () => {
             </TabsContent>
 
             <TabsContent value="collector" className="space-y-4 mt-4">
-              <SummaryTable items={collectorSummary} label="Data Collector" icon={Users} />
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Users className="h-5 w-5 text-primary" />
+                    By Data Collector
+                  </CardTitle>
+                  <CardDescription>{collectorSummary.length} unique data collectors found</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="table-data-collector">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left py-2 px-3 font-medium">#</th>
+                          <th className="text-left py-2 px-3 font-medium">معرف الجهاز (Device ID)</th>
+                          <th className="text-left py-2 px-3 font-medium">Data Collector</th>
+                          <th className="text-right py-2 px-3 font-medium">Total</th>
+                          <th className="text-right py-2 px-3 font-medium">%</th>
+                          <th className="py-2 px-3 font-medium w-32">Distribution</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {collectorSummary.map((item, i) => (
+                          <tr key={item.name} className="border-b hover:bg-muted/30 transition-colors">
+                            <td className="py-2 px-3 text-muted-foreground">{i + 1}</td>
+                            <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.deviceId || '-'}</td>
+                            <td className="py-2 px-3 font-medium">{item.name}</td>
+                            <td className="py-2 px-3 text-right">
+                              <Badge variant="secondary" className="font-mono">{item.count}</Badge>
+                            </td>
+                            <td className="py-2 px-3 text-right text-muted-foreground">{item.percentage.toFixed(1)}%</td>
+                            <td className="py-2 px-3">
+                              <div className="w-full bg-muted rounded-full h-2">
+                                <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${Math.min(item.percentage, 100)}%` }} />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="bg-muted/50 font-semibold">
+                          <td className="py-2 px-3" colSpan={3}>Total</td>
+                          <td className="py-2 px-3 text-right">
+                            <Badge className="font-mono">{collectorSummary.reduce((a, b) => a + b.count, 0)}</Badge>
+                          </td>
+                          <td className="py-2 px-3 text-right">100%</td>
+                          <td />
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
 
               <Card>
                 <CardHeader className="pb-3">
@@ -753,6 +842,7 @@ const QuestionnaireAnalytics = () => {
                               <thead>
                                 <tr className="border-b">
                                   <th className="text-left py-1.5 px-2 font-medium text-xs">#</th>
+                                  <th className="text-left py-1.5 px-2 font-medium text-xs">معرف الجهاز</th>
                                   <th className="text-left py-1.5 px-2 font-medium text-xs">Data Collector</th>
                                   <th className="text-right py-1.5 px-2 font-medium text-xs">Total</th>
                                 </tr>
@@ -761,6 +851,7 @@ const QuestionnaireAnalytics = () => {
                                 {hubGroup.collectors.map((c, i) => (
                                   <tr key={c.name} className="border-b last:border-0">
                                     <td className="py-1.5 px-2 text-muted-foreground text-xs">{i + 1}</td>
+                                    <td className="py-1.5 px-2 font-mono text-xs text-muted-foreground">{c.deviceId || '-'}</td>
                                     <td className="py-1.5 px-2">{c.name}</td>
                                     <td className="py-1.5 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{c.count}</Badge></td>
                                   </tr>
