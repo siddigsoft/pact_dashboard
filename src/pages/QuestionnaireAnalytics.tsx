@@ -746,14 +746,14 @@ const QuestionnaireAnalytics = () => {
     hubs.forEach((hub, hi) => {
       totalRow[`${hub} Sites`] = hubTotals[hi].sites;
       totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
-      const pdmHubQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0);
-      totalRow[`${hub} PDM Sites`] = Math.ceil(pdmHubQ / 7);
+      const pdmSitesCol = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0);
+      totalRow[`${hub} PDM Sites`] = pdmSitesCol || 0;
       totalRow[`${hub} Collectors`] = hubTotals[hi].collectors;
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
-    const pdmTotalQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-    totalRow['Total PDM Sites'] = Math.ceil(pdmTotalQ / 7);
+    const pdmSitesGrand = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+    totalRow['Total PDM Sites'] = pdmSitesGrand || 0;
     totalRow['Total Collectors'] = grandCollectors;
     trackerRows.push(totalRow);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trackerRows), 'Tracker');
@@ -773,11 +773,11 @@ const QuestionnaireAnalytics = () => {
       });
       const htTotal: any = { Activity: 'Total' };
       ht.colTotals.forEach((ct, ci) => {
-        const pdmColQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
-        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = Math.ceil(pdmColQ / 7); htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmTotalQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = Math.ceil(htPdmTotalQ / 7); htTotal['Total DC'] = ht.grandCollectors;
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       const sheetName = `Hub-${ht.hub}`.slice(0, 31);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), sheetName);
@@ -798,11 +798,11 @@ const QuestionnaireAnalytics = () => {
       });
       const stTotal: any = { Activity: 'Total' };
       st.colTotals.forEach((ct, ci) => {
-        const pdmColQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
-        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = Math.ceil(pdmColQ / 7); stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+        const pdmSitesCol = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol || 0; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmTotalQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = Math.ceil(stPdmTotalQ / 7); stTotal['Total DC'] = st.grandCollectors;
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand || 0; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       const sheetName = `State-${st.state}`.slice(0, 31);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), sheetName);
@@ -907,11 +907,10 @@ const QuestionnaireAnalytics = () => {
         r.push(String(row.totalSites), String(row.totalQ), String(isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0), String(row.totalCollectors));
         return r;
       });
-      const pdmHubTotals = tHubs.map((_, hi) => tMatrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0));
-      const pdmGrandQ = tMatrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
       const tTotalRow = ['Grand Total'];
-      tHubTotals.forEach((ht, idx) => { tTotalRow.push(String(ht.sites), String(ht.questionnaires), String(Math.ceil(pdmHubTotals[idx] / 7)), String(ht.collectors)); });
-      tTotalRow.push(String(tGrandSites), String(tGrandQ), String(Math.ceil(pdmGrandQ / 7)), String(tGrandCollectors));
+      tHubTotals.forEach((ht, idx) => { const pdmSitesCol = tMatrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[idx].questionnaires ? Math.ceil(r.cells[idx].questionnaires / 7) : 0) : r.cells[idx].questionnaires), 0); tTotalRow.push(String(ht.sites), String(ht.questionnaires), String(pdmSitesCol || 0), String(ht.collectors)); });
+      const pdmSitesGrandPdf = tMatrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      tTotalRow.push(String(tGrandSites), String(tGrandQ), String(pdmSitesGrandPdf || 0), String(tGrandCollectors));
       tRows.push(tTotalRow);
       addSection('Tracker - Activity x Hub', tHeaders, tRows);
     }
@@ -927,9 +926,9 @@ const QuestionnaireAnalytics = () => {
         return r;
       });
       const totR = ['Total'];
-      ht.colTotals.forEach((ct, ci) => { const pdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0); totR.push(String(ct.sites), String(ct.questionnaires), String(Math.ceil(pdmQ / 7)), String(ct.collectors)); });
-      const htPdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-      totR.push(String(ht.grandSites), String(ht.grandQ), String(Math.ceil(htPdmQ / 7)), String(ht.grandCollectors));
+      ht.colTotals.forEach((ct, ci) => { const pdmSitesCol = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0); totR.push(String(ct.sites), String(ct.questionnaires), String(pdmSitesCol || 0), String(ct.collectors)); });
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      totR.push(String(ht.grandSites), String(ht.grandQ), String(htPdmSitesGrand || 0), String(ht.grandCollectors));
       rows.push(totR);
       addSection(`Hub: ${ht.hub} (Activity x State)`, headers, rows);
     });
@@ -945,9 +944,9 @@ const QuestionnaireAnalytics = () => {
         return r;
       });
       const totR2 = ['Total'];
-      st.colTotals.forEach((ct, ci) => { const pdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0); totR2.push(String(ct.sites), String(ct.questionnaires), String(Math.ceil(pdmQ / 7)), String(ct.collectors)); });
-      const stPdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-      totR2.push(String(st.grandSites), String(st.grandQ), String(Math.ceil(stPdmQ / 7)), String(st.grandCollectors));
+      st.colTotals.forEach((ct, ci) => { const pdmSitesCol = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0); totR2.push(String(ct.sites), String(ct.questionnaires), String(pdmSitesCol || 0), String(ct.collectors)); });
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      totR2.push(String(st.grandSites), String(st.grandQ), String(stPdmSitesGrand || 0), String(st.grandCollectors));
       rows2.push(totR2);
       addSection(`State: ${st.state} (Activity x Locality)`, headers, rows2);
     });
@@ -978,14 +977,14 @@ const QuestionnaireAnalytics = () => {
     hubs.forEach((hub, hi) => {
       totalRow[`${hub} Sites`] = hubTotals[hi].sites;
       totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
-      const pdmHubQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0);
-      totalRow[`${hub} PDM Sites`] = Math.ceil(pdmHubQ / 7);
+      const pdmSitesCol = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0);
+      totalRow[`${hub} PDM Sites`] = pdmSitesCol || 0;
       totalRow[`${hub} DC`] = hubTotals[hi].collectors;
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
-    const pdmTotalQ2 = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-    totalRow['Total PDM Sites'] = Math.ceil(pdmTotalQ2 / 7);
+    const pdmSitesGrand2 = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+    totalRow['Total PDM Sites'] = pdmSitesGrand2 || 0;
     totalRow['Total DC'] = grandCollectors;
     rows.push(totalRow);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity x Hub');
@@ -1015,11 +1014,11 @@ const QuestionnaireAnalytics = () => {
       });
       const htTotal: any = { Activity: 'Total' };
       ht.colTotals.forEach((ct, ci) => {
-        const pdmColQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
-        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = Math.ceil(pdmColQ / 7); htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmTotalQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = Math.ceil(htPdmTotalQ / 7); htTotal['Total DC'] = ht.grandCollectors;
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `Hub-${ht.hub}`.slice(0, 31));
     });
@@ -1039,11 +1038,11 @@ const QuestionnaireAnalytics = () => {
       });
       const stTotal: any = { Activity: 'Total' };
       st.colTotals.forEach((ct, ci) => {
-        const pdmColQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
-        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = Math.ceil(pdmColQ / 7); stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+        const pdmSitesCol = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol || 0; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmTotalQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = Math.ceil(stPdmTotalQ / 7); stTotal['Total DC'] = st.grandCollectors;
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand || 0; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `State-${st.state}`.slice(0, 31));
     });
@@ -1058,8 +1057,8 @@ const QuestionnaireAnalytics = () => {
       sb.activities.filter(a => a.questionnaires > 0).forEach(a => {
         rows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires, 'PDM Sites': isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : '-' });
       });
-      const pdmQ = sb.activities.filter(a => a.questionnaires > 0 && isPdmActivity(a.activity)).reduce((s, a) => s + a.questionnaires, 0);
-      rows.push({ State: sb.state, Activity: 'Total', Sites: sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0), Questionnaires: sb.totalQ, 'PDM Sites': pdmQ ? Math.ceil(pdmQ / 7) : '-' });
+      const pdmSitesTotal = sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + (isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : a.questionnaires), 0);
+      rows.push({ State: sb.state, Activity: 'Total', Sites: sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0), Questionnaires: sb.totalQ, 'PDM Sites': pdmSitesTotal || '-' });
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity by State');
     XLSX.writeFile(wb, 'tracker_activity_by_state.xlsx');
@@ -1077,8 +1076,8 @@ const QuestionnaireAnalytics = () => {
       doc.text(`${sb.state} (${sb.totalQ} Q)`, 14, y);
       y += 2;
       const actRows = sb.activities.filter((a: any) => a.questionnaires > 0).map((a: any) => [a.activity, String(a.sites), String(a.questionnaires), isPdmActivity(a.activity) ? String(Math.ceil(a.questionnaires / 7)) : '-']);
-      const pdmQ = sb.activities.filter((a: any) => a.questionnaires > 0 && isPdmActivity(a.activity)).reduce((s: number, a: any) => s + a.questionnaires, 0);
-      actRows.push(['Total', String(sb.activities.filter((a: any) => a.questionnaires > 0).reduce((s: number, a: any) => s + a.sites, 0)), String(sb.totalQ), pdmQ ? String(Math.ceil(pdmQ / 7)) : '-']);
+      const pdmSitesTotal = sb.activities.filter((a: any) => a.questionnaires > 0).reduce((s: number, a: any) => s + (isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : a.questionnaires), 0);
+      actRows.push(['Total', String(sb.activities.filter((a: any) => a.questionnaires > 0).reduce((s: number, a: any) => s + a.sites, 0)), String(sb.totalQ), pdmSitesTotal ? String(pdmSitesTotal) : '-']);
       y = styledAutoTable(doc, [['Activity', 'Sites', 'Questionnaires', 'PDM Sites']], actRows, y, { boldLastRow: true });
       y += 8;
     });
@@ -1103,11 +1102,11 @@ const QuestionnaireAnalytics = () => {
       });
       const htTotal: any = { Activity: 'Total' };
       ht.colTotals.forEach((ct, ci) => {
-        const pdmColQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
-        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmColQ ? Math.ceil(pdmColQ / 7) : 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+        const pdmSitesCol = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = pdmSitesCol || 0; htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      const htPdmTotalQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmTotalQ ? Math.ceil(htPdmTotalQ / 7) : 0; htTotal['Total DC'] = ht.grandCollectors;
+      const htPdmSitesGrand = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = htPdmSitesGrand || 0; htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `${ht.hub}`.slice(0, 31));
     });
@@ -1136,11 +1135,11 @@ const QuestionnaireAnalytics = () => {
       });
       const totR = ['Total'];
       ht.colTotals.forEach((ct: any, ci: number) => {
-        const pdmColQ = ht.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[ci].questionnaires, 0);
-        totR.push(String(ct.sites), String(ct.questionnaires), pdmColQ ? String(Math.ceil(pdmColQ / 7)) : '-', String(ct.collectors));
+        const pdmSitesCol = ht.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        totR.push(String(ct.sites), String(ct.questionnaires), pdmSitesCol ? String(pdmSitesCol) : '-', String(ct.collectors));
       });
-      const htPdmQ = ht.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
-      totR.push(String(ht.grandSites), String(ht.grandQ), htPdmQ ? String(Math.ceil(htPdmQ / 7)) : '-', String(ht.grandCollectors));
+      const htPdmSitesGrand = ht.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      totR.push(String(ht.grandSites), String(ht.grandQ), htPdmSitesGrand ? String(htPdmSitesGrand) : '-', String(ht.grandCollectors));
       bodyRows.push(totR);
       y = styledAutoTable(doc, [headers], bodyRows, y, { fontSize: 6, margin: { left: 10, right: 10 }, boldLastRow: true });
       y += 10;
@@ -1166,11 +1165,11 @@ const QuestionnaireAnalytics = () => {
       });
       const stTotal: any = { Activity: 'Total' };
       st.colTotals.forEach((ct, ci) => {
-        const pdmColQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
-        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmColQ ? Math.ceil(pdmColQ / 7) : 0; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+        const pdmSitesCol = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = pdmSitesCol || 0; stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      const stPdmTotalQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
-      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmTotalQ ? Math.ceil(stPdmTotalQ / 7) : 0; stTotal['Total DC'] = st.grandCollectors;
+      const stPdmSitesGrand = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = stPdmSitesGrand || 0; stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `${st.state}`.slice(0, 31));
     });
@@ -1199,11 +1198,11 @@ const QuestionnaireAnalytics = () => {
       });
       const totR = ['Total'];
       st.colTotals.forEach((ct: any, ci: number) => {
-        const pdmColQ = st.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[ci].questionnaires, 0);
-        totR.push(String(ct.sites), String(ct.questionnaires), pdmColQ ? String(Math.ceil(pdmColQ / 7)) : '-', String(ct.collectors));
+        const pdmSitesCol = st.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        totR.push(String(ct.sites), String(ct.questionnaires), pdmSitesCol ? String(pdmSitesCol) : '-', String(ct.collectors));
       });
-      const stPdmQ = st.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
-      totR.push(String(st.grandSites), String(st.grandQ), stPdmQ ? String(Math.ceil(stPdmQ / 7)) : '-', String(st.grandCollectors));
+      const stPdmSitesGrand = st.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      totR.push(String(st.grandSites), String(st.grandQ), stPdmSitesGrand ? String(stPdmSitesGrand) : '-', String(st.grandCollectors));
       bodyRows.push(totR);
       y = styledAutoTable(doc, [headers], bodyRows, y, { fontSize: 6, margin: { left: 10, right: 10 }, boldLastRow: true });
       y += 10;
@@ -1391,11 +1390,11 @@ const QuestionnaireAnalytics = () => {
     });
     const totR = ['Grand Total'];
     hubTotals.forEach((ht: any, hi: number) => {
-      const pdmHubQ = matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[hi].questionnaires, 0);
-      totR.push(String(ht.sites), String(ht.questionnaires), pdmHubQ ? String(Math.ceil(pdmHubQ / 7)) : '-', String(ht.collectors));
+      const pdmSitesCol = matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0);
+      totR.push(String(ht.sites), String(ht.questionnaires), pdmSitesCol ? String(pdmSitesCol) : '-', String(ht.collectors));
     });
-    const pdmGrandQ = matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
-    totR.push(String(grandSites), String(grandQ), pdmGrandQ ? String(Math.ceil(pdmGrandQ / 7)) : '-', String(grandCollectors));
+    const pdmSitesGrandPdf = matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+    totR.push(String(grandSites), String(grandQ), pdmSitesGrandPdf ? String(pdmSitesGrandPdf) : '-', String(grandCollectors));
     bodyRows.push(totR);
     y = styledAutoTable(doc, [headers], bodyRows, y, { fontSize: 6, margin: { left: 10, right: 10 }, boldLastRow: true });
     addAllFooters(doc);
@@ -1409,12 +1408,12 @@ const QuestionnaireAnalytics = () => {
   const exportActivityByStateFormattedExcel = useCallback(async () => {
     const sheets = trackerData.stateBreakdown.map(sb => {
       const acts = sb.activities.filter((a: any) => a.questionnaires > 0);
-      const pdmQ = acts.filter((a: any) => isPdmActivity(a.activity)).reduce((s: number, a: any) => s + a.questionnaires, 0);
+      const pdmSitesTotal = acts.reduce((s: number, a: any) => s + (isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : a.questionnaires), 0);
       return {
         title: sb.state,
         headers: ['Activity', 'Sites', 'Questionnaires', 'PDM Sites'],
         rows: acts.map((a: any) => [a.activity, a.sites, a.questionnaires, isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : '-']),
-        totalRow: ['Total', acts.reduce((s: number, a: any) => s + a.sites, 0), sb.totalQ, pdmQ ? Math.ceil(pdmQ / 7) : '-'],
+        totalRow: ['Total', acts.reduce((s: number, a: any) => s + a.sites, 0), sb.totalQ, pdmSitesTotal || '-'],
       };
     });
     await exportFormattedExcel(sheets, 'tracker_activity_by_state.xlsx');
@@ -1433,11 +1432,11 @@ const QuestionnaireAnalytics = () => {
       });
       const totR: (string|number)[] = ['Total'];
       ht.colTotals.forEach((ct: any, ci: number) => {
-        const pdmColQ = ht.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[ci].questionnaires, 0);
-        totR.push(ct.sites, ct.questionnaires, pdmColQ ? Math.ceil(pdmColQ / 7) : '-', ct.collectors);
+        const pdmSitesCol = ht.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        totR.push(ct.sites, ct.questionnaires, pdmSitesCol || '-', ct.collectors);
       });
-      const htPdmQ = ht.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
-      totR.push(ht.grandSites, ht.grandQ, htPdmQ ? Math.ceil(htPdmQ / 7) : '-', ht.grandCollectors);
+      const htPdmSitesGrand = ht.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      totR.push(ht.grandSites, ht.grandQ, htPdmSitesGrand || '-', ht.grandCollectors);
       return { title: ht.hub, headers, rows, totalRow: totR };
     });
     await exportFormattedExcel(sheets, 'tracker_per_hub.xlsx');
@@ -1456,11 +1455,11 @@ const QuestionnaireAnalytics = () => {
       });
       const totR: (string|number)[] = ['Total'];
       st.colTotals.forEach((ct: any, ci: number) => {
-        const pdmColQ = st.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[ci].questionnaires, 0);
-        totR.push(ct.sites, ct.questionnaires, pdmColQ ? Math.ceil(pdmColQ / 7) : '-', ct.collectors);
+        const pdmSitesCol = st.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+        totR.push(ct.sites, ct.questionnaires, pdmSitesCol || '-', ct.collectors);
       });
-      const stPdmQ = st.matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
-      totR.push(st.grandSites, st.grandQ, stPdmQ ? Math.ceil(stPdmQ / 7) : '-', st.grandCollectors);
+      const stPdmSitesGrand = st.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      totR.push(st.grandSites, st.grandQ, stPdmSitesGrand || '-', st.grandCollectors);
       return { title: st.state, headers, rows, totalRow: totR };
     });
     await exportFormattedExcel(sheets, 'tracker_per_state.xlsx');
@@ -2661,13 +2660,13 @@ const QuestionnaireAnalytics = () => {
                             <Fragment key={trackerData.hubs[hi]}>
                               <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs">{ht.sites}</td>
                               <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs">{ht.questionnaires}</td>
-                              <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs">{Math.ceil(trackerData.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0) / 7) || '-'}</td>
+                              <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs">{trackerData.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0) || '-'}</td>
                               <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs">{ht.collectors}</td>
                             </Fragment>
                           ))}
                           <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs bg-primary/10">{trackerData.grandSites}</td>
                           <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs bg-primary/10">{trackerData.grandQ}</td>
-                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{Math.ceil(trackerData.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0) / 7) || '-'}</td>
+                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{trackerData.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0) || '-'}</td>
                           <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs bg-primary/10">{trackerData.grandCollectors}</td>
                         </tr>
                       </tbody>
@@ -2754,7 +2753,7 @@ const QuestionnaireAnalytics = () => {
                                     <td className="py-1.5 px-2">Total</td>
                                     <td className="py-1.5 px-2 text-right text-blue-700 text-xs">{sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0)}</td>
                                     <td className="py-1.5 px-2 text-right"><Badge className="font-mono text-xs">{sb.totalQ}</Badge></td>
-                                    <td className="py-1.5 px-2 text-right text-amber-700 font-mono text-xs">{(() => { const pdmQ = sb.activities.filter(a => a.questionnaires > 0 && isPdmActivity(a.activity)).reduce((s, a) => s + a.questionnaires, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
+                                    <td className="py-1.5 px-2 text-right text-amber-700 font-mono text-xs">{(() => { const total = sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + (isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : a.questionnaires), 0); return total || '-'; })()}</td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -2873,13 +2872,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={ht.states[ci]}>
                                       <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
                                       <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
-                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const pdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const total = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0); return total || '-'; })()}</td>
                                       <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
                                     </Fragment>
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{ht.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{ht.grandQ}</td>
-                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const pdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const total = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0); return total || '-'; })()}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{ht.grandCollectors}</td>
                                 </tr>
                               </tbody>
@@ -2998,13 +2997,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={st.localities[ci]}>
                                       <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
                                       <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
-                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const pdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const total = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0); return total || '-'; })()}</td>
                                       <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
                                     </Fragment>
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{st.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{st.grandQ}</td>
-                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const pdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const total = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0); return total || '-'; })()}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{st.grandCollectors}</td>
                                 </tr>
                               </tbody>
