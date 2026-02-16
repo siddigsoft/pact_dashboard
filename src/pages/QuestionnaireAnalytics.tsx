@@ -95,6 +95,8 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
   dataCollector: ['data collector', 'datacollector', 'enumerator', 'collector name', 'اسم الجامع', 'data_collector'],
 };
 
+const isPdmActivity = (activity: string) => /pdm/i.test(activity);
+
 const AccessDenied = () => (
   <div className="flex items-center justify-center h-[60vh]">
     <Card className="max-w-md w-full">
@@ -729,12 +731,12 @@ const QuestionnaireAnalytics = () => {
       hubs.forEach((hub, hi) => {
         r[`${hub} Sites`] = row.cells[hi].sites;
         r[`${hub} Actual`] = row.cells[hi].questionnaires;
-        r[`${hub} PDM Sites`] = row.cells[hi].questionnaires ? Math.ceil(row.cells[hi].questionnaires / 7) : 0;
+        r[`${hub} PDM Sites`] = isPdmActivity(row.activity) ? Math.ceil(row.cells[hi].questionnaires / 7) : 0;
         r[`${hub} Collectors`] = row.cells[hi].collectors;
       });
       r['Total Sites'] = row.totalSites;
       r['Total Actual'] = row.totalQ;
-      r['Total PDM Sites'] = Math.ceil(row.totalQ / 7);
+      r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0;
       r['Total Collectors'] = row.totalCollectors;
       trackerRows.push(r);
     });
@@ -742,12 +744,14 @@ const QuestionnaireAnalytics = () => {
     hubs.forEach((hub, hi) => {
       totalRow[`${hub} Sites`] = hubTotals[hi].sites;
       totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
-      totalRow[`${hub} PDM Sites`] = Math.ceil(hubTotals[hi].questionnaires / 7);
+      const pdmHubQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0);
+      totalRow[`${hub} PDM Sites`] = Math.ceil(pdmHubQ / 7);
       totalRow[`${hub} Collectors`] = hubTotals[hi].collectors;
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
-    totalRow['Total PDM Sites'] = Math.ceil(grandQ / 7);
+    const pdmTotalQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+    totalRow['Total PDM Sites'] = Math.ceil(pdmTotalQ / 7);
     totalRow['Total Collectors'] = grandCollectors;
     trackerRows.push(totalRow);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trackerRows), 'Tracker');
@@ -759,17 +763,19 @@ const QuestionnaireAnalytics = () => {
         ht.states.forEach((st, si) => {
           r[`${st} Sites`] = row.cells[si].sites;
           r[`${st} Actual`] = row.cells[si].questionnaires;
-          r[`${st} PDM Sites`] = row.cells[si].questionnaires ? Math.ceil(row.cells[si].questionnaires / 7) : 0;
+          r[`${st} PDM Sites`] = isPdmActivity(row.activity) ? Math.ceil(row.cells[si].questionnaires / 7) : 0;
           r[`${st} DC`] = row.cells[si].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.ceil(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0; r['Total DC'] = row.totalCollectors;
         htRows.push(r);
       });
       const htTotal: any = { Activity: 'Total' };
       ht.colTotals.forEach((ct, ci) => {
-        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = Math.ceil(ct.questionnaires / 7); htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+        const pdmColQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = Math.ceil(pdmColQ / 7); htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = Math.ceil(ht.grandQ / 7); htTotal['Total DC'] = ht.grandCollectors;
+      const htPdmTotalQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = Math.ceil(htPdmTotalQ / 7); htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       const sheetName = `Hub-${ht.hub}`.slice(0, 31);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), sheetName);
@@ -782,17 +788,19 @@ const QuestionnaireAnalytics = () => {
         st.localities.forEach((loc, li) => {
           r[`${loc} Sites`] = row.cells[li].sites;
           r[`${loc} Actual`] = row.cells[li].questionnaires;
-          r[`${loc} PDM Sites`] = row.cells[li].questionnaires ? Math.ceil(row.cells[li].questionnaires / 7) : 0;
+          r[`${loc} PDM Sites`] = isPdmActivity(row.activity) ? Math.ceil(row.cells[li].questionnaires / 7) : 0;
           r[`${loc} DC`] = row.cells[li].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.ceil(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0; r['Total DC'] = row.totalCollectors;
         stRows.push(r);
       });
       const stTotal: any = { Activity: 'Total' };
       st.colTotals.forEach((ct, ci) => {
-        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = Math.ceil(ct.questionnaires / 7); stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+        const pdmColQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = Math.ceil(pdmColQ / 7); stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = Math.ceil(st.grandQ / 7); stTotal['Total DC'] = st.grandCollectors;
+      const stPdmTotalQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = Math.ceil(stPdmTotalQ / 7); stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       const sheetName = `State-${st.state}`.slice(0, 31);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), sheetName);
@@ -893,13 +901,15 @@ const QuestionnaireAnalytics = () => {
       tHeaders.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
       const tRows = tMatrix.map(row => {
         const r = [row.activity];
-        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
-        r.push(String(row.totalSites), String(row.totalQ), String(Math.ceil(row.totalQ / 7)), String(row.totalCollectors));
+        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(isPdmActivity(row.activity) && c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
+        r.push(String(row.totalSites), String(row.totalQ), String(isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0), String(row.totalCollectors));
         return r;
       });
+      const pdmHubTotals = tHubs.map((_, hi) => tMatrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0));
+      const pdmGrandQ = tMatrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
       const tTotalRow = ['Grand Total'];
-      tHubTotals.forEach(ht => { tTotalRow.push(String(ht.sites), String(ht.questionnaires), String(Math.ceil(ht.questionnaires / 7)), String(ht.collectors)); });
-      tTotalRow.push(String(tGrandSites), String(tGrandQ), String(Math.ceil(tGrandQ / 7)), String(tGrandCollectors));
+      tHubTotals.forEach((ht, idx) => { tTotalRow.push(String(ht.sites), String(ht.questionnaires), String(Math.ceil(pdmHubTotals[idx] / 7)), String(ht.collectors)); });
+      tTotalRow.push(String(tGrandSites), String(tGrandQ), String(Math.ceil(pdmGrandQ / 7)), String(tGrandCollectors));
       tRows.push(tTotalRow);
       addSection('Tracker - Activity x Hub', tHeaders, tRows);
     }
@@ -910,13 +920,14 @@ const QuestionnaireAnalytics = () => {
       headers.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
       const rows = ht.matrix.map(row => {
         const r = [row.activity];
-        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
-        r.push(String(row.totalSites), String(row.totalQ), String(Math.ceil(row.totalQ / 7)), String(row.totalCollectors));
+        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(isPdmActivity(row.activity) && c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
+        r.push(String(row.totalSites), String(row.totalQ), String(isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0), String(row.totalCollectors));
         return r;
       });
       const totR = ['Total'];
-      ht.colTotals.forEach(ct => { totR.push(String(ct.sites), String(ct.questionnaires), String(Math.ceil(ct.questionnaires / 7)), String(ct.collectors)); });
-      totR.push(String(ht.grandSites), String(ht.grandQ), String(Math.ceil(ht.grandQ / 7)), String(ht.grandCollectors));
+      ht.colTotals.forEach((ct, ci) => { const pdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0); totR.push(String(ct.sites), String(ct.questionnaires), String(Math.ceil(pdmQ / 7)), String(ct.collectors)); });
+      const htPdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      totR.push(String(ht.grandSites), String(ht.grandQ), String(Math.ceil(htPdmQ / 7)), String(ht.grandCollectors));
       rows.push(totR);
       addSection(`Hub: ${ht.hub} (Activity x State)`, headers, rows);
     });
@@ -927,13 +938,14 @@ const QuestionnaireAnalytics = () => {
       headers.push('Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC');
       const rows2 = st.matrix.map(row => {
         const r = [row.activity];
-        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
-        r.push(String(row.totalSites), String(row.totalQ), String(Math.ceil(row.totalQ / 7)), String(row.totalCollectors));
+        row.cells.forEach(c => { r.push(String(c.sites), String(c.questionnaires), String(isPdmActivity(row.activity) && c.questionnaires ? Math.ceil(c.questionnaires / 7) : 0), String(c.collectors)); });
+        r.push(String(row.totalSites), String(row.totalQ), String(isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0), String(row.totalCollectors));
         return r;
       });
       const totR2 = ['Total'];
-      st.colTotals.forEach(ct => { totR2.push(String(ct.sites), String(ct.questionnaires), String(Math.ceil(ct.questionnaires / 7)), String(ct.collectors)); });
-      totR2.push(String(st.grandSites), String(st.grandQ), String(Math.ceil(st.grandQ / 7)), String(st.grandCollectors));
+      st.colTotals.forEach((ct, ci) => { const pdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0); totR2.push(String(ct.sites), String(ct.questionnaires), String(Math.ceil(pdmQ / 7)), String(ct.collectors)); });
+      const stPdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      totR2.push(String(st.grandSites), String(st.grandQ), String(Math.ceil(stPdmQ / 7)), String(st.grandCollectors));
       rows2.push(totR2);
       addSection(`State: ${st.state} (Activity x Locality)`, headers, rows2);
     });
@@ -951,12 +963,12 @@ const QuestionnaireAnalytics = () => {
       hubs.forEach((hub, hi) => {
         r[`${hub} Sites`] = row.cells[hi].sites;
         r[`${hub} Actual`] = row.cells[hi].questionnaires;
-        r[`${hub} PDM Sites`] = row.cells[hi].questionnaires ? Math.ceil(row.cells[hi].questionnaires / 7) : 0;
+        r[`${hub} PDM Sites`] = isPdmActivity(row.activity) ? Math.ceil(row.cells[hi].questionnaires / 7) : 0;
         r[`${hub} DC`] = row.cells[hi].collectors;
       });
       r['Total Sites'] = row.totalSites;
       r['Total Actual'] = row.totalQ;
-      r['Total PDM Sites'] = Math.ceil(row.totalQ / 7);
+      r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0;
       r['Total DC'] = row.totalCollectors;
       rows.push(r);
     });
@@ -964,12 +976,14 @@ const QuestionnaireAnalytics = () => {
     hubs.forEach((hub, hi) => {
       totalRow[`${hub} Sites`] = hubTotals[hi].sites;
       totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
-      totalRow[`${hub} PDM Sites`] = Math.ceil(hubTotals[hi].questionnaires / 7);
+      const pdmHubQ = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0);
+      totalRow[`${hub} PDM Sites`] = Math.ceil(pdmHubQ / 7);
       totalRow[`${hub} DC`] = hubTotals[hi].collectors;
     });
     totalRow['Total Sites'] = grandSites;
     totalRow['Total Actual'] = grandQ;
-    totalRow['Total PDM Sites'] = Math.ceil(grandQ / 7);
+    const pdmTotalQ2 = matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+    totalRow['Total PDM Sites'] = Math.ceil(pdmTotalQ2 / 7);
     totalRow['Total DC'] = grandCollectors;
     rows.push(totalRow);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity x Hub');
@@ -978,7 +992,7 @@ const QuestionnaireAnalytics = () => {
     stateBreakdown.forEach(sb => {
       sb.activities.forEach(a => {
         if (a.questionnaires > 0) {
-          stateRows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires, 'PDM Sites': Math.ceil(a.questionnaires / 7) });
+          stateRows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires, 'PDM Sites': isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : 0 });
         }
       });
     });
@@ -991,17 +1005,19 @@ const QuestionnaireAnalytics = () => {
         ht.states.forEach((st, si) => {
           r[`${st} Sites`] = row.cells[si].sites;
           r[`${st} Actual`] = row.cells[si].questionnaires;
-          r[`${st} PDM Sites`] = row.cells[si].questionnaires ? Math.ceil(row.cells[si].questionnaires / 7) : 0;
+          r[`${st} PDM Sites`] = isPdmActivity(row.activity) ? Math.ceil(row.cells[si].questionnaires / 7) : 0;
           r[`${st} DC`] = row.cells[si].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.ceil(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0; r['Total DC'] = row.totalCollectors;
         htRows.push(r);
       });
       const htTotal: any = { Activity: 'Total' };
       ht.colTotals.forEach((ct, ci) => {
-        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = Math.ceil(ct.questionnaires / 7); htTotal[`${ht.states[ci]} DC`] = ct.collectors;
+        const pdmColQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+        htTotal[`${ht.states[ci]} Sites`] = ct.sites; htTotal[`${ht.states[ci]} Actual`] = ct.questionnaires; htTotal[`${ht.states[ci]} PDM Sites`] = Math.ceil(pdmColQ / 7); htTotal[`${ht.states[ci]} DC`] = ct.collectors;
       });
-      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = Math.ceil(ht.grandQ / 7); htTotal['Total DC'] = ht.grandCollectors;
+      const htPdmTotalQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      htTotal['Total Sites'] = ht.grandSites; htTotal['Total Actual'] = ht.grandQ; htTotal['Total PDM Sites'] = Math.ceil(htPdmTotalQ / 7); htTotal['Total DC'] = ht.grandCollectors;
       htRows.push(htTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(htRows), `Hub-${ht.hub}`.slice(0, 31));
     });
@@ -1013,17 +1029,19 @@ const QuestionnaireAnalytics = () => {
         st.localities.forEach((loc, li) => {
           r[`${loc} Sites`] = row.cells[li].sites;
           r[`${loc} Actual`] = row.cells[li].questionnaires;
-          r[`${loc} PDM Sites`] = row.cells[li].questionnaires ? Math.ceil(row.cells[li].questionnaires / 7) : 0;
+          r[`${loc} PDM Sites`] = isPdmActivity(row.activity) ? Math.ceil(row.cells[li].questionnaires / 7) : 0;
           r[`${loc} DC`] = row.cells[li].collectors;
         });
-        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = Math.ceil(row.totalQ / 7); r['Total DC'] = row.totalCollectors;
+        r['Total Sites'] = row.totalSites; r['Total Actual'] = row.totalQ; r['Total PDM Sites'] = isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0; r['Total DC'] = row.totalCollectors;
         stRows.push(r);
       });
       const stTotal: any = { Activity: 'Total' };
       st.colTotals.forEach((ct, ci) => {
-        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = Math.ceil(ct.questionnaires / 7); stTotal[`${st.localities[ci]} DC`] = ct.collectors;
+        const pdmColQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0);
+        stTotal[`${st.localities[ci]} Sites`] = ct.sites; stTotal[`${st.localities[ci]} Actual`] = ct.questionnaires; stTotal[`${st.localities[ci]} PDM Sites`] = Math.ceil(pdmColQ / 7); stTotal[`${st.localities[ci]} DC`] = ct.collectors;
       });
-      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = Math.ceil(st.grandQ / 7); stTotal['Total DC'] = st.grandCollectors;
+      const stPdmTotalQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0);
+      stTotal['Total Sites'] = st.grandSites; stTotal['Total Actual'] = st.grandQ; stTotal['Total PDM Sites'] = Math.ceil(stPdmTotalQ / 7); stTotal['Total DC'] = st.grandCollectors;
       stRows.push(stTotal);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stRows), `State-${st.state}`.slice(0, 31));
     });
@@ -2311,13 +2329,13 @@ const QuestionnaireAnalytics = () => {
                               <Fragment key={trackerData.hubs[ci]}>
                                 <td className="text-center py-2 px-2 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
                                 <td className="text-center py-2 px-2 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
-                                <td className="text-center py-2 px-2 border text-amber-600 font-mono text-xs">{cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
+                                <td className="text-center py-2 px-2 border text-amber-600 font-mono text-xs">{isPdmActivity(row.activity) && cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
                                 <td className="text-center py-2 px-2 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
                               </Fragment>
                             ))}
                             <td className="text-center py-2 px-2 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
                             <td className="text-center py-2 px-2 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
-                            <td className="text-center py-2 px-2 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{Math.ceil(row.totalQ / 7)}</td>
+                            <td className="text-center py-2 px-2 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : '-'}</td>
                             <td className="text-center py-2 px-2 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
                           </tr>
                         ))}
@@ -2327,13 +2345,13 @@ const QuestionnaireAnalytics = () => {
                             <Fragment key={trackerData.hubs[hi]}>
                               <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs">{ht.sites}</td>
                               <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs">{ht.questionnaires}</td>
-                              <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs">{Math.ceil(ht.questionnaires / 7)}</td>
+                              <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs">{Math.ceil(trackerData.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[hi].questionnaires, 0) / 7) || '-'}</td>
                               <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs">{ht.collectors}</td>
                             </Fragment>
                           ))}
                           <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs bg-primary/10">{trackerData.grandSites}</td>
                           <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs bg-primary/10">{trackerData.grandQ}</td>
-                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{Math.ceil(trackerData.grandQ / 7)}</td>
+                          <td className="text-center py-2 px-2 border text-amber-700 font-mono text-xs bg-primary/10">{Math.ceil(trackerData.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0) / 7) || '-'}</td>
                           <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs bg-primary/10">{trackerData.grandCollectors}</td>
                         </tr>
                       </tbody>
@@ -2463,13 +2481,13 @@ const QuestionnaireAnalytics = () => {
                                       <Fragment key={ht.states[ci]}>
                                         <td className="text-center py-1.5 px-1.5 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
-                                        <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{isPdmActivity(row.activity) && cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
                                       </Fragment>
                                     ))}
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
-                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{Math.ceil(row.totalQ / 7)}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : '-'}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
                                   </tr>
                                 ))}
@@ -2479,13 +2497,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={ht.states[ci]}>
                                       <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
                                       <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
-                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{Math.ceil(ct.questionnaires / 7)}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const pdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
                                       <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
                                     </Fragment>
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{ht.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{ht.grandQ}</td>
-                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{Math.ceil(ht.grandQ / 7)}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const pdmQ = ht.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{ht.grandCollectors}</td>
                                 </tr>
                               </tbody>
@@ -2562,13 +2580,13 @@ const QuestionnaireAnalytics = () => {
                                       <Fragment key={st.localities[ci]}>
                                         <td className="text-center py-1.5 px-1.5 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
-                                        <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
+                                        <td className="text-center py-1.5 px-1.5 border text-amber-600 font-mono text-xs">{isPdmActivity(row.activity) && cell.questionnaires ? Math.ceil(cell.questionnaires / 7) : '-'}</td>
                                         <td className="text-center py-1.5 px-1.5 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
                                       </Fragment>
                                     ))}
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
-                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{Math.ceil(row.totalQ / 7)}</td>
+                                    <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-amber-700 font-semibold bg-primary/5">{isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : '-'}</td>
                                     <td className="text-center py-1.5 px-1.5 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
                                   </tr>
                                 ))}
@@ -2578,13 +2596,13 @@ const QuestionnaireAnalytics = () => {
                                     <Fragment key={st.localities[ci]}>
                                       <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs">{ct.sites}</td>
                                       <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs">{ct.questionnaires}</td>
-                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{Math.ceil(ct.questionnaires / 7)}</td>
+                                      <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs">{(() => { const pdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.cells[ci].questionnaires, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
                                       <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs">{ct.collectors}</td>
                                     </Fragment>
                                   ))}
                                   <td className="text-center py-2 px-1.5 border text-blue-700 font-mono text-xs bg-primary/10">{st.grandSites}</td>
                                   <td className="text-center py-2 px-1.5 border text-green-700 font-mono text-xs bg-primary/10">{st.grandQ}</td>
-                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{Math.ceil(st.grandQ / 7)}</td>
+                                  <td className="text-center py-2 px-1.5 border text-amber-700 font-mono text-xs bg-primary/10">{(() => { const pdmQ = st.matrix.filter(r => isPdmActivity(r.activity)).reduce((a, r) => a + r.totalQ, 0); return pdmQ ? Math.ceil(pdmQ / 7) : '-'; })()}</td>
                                   <td className="text-center py-2 px-1.5 border text-purple-700 font-mono text-xs bg-primary/10">{st.grandCollectors}</td>
                                 </tr>
                               </tbody>
