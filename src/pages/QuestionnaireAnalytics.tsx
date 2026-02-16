@@ -290,6 +290,72 @@ const QuestionnaireAnalytics = () => {
   const localitySummary = useMemo(() => buildSummaryWithSites(filteredData, 'locality'), [filteredData, buildSummaryWithSites]);
   const siteSummary = useMemo(() => buildSummaryWithSites(filteredData, 'activitySite'), [filteredData, buildSummaryWithSites]);
 
+  const hubDrilldown = useMemo(() => {
+    const hubMap = new Map<string, {
+      q: number; sites: Set<string>;
+      states: Map<string, {
+        q: number; sites: Set<string>;
+        activities: Map<string, {
+          q: number; sites: Set<string>;
+          localities: Map<string, { q: number; sites: Set<string> }>;
+        }>;
+      }>;
+    }>();
+
+    filteredData.forEach(row => {
+      const hub = row.hub || '(Empty)';
+      const state = row.state || '(Empty)';
+      const activity = row.activity || '(Empty)';
+      const locality = row.locality || '(Empty)';
+
+      if (!hubMap.has(hub)) hubMap.set(hub, { q: 0, sites: new Set(), states: new Map() });
+      const hEntry = hubMap.get(hub)!;
+      hEntry.q++;
+      if (row.activitySite) hEntry.sites.add(row.activitySite);
+
+      if (!hEntry.states.has(state)) hEntry.states.set(state, { q: 0, sites: new Set(), activities: new Map() });
+      const sEntry = hEntry.states.get(state)!;
+      sEntry.q++;
+      if (row.activitySite) sEntry.sites.add(row.activitySite);
+
+      if (!sEntry.activities.has(activity)) sEntry.activities.set(activity, { q: 0, sites: new Set(), localities: new Map() });
+      const aEntry = sEntry.activities.get(activity)!;
+      aEntry.q++;
+      if (row.activitySite) aEntry.sites.add(row.activitySite);
+
+      if (!aEntry.localities.has(locality)) aEntry.localities.set(locality, { q: 0, sites: new Set() });
+      const lEntry = aEntry.localities.get(locality)!;
+      lEntry.q++;
+      if (row.activitySite) lEntry.sites.add(row.activitySite);
+    });
+
+    const totalQ = filteredData.length;
+    return [...hubMap.entries()].map(([hub, hd]) => ({
+      name: hub,
+      questionnaires: hd.q,
+      sites: hd.sites.size,
+      percentage: totalQ > 0 ? (hd.q / totalQ) * 100 : 0,
+      states: [...hd.states.entries()].map(([st, sd]) => ({
+        name: st,
+        questionnaires: sd.q,
+        sites: sd.sites.size,
+        percentage: hd.q > 0 ? (sd.q / hd.q) * 100 : 0,
+        activities: [...sd.activities.entries()].map(([act, ad]) => ({
+          name: act,
+          questionnaires: ad.q,
+          sites: ad.sites.size,
+          percentage: sd.q > 0 ? (ad.q / sd.q) * 100 : 0,
+          localities: [...ad.localities.entries()].map(([loc, ld]) => ({
+            name: loc,
+            questionnaires: ld.q,
+            sites: ld.sites.size,
+            percentage: ad.q > 0 ? (ld.q / ad.q) * 100 : 0,
+          })).sort((a, b) => b.questionnaires - a.questionnaires),
+        })).sort((a, b) => b.questionnaires - a.questionnaires),
+      })).sort((a, b) => b.questionnaires - a.questionnaires),
+    })).sort((a, b) => b.questionnaires - a.questionnaires);
+  }, [filteredData]);
+
   const activityBreakdown = useMemo((): ActivityBreakdown[] => {
     const actMap = new Map<string, QuestionnaireRow[]>();
     filteredData.forEach(row => {
@@ -1022,6 +1088,192 @@ const QuestionnaireAnalytics = () => {
     doc.save(`collector_${safeName}.pdf`);
   }, []);
 
+  const HubDrilldownTable = () => {
+    const [expandedHubs, setExpandedHubs] = useState<Set<string>>(new Set());
+    const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set());
+    const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
+
+    const toggleHub = (hub: string) => {
+      setExpandedHubs(prev => {
+        const n = new Set(prev);
+        if (n.has(hub)) {
+          n.delete(hub);
+          setExpandedStates(sp => { const ns = new Set<string>(); sp.forEach(k => { if (!k.startsWith(`${hub}::`)) ns.add(k); }); return ns; });
+          setExpandedActivities(ap => { const na = new Set<string>(); ap.forEach(k => { if (!k.startsWith(`${hub}::`)) na.add(k); }); return na; });
+        } else {
+          n.add(hub);
+        }
+        return n;
+      });
+    };
+    const toggleState = (key: string) => {
+      setExpandedStates(prev => {
+        const n = new Set(prev);
+        if (n.has(key)) {
+          n.delete(key);
+          setExpandedActivities(ap => { const na = new Set<string>(); ap.forEach(k => { if (!k.startsWith(`${key}::`)) na.add(k); }); return na; });
+        } else {
+          n.add(key);
+        }
+        return n;
+      });
+    };
+    const toggleActivity = (key: string) => setExpandedActivities(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Building2 className="h-5 w-5 text-primary" />
+            By Hub
+            <Badge variant="outline" className="text-xs ml-1">Click to drill down</Badge>
+          </CardTitle>
+          <CardDescription>{hubDrilldown.length} unique hubs found — click a hub to see states, then activities, then localities</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="table-hub-drilldown">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left py-2 px-3 font-medium w-8">#</th>
+                  <th className="text-left py-2 px-3 font-medium">Hub</th>
+                  <th className="text-right py-2 px-3 font-medium">Sites</th>
+                  <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
+                  <th className="text-right py-2 px-3 font-medium">%</th>
+                  <th className="py-2 px-3 font-medium w-32">Distribution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hubDrilldown.map((hub, hi) => {
+                  const hubExpanded = expandedHubs.has(hub.name);
+                  return (
+                    <Fragment key={hub.name}>
+                      <tr
+                        className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => toggleHub(hub.name)}
+                        data-testid={`row-hub-drill-${hi}`}
+                      >
+                        <td className="py-2 px-3 text-muted-foreground">{hi + 1}</td>
+                        <td className="py-2 px-3 font-medium">
+                          <div className="flex items-center gap-2">
+                            {hubExpanded ? <ChevronUp className="h-4 w-4 text-primary flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                            <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                            {hub.name}
+                            <Badge variant="outline" className="text-[10px] px-1 py-0">{hub.states.length} states</Badge>
+                          </div>
+                        </td>
+                        <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-600">{hub.sites}</Badge></td>
+                        <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{hub.questionnaires}</Badge></td>
+                        <td className="py-2 px-3 text-right text-muted-foreground">{hub.percentage.toFixed(1)}%</td>
+                        <td className="py-2 px-3">
+                          <div className="w-full bg-muted rounded-full h-2">
+                            <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${Math.min(hub.percentage, 100)}%` }} />
+                          </div>
+                        </td>
+                      </tr>
+                      {hubExpanded && hub.states.map((state, si) => {
+                        const stateKey = `${hub.name}::${state.name}`;
+                        const stateExpanded = expandedStates.has(stateKey);
+                        return (
+                          <Fragment key={stateKey}>
+                            <tr
+                              className="border-b hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors cursor-pointer bg-blue-50/30 dark:bg-blue-950/10"
+                              onClick={() => toggleState(stateKey)}
+                              data-testid={`row-state-drill-${hi}-${si}`}
+                            >
+                              <td className="py-2 px-3" />
+                              <td className="py-2 px-3 font-medium pl-10">
+                                <div className="flex items-center gap-2">
+                                  {stateExpanded ? <ChevronUp className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />}
+                                  <Globe className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+                                  {state.name}
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0">{state.activities.length} activities</Badge>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-600 text-xs">{state.sites}</Badge></td>
+                              <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono text-xs">{state.questionnaires}</Badge></td>
+                              <td className="py-2 px-3 text-right text-muted-foreground text-xs">{state.percentage.toFixed(1)}%</td>
+                              <td className="py-2 px-3">
+                                <div className="w-full bg-muted rounded-full h-1.5">
+                                  <div className="bg-blue-500 rounded-full h-1.5 transition-all" style={{ width: `${Math.min(state.percentage, 100)}%` }} />
+                                </div>
+                              </td>
+                            </tr>
+                            {stateExpanded && state.activities.map((act, ai) => {
+                              const actKey = `${stateKey}::${act.name}`;
+                              const actExpanded = expandedActivities.has(actKey);
+                              return (
+                                <Fragment key={actKey}>
+                                  <tr
+                                    className="border-b hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 transition-colors cursor-pointer bg-emerald-50/30 dark:bg-emerald-950/10"
+                                    onClick={() => toggleActivity(actKey)}
+                                    data-testid={`row-activity-drill-${hi}-${si}-${ai}`}
+                                  >
+                                    <td className="py-2 px-3" />
+                                    <td className="py-2 px-3 font-medium pl-16">
+                                      <div className="flex items-center gap-2">
+                                        {actExpanded ? <ChevronUp className="h-3 w-3 text-emerald-600 flex-shrink-0" /> : <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
+                                        <Activity className="h-3 w-3 text-emerald-600 flex-shrink-0" />
+                                        <span className="text-xs">{act.name}</span>
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0">{act.localities.length} loc.</Badge>
+                                      </div>
+                                    </td>
+                                    <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-xs">{act.sites}</Badge></td>
+                                    <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono text-xs">{act.questionnaires}</Badge></td>
+                                    <td className="py-2 px-3 text-right text-muted-foreground text-xs">{act.percentage.toFixed(1)}%</td>
+                                    <td className="py-2 px-3">
+                                      <div className="w-full bg-muted rounded-full h-1">
+                                        <div className="bg-emerald-500 rounded-full h-1 transition-all" style={{ width: `${Math.min(act.percentage, 100)}%` }} />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {actExpanded && act.localities.map((loc, li) => (
+                                    <tr
+                                      key={`${actKey}::${loc.name}`}
+                                      className="border-b bg-amber-50/30 dark:bg-amber-950/10"
+                                      data-testid={`row-locality-drill-${hi}-${si}-${ai}-${li}`}
+                                    >
+                                      <td className="py-1.5 px-3" />
+                                      <td className="py-1.5 px-3 pl-24">
+                                        <div className="flex items-center gap-2 text-xs">
+                                          <MapPin className="h-3 w-3 text-amber-600 flex-shrink-0" />
+                                          {loc.name}
+                                        </div>
+                                      </td>
+                                      <td className="py-1.5 px-3 text-right"><span className="font-mono text-xs text-muted-foreground">{loc.sites}</span></td>
+                                      <td className="py-1.5 px-3 text-right"><span className="font-mono text-xs">{loc.questionnaires}</span></td>
+                                      <td className="py-1.5 px-3 text-right text-muted-foreground text-xs">{loc.percentage.toFixed(1)}%</td>
+                                      <td className="py-1.5 px-3">
+                                        <div className="w-full bg-muted rounded-full h-1">
+                                          <div className="bg-amber-500 rounded-full h-1 transition-all" style={{ width: `${Math.min(loc.percentage, 100)}%` }} />
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </Fragment>
+                              );
+                            })}
+                          </Fragment>
+                        );
+                      })}
+                    </Fragment>
+                  );
+                })}
+                <tr className="bg-muted/50 font-semibold">
+                  <td className="py-2 px-3" colSpan={2}>Total</td>
+                  <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-700">{hubDrilldown.reduce((a, b) => a + b.sites, 0)}</Badge></td>
+                  <td className="py-2 px-3 text-right"><Badge className="font-mono">{hubDrilldown.reduce((a, b) => a + b.questionnaires, 0)}</Badge></td>
+                  <td className="py-2 px-3 text-right">100%</td>
+                  <td className="py-2 px-3" />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const SummaryTableWithSites = ({ items, label, icon: Icon }: { items: SummaryWithSites[]; label: string; icon: React.ElementType }) => (
     <Card>
       <CardHeader className="pb-3">
@@ -1577,7 +1829,7 @@ const QuestionnaireAnalytics = () => {
                   </div>
                 </CardContent>
               </Card>
-              <SummaryTableWithSites items={hubSummary} label="Hub" icon={Building2} />
+              <HubDrilldownTable />
             </TabsContent>
 
             <TabsContent value="state" className="mt-4 space-y-4">
