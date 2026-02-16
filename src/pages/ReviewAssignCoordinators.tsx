@@ -194,6 +194,17 @@ const ReviewAssignCoordinators: React.FC = () => {
   const mmpFileId = mmpFile?.id;
   const entriesLength = mmpFile?.siteEntries?.length || 0;
 
+  const allCoordinators = useMemo(() => 
+    users.filter(u => u.role === 'coordinator').map(c => ({
+      ...c,
+      stateId: normalizeStateId(c.stateId) || c.stateId,
+      localityId: c.localityId ? (normalizeLocalityId(c.localityId, normalizeStateId(c.stateId) || c.stateId || '') || c.localityId) : c.localityId,
+    })),
+    [users]
+  );
+
+  const allSupervisors = useMemo(() => users.filter(u => u.role === 'supervisor'), [users]);
+
   // Track initialization to prevent unnecessary re-runs
   const initializationKeyRef = useRef<string>('');
 
@@ -401,17 +412,6 @@ const ReviewAssignCoordinators: React.FC = () => {
     
     return acc;
   }, {} as Record<string, any[]>);
-
-  const allCoordinators = useMemo(() => 
-    users.filter(u => u.role === 'coordinator').map(c => ({
-      ...c,
-      stateId: normalizeStateId(c.stateId) || c.stateId,
-      localityId: c.localityId ? (normalizeLocalityId(c.localityId, normalizeStateId(c.stateId) || c.stateId || '') || c.localityId) : c.localityId,
-    })),
-    [users]
-  );
-
-  const allSupervisors = useMemo(() => users.filter(u => u.role === 'supervisor'), [users]);
 
   // Helper to get recommended coordinator for a group
   function getRecommendedCoordinator(stateId: string, localityId: string) {
