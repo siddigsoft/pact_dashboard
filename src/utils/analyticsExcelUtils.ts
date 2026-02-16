@@ -206,11 +206,11 @@ export async function exportFormattedTrackerExcel(
 
   const totCells: (string | number)[] = ['Grand Total'];
   hubTotals.forEach((ht: any, hi: number) => {
-    const pdmHubQ = matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.cells[hi].questionnaires, 0);
-    totCells.push(ht.sites, ht.questionnaires, pdmHubQ ? Math.ceil(pdmHubQ / 7) : '-', ht.collectors);
+    const pdmSitesCol = matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0);
+    totCells.push(ht.sites, ht.questionnaires, pdmSitesCol || '-', ht.collectors);
   });
-  const pdmGrandQ = matrix.filter((r: any) => isPdmActivity(r.activity)).reduce((a: number, r: any) => a + r.totalQ, 0);
-  totCells.push(grandSites, grandQ, pdmGrandQ ? Math.ceil(pdmGrandQ / 7) : '-', grandCollectors);
+  const pdmSitesGrand = matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+  totCells.push(grandSites, grandQ, pdmSitesGrand || '-', grandCollectors);
   const totRow = ws.addRow(totCells);
   totRow.eachCell((cell) => {
     cell.fill = totalFill();
