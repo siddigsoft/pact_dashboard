@@ -1013,6 +1013,81 @@ const QuestionnaireAnalytics = () => {
         </CardContent>
       </Card>
 
+      {savedSessions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FolderOpen className="h-5 w-5 text-primary" />
+              Saved Data Files ({savedSessions.length})
+            </CardTitle>
+            <CardDescription>Previously uploaded and saved questionnaire data files</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b">
+                    <th className="text-left py-2.5 px-4 font-medium">#</th>
+                    <th className="text-left py-2.5 px-4 font-medium">Session Name</th>
+                    <th className="text-left py-2.5 px-4 font-medium">File Name</th>
+                    <th className="text-left py-2.5 px-4 font-medium">Month / Date Saved</th>
+                    <th className="text-center py-2.5 px-4 font-medium">Rows</th>
+                    <th className="text-center py-2.5 px-4 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {savedSessions.map((session, idx) => {
+                    const savedDate = new Date(session.savedAt);
+                    const isActive = currentSessionName === session.name;
+                    return (
+                      <tr
+                        key={session.id}
+                        className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors ${isActive ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
+                        data-testid={`saved-session-row-${session.id}`}
+                      >
+                        <td className="py-2.5 px-4 text-muted-foreground">{idx + 1}</td>
+                        <td className="py-2.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{session.name}</span>
+                            {isActive && <Badge variant="default" className="text-[10px] px-1.5 py-0">Active</Badge>}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate max-w-[200px]">{session.fileName}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <div className="flex flex-col">
+                            <span className="font-medium">{format(savedDate, 'MMMM yyyy')}</span>
+                            <span className="text-xs text-muted-foreground">{format(savedDate, 'MMM d, yyyy - h:mm a')}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4 text-center">
+                          <Badge variant="outline">{session.rowCount.toLocaleString()}</Badge>
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Button size="sm" variant={isActive ? "secondary" : "outline"} className="gap-1 h-7 text-xs" onClick={() => loadSession(session)} data-testid={`button-load-inline-${session.id}`}>
+                              <FolderOpen className="h-3 w-3" />
+                              {isActive ? 'Loaded' : 'Load'}
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => deleteSession(session.id)} data-testid={`button-delete-inline-${session.id}`}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {data.length > 0 && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
