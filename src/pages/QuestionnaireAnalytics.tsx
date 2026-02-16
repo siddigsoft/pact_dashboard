@@ -15,7 +15,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { drawPdfHeader, styledAutoTable, addAllFooters, addPageHeader, loadArabicFont, arText, C } from '@/utils/analyticsPdfUtils';
-import { exportFormattedExcel, exportFormattedTrackerExcel } from '@/utils/analyticsExcelUtils';
+import { exportFormattedExcel, exportFormattedTrackerExcel, exportCoverageTrackerExcel } from '@/utils/analyticsExcelUtils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPie, Pie, Cell, Legend } from 'recharts';
 
 interface QuestionnaireRow {
@@ -1893,6 +1893,10 @@ const QuestionnaireAnalytics = () => {
                   <DropdownMenuItem onClick={exportTrackerToExcel} data-testid="button-export-tracker-menu">
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
                     Export Tracker to Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportCoverageTrackerExcel(filteredData, 'coverage_tracker.xlsx')} data-testid="button-export-coverage-tracker">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Coverage Tracker (Hub/State/Collector)
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
