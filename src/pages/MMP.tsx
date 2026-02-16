@@ -4429,101 +4429,7 @@ const MMP = () => {
             )}
 
             <TabsContent value="verified">
-              {(isAdmin || isICT || isFOM || isCoordinator) && (
-                <div className="mb-6">
-                  <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
-                  <div className="flex gap-2 overflow-x-auto pb-2 flex-wrap">
-                    <Button 
-                      variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} 
-                      size="sm" 
-                      onClick={() => setVerifiedSubTab('newSites')} 
-                      className={`${verifiedSubTab === 'newSites' ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 shadow-md' : 'hover:bg-blue-50 dark:hover:bg-blue-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
-                    >
-                      <FilePlus className="h-3.5 w-3.5 mr-1.5" />
-                      {t('mmpPage.subcategories.newSites')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'newSites' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'}`}>
-                        {newSitesVerifiedCount}
-                      </Badge>
-                    </Button>
-                    <Button 
-                      variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} 
-                      size="sm" 
-                      onClick={() => setVerifiedSubTab('approvedCosted')} 
-                      className={`${verifiedSubTab === 'approvedCosted' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border-0 shadow-md' : 'hover:bg-emerald-50 dark:hover:bg-emerald-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
-                    >
-                      <CheckSquare className="h-3.5 w-3.5 mr-1.5" />
-                      {t('mmpPage.subcategories.approved')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'approvedCosted' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'}`}>{verifiedTabSiteEntryCounts.approvedCosted}</Badge>
-                    </Button>
-                    <Button 
-                      variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} 
-                      size="sm" 
-                      onClick={() => setVerifiedSubTab('dispatched')} 
-                      className={`${verifiedSubTab === 'dispatched' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md' : 'hover:bg-amber-50 dark:hover:bg-amber-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
-                    >
-                      <Truck className="h-3.5 w-3.5 mr-1.5" />
-                      {t('mmpPage.subcategories.dispatched')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'dispatched' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{verifiedTabSiteEntryCounts.dispatched}</Badge>
-                    </Button>
-                    {(isAdmin || isICT || isFOM || isSupervisor) && (
-                      <>
-                        <Button 
-                          variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} 
-                          size="sm" 
-                          onClick={() => setVerifiedSubTab('smartAssigned')} 
-                          className={`${verifiedSubTab === 'smartAssigned' ? 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0 shadow-md' : 'hover:bg-violet-50 dark:hover:bg-violet-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
-                        >
-                          <Wand2 className="h-3.5 w-3.5 mr-1.5" />
-                          {t('mmpPage.subcategories.smartAssigned')}
-                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'smartAssigned' ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'}`}>{verifiedTabSiteEntryCounts.smartAssigned}</Badge>
-                        </Button>
-                        <Button 
-                          variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} 
-                          size="sm" 
-                          onClick={() => setVerifiedSubTab('accepted')} 
-                          className={`${verifiedSubTab === 'accepted' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white border-0 shadow-md' : 'hover:bg-teal-50 dark:hover:bg-teal-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
-                        >
-                          <Handshake className="h-3.5 w-3.5 mr-1.5" />
-                          {t('mmpPage.subcategories.accepted')}
-                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'accepted' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200'}`}>{verifiedTabSiteEntryCounts.accepted}</Badge>
-                        </Button>
-                        <Button 
-                          variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} 
-                          size="sm" 
-                          onClick={() => setVerifiedSubTab('ongoing')} 
-                          className={`${verifiedSubTab === 'ongoing' ? 'bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600 text-white border-0 shadow-md' : 'hover:bg-sky-50 dark:hover:bg-sky-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
-                        >
-                          <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
-                          {t('mmpPage.subcategories.ongoing')}
-                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'ongoing' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200'}`}>{verifiedTabSiteEntryCounts.ongoing}</Badge>
-                        </Button>
-                      </>
-                    )}
-                    <Button 
-                      variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} 
-                      size="sm" 
-                      onClick={() => setVerifiedSubTab('completed')} 
-                      className={`${verifiedSubTab === 'completed' ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 shadow-md' : 'hover:bg-green-50 dark:hover:bg-green-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                      {t('mmpPage.subcategories.completed')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'completed' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{verifiedTabSiteEntryCounts.completed}</Badge>
-                    </Button>
-                    <Button 
-                      variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} 
-                      size="sm" 
-                      onClick={() => setVerifiedSubTab('rejected')} 
-                      className={`${verifiedSubTab === 'rejected' ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white border-0 shadow-md' : 'hover:bg-red-50 dark:hover:bg-red-950 border-red-200 dark:border-red-800'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
-                    >
-                      <XCircle className="h-3.5 w-3.5 mr-1.5" />
-                      {t('mmpPage.subcategories.rejected')}
-                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'rejected' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{verifiedTabSiteEntryCounts.rejected}</Badge>
-                    </Button>
-                  </div>
-                </div>
-              )}
-              
-              {/* Global Site Entry Filters */}
+              {/* Global Site Entry Filters - above subcategory tabs */}
               {(isAdmin || isICT || isFOM || isCoordinator || isSupervisor) && (
                 <Card className="mb-4">
                   <CardContent className="py-3">
@@ -4648,6 +4554,101 @@ const MMP = () => {
                     </div>
                   </CardContent>
                 </Card>
+              )}
+
+              {/* Subcategory tabs - below filters */}
+              {(isAdmin || isICT || isFOM || isCoordinator) && (
+                <div className="mb-6">
+                  <div className="text-sm font-medium text-muted-foreground mb-3">{t('mmpPage.subcategory')}:</div>
+                  <div className="flex gap-2 overflow-x-auto pb-2 flex-wrap">
+                    <Button 
+                      variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('newSites')} 
+                      className={`${verifiedSubTab === 'newSites' ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 shadow-md' : 'hover:bg-blue-50 dark:hover:bg-blue-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <FilePlus className="h-3.5 w-3.5 mr-1.5" />
+                      {t('mmpPage.subcategories.newSites')}
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'newSites' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'}`}>
+                        {newSitesVerifiedCount}
+                      </Badge>
+                    </Button>
+                    <Button 
+                      variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('approvedCosted')} 
+                      className={`${verifiedSubTab === 'approvedCosted' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border-0 shadow-md' : 'hover:bg-emerald-50 dark:hover:bg-emerald-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <CheckSquare className="h-3.5 w-3.5 mr-1.5" />
+                      {t('mmpPage.subcategories.approved')}
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'approvedCosted' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'}`}>{verifiedTabSiteEntryCounts.approvedCosted}</Badge>
+                    </Button>
+                    <Button 
+                      variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('dispatched')} 
+                      className={`${verifiedSubTab === 'dispatched' ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0 shadow-md' : 'hover:bg-amber-50 dark:hover:bg-amber-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <Truck className="h-3.5 w-3.5 mr-1.5" />
+                      {t('mmpPage.subcategories.dispatched')}
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'dispatched' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}`}>{verifiedTabSiteEntryCounts.dispatched}</Badge>
+                    </Button>
+                    {(isAdmin || isICT || isFOM || isSupervisor) && (
+                      <>
+                        <Button 
+                          variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setVerifiedSubTab('smartAssigned')} 
+                          className={`${verifiedSubTab === 'smartAssigned' ? 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white border-0 shadow-md' : 'hover:bg-violet-50 dark:hover:bg-violet-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                        >
+                          <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                          {t('mmpPage.subcategories.smartAssigned')}
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'smartAssigned' ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'}`}>{verifiedTabSiteEntryCounts.smartAssigned}</Badge>
+                        </Button>
+                        <Button 
+                          variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setVerifiedSubTab('accepted')} 
+                          className={`${verifiedSubTab === 'accepted' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white border-0 shadow-md' : 'hover:bg-teal-50 dark:hover:bg-teal-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                        >
+                          <Handshake className="h-3.5 w-3.5 mr-1.5" />
+                          {t('mmpPage.subcategories.accepted')}
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'accepted' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200'}`}>{verifiedTabSiteEntryCounts.accepted}</Badge>
+                        </Button>
+                        <Button 
+                          variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setVerifiedSubTab('ongoing')} 
+                          className={`${verifiedSubTab === 'ongoing' ? 'bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600 text-white border-0 shadow-md' : 'hover:bg-sky-50 dark:hover:bg-sky-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                        >
+                          <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
+                          {t('mmpPage.subcategories.ongoing')}
+                          <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'ongoing' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200'}`}>{verifiedTabSiteEntryCounts.ongoing}</Badge>
+                        </Button>
+                      </>
+                    )}
+                    <Button 
+                      variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('completed')} 
+                      className={`${verifiedSubTab === 'completed' ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 shadow-md' : 'hover:bg-green-50 dark:hover:bg-green-950'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                      {t('mmpPage.subcategories.completed')}
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'completed' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{verifiedTabSiteEntryCounts.completed}</Badge>
+                    </Button>
+                    <Button 
+                      variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} 
+                      size="sm" 
+                      onClick={() => setVerifiedSubTab('rejected')} 
+                      className={`${verifiedSubTab === 'rejected' ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white border-0 shadow-md' : 'hover:bg-red-50 dark:hover:bg-red-950 border-red-200 dark:border-red-800'} text-xs whitespace-nowrap flex-shrink-0 rounded-lg transition-all`}
+                    >
+                      <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                      {t('mmpPage.subcategories.rejected')}
+                      <Badge className={`ml-1.5 text-xs ${verifiedSubTab === 'rejected' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{verifiedTabSiteEntryCounts.rejected}</Badge>
+                    </Button>
+                  </div>
+                </div>
               )}
               
               {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && verifiedSubTab !== 'newSites' && (
