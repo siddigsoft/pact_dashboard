@@ -3,13 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -30,20 +29,33 @@ interface QuestionnaireRow {
   partner: string;
 }
 
-interface SummaryItem {
+interface SummaryWithSites {
   name: string;
-  count: number;
+  questionnaires: number;
+  sites: number;
   percentage: number;
-  children?: SummaryItem[];
 }
 
-interface ActivitySiteItem {
+interface ActivityBreakdown {
   name: string;
   siteCount: number;
   questionnaireCount: number;
   percentage: number;
-  sites: { name: string; count: number; percentage: number }[];
-  children?: SummaryItem[];
+  siteList: { name: string; count: number; percentage: number }[];
+  byHub: { name: string; count: number; sites: number }[];
+  byState: { name: string; count: number; sites: number }[];
+  byLocality: { name: string; count: number; sites: number }[];
+  byCollector: { name: string; count: number; deviceId: string }[];
+}
+
+interface CollectorDetail {
+  name: string;
+  deviceId: string;
+  count: number;
+  percentage: number;
+  activities: { name: string; count: number }[];
+  localities: { name: string; count: number }[];
+  hubs: string[];
 }
 
 interface SavedSession {
@@ -56,7 +68,6 @@ interface SavedSession {
 }
 
 const STORAGE_KEY = 'pact_questionnaire_sessions';
-const SESSION_VERSION = 1;
 
 const DEFAULT_COLUMN_MAP = {
   hub: 16,
@@ -235,113 +246,121 @@ const QuestionnaireAnalytics = () => {
     setSearchQuery('');
   };
 
-  const buildSummary = useCallback((items: QuestionnaireRow[], key: keyof QuestionnaireRow): SummaryItem[] => {
-    const counts = new Map<string, number>();
+  const buildSummaryWithSites = useCallback((items: QuestionnaireRow[], key: keyof QuestionnaireRow): SummaryWithSites[] => {
+    const map = new Map<string, { questionnaires: number; sites: Set<string> }>();
     items.forEach(row => {
       const val = row[key] || '(Empty)';
-      counts.set(val, (counts.get(val) || 0) + 1);
+      if (!map.has(val)) map.set(val, { questionnaires: 0, sites: new Set() });
+      const entry = map.get(val)!;
+      entry.questionnaires++;
+      if (row.activitySite) entry.sites.add(row.activitySite);
     });
     const total = items.length;
-    return [...counts.entries()]
-      .map(([name, count]) => ({ name, count, percentage: total > 0 ? (count / total) * 100 : 0 }))
-      .sort((a, b) => b.count - a.count);
+    return [...map.entries()]
+      .map(([name, { questionnaires, sites }]) => ({
+        name,
+        questionnaires,
+        sites: sites.size,
+        percentage: total > 0 ? (questionnaires / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.questionnaires - a.questionnaires);
   }, []);
 
-  const buildNestedSummary = useCallback((items: QuestionnaireRow[], parentKey: keyof QuestionnaireRow, childKey: keyof QuestionnaireRow): SummaryItem[] => {
-    const parentMap = new Map<string, Map<string, number>>();
-    items.forEach(row => {
-      const parent = row[parentKey] || '(Empty)';
-      const child = row[childKey] || '(Empty)';
-      if (!parentMap.has(parent)) parentMap.set(parent, new Map());
-      const childMap = parentMap.get(parent)!;
-      childMap.set(child, (childMap.get(child) || 0) + 1);
-    });
-    const total = items.length;
-    return [...parentMap.entries()]
-      .map(([name, childMap]) => {
-        const count = [...childMap.values()].reduce((a, b) => a + b, 0);
-        const children = [...childMap.entries()]
-          .map(([childName, childCount]) => ({ name: childName, count: childCount, percentage: count > 0 ? (childCount / count) * 100 : 0 }))
-          .sort((a, b) => b.count - a.count);
-        return { name, count, percentage: total > 0 ? (count / total) * 100 : 0, children };
-      })
-      .sort((a, b) => b.count - a.count);
-  }, []);
+  const hubSummary = useMemo(() => buildSummaryWithSites(filteredData, 'hub'), [filteredData, buildSummaryWithSites]);
+  const stateSummary = useMemo(() => buildSummaryWithSites(filteredData, 'state'), [filteredData, buildSummaryWithSites]);
+  const localitySummary = useMemo(() => buildSummaryWithSites(filteredData, 'locality'), [filteredData, buildSummaryWithSites]);
+  const siteSummary = useMemo(() => buildSummaryWithSites(filteredData, 'activitySite'), [filteredData, buildSummaryWithSites]);
 
-  const hubSummary = useMemo(() => buildSummary(filteredData, 'hub'), [filteredData, buildSummary]);
-  const stateSummary = useMemo(() => buildSummary(filteredData, 'state'), [filteredData, buildSummary]);
-  const localitySummary = useMemo(() => buildSummary(filteredData, 'locality'), [filteredData, buildSummary]);
-  const siteSummary = useMemo(() => buildSummary(filteredData, 'activitySite'), [filteredData, buildSummary]);
-  const activitySubSummary = useMemo(() => buildNestedSummary(filteredData, 'activity', 'subActivity'), [filteredData, buildNestedSummary]);
-
-  const activitySummary = useMemo((): ActivitySiteItem[] => {
-    const actMap = new Map<string, Map<string, number>>();
+  const activityBreakdown = useMemo((): ActivityBreakdown[] => {
+    const actMap = new Map<string, QuestionnaireRow[]>();
     filteredData.forEach(row => {
       const act = row.activity || '(Empty)';
-      const site = row.activitySite || '(Empty)';
-      if (!actMap.has(act)) actMap.set(act, new Map());
-      const siteMap = actMap.get(act)!;
-      siteMap.set(site, (siteMap.get(site) || 0) + 1);
+      if (!actMap.has(act)) actMap.set(act, []);
+      actMap.get(act)!.push(row);
     });
     const totalQ = filteredData.length;
     return [...actMap.entries()]
-      .map(([name, siteMap]) => {
-        const questionnaireCount = [...siteMap.values()].reduce((a, b) => a + b, 0);
-        const sites = [...siteMap.entries()]
-          .map(([siteName, count]) => ({ name: siteName, count, percentage: questionnaireCount > 0 ? (count / questionnaireCount) * 100 : 0 }))
+      .map(([name, rows]) => {
+        const siteSet = new Set(rows.map(r => r.activitySite).filter(Boolean));
+        const siteMap = new Map<string, number>();
+        rows.forEach(r => {
+          const s = r.activitySite || '(Empty)';
+          siteMap.set(s, (siteMap.get(s) || 0) + 1);
+        });
+        const siteList = [...siteMap.entries()]
+          .map(([sn, sc]) => ({ name: sn, count: sc, percentage: rows.length > 0 ? (sc / rows.length) * 100 : 0 }))
           .sort((a, b) => b.count - a.count);
+
+        const hubMap = new Map<string, { count: number; sites: Set<string> }>();
+        const stateMap = new Map<string, { count: number; sites: Set<string> }>();
+        const locMap = new Map<string, { count: number; sites: Set<string> }>();
+        const collMap = new Map<string, { count: number; deviceId: string }>();
+
+        rows.forEach(r => {
+          const h = r.hub || '(Empty)';
+          if (!hubMap.has(h)) hubMap.set(h, { count: 0, sites: new Set() });
+          hubMap.get(h)!.count++;
+          if (r.activitySite) hubMap.get(h)!.sites.add(r.activitySite);
+
+          const st = r.state || '(Empty)';
+          if (!stateMap.has(st)) stateMap.set(st, { count: 0, sites: new Set() });
+          stateMap.get(st)!.count++;
+          if (r.activitySite) stateMap.get(st)!.sites.add(r.activitySite);
+
+          const lo = r.locality || '(Empty)';
+          if (!locMap.has(lo)) locMap.set(lo, { count: 0, sites: new Set() });
+          locMap.get(lo)!.count++;
+          if (r.activitySite) locMap.get(lo)!.sites.add(r.activitySite);
+
+          const dc = r.dataCollector || '(Empty)';
+          if (!collMap.has(dc)) collMap.set(dc, { count: 0, deviceId: '' });
+          collMap.get(dc)!.count++;
+          if (!collMap.get(dc)!.deviceId && r.deviceId) collMap.get(dc)!.deviceId = r.deviceId;
+        });
+
         return {
           name,
-          siteCount: siteMap.size,
-          questionnaireCount,
-          percentage: totalQ > 0 ? (questionnaireCount / totalQ) * 100 : 0,
-          sites,
+          siteCount: siteSet.size,
+          questionnaireCount: rows.length,
+          percentage: totalQ > 0 ? (rows.length / totalQ) * 100 : 0,
+          siteList,
+          byHub: [...hubMap.entries()].map(([n, d]) => ({ name: n, count: d.count, sites: d.sites.size })).sort((a, b) => b.count - a.count),
+          byState: [...stateMap.entries()].map(([n, d]) => ({ name: n, count: d.count, sites: d.sites.size })).sort((a, b) => b.count - a.count),
+          byLocality: [...locMap.entries()].map(([n, d]) => ({ name: n, count: d.count, sites: d.sites.size })).sort((a, b) => b.count - a.count),
+          byCollector: [...collMap.entries()].map(([n, d]) => ({ name: n, count: d.count, deviceId: d.deviceId })).sort((a, b) => b.count - a.count),
         };
       })
       .sort((a, b) => b.siteCount - a.siteCount);
   }, [filteredData]);
-  const collectorSummary = useMemo(() => {
-    const collMap = new Map<string, { count: number; deviceId: string }>();
+
+  const collectorDetails = useMemo((): CollectorDetail[] => {
+    const map = new Map<string, { count: number; deviceId: string; activities: Map<string, number>; localities: Map<string, number>; hubs: Set<string> }>();
     filteredData.forEach(row => {
       const name = row.dataCollector || '(Empty)';
-      const existing = collMap.get(name);
-      if (existing) {
-        existing.count++;
-        if (!existing.deviceId && row.deviceId) existing.deviceId = row.deviceId;
-      } else {
-        collMap.set(name, { count: 1, deviceId: row.deviceId || '' });
+      if (!map.has(name)) map.set(name, { count: 0, deviceId: '', activities: new Map(), localities: new Map(), hubs: new Set() });
+      const entry = map.get(name)!;
+      entry.count++;
+      if (!entry.deviceId && row.deviceId) entry.deviceId = row.deviceId;
+      if (row.activity) {
+        entry.activities.set(row.activity, (entry.activities.get(row.activity) || 0) + 1);
       }
+      if (row.locality) {
+        entry.localities.set(row.locality, (entry.localities.get(row.locality) || 0) + 1);
+      }
+      if (row.hub) entry.hubs.add(row.hub);
     });
     const total = filteredData.length;
-    return [...collMap.entries()]
-      .map(([name, { count, deviceId }]) => ({ name, count, deviceId, percentage: total > 0 ? (count / total) * 100 : 0 }))
-      .sort((a, b) => b.count - a.count);
-  }, [filteredData]);
-
-  const collectorByHub = useMemo(() => {
-    const hubMap = new Map<string, Map<string, { count: number; deviceId: string }>>();
-    filteredData.forEach(row => {
-      const hub = row.hub || '(Empty)';
-      const collector = row.dataCollector || '(Empty)';
-      if (!hubMap.has(hub)) hubMap.set(hub, new Map());
-      const cMap = hubMap.get(hub)!;
-      const existing = cMap.get(collector);
-      if (existing) {
-        existing.count++;
-        if (!existing.deviceId && row.deviceId) existing.deviceId = row.deviceId;
-      } else {
-        cMap.set(collector, { count: 1, deviceId: row.deviceId || '' });
-      }
-    });
-    return [...hubMap.entries()]
-      .map(([hub, collectors]) => ({
-        hub,
-        total: [...collectors.values()].reduce((a, b) => a + b.count, 0),
-        collectors: [...collectors.entries()]
-          .map(([name, { count, deviceId }]) => ({ name, count, deviceId }))
-          .sort((a, b) => b.count - a.count),
+    return [...map.entries()]
+      .map(([name, d]) => ({
+        name,
+        deviceId: d.deviceId,
+        count: d.count,
+        percentage: total > 0 ? (d.count / total) * 100 : 0,
+        activities: [...d.activities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
+        localities: [...d.localities.entries()].map(([n, c]) => ({ name: n, count: c })).sort((a, b) => b.count - a.count),
+        hubs: [...d.hubs],
       }))
-      .sort((a, b) => b.total - a.total);
+      .sort((a, b) => b.count - a.count);
   }, [filteredData]);
 
   const toggleExpand = (key: string) => {
@@ -353,50 +372,155 @@ const QuestionnaireAnalytics = () => {
     });
   };
 
+  const trackerData = useMemo(() => {
+    const hubs = [...new Set(filteredData.map(r => r.hub))].filter(Boolean).sort();
+    const activities = [...new Set(filteredData.map(r => r.activity))].filter(Boolean).sort();
+    const states = [...new Set(filteredData.map(r => r.state))].filter(Boolean).sort();
+
+    const siteSetMatrix: Record<string, Record<string, Set<string>>> = {};
+    const qMatrix: Record<string, Record<string, number>> = {};
+    const collMatrix: Record<string, Record<string, Set<string>>> = {};
+    const stateActMatrix: Record<string, Record<string, { q: number; sites: Set<string> }>> = {};
+
+    filteredData.forEach(row => {
+      if (!row.activity || !row.hub) return;
+      if (!siteSetMatrix[row.activity]) siteSetMatrix[row.activity] = {};
+      if (!siteSetMatrix[row.activity][row.hub]) siteSetMatrix[row.activity][row.hub] = new Set();
+      if (!qMatrix[row.activity]) qMatrix[row.activity] = {};
+      if (!qMatrix[row.activity][row.hub]) qMatrix[row.activity][row.hub] = 0;
+      if (!collMatrix[row.activity]) collMatrix[row.activity] = {};
+      if (!collMatrix[row.activity][row.hub]) collMatrix[row.activity][row.hub] = new Set();
+
+      qMatrix[row.activity][row.hub]++;
+      if (row.activitySite) siteSetMatrix[row.activity][row.hub].add(row.activitySite);
+      if (row.dataCollector) collMatrix[row.activity][row.hub].add(row.dataCollector);
+
+      if (row.state) {
+        if (!stateActMatrix[row.state]) stateActMatrix[row.state] = {};
+        if (!stateActMatrix[row.state][row.activity]) stateActMatrix[row.state][row.activity] = { q: 0, sites: new Set() };
+        stateActMatrix[row.state][row.activity].q++;
+        if (row.activitySite) stateActMatrix[row.state][row.activity].sites.add(row.activitySite);
+      }
+    });
+
+    const matrix = activities.map(act => {
+      const cells = hubs.map(hub => ({
+        questionnaires: qMatrix[act]?.[hub] || 0,
+        sites: siteSetMatrix[act]?.[hub]?.size || 0,
+        collectors: collMatrix[act]?.[hub]?.size || 0,
+      }));
+      const totalQ = cells.reduce((a, c) => a + c.questionnaires, 0);
+      const totalSites = new Set<string>();
+      hubs.forEach(hub => {
+        (siteSetMatrix[act]?.[hub] || new Set()).forEach(s => totalSites.add(s));
+      });
+      const totalColl = new Set<string>();
+      hubs.forEach(hub => {
+        (collMatrix[act]?.[hub] || new Set()).forEach(c => totalColl.add(c));
+      });
+      return { activity: act, cells, totalQ, totalSites: totalSites.size, totalCollectors: totalColl.size };
+    });
+
+    const hubTotals = hubs.map((hub, hi) => {
+      const q = matrix.reduce((a, r) => a + r.cells[hi].questionnaires, 0);
+      const siteSet = new Set<string>();
+      activities.forEach(act => {
+        (siteSetMatrix[act]?.[hub] || new Set()).forEach(s => siteSet.add(s));
+      });
+      const collSet = new Set<string>();
+      activities.forEach(act => {
+        (collMatrix[act]?.[hub] || new Set()).forEach(c => collSet.add(c));
+      });
+      return { questionnaires: q, sites: siteSet.size, collectors: collSet.size };
+    });
+
+    const grandQ = matrix.reduce((a, r) => a + r.totalQ, 0);
+    const grandSites = new Set<string>();
+    const grandColl = new Set<string>();
+    activities.forEach(act => {
+      hubs.forEach(hub => {
+        (siteSetMatrix[act]?.[hub] || new Set()).forEach(s => grandSites.add(s));
+        (collMatrix[act]?.[hub] || new Set()).forEach(c => grandColl.add(c));
+      });
+    });
+
+    const stateBreakdown = states.map(state => {
+      const actData = activities.map(act => ({
+        activity: act,
+        questionnaires: stateActMatrix[state]?.[act]?.q || 0,
+        sites: stateActMatrix[state]?.[act]?.sites?.size || 0,
+      }));
+      return { state, activities: actData, totalQ: actData.reduce((a, d) => a + d.questionnaires, 0) };
+    }).filter(s => s.totalQ > 0);
+
+    return { hubs, activities, matrix, hubTotals, grandQ, grandSites: grandSites.size, grandCollectors: grandColl.size, stateBreakdown };
+  }, [filteredData]);
+
   const exportToExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
 
-    const hubData = hubSummary.map(h => ({ Hub: h.name, 'Total Questionnaires': h.count, 'Percentage': h.percentage.toFixed(1) + '%' }));
-    const hubWs = XLSX.utils.json_to_sheet(hubData);
-    XLSX.utils.book_append_sheet(wb, hubWs, 'By Hub');
+    const hubData = hubSummary.map((h, i) => ({ '#': i + 1, Hub: h.name, Sites: h.sites, Questionnaires: h.questionnaires, '%': h.percentage.toFixed(1) + '%' }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hubData), 'By Hub');
 
-    const stateData = stateSummary.map(s => ({ State: s.name, 'Total Questionnaires': s.count, 'Percentage': s.percentage.toFixed(1) + '%' }));
-    const stateWs = XLSX.utils.json_to_sheet(stateData);
-    XLSX.utils.book_append_sheet(wb, stateWs, 'By State');
+    const stateData = stateSummary.map((s, i) => ({ '#': i + 1, State: s.name, Sites: s.sites, Questionnaires: s.questionnaires, '%': s.percentage.toFixed(1) + '%' }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stateData), 'By State');
 
-    const localityData = localitySummary.map(l => ({ Locality: l.name, 'Total Questionnaires': l.count, 'Percentage': l.percentage.toFixed(1) + '%' }));
-    const localityWs = XLSX.utils.json_to_sheet(localityData);
-    XLSX.utils.book_append_sheet(wb, localityWs, 'By Locality');
+    const localityData = localitySummary.map((l, i) => ({ '#': i + 1, Locality: l.name, Sites: l.sites, Questionnaires: l.questionnaires, '%': l.percentage.toFixed(1) + '%' }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(localityData), 'By Locality');
 
-    const siteData = siteSummary.map(s => ({ 'Site Name': s.name, 'Total Questionnaires': s.count, 'Percentage': s.percentage.toFixed(1) + '%' }));
-    const siteWs = XLSX.utils.json_to_sheet(siteData);
-    XLSX.utils.book_append_sheet(wb, siteWs, 'By Site');
+    const siteData = siteSummary.map((s, i) => ({ '#': i + 1, 'Site Name': s.name, Questionnaires: s.questionnaires, '%': s.percentage.toFixed(1) + '%' }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteData), 'By Site');
 
     const actRows: any[] = [];
-    activitySummary.forEach(a => {
-      actRows.push({ 'Activity (PDM)': a.name, 'Site Name': '', 'Sites Count': a.siteCount, 'Questionnaires': a.questionnaireCount, '%': a.percentage.toFixed(1) + '%' });
-      a.sites.forEach(s => {
-        actRows.push({ 'Activity (PDM)': '', 'Site Name': s.name, 'Sites Count': '', 'Questionnaires': s.count, '%': s.percentage.toFixed(1) + '%' });
-      });
+    activityBreakdown.forEach(a => {
+      actRows.push({ Activity: a.name, Level: 'Activity', Detail: '', Sites: a.siteCount, Questionnaires: a.questionnaireCount, '%': a.percentage.toFixed(1) + '%' });
+      a.byHub.forEach(h => actRows.push({ Activity: a.name, Level: 'Hub', Detail: h.name, Sites: h.sites, Questionnaires: h.count, '%': '' }));
+      a.byState.forEach(s => actRows.push({ Activity: a.name, Level: 'State', Detail: s.name, Sites: s.sites, Questionnaires: s.count, '%': '' }));
+      a.byLocality.forEach(l => actRows.push({ Activity: a.name, Level: 'Locality', Detail: l.name, Sites: l.sites, Questionnaires: l.count, '%': '' }));
+      a.byCollector.forEach(c => actRows.push({ Activity: a.name, Level: 'Collector', Detail: c.name, Sites: '', Questionnaires: c.count, '%': '' }));
     });
-    const actWs = XLSX.utils.json_to_sheet(actRows);
-    XLSX.utils.book_append_sheet(wb, actWs, 'By Activity (PDM)');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(actRows), 'By Activity');
 
-    const collData = collectorSummary.map(c => ({ 'معرف الجهاز (Device ID)': c.deviceId, 'Data Collector': c.name, 'Total Questionnaires': c.count, 'Percentage': c.percentage.toFixed(1) + '%' }));
-    const collWs = XLSX.utils.json_to_sheet(collData);
-    XLSX.utils.book_append_sheet(wb, collWs, 'By Data Collector');
+    const collRows = collectorDetails.map((c, i) => ({
+      '#': i + 1,
+      'Device ID': c.deviceId || '-',
+      'Data Collector': c.name,
+      Hub: c.hubs.join(', '),
+      Activities: c.activities.map(a => `${a.name} (${a.count})`).join(', '),
+      Localities: c.localities.map(l => `${l.name} (${l.count})`).join(', '),
+      Questionnaires: c.count,
+      '%': c.percentage.toFixed(1) + '%',
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(collRows), 'By Collector');
 
-    const collHubRows: any[] = [];
-    collectorByHub.forEach(h => {
-      h.collectors.forEach(c => {
-        collHubRows.push({ Hub: h.hub, 'معرف الجهاز (Device ID)': c.deviceId, 'Data Collector': c.name, 'Total Questionnaires': c.count });
+    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors } = trackerData;
+    const trackerRows: any[] = [];
+    matrix.forEach(row => {
+      const r: any = { Activity: row.activity };
+      hubs.forEach((hub, hi) => {
+        r[`${hub} Sites`] = row.cells[hi].sites;
+        r[`${hub} Actual`] = row.cells[hi].questionnaires;
+        r[`${hub} Collectors`] = row.cells[hi].collectors;
       });
+      r['Total Sites'] = row.totalSites;
+      r['Total Actual'] = row.totalQ;
+      r['Total Collectors'] = row.totalCollectors;
+      trackerRows.push(r);
     });
-    const collHubWs = XLSX.utils.json_to_sheet(collHubRows);
-    XLSX.utils.book_append_sheet(wb, collHubWs, 'Collectors by Hub');
+    const totalRow: any = { Activity: 'Grand Total' };
+    hubs.forEach((hub, hi) => {
+      totalRow[`${hub} Sites`] = hubTotals[hi].sites;
+      totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
+      totalRow[`${hub} Collectors`] = hubTotals[hi].collectors;
+    });
+    totalRow['Total Sites'] = grandSites;
+    totalRow['Total Actual'] = grandQ;
+    totalRow['Total Collectors'] = grandCollectors;
+    trackerRows.push(totalRow);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trackerRows), 'Tracker');
 
     XLSX.writeFile(wb, 'questionnaire_analytics.xlsx');
-  }, [hubSummary, stateSummary, localitySummary, siteSummary, activitySummary, collectorSummary, collectorByHub]);
+  }, [hubSummary, stateSummary, localitySummary, siteSummary, activityBreakdown, collectorDetails, trackerData]);
 
   const exportToPdf = useCallback(() => {
     const doc = new jsPDF();
@@ -419,26 +543,20 @@ const QuestionnaireAnalytics = () => {
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(80);
-    doc.text(`Total Questionnaires: ${filteredData.length}`, margin, y);
+    doc.text(`Total Questionnaires: ${filteredData.length} | Sites: ${new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size}`, margin, y);
     y += 12;
 
     const addSection = (title: string, headers: string[], rows: string[][]) => {
-      if (y > doc.internal.pageSize.height - 40) {
-        doc.addPage();
-        y = 15;
-      }
+      if (y > doc.internal.pageSize.height - 40) { doc.addPage(); y = 15; }
       doc.setFontSize(13);
       doc.setTextColor(0);
       doc.setFont('helvetica', 'bold');
       doc.text(title, margin, y);
       y += 2;
-
       autoTable(doc, {
-        startY: y,
-        head: [headers],
-        body: rows,
+        startY: y, head: [headers], body: rows,
         margin: { left: margin, right: margin },
-        styles: { fontSize: 9, cellPadding: 3 },
+        styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [41, 98, 255], textColor: 255, fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [245, 247, 250] },
         didDrawPage: () => { y = 15; },
@@ -446,65 +564,67 @@ const QuestionnaireAnalytics = () => {
       y = (doc as any).lastAutoTable.finalY + 12;
     };
 
-    addSection(
-      'Summary by Hub',
-      ['Hub', 'Total', '%'],
-      hubSummary.map(h => [h.name, String(h.count), h.percentage.toFixed(1) + '%'])
-    );
+    addSection('By Hub', ['#', 'Hub', 'Sites', 'Questionnaires', '%'],
+      hubSummary.map((h, i) => [String(i + 1), h.name, String(h.sites), String(h.questionnaires), h.percentage.toFixed(1) + '%']));
 
-    addSection(
-      'Summary by State',
-      ['State', 'Total', '%'],
-      stateSummary.map(s => [s.name, String(s.count), s.percentage.toFixed(1) + '%'])
-    );
+    addSection('By State', ['#', 'State', 'Sites', 'Questionnaires', '%'],
+      stateSummary.map((s, i) => [String(i + 1), s.name, String(s.sites), String(s.questionnaires), s.percentage.toFixed(1) + '%']));
 
-    addSection(
-      'Summary by Locality',
-      ['Locality', 'Total', '%'],
-      localitySummary.map(l => [l.name, String(l.count), l.percentage.toFixed(1) + '%'])
-    );
+    addSection('By Locality', ['#', 'Locality', 'Sites', 'Questionnaires', '%'],
+      localitySummary.map((l, i) => [String(i + 1), l.name, String(l.sites), String(l.questionnaires), l.percentage.toFixed(1) + '%']));
 
-    addSection(
-      'Summary by Site',
-      ['Site Name', 'Questionnaires', '%'],
-      siteSummary.map(s => [s.name, String(s.count), s.percentage.toFixed(1) + '%'])
-    );
+    addSection('By Activity', ['Activity', 'Sites', 'Questionnaires', '%'],
+      activityBreakdown.map(a => [a.name, String(a.siteCount), String(a.questionnaireCount), a.percentage.toFixed(1) + '%']));
 
-    const actRows: string[][] = [];
-    activitySummary.forEach(a => {
-      actRows.push([a.name, '', String(a.siteCount), String(a.questionnaireCount)]);
-      a.sites.forEach(s => {
-        actRows.push(['', '  ' + s.name, '', String(s.count)]);
-      });
-    });
-    addSection(
-      'Summary by Activity (PDM) - Sites & Questionnaires',
-      ['Activity (PDM)', 'Site Name', 'Sites', 'Questionnaires'],
-      actRows
-    );
-
-    addSection(
-      'Summary by Data Collector',
-      ['Device ID', 'Data Collector', 'Total', '%'],
-      collectorSummary.map(c => [c.deviceId || '-', c.name, String(c.count), c.percentage.toFixed(1) + '%'])
-    );
-
-    const collHubRows: string[][] = [];
-    collectorByHub.forEach(h => {
-      h.collectors.forEach(c => {
-        collHubRows.push([h.hub, c.deviceId || '-', c.name, String(c.count)]);
-      });
-    });
-    addSection(
-      'Data Collectors by Hub',
-      ['Hub', 'Device ID', 'Data Collector', 'Total'],
-      collHubRows
-    );
+    addSection('By Data Collector', ['#', 'Device ID', 'Collector', 'Activities', 'Questionnaires', '%'],
+      collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.activities.map(a => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']));
 
     doc.save('questionnaire_analytics.pdf');
-  }, [filteredData, hubSummary, stateSummary, localitySummary, siteSummary, activitySummary, collectorSummary, collectorByHub]);
+  }, [filteredData, hubSummary, stateSummary, localitySummary, activityBreakdown, collectorDetails]);
 
-  const SummaryTable = ({ items, label, icon: Icon }: { items: SummaryItem[]; label: string; icon: React.ElementType }) => (
+  const exportTrackerToExcel = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    const { hubs, activities, matrix, hubTotals, grandQ, grandSites, grandCollectors, stateBreakdown } = trackerData;
+
+    const rows: any[] = [];
+    matrix.forEach(row => {
+      const r: any = { Activity: row.activity };
+      hubs.forEach((hub, hi) => {
+        r[`${hub} Sites`] = row.cells[hi].sites;
+        r[`${hub} Actual`] = row.cells[hi].questionnaires;
+        r[`${hub} Collectors`] = row.cells[hi].collectors;
+      });
+      r['Total Sites'] = row.totalSites;
+      r['Total Actual'] = row.totalQ;
+      r['Total Collectors'] = row.totalCollectors;
+      rows.push(r);
+    });
+    const totalRow: any = { Activity: 'Grand Total' };
+    hubs.forEach((hub, hi) => {
+      totalRow[`${hub} Sites`] = hubTotals[hi].sites;
+      totalRow[`${hub} Actual`] = hubTotals[hi].questionnaires;
+      totalRow[`${hub} Collectors`] = hubTotals[hi].collectors;
+    });
+    totalRow['Total Sites'] = grandSites;
+    totalRow['Total Actual'] = grandQ;
+    totalRow['Total Collectors'] = grandCollectors;
+    rows.push(totalRow);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Activity x Hub');
+
+    const stateRows: any[] = [];
+    stateBreakdown.forEach(sb => {
+      sb.activities.forEach(a => {
+        if (a.questionnaires > 0) {
+          stateRows.push({ State: sb.state, Activity: a.activity, Sites: a.sites, Questionnaires: a.questionnaires });
+        }
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stateRows), 'Activity x State');
+
+    XLSX.writeFile(wb, 'tracker_report.xlsx');
+  }, [trackerData]);
+
+  const SummaryTableWithSites = ({ items, label, icon: Icon }: { items: SummaryWithSites[]; label: string; icon: React.ElementType }) => (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
@@ -520,19 +640,19 @@ const QuestionnaireAnalytics = () => {
               <tr className="border-b bg-muted/50">
                 <th className="text-left py-2 px-3 font-medium">#</th>
                 <th className="text-left py-2 px-3 font-medium">{label}</th>
-                <th className="text-right py-2 px-3 font-medium">Total</th>
+                <th className="text-right py-2 px-3 font-medium">Sites</th>
+                <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
                 <th className="text-right py-2 px-3 font-medium">%</th>
                 <th className="py-2 px-3 font-medium w-32">Distribution</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item, i) => (
-                <tr key={item.name} className="border-b hover:bg-muted/30 transition-colors">
+                <tr key={item.name} className="border-b hover:bg-muted/30 transition-colors" data-testid={`row-${label.toLowerCase()}-${i}`}>
                   <td className="py-2 px-3 text-muted-foreground">{i + 1}</td>
                   <td className="py-2 px-3 font-medium">{item.name}</td>
-                  <td className="py-2 px-3 text-right">
-                    <Badge variant="secondary" className="font-mono">{item.count}</Badge>
-                  </td>
+                  <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-600">{item.sites}</Badge></td>
+                  <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.questionnaires}</Badge></td>
                   <td className="py-2 px-3 text-right text-muted-foreground">{item.percentage.toFixed(1)}%</td>
                   <td className="py-2 px-3">
                     <div className="w-full bg-muted rounded-full h-2">
@@ -543,9 +663,8 @@ const QuestionnaireAnalytics = () => {
               ))}
               <tr className="bg-muted/50 font-semibold">
                 <td className="py-2 px-3" colSpan={2}>Total</td>
-                <td className="py-2 px-3 text-right">
-                  <Badge className="font-mono">{items.reduce((a, b) => a + b.count, 0)}</Badge>
-                </td>
+                <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-700">{items.reduce((a, b) => a + b.sites, 0)}</Badge></td>
+                <td className="py-2 px-3 text-right"><Badge className="font-mono">{items.reduce((a, b) => a + b.questionnaires, 0)}</Badge></td>
                 <td className="py-2 px-3 text-right">100%</td>
                 <td className="py-2 px-3" />
               </tr>
@@ -594,11 +713,11 @@ const QuestionnaireAnalytics = () => {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={exportToExcel} data-testid="button-export-excel">
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
-                    Export to Excel
+                    Export All to Excel
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={exportToPdf} data-testid="button-export-pdf">
                     <FileDown className="h-4 w-4 mr-2" />
-                    Export to PDF
+                    Export All to PDF
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -782,21 +901,21 @@ const QuestionnaireAnalytics = () => {
               <TabsTrigger value="state" data-testid="tab-state">State</TabsTrigger>
               <TabsTrigger value="locality" data-testid="tab-locality">Locality</TabsTrigger>
               <TabsTrigger value="sites" data-testid="tab-sites">Sites</TabsTrigger>
-              <TabsTrigger value="activity" data-testid="tab-activity">Activity (PDM)</TabsTrigger>
+              <TabsTrigger value="activity" data-testid="tab-activity">Activity</TabsTrigger>
               <TabsTrigger value="collector" data-testid="tab-collector">Collector</TabsTrigger>
               <TabsTrigger value="tracker" data-testid="tab-tracker">Tracker</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4 mt-4">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <SummaryTable items={hubSummary} label="Hub" icon={Building2} />
-                <SummaryTable items={stateSummary} label="State" icon={MapPin} />
+                <SummaryTableWithSites items={hubSummary} label="Hub" icon={Building2} />
+                <SummaryTableWithSites items={stateSummary} label="State" icon={MapPin} />
               </div>
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Activity className="h-5 w-5 text-primary" />
-                    By Activity (PDM)
+                    By Activity
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -805,13 +924,13 @@ const QuestionnaireAnalytics = () => {
                       <thead>
                         <tr className="border-b bg-muted/50">
                           <th className="text-left py-2 px-3 font-medium w-8"></th>
-                          <th className="text-left py-2 px-3 font-medium">Activity (PDM)</th>
+                          <th className="text-left py-2 px-3 font-medium">Activity</th>
                           <th className="text-right py-2 px-3 font-medium">Sites</th>
                           <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {activitySummary.map((item) => (
+                        {activityBreakdown.map((item) => (
                           <Fragment key={item.name}>
                             <tr
                               className="border-b hover:bg-muted/30 cursor-pointer transition-colors"
@@ -819,15 +938,13 @@ const QuestionnaireAnalytics = () => {
                               data-testid={`row-activity-${item.name}`}
                             >
                               <td className="py-2 px-3">
-                                {item.sites.length > 0 && (
-                                  expandedRows.has(item.name) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                                )}
+                                {expandedRows.has(item.name) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                               </td>
                               <td className="py-2 px-3 font-medium">{item.name}</td>
-                              <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.siteCount}</Badge></td>
+                              <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-600">{item.siteCount}</Badge></td>
                               <td className="py-2 px-3 text-right text-muted-foreground">{item.questionnaireCount}</td>
                             </tr>
-                            {expandedRows.has(item.name) && item.sites.map(site => (
+                            {expandedRows.has(item.name) && item.siteList.map(site => (
                               <tr key={`${item.name}-${site.name}`} className="border-b bg-muted/20">
                                 <td className="py-1.5 px-3" />
                                 <td className="py-1.5 px-3 pl-8 text-muted-foreground flex items-center gap-2">
@@ -843,8 +960,8 @@ const QuestionnaireAnalytics = () => {
                         <tr className="bg-muted/50 font-semibold">
                           <td className="py-2 px-3" />
                           <td className="py-2 px-3">Total</td>
-                          <td className="py-2 px-3 text-right"><Badge className="font-mono">{activitySummary.reduce((a, b) => a + b.siteCount, 0)}</Badge></td>
-                          <td className="py-2 px-3 text-right">{activitySummary.reduce((a, b) => a + b.questionnaireCount, 0)}</td>
+                          <td className="py-2 px-3 text-right"><Badge variant="outline" className="font-mono text-blue-700">{activityBreakdown.reduce((a, b) => a + b.siteCount, 0)}</Badge></td>
+                          <td className="py-2 px-3 text-right">{activityBreakdown.reduce((a, b) => a + b.questionnaireCount, 0)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -854,90 +971,134 @@ const QuestionnaireAnalytics = () => {
             </TabsContent>
 
             <TabsContent value="hub" className="mt-4">
-              <SummaryTable items={hubSummary} label="Hub" icon={Building2} />
+              <SummaryTableWithSites items={hubSummary} label="Hub" icon={Building2} />
             </TabsContent>
 
             <TabsContent value="state" className="mt-4">
-              <SummaryTable items={stateSummary} label="State" icon={MapPin} />
+              <SummaryTableWithSites items={stateSummary} label="State" icon={MapPin} />
             </TabsContent>
 
             <TabsContent value="locality" className="mt-4">
-              <SummaryTable items={localitySummary} label="Locality" icon={MapPin} />
+              <SummaryTableWithSites items={localitySummary} label="Locality" icon={MapPin} />
             </TabsContent>
 
             <TabsContent value="sites" className="mt-4">
-              <SummaryTable items={siteSummary} label="Site" icon={MapPin} />
+              <SummaryTableWithSites items={siteSummary} label="Site" icon={MapPin} />
             </TabsContent>
 
-            <TabsContent value="activity" className="mt-4">
+            <TabsContent value="activity" className="mt-4 space-y-4">
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Activity className="h-5 w-5 text-primary" />
-                    By Activity (PDM) &mdash; Sites & Questionnaires
+                    By Activity &mdash; Full Breakdown
                   </CardTitle>
-                  <CardDescription>{activitySummary.length} activities, {activitySummary.reduce((a, b) => a + b.siteCount, 0)} total sites</CardDescription>
+                  <CardDescription>{activityBreakdown.length} activities, {activityBreakdown.reduce((a, b) => a + b.siteCount, 0)} total sites</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm" data-testid="table-activity">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left py-2 px-3 font-medium w-8"></th>
-                          <th className="text-left py-2 px-3 font-medium">Activity (PDM)</th>
-                          <th className="text-right py-2 px-3 font-medium">Sites</th>
-                          <th className="text-right py-2 px-3 font-medium">Questionnaires</th>
-                          <th className="py-2 px-3 font-medium w-32">Distribution</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activitySummary.map((item) => (
-                          <Fragment key={item.name}>
-                            <tr
-                              className="border-b hover:bg-muted/30 cursor-pointer transition-colors"
-                              onClick={() => toggleExpand(`act-${item.name}`)}
-                            >
-                              <td className="py-2 px-3">
-                                {item.sites.length > 0 && (
-                                  expandedRows.has(`act-${item.name}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-                                )}
-                              </td>
-                              <td className="py-2 px-3 font-medium">{item.name}</td>
-                              <td className="py-2 px-3 text-right"><Badge variant="secondary" className="font-mono">{item.siteCount}</Badge></td>
-                              <td className="py-2 px-3 text-right text-muted-foreground">{item.questionnaireCount}</td>
-                              <td className="py-2 px-3">
-                                <div className="w-full bg-muted rounded-full h-2">
-                                  <div className="bg-primary rounded-full h-2" style={{ width: `${Math.min(item.percentage, 100)}%` }} />
-                                </div>
-                              </td>
-                            </tr>
-                            {expandedRows.has(`act-${item.name}`) && item.sites.map(site => (
-                              <tr key={`${item.name}-${site.name}`} className="border-b bg-blue-50/50 dark:bg-blue-900/10">
-                                <td className="py-1.5 px-3" />
-                                <td className="py-1.5 px-3 pl-8 flex items-center gap-2">
-                                  <MapPin className="h-3 w-3 text-blue-500" />
-                                  <span className="text-blue-700 dark:text-blue-300">{site.name}</span>
-                                </td>
-                                <td className="py-1.5 px-3" />
-                                <td className="py-1.5 px-3 text-right"><Badge variant="outline" className="font-mono text-xs">{site.count}</Badge></td>
-                                <td className="py-1.5 px-3">
-                                  <div className="w-full bg-muted rounded-full h-1.5">
-                                    <div className="bg-blue-400 rounded-full h-1.5" style={{ width: `${Math.min(site.percentage, 100)}%` }} />
+                  <div className="space-y-3">
+                    {activityBreakdown.map((item) => (
+                      <div key={item.name} className="border rounded-lg">
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
+                          onClick={() => toggleExpand(`act-detail-${item.name}`)}
+                          data-testid={`button-activity-expand-${item.name}`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Activity className="h-4 w-4 text-primary flex-shrink-0" />
+                            <span className="font-medium truncate">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Badge variant="outline" className="text-blue-600 font-mono">{item.siteCount} sites</Badge>
+                            <Badge variant="secondary" className="font-mono">{item.questionnaireCount} Q</Badge>
+                            <span className="text-xs text-muted-foreground">{item.percentage.toFixed(1)}%</span>
+                            {expandedRows.has(`act-detail-${item.name}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </div>
+                        </button>
+                        {expandedRows.has(`act-detail-${item.name}`) && (
+                          <div className="border-t px-3 pb-3 space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                              <div>
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><Building2 className="h-3 w-3" /> BY HUB</h4>
+                                <table className="w-full text-sm">
+                                  <thead><tr className="border-b"><th className="text-left py-1 px-2 text-xs font-medium">Hub</th><th className="text-right py-1 px-2 text-xs font-medium">Sites</th><th className="text-right py-1 px-2 text-xs font-medium">Q</th></tr></thead>
+                                  <tbody>
+                                    {item.byHub.map(h => (
+                                      <tr key={h.name} className="border-b last:border-0">
+                                        <td className="py-1 px-2 text-sm">{h.name}</td>
+                                        <td className="py-1 px-2 text-right text-xs text-blue-600">{h.sites}</td>
+                                        <td className="py-1 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{h.count}</Badge></td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><Globe className="h-3 w-3" /> BY STATE</h4>
+                                <table className="w-full text-sm">
+                                  <thead><tr className="border-b"><th className="text-left py-1 px-2 text-xs font-medium">State</th><th className="text-right py-1 px-2 text-xs font-medium">Sites</th><th className="text-right py-1 px-2 text-xs font-medium">Q</th></tr></thead>
+                                  <tbody>
+                                    {item.byState.map(s => (
+                                      <tr key={s.name} className="border-b last:border-0">
+                                        <td className="py-1 px-2 text-sm">{s.name}</td>
+                                        <td className="py-1 px-2 text-right text-xs text-blue-600">{s.sites}</td>
+                                        <td className="py-1 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{s.count}</Badge></td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><MapPin className="h-3 w-3" /> BY LOCALITY</h4>
+                                <table className="w-full text-sm">
+                                  <thead><tr className="border-b"><th className="text-left py-1 px-2 text-xs font-medium">Locality</th><th className="text-right py-1 px-2 text-xs font-medium">Sites</th><th className="text-right py-1 px-2 text-xs font-medium">Q</th></tr></thead>
+                                  <tbody>
+                                    {item.byLocality.map(l => (
+                                      <tr key={l.name} className="border-b last:border-0">
+                                        <td className="py-1 px-2 text-sm">{l.name}</td>
+                                        <td className="py-1 px-2 text-right text-xs text-blue-600">{l.sites}</td>
+                                        <td className="py-1 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{l.count}</Badge></td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><Users className="h-3 w-3" /> BY DATA COLLECTOR</h4>
+                                <table className="w-full text-sm">
+                                  <thead><tr className="border-b"><th className="text-left py-1 px-2 text-xs font-medium">Collector</th><th className="text-right py-1 px-2 text-xs font-medium">Q</th></tr></thead>
+                                  <tbody>
+                                    {item.byCollector.map(c => (
+                                      <tr key={c.name} className="border-b last:border-0">
+                                        <td className="py-1 px-2 text-sm">
+                                          <span>{c.name}</span>
+                                          {c.deviceId && <span className="ml-1 text-xs text-muted-foreground font-mono">({c.deviceId})</span>}
+                                        </td>
+                                        <td className="py-1 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{c.count}</Badge></td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><MapPin className="h-3 w-3" /> SITES ({item.siteList.length})</h4>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1">
+                                {item.siteList.map(site => (
+                                  <div key={site.name} className="flex items-center justify-between text-xs px-2 py-1 bg-muted/30 rounded">
+                                    <span className="truncate">{site.name}</span>
+                                    <Badge variant="outline" className="ml-1 font-mono text-xs flex-shrink-0">{site.count}</Badge>
                                   </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </Fragment>
-                        ))}
-                        <tr className="bg-muted/50 font-semibold">
-                          <td className="py-2 px-3" />
-                          <td className="py-2 px-3">Total</td>
-                          <td className="py-2 px-3 text-right"><Badge className="font-mono">{activitySummary.reduce((a, b) => a + b.siteCount, 0)}</Badge></td>
-                          <td className="py-2 px-3 text-right">{activitySummary.reduce((a, b) => a + b.questionnaireCount, 0)}</td>
-                          <td />
-                        </tr>
-                      </tbody>
-                    </table>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -950,100 +1111,67 @@ const QuestionnaireAnalytics = () => {
                     <Users className="h-5 w-5 text-primary" />
                     By Data Collector
                   </CardTitle>
-                  <CardDescription>{collectorSummary.length} unique data collectors found</CardDescription>
+                  <CardDescription>{collectorDetails.length} unique data collectors found</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm" data-testid="table-data-collector">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left py-2 px-3 font-medium">#</th>
-                          <th className="text-left py-2 px-3 font-medium">معرف الجهاز (Device ID)</th>
-                          <th className="text-left py-2 px-3 font-medium">Data Collector</th>
-                          <th className="text-right py-2 px-3 font-medium">Total</th>
-                          <th className="text-right py-2 px-3 font-medium">%</th>
-                          <th className="py-2 px-3 font-medium w-32">Distribution</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {collectorSummary.map((item, i) => (
-                          <tr key={item.name} className="border-b hover:bg-muted/30 transition-colors">
-                            <td className="py-2 px-3 text-muted-foreground">{i + 1}</td>
-                            <td className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.deviceId || '-'}</td>
-                            <td className="py-2 px-3 font-medium">{item.name}</td>
-                            <td className="py-2 px-3 text-right">
-                              <Badge variant="secondary" className="font-mono">{item.count}</Badge>
-                            </td>
-                            <td className="py-2 px-3 text-right text-muted-foreground">{item.percentage.toFixed(1)}%</td>
-                            <td className="py-2 px-3">
-                              <div className="w-full bg-muted rounded-full h-2">
-                                <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${Math.min(item.percentage, 100)}%` }} />
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="bg-muted/50 font-semibold">
-                          <td className="py-2 px-3" colSpan={3}>Total</td>
-                          <td className="py-2 px-3 text-right">
-                            <Badge className="font-mono">{collectorSummary.reduce((a, b) => a + b.count, 0)}</Badge>
-                          </td>
-                          <td className="py-2 px-3 text-right">100%</td>
-                          <td />
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Users className="h-5 w-5 text-primary" />
-                    Data Collectors by Hub
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {collectorByHub.map(hubGroup => (
-                      <div key={hubGroup.hub} className="border rounded-lg">
-                        <div
-                          className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30 transition-colors"
-                          onClick={() => toggleExpand(`hub-col-${hubGroup.hub}`)}
-                          data-testid={`row-hub-collector-${hubGroup.hub}`}
+                  <div className="space-y-2">
+                    {collectorDetails.map((item, i) => (
+                      <div key={item.name} className="border rounded-lg">
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
+                          onClick={() => toggleExpand(`coll-${item.name}`)}
+                          data-testid={`button-collector-expand-${i}`}
                         >
-                          <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-primary" />
-                            <span className="font-medium">{hubGroup.hub}</span>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-xs text-muted-foreground w-5 text-right flex-shrink-0">{i + 1}</span>
+                            <div className="min-w-0">
+                              <span className="font-medium block truncate">{item.name}</span>
+                              {item.deviceId && <span className="text-xs text-muted-foreground font-mono">{item.deviceId}</span>}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">{hubGroup.total} questionnaires</Badge>
-                            <Badge variant="outline">{hubGroup.collectors.length} collectors</Badge>
-                            {expandedRows.has(`hub-col-${hubGroup.hub}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Badge variant="outline" className="text-xs">{item.activities.length} activities</Badge>
+                            <Badge variant="outline" className="text-xs">{item.localities.length} localities</Badge>
+                            <Badge variant="secondary" className="font-mono">{item.count}</Badge>
+                            <span className="text-xs text-muted-foreground">{item.percentage.toFixed(1)}%</span>
+                            {expandedRows.has(`coll-${item.name}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                           </div>
-                        </div>
-                        {expandedRows.has(`hub-col-${hubGroup.hub}`) && (
-                          <div className="border-t px-3 pb-3">
-                            <table className="w-full text-sm mt-2">
-                              <thead>
-                                <tr className="border-b">
-                                  <th className="text-left py-1.5 px-2 font-medium text-xs">#</th>
-                                  <th className="text-left py-1.5 px-2 font-medium text-xs">معرف الجهاز</th>
-                                  <th className="text-left py-1.5 px-2 font-medium text-xs">Data Collector</th>
-                                  <th className="text-right py-1.5 px-2 font-medium text-xs">Total</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {hubGroup.collectors.map((c, i) => (
-                                  <tr key={c.name} className="border-b last:border-0">
-                                    <td className="py-1.5 px-2 text-muted-foreground text-xs">{i + 1}</td>
-                                    <td className="py-1.5 px-2 font-mono text-xs text-muted-foreground">{c.deviceId || '-'}</td>
-                                    <td className="py-1.5 px-2">{c.name}</td>
-                                    <td className="py-1.5 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{c.count}</Badge></td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                        </button>
+                        {expandedRows.has(`coll-${item.name}`) && (
+                          <div className="border-t px-3 pb-3 space-y-3 mt-0">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                              <div>
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><Activity className="h-3 w-3" /> ACTIVITIES</h4>
+                                <div className="space-y-1">
+                                  {item.activities.map(a => (
+                                    <div key={a.name} className="flex items-center justify-between text-sm px-2 py-1 bg-muted/30 rounded">
+                                      <span className="truncate">{a.name}</span>
+                                      <Badge variant="outline" className="font-mono text-xs ml-1">{a.count}</Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><MapPin className="h-3 w-3" /> LOCALITIES</h4>
+                                <div className="space-y-1">
+                                  {item.localities.map(l => (
+                                    <div key={l.name} className="flex items-center justify-between text-sm px-2 py-1 bg-muted/30 rounded">
+                                      <span className="truncate">{l.name}</span>
+                                      <Badge variant="outline" className="font-mono text-xs ml-1">{l.count}</Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            {item.hubs.length > 0 && (
+                              <div>
+                                <h4 className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1"><Building2 className="h-3 w-3" /> HUBS</h4>
+                                <div className="flex flex-wrap gap-1">
+                                  {item.hubs.map(h => <Badge key={h} variant="outline" className="text-xs">{h}</Badge>)}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1053,127 +1181,139 @@ const QuestionnaireAnalytics = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="tracker" className="mt-4">
+            <TabsContent value="tracker" className="mt-4 space-y-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Layers className="h-5 w-5 text-primary" />
-                    Tracker - Cross-Tab Summary
-                  </CardTitle>
-                  <CardDescription>Activity (PDM) breakdown by Hub with questionnaire counts (Actual) and site counts</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Layers className="h-5 w-5 text-primary" />
+                        Tracker - Activity by Hub
+                      </CardTitle>
+                      <CardDescription>Cross-tab: Activities (rows) x Hubs (columns) with Sites, Questionnaires & Collectors</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={exportTrackerToExcel} data-testid="button-export-tracker">
+                      <Download className="h-4 w-4" />
+                      Export Tracker
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
-                    {(() => {
-                      const hubs = [...new Set(filteredData.map(r => r.hub))].filter(Boolean).sort();
-                      const activities = [...new Set(filteredData.map(r => r.activity))].filter(Boolean).sort();
-
-                      type CellData = { questionnaires: number; siteNames: string[] };
-                      const matrix: Record<string, Record<string, CellData>> = {};
-                      const siteSetMatrix: Record<string, Record<string, Set<string>>> = {};
-
-                      filteredData.forEach(row => {
-                        if (!row.activity || !row.hub) return;
-                        if (!siteSetMatrix[row.activity]) siteSetMatrix[row.activity] = {};
-                        if (!siteSetMatrix[row.activity][row.hub]) siteSetMatrix[row.activity][row.hub] = new Set();
-                        if (!matrix[row.activity]) matrix[row.activity] = {};
-                        if (!matrix[row.activity][row.hub]) matrix[row.activity][row.hub] = { questionnaires: 0, siteNames: [] };
-                        matrix[row.activity][row.hub].questionnaires++;
-                        if (row.activitySite) siteSetMatrix[row.activity][row.hub].add(row.activitySite);
-                      });
-
-                      activities.forEach(act => {
-                        hubs.forEach(hub => {
-                          if (!matrix[act]) matrix[act] = {};
-                          if (!matrix[act][hub]) matrix[act][hub] = { questionnaires: 0, siteNames: [] };
-                          matrix[act][hub].siteNames = [...(siteSetMatrix[act]?.[hub] || [])];
-                        });
-                      });
-
-                      const hubTotals: Record<string, { questionnaires: number; sites: number }> = {};
-                      const rowTotals: Record<string, { questionnaires: number; sites: number }> = {};
-                      let grandQ = 0;
-                      const grandSiteSet = new Set<string>();
-
-                      hubs.forEach(hub => { hubTotals[hub] = { questionnaires: 0, sites: 0 }; });
-                      activities.forEach(act => {
-                        let rq = 0;
-                        const rSites = new Set<string>();
-                        hubs.forEach(hub => {
-                          const cell = matrix[act][hub];
-                          rq += cell.questionnaires;
-                          cell.siteNames.forEach(s => { rSites.add(s); grandSiteSet.add(s); });
-                          hubTotals[hub].questionnaires += cell.questionnaires;
-                        });
-                        rowTotals[act] = { questionnaires: rq, sites: rSites.size };
-                        grandQ += rq;
-                      });
-
-                      hubs.forEach(hub => {
-                        const hubSiteSet = new Set<string>();
-                        activities.forEach(act => {
-                          matrix[act][hub].siteNames.forEach(s => hubSiteSet.add(s));
-                        });
-                        hubTotals[hub].sites = hubSiteSet.size;
-                      });
-
-                      return (
-                        <table className="w-full text-sm border-collapse" data-testid="table-tracker">
-                          <thead>
-                            <tr className="bg-muted/50">
-                              <th className="text-left py-2 px-3 font-medium border min-w-[200px] sticky left-0 bg-muted/50 z-10">Activity (PDM)</th>
-                              {hubs.map(hub => (
-                                <th key={hub} className="text-center py-2 px-3 font-medium border min-w-[120px]" colSpan={2}>{hub}</th>
-                              ))}
-                              <th className="text-center py-2 px-3 font-medium border min-w-[120px] bg-primary/10" colSpan={2}>Grand Total</th>
-                            </tr>
-                            <tr className="bg-muted/30">
-                              <th className="text-left py-1 px-3 text-xs font-medium border sticky left-0 bg-muted/30 z-10"></th>
-                              {hubs.map(hub => (
-                                <Fragment key={hub}>
-                                  <th className="text-center py-1 px-2 text-xs font-medium border text-blue-600">Sites</th>
-                                  <th className="text-center py-1 px-2 text-xs font-medium border text-green-600">Actual</th>
-                                </Fragment>
-                              ))}
-                              <th className="text-center py-1 px-2 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
-                              <th className="text-center py-1 px-2 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {activities.map((act, i) => (
-                              <tr key={act} className={i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}>
-                                <td className={`py-2 px-3 font-medium border sticky left-0 z-10 ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>{act}</td>
-                                {hubs.map(hub => {
-                                  const cell = matrix[act][hub];
-                                  return (
-                                    <Fragment key={hub}>
-                                      <td className="text-center py-2 px-2 border text-blue-600 font-mono text-xs">{cell.siteNames.length || '-'}</td>
-                                      <td className="text-center py-2 px-2 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
-                                    </Fragment>
-                                  );
-                                })}
-                                <td className="text-center py-2 px-2 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{rowTotals[act].sites}</td>
-                                <td className="text-center py-2 px-2 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{rowTotals[act].questionnaires}</td>
-                              </tr>
+                    <table className="w-full text-sm border-collapse" data-testid="table-tracker">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="text-left py-2 px-3 font-medium border min-w-[200px] sticky left-0 bg-muted/50 z-10">Activity</th>
+                          {trackerData.hubs.map(hub => (
+                            <th key={hub} className="text-center py-2 px-3 font-medium border min-w-[150px]" colSpan={3}>{hub}</th>
+                          ))}
+                          <th className="text-center py-2 px-3 font-medium border min-w-[150px] bg-primary/10" colSpan={3}>Grand Total</th>
+                        </tr>
+                        <tr className="bg-muted/30">
+                          <th className="text-left py-1 px-3 text-xs font-medium border sticky left-0 bg-muted/30 z-10"></th>
+                          {trackerData.hubs.map(hub => (
+                            <Fragment key={hub}>
+                              <th className="text-center py-1 px-2 text-xs font-medium border text-blue-600">Sites</th>
+                              <th className="text-center py-1 px-2 text-xs font-medium border text-green-600">Actual</th>
+                              <th className="text-center py-1 px-2 text-xs font-medium border text-purple-600">DC</th>
+                            </Fragment>
+                          ))}
+                          <th className="text-center py-1 px-2 text-xs font-medium border text-blue-600 bg-primary/5">Sites</th>
+                          <th className="text-center py-1 px-2 text-xs font-medium border text-green-600 bg-primary/5">Actual</th>
+                          <th className="text-center py-1 px-2 text-xs font-medium border text-purple-600 bg-primary/5">DC</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {trackerData.matrix.map((row, i) => (
+                          <tr key={row.activity} className={i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}>
+                            <td className={`py-2 px-3 font-medium border sticky left-0 z-10 ${i % 2 === 0 ? 'bg-white dark:bg-background' : 'bg-muted/20'}`}>{row.activity}</td>
+                            {row.cells.map((cell, ci) => (
+                              <Fragment key={trackerData.hubs[ci]}>
+                                <td className="text-center py-2 px-2 border text-blue-600 font-mono text-xs">{cell.sites || '-'}</td>
+                                <td className="text-center py-2 px-2 border text-green-600 font-mono text-xs">{cell.questionnaires || '-'}</td>
+                                <td className="text-center py-2 px-2 border text-purple-600 font-mono text-xs">{cell.collectors || '-'}</td>
+                              </Fragment>
                             ))}
-                            <tr className="bg-muted/50 font-semibold">
-                              <td className="py-2 px-3 border sticky left-0 bg-muted/50 z-10">Grand Total</td>
-                              {hubs.map(hub => (
-                                <Fragment key={hub}>
-                                  <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs">{hubTotals[hub].sites}</td>
-                                  <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs">{hubTotals[hub].questionnaires}</td>
-                                </Fragment>
-                              ))}
-                              <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs bg-primary/10">{grandSiteSet.size}</td>
-                              <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs bg-primary/10">{grandQ}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      );
-                    })()}
+                            <td className="text-center py-2 px-2 border font-mono text-xs text-blue-700 font-semibold bg-primary/5">{row.totalSites}</td>
+                            <td className="text-center py-2 px-2 border font-mono text-xs text-green-700 font-semibold bg-primary/5">{row.totalQ}</td>
+                            <td className="text-center py-2 px-2 border font-mono text-xs text-purple-700 font-semibold bg-primary/5">{row.totalCollectors}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-muted/50 font-semibold">
+                          <td className="py-2 px-3 border sticky left-0 bg-muted/50 z-10">Grand Total</td>
+                          {trackerData.hubTotals.map((ht, hi) => (
+                            <Fragment key={trackerData.hubs[hi]}>
+                              <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs">{ht.sites}</td>
+                              <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs">{ht.questionnaires}</td>
+                              <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs">{ht.collectors}</td>
+                            </Fragment>
+                          ))}
+                          <td className="text-center py-2 px-2 border text-blue-700 font-mono text-xs bg-primary/10">{trackerData.grandSites}</td>
+                          <td className="text-center py-2 px-2 border text-green-700 font-mono text-xs bg-primary/10">{trackerData.grandQ}</td>
+                          <td className="text-center py-2 px-2 border text-purple-700 font-mono text-xs bg-primary/10">{trackerData.grandCollectors}</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </CardContent>
               </Card>
+
+              {trackerData.stateBreakdown.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Globe className="h-5 w-5 text-primary" />
+                      Tracker - Activity by State
+                    </CardTitle>
+                    <CardDescription>Activity breakdown per state</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {trackerData.stateBreakdown.map(sb => (
+                        <div key={sb.state} className="border rounded-lg">
+                          <button
+                            type="button"
+                            className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
+                            onClick={() => toggleExpand(`tracker-state-${sb.state}`)}
+                            data-testid={`button-tracker-state-${sb.state}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-primary" />
+                              <span className="font-medium">{sb.state}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="font-mono">{sb.totalQ} Q</Badge>
+                              {expandedRows.has(`tracker-state-${sb.state}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </div>
+                          </button>
+                          {expandedRows.has(`tracker-state-${sb.state}`) && (
+                            <div className="border-t px-3 pb-3">
+                              <table className="w-full text-sm mt-2">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="text-left py-1.5 px-2 font-medium text-xs">Activity</th>
+                                    <th className="text-right py-1.5 px-2 font-medium text-xs">Sites</th>
+                                    <th className="text-right py-1.5 px-2 font-medium text-xs">Questionnaires</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sb.activities.filter(a => a.questionnaires > 0).map(a => (
+                                    <tr key={a.activity} className="border-b last:border-0">
+                                      <td className="py-1.5 px-2">{a.activity}</td>
+                                      <td className="py-1.5 px-2 text-right text-blue-600 text-xs">{a.sites}</td>
+                                      <td className="py-1.5 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{a.questionnaires}</Badge></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
         </>
