@@ -330,7 +330,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
     { resource: 'mmp', action: 'read' },
-    { resource: 'reports', action: 'read' }
+    { resource: 'reports', action: 'read' },
+    { resource: 'finances', action: 'read' },
+    { resource: 'finances', action: 'create' },
   ],
   // Data Team: Analytics and reporting focus
   // Can view all operational data, create reports and exports
