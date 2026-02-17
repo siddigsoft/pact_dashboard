@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { supabase } from '@/integrations/supabase/client';
 
 const NAVY = 'FF0F2041';
 const BLUE = 'FF2962FF';
@@ -304,6 +305,102 @@ function mergeCollectorsByDevice(
 
 const DETAIL_COLS = [...ACTIVITY_COLS, 'PDM Sites'];
 
+interface CollectorClassificationInfo {
+  classificationLevel: string;
+  baseFee: number;
+  transportFee: number;
+  currency: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  bankBranch: string;
+}
+
+async function fetchCollectorClassifications(): Promise<Map<string, CollectorClassificationInfo>> {
+  const result = new Map<string, CollectorClassificationInfo>();
+
+  try {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, role')
+      .or('role.ilike.%data collector%,role.ilike.%datacollector%,role.ilike.%enumerator%,role.ilike.%coordinator%');
+
+    if (!profiles || profiles.length === 0) return result;
+
+    const profileMap = new Map<string, { id: string; fullName: string }>();
+    profiles.forEach(p => {
+      const normalizedName = (p.full_name || '').trim().toLowerCase();
+      if (normalizedName) {
+        profileMap.set(normalizedName, { id: p.id, fullName: p.full_name || '' });
+      }
+    });
+
+    const { data: classifications } = await supabase
+      .from('user_classifications')
+      .select('*')
+      .eq('is_active', true);
+
+    const { data: feeStructures } = await supabase
+      .from('classification_fee_structures')
+      .select('*')
+      .eq('is_active', true);
+
+    const classMap = new Map<string, any>();
+    (classifications || []).forEach(c => {
+      classMap.set(c.user_id, c);
+    });
+
+    const feeMap = new Map<string, any>();
+    (feeStructures || []).forEach(f => {
+      const key = `${f.classification_level}_${f.role_scope}`;
+      feeMap.set(key, f);
+    });
+
+    profileMap.forEach(({ id, fullName }, normalizedName) => {
+      const classification = classMap.get(id);
+      if (classification) {
+        const feeKey = `${classification.classification_level}_${classification.role_scope}`;
+        const fee = feeMap.get(feeKey);
+        result.set(normalizedName, {
+          classificationLevel: classification.classification_level || 'N/A',
+          baseFee: fee ? parseInt(fee.site_visit_base_fee_cents || 0) / 100 : 0,
+          transportFee: fee ? parseInt(fee.site_visit_transport_fee_cents || 0) / 100 : 0,
+          currency: fee?.currency || 'SDG',
+          bankAccountName: '',
+          bankAccountNumber: '',
+          bankBranch: '',
+        });
+      }
+    });
+  } catch (err) {
+    console.error('[CoverageTracker] Error fetching classifications:', err);
+  }
+
+  return result;
+}
+
+function matchCollectorClassification(
+  collectorName: string,
+  classificationMap: Map<string, CollectorClassificationInfo>
+): CollectorClassificationInfo | null {
+  const normalized = collectorName.trim().toLowerCase();
+  if (classificationMap.has(normalized)) return classificationMap.get(normalized)!;
+
+  for (const [key, value] of classificationMap.entries()) {
+    if (key.includes(normalized) || normalized.includes(key)) return value;
+  }
+
+  const nameParts = normalized.split(/\s+/);
+  if (nameParts.length >= 2) {
+    for (const [key, value] of classificationMap.entries()) {
+      const keyParts = key.split(/\s+/);
+      const matchCount = nameParts.filter(p => keyParts.some(kp => kp === p)).length;
+      if (matchCount >= 2) return value;
+    }
+  }
+
+  return null;
+}
+
 export async function exportCoverageTrackerExcel(
   filteredData: FilteredRow[],
   filename: string,
@@ -312,6 +409,8 @@ export async function exportCoverageTrackerExcel(
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
   wb.created = new Date();
+
+  const classificationMap = await fetchCollectorClassifications();
 
   const label = sessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
@@ -344,7 +443,7 @@ export async function exportCoverageTrackerExcel(
 
   hubOrder.sort();
 
-  const headers = ['Hub', 'State', 'Data Collector', ...DETAIL_COLS, 'Overall Site Total', 'Total Sites (PDM/7)'];
+  const headers = ['Hub', 'State', 'Data Collector', ...DETAIL_COLS, 'Overall Site Total', 'Total Sites (PDM/7)', 'Class. Level', 'Fee/Site', 'Transport Fee', 'Total Cost', 'Bank Account', 'Bank Branch'];
 
   const ws = wb.addWorksheet(label.slice(0, 31));
 
@@ -440,6 +539,7 @@ export async function exportCoverageTrackerExcel(
 
       merged.forEach(mc => {
         const isDup = dupNames.has(mc.primaryName.trim().toLowerCase());
+        const classInfo = matchCollectorClassification(mc.primaryName, classificationMap);
         const vals: (string | number)[] = [hub, state, mc.primaryName];
         let rowTotal = 0;
         let nonPdmTotal = 0;
@@ -457,6 +557,19 @@ export async function exportCoverageTrackerExcel(
         vals.push(rowTotal || '');
         const siteTotal = nonPdmTotal + pdmSites;
         vals.push(siteTotal || '');
+
+        const classLevel = classInfo?.classificationLevel || '';
+        const baseFee = classInfo?.baseFee || 0;
+        const transportFee = classInfo?.transportFee || 0;
+        const totalCost = siteTotal * (baseFee + transportFee);
+
+        vals.push(classLevel);
+        vals.push(baseFee > 0 ? baseFee : '');
+        vals.push(transportFee > 0 ? transportFee : '');
+        vals.push(totalCost > 0 ? totalCost : '');
+        vals.push(classInfo?.bankAccountName || classInfo?.bankAccountNumber || '');
+        vals.push(classInfo?.bankBranch || '');
+
         const dataRow = ws.addRow(vals);
         dataRow.eachCell((cell, ci) => {
           cell.border = thinBorder();
@@ -466,6 +579,9 @@ export async function exportCoverageTrackerExcel(
             cell.font = bodyFont(10, DUP_TEXT);
           } else {
             cell.font = bodyFont(10);
+          }
+          if (ci === vals.length - 2 && totalCost > 0) {
+            cell.numFmt = '#,##0.00';
           }
         });
         dataRow.height = 20;

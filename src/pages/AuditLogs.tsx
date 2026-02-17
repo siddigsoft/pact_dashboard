@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAudit } from '@/context/audit/AuditContext';
@@ -146,19 +146,81 @@ const AuditLogs = () => {
     fetchProfiles();
   }, []);
 
-  // Refresh live activities periodically
-  useEffect(() => {
-    const refreshActivities = () => {
-      const activities = activityTracker.getActivities({ limit: 500 });
-      setLiveActivities(activities);
-    };
-    
-    refreshActivities();
-    const interval = setInterval(refreshActivities, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  const [activityUserFilter, setActivityUserFilter] = useState<string>('all');
 
-  // Filtered live activities
+  const mapDbRowToActivity = useCallback((row: any): ActivityEntry => ({
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name || 'Unknown',
+    userEmail: row.user_email,
+    userRole: row.user_role || '',
+    activityType: row.activity_type,
+    category: row.category,
+    component: row.component || '',
+    action: row.action || '',
+    description: row.description || '',
+    path: row.path || '',
+    timestamp: row.timestamp || row.created_at,
+    metadata: row.metadata,
+    elementId: row.element_id,
+    elementText: row.element_text,
+    previousValue: row.previous_value,
+    newValue: row.new_value,
+    duration: row.duration,
+    success: row.success !== false,
+    errorMessage: row.error_message,
+    sessionId: row.session_id || '',
+    deviceInfo: row.device_info,
+  }), []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchDbActivities = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_activity_logs')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(500);
+
+        if (!error && data && isMounted) {
+          setLiveActivities(data.map(mapDbRowToActivity));
+        }
+      } catch (err) {
+        console.error('[AuditLogs] Error fetching activity logs:', err);
+      }
+    };
+
+    fetchDbActivities();
+
+    const channel = supabase
+      .channel('live-activity-feed')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'user_activity_logs' },
+        (payload) => {
+          if (!isMounted) return;
+          const newActivity = mapDbRowToActivity(payload.new);
+          setLiveActivities(prev => {
+            const exists = prev.some(a => a.id === newActivity.id);
+            if (exists) return prev;
+            const updated = [newActivity, ...prev];
+            return updated.slice(0, 1000);
+          });
+        }
+      )
+      .subscribe();
+
+    const interval = setInterval(fetchDbActivities, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [mapDbRowToActivity]);
+
   const filteredActivities = useMemo(() => {
     let result = [...liveActivities];
     
@@ -168,11 +230,34 @@ const AuditLogs = () => {
     if (activityCategoryFilter !== 'all') {
       result = result.filter(a => a.category === activityCategoryFilter);
     }
+    if (activityUserFilter !== 'all') {
+      result = result.filter(a => a.userName === activityUserFilter || a.userId === activityUserFilter);
+    }
     
     return result;
-  }, [liveActivities, activityFilter, activityCategoryFilter]);
+  }, [liveActivities, activityFilter, activityCategoryFilter, activityUserFilter]);
 
-  const activityStats = useMemo(() => activityTracker.getActivityStats(), [liveActivities]);
+  const activityStats = useMemo(() => {
+    const byType: Record<string, number> = {};
+    const byCategory: Record<string, number> = {};
+    const byUser: Record<string, number> = {};
+    let successCount = 0;
+
+    liveActivities.forEach(a => {
+      byType[a.activityType] = (byType[a.activityType] || 0) + 1;
+      byCategory[a.category] = (byCategory[a.category] || 0) + 1;
+      byUser[a.userName] = (byUser[a.userName] || 0) + 1;
+      if (a.success) successCount++;
+    });
+
+    return {
+      totalActivities: liveActivities.length,
+      successRate: liveActivities.length > 0 ? (successCount / liveActivities.length) * 100 : 100,
+      byType,
+      byCategory,
+      byUser,
+    };
+  }, [liveActivities]);
 
   // Auto-refresh in live mode
   useEffect(() => {
@@ -1934,11 +2019,24 @@ const AuditLogs = () => {
                   Live Activity Feed
                 </CardTitle>
                 <CardDescription>
-                  Real-time tracking of all user interactions, button clicks, navigation, form submissions, and more
+                  Live monitoring of all user actions across the system — see who is doing what in real-time from the database
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-4 mb-4 flex-wrap">
+                  <Select value={activityUserFilter} onValueChange={setActivityUserFilter}>
+                    <SelectTrigger className="w-48" data-testid="select-activity-user">
+                      <SelectValue placeholder="Filter by User" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Users</SelectItem>
+                      {Object.entries(activityStats.byUser)
+                        .sort(([,a], [,b]) => b - a)
+                        .map(([userName]) => (
+                          <SelectItem key={userName} value={userName}>{userName}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                   <Select value={activityCategoryFilter} onValueChange={(v) => setActivityCategoryFilter(v as ActivityCategory | 'all')}>
                     <SelectTrigger className="w-40" data-testid="select-activity-category">
                       <SelectValue placeholder="Category" />
@@ -2043,10 +2141,13 @@ const AuditLogs = () => {
                               )}
                             </div>
                             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 font-medium">
                                 <User className="h-3 w-3" />
                                 {activity.userName}
                               </span>
+                              {activity.userRole && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0">{activity.userRole}</Badge>
+                              )}
                               <span className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
                                 {format(parseISO(activity.timestamp), 'MMM d, HH:mm:ss')}
@@ -2089,19 +2190,31 @@ const AuditLogs = () => {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Activity by Category</CardTitle>
+                  <CardTitle className="text-lg">Activity by User</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    {Object.entries(activityStats.byCategory)
-                      .sort(([,a], [,b]) => b - a)
-                      .map(([category, count]) => (
-                        <div key={category} className="flex items-center justify-between">
-                          <span className="text-sm capitalize">{category}</span>
-                          <Badge variant="secondary">{count}</Badge>
-                        </div>
-                      ))}
-                  </div>
+                  <ScrollArea className="h-[250px]">
+                    <div className="space-y-2">
+                      {Object.entries(activityStats.byUser)
+                        .sort(([,a], [,b]) => b - a)
+                        .slice(0, 20)
+                        .map(([userName, count]) => (
+                          <div 
+                            key={userName} 
+                            className="flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded px-2 py-1"
+                            onClick={() => setActivityUserFilter(activityUserFilter === userName ? 'all' : userName)}
+                          >
+                            <span className="text-sm flex items-center gap-2">
+                              <Avatar className="h-5 w-5">
+                                <AvatarFallback className="text-[10px]">{userName.split(' ').map(n => n[0]).join('').slice(0, 2)}</AvatarFallback>
+                              </Avatar>
+                              {userName}
+                            </span>
+                            <Badge variant={activityUserFilter === userName ? "default" : "secondary"}>{count}</Badge>
+                          </div>
+                        ))}
+                    </div>
+                  </ScrollArea>
                 </CardContent>
               </Card>
             </div>
