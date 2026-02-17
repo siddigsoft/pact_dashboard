@@ -127,11 +127,18 @@ const MMPCycleClose = () => {
         return;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('site_visits')
         .select('id, site_name, site_code, state, locality, status, mmp_id, not_covered_flag, not_covered_reason, not_covered_reason_other, not_covered_at, not_covered_by')
-        .in('mmp_id', mmpIds)
-        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+        .in('mmp_id', mmpIds);
+
+      if (closingMmps.length > 0) {
+        query = query.eq('not_covered_flag', true);
+      } else {
+        query = query.in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
