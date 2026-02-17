@@ -85,6 +85,16 @@ export const navigationConfig: NavigationGroup[] = [
         description: 'Project management'
       },
       {
+        id: 'mmp-cycle-close',
+        icon: CheckCircle,
+        label: 'MMP Cycle Close',
+        path: '/mmp/cycle-close',
+        category: 'secondary',
+        priority: 82,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
+        description: 'MMP cycle lifecycle management'
+      },
+      {
         id: 'archive',
         icon: Archive,
         label: 'Archive',
