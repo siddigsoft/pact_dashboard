@@ -152,7 +152,7 @@ const CostSubmission = () => {
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
   
-  const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser;
+  const canViewTeamSubmissions = isAdmin || isSupervisor || isFOM || isCountryDirector || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser;
 
   // Default to Submit Request tab for all users
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
@@ -378,7 +378,9 @@ const CostSubmission = () => {
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
     if (!isAdminOrSuperUser && !isSuperAdmin) {
-      if (isSupervisor && teamMemberIds.length > 0) {
+      if (isFOM || isCountryDirector) {
+        // FOM and Country Director see all submissions (they approve T1 for supervisors, T2 for coordinators)
+      } else if (isSupervisor && teamMemberIds.length > 0) {
         filtered = filtered.filter(o => teamMemberIds.includes(o.submitted_by) || o.submitted_by === currentUser?.id);
       } else if (!canViewTeamSubmissions) {
         filtered = filtered.filter(o => o.submitted_by === currentUser?.id);
@@ -388,7 +390,7 @@ const CostSubmission = () => {
       }
     }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isSupervisor, isFOM, isCountryDirector, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
 
   interface GroupedRequest {
     groupId: string | null;
