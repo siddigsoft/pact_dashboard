@@ -335,7 +335,7 @@ export async function exportCoverageTrackerExcel(
 
   hubOrder.sort();
 
-  const headers = ['Hub', 'State', 'Data Collector', ...DETAIL_COLS, 'Overall Site Total'];
+  const headers = ['Hub', 'State', 'Data Collector', ...DETAIL_COLS, 'Overall Site Total', 'Total Sites (PDM/7)'];
 
   const ws = wb.addWorksheet(label.slice(0, 31));
 
@@ -359,11 +359,16 @@ export async function exportCoverageTrackerExcel(
     ACTIVITY_COLS.forEach(col => {
       const v = totals.get(col) || 0;
       vals.push(v);
-      if (col !== 'PDM') overall += v;
+      overall += v;
     });
     vals.push(pdmSites);
-    overall += pdmSites;
     vals.push(overall);
+    let siteTotal = 0;
+    ACTIVITY_COLS.forEach(col => {
+      if (col !== 'PDM') siteTotal += (totals.get(col) || 0);
+    });
+    siteTotal += pdmSites;
+    vals.push(siteTotal);
     const row = sheet.addRow(vals);
     row.eachCell((cell, ci) => {
       cell.fill = GREEN_FILL;
@@ -383,11 +388,16 @@ export async function exportCoverageTrackerExcel(
     ACTIVITY_COLS.forEach(col => {
       const v = totals.get(col) || 0;
       vals.push(v);
-      if (col !== 'PDM') overall += v;
+      overall += v;
     });
     vals.push(pdmSites);
-    overall += pdmSites;
     vals.push(overall);
+    let siteTotal = 0;
+    ACTIVITY_COLS.forEach(col => {
+      if (col !== 'PDM') siteTotal += (totals.get(col) || 0);
+    });
+    siteTotal += pdmSites;
+    vals.push(siteTotal);
     const row = sheet.addRow(vals);
     row.eachCell((cell, ci) => {
       cell.fill = GREEN_FILL;
@@ -414,18 +424,21 @@ export async function exportCoverageTrackerExcel(
       merged.forEach(mc => {
         const vals: (string | number)[] = [hub, state, mc.primaryName];
         let rowTotal = 0;
+        let nonPdmTotal = 0;
         ACTIVITY_COLS.forEach(col => {
           const v = mc.activities.get(col) || 0;
           vals.push(v || '');
-          if (col !== 'PDM') rowTotal += v;
+          rowTotal += v;
+          if (col !== 'PDM') nonPdmTotal += v;
           stateTotals.set(col, (stateTotals.get(col) || 0) + v);
         });
         const pdmCount = mc.activities.get('PDM') || 0;
         const pdmSites = pdmCount > 0 ? Math.ceil(pdmCount / 7) : 0;
         vals.push(pdmSites || '');
         statePdmSites += pdmSites;
-        rowTotal += pdmSites;
         vals.push(rowTotal || '');
+        const siteTotal = nonPdmTotal + pdmSites;
+        vals.push(siteTotal || '');
         const dataRow = ws.addRow(vals);
         dataRow.eachCell((cell, ci) => {
           cell.border = thinBorder();
@@ -449,7 +462,7 @@ export async function exportCoverageTrackerExcel(
   titleRow.height = 26;
   ws2.addRow([]);
 
-  const summaryHeaders = ['HUB', 'State', ...DETAIL_COLS, 'Overall Site Total'];
+  const summaryHeaders = ['HUB', 'State', ...DETAIL_COLS, 'Overall Site Total', 'Total Sites (PDM/7)'];
   const sHdrRow = ws2.addRow(summaryHeaders);
   sHdrRow.eachCell((cell, ci) => {
     cell.fill = headerFill();
@@ -473,10 +486,12 @@ export async function exportCoverageTrackerExcel(
       const am = hsm.get(state)!;
       const vals: (string | number)[] = [hub, state];
       let rowTotal = 0;
+      let nonPdmTotal = 0;
       ACTIVITY_COLS.forEach(col => {
         const v = am.get(col) || 0;
         vals.push(v);
-        if (col !== 'PDM') rowTotal += v;
+        rowTotal += v;
+        if (col !== 'PDM') nonPdmTotal += v;
         hubTotals.set(col, (hubTotals.get(col) || 0) + v);
         grandTotals.set(col, (grandTotals.get(col) || 0) + v);
       });
@@ -484,8 +499,8 @@ export async function exportCoverageTrackerExcel(
       const pdmSites = pdmCount > 0 ? Math.ceil(pdmCount / 7) : 0;
       hubPdmSites += pdmSites;
       vals.push(pdmSites);
-      rowTotal += pdmSites;
       vals.push(rowTotal);
+      vals.push(nonPdmTotal + pdmSites);
       const dataRow = ws2.addRow(vals);
       dataRow.eachCell((cell, ci) => {
         cell.border = thinBorder();
@@ -501,14 +516,16 @@ export async function exportCoverageTrackerExcel(
 
   const overallVals: (string | number)[] = ['', 'Overall Total'];
   let grandOverall = 0;
+  let grandNonPdm = 0;
   ACTIVITY_COLS.forEach(col => {
     const v = grandTotals.get(col) || 0;
     overallVals.push(v);
-    if (col !== 'PDM') grandOverall += v;
+    grandOverall += v;
+    if (col !== 'PDM') grandNonPdm += v;
   });
   overallVals.push(grandPdmSites);
-  grandOverall += grandPdmSites;
   overallVals.push(grandOverall);
+  overallVals.push(grandNonPdm + grandPdmSites);
   const grandRow = ws2.addRow(overallVals);
   grandRow.eachCell((cell, ci) => {
     cell.fill = GREEN_FILL;
