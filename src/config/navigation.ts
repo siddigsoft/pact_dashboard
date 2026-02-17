@@ -246,7 +246,7 @@ export const navigationConfig: NavigationGroup[] = [
         path: '/cost-submission',
         category: 'secondary',
         priority: 72,
-        roles: ['DataCollector' as AppRole, 'Admin' as AppRole],
+        roles: ['DataCollector' as AppRole, 'Admin' as AppRole, 'Coordinator' as AppRole],
         description: 'Submit operation costs'
       },
       {
