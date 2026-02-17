@@ -731,10 +731,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (locMap != null) {
             _currentLocation = {
               'latitude':
-                  (locMap['latitude'] ?? locMap['lat'] ?? 0.0) as double,
+                  ((locMap['latitude'] ?? locMap['lat'] ?? 0.0) as num).toDouble(),
               'longitude':
-                  (locMap['longitude'] ?? locMap['lng'] ?? locMap['lon'] ?? 0.0)
-                      as double,
+                  ((locMap['longitude'] ?? locMap['lng'] ?? locMap['lon'] ?? 0.0) as num).toDouble(),
             };
             _hasLocation =
                 _currentLocation!['latitude'] != 0.0 &&

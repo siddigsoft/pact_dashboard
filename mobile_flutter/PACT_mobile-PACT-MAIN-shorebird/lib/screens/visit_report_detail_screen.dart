@@ -88,9 +88,9 @@ class VisitReportDetail {
     );
   }
 
-  double? get latitude => coordinates?['latitude'] as double?;
-  double? get longitude => coordinates?['longitude'] as double?;
-  double? get accuracy => coordinates?['accuracy'] as double?;
+  double? get latitude => (coordinates?['latitude'] as num?)?.toDouble();
+  double? get longitude => (coordinates?['longitude'] as num?)?.toDouble();
+  double? get accuracy => (coordinates?['accuracy'] as num?)?.toDouble();
 }
 
 class VisitReportDetailScreen extends ConsumerStatefulWidget {

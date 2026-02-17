@@ -1320,12 +1320,12 @@ class WebRTCService {
           }
           bitrate = values['bytesReceived'] as int? ?? 0;
           // Jitter is reported in seconds, convert to ms
-          final jitterSeconds = values['jitter'] as double? ?? 0;
+          final jitterSeconds = (values['jitter'] as num?)?.toDouble() ?? 0;
           jitter = (jitterSeconds * 1000).round();
         }
         
         if (report.type == 'candidate-pair' && values['state'] == 'succeeded') {
-          latency = (values['currentRoundTripTime'] as double? ?? 0) * 1000 ~/ 1;
+          latency = ((values['currentRoundTripTime'] as num?)?.toDouble() ?? 0) * 1000 ~/ 1;
         }
       }
       

@@ -1144,9 +1144,9 @@ class SiteVisitService {
             siteName ?? (response['site_name'] ?? 'Unknown Site'),
             siteEntryId,
             enumeratorFee:
-                enumeratorFee ?? (response['enumerator_fee'] as double?),
+                enumeratorFee ?? (response['enumerator_fee'] as num?)?.toDouble(),
             transportFee:
-                transportFee ?? (response['transport_fee'] as double?),
+                transportFee ?? (response['transport_fee'] as num?)?.toDouble(),
             assignedBy: userId,
           );
           print('✅ Notification sent to collector: $toDataCollectorId');
