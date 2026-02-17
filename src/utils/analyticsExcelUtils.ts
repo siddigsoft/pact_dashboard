@@ -297,13 +297,14 @@ const DETAIL_COLS = [...ACTIVITY_COLS, 'PDM Sites'];
 
 export async function exportCoverageTrackerExcel(
   filteredData: FilteredRow[],
-  filename: string
+  filename: string,
+  sessionName?: string
 ) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
   wb.created = new Date();
 
-  const monthLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const label = sessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
   const hubStateRows = new Map<string, Map<string, { collector: string; deviceId: string; activity: string; abbr: string }[]>>();
   const hubStateMap = new Map<string, Map<string, Map<string, number>>>();
@@ -336,7 +337,7 @@ export async function exportCoverageTrackerExcel(
 
   const headers = ['Hub', 'State', 'Data Collector', ...DETAIL_COLS, 'Overall Site Total'];
 
-  const ws = wb.addWorksheet(monthLabel.slice(0, 31));
+  const ws = wb.addWorksheet(label.slice(0, 31));
 
   function addSectionHeaderRow(sheet: ExcelJS.Worksheet, hdrs: string[]) {
     const hRow = sheet.addRow(hdrs);
@@ -438,9 +439,9 @@ export async function exportCoverageTrackerExcel(
 
   autoFitColumns(ws);
 
-  const summarySheetName = `TPM Tracker ${monthLabel}`.slice(0, 31);
+  const summarySheetName = `TPM Tracker ${label}`.slice(0, 31);
   const ws2 = wb.addWorksheet(summarySheetName);
-  const titleRow = ws2.addRow([`TPM Tracker for ${monthLabel}`]);
+  const titleRow = ws2.addRow([`TPM Tracker ${label}`]);
   titleRow.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
   titleRow.height = 26;
   ws2.addRow([]);

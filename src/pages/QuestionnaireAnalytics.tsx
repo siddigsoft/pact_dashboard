@@ -1894,7 +1894,7 @@ const QuestionnaireAnalytics = () => {
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
                     Export Tracker to Excel
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => exportCoverageTrackerExcel(filteredData, 'coverage_tracker.xlsx')} data-testid="button-export-coverage-tracker">
+                  <DropdownMenuItem onClick={() => exportCoverageTrackerExcel(filteredData, 'coverage_tracker.xlsx', currentSessionName)} data-testid="button-export-coverage-tracker">
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
                     Coverage Tracker (Hub/State/Collector)
                   </DropdownMenuItem>
