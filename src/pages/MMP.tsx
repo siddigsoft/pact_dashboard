@@ -2417,6 +2417,9 @@ const MMP = () => {
       return false;
     });
     
+    const newMMPIds = new Set(newMMPs.map(m => m.id));
+    const forwardedMMPIds = new Set(forwardedMMPs.map(m => m.id));
+
     const verifiedMMPs = filteredMMPs.filter(mmp => {
       const workflow = mmp.workflow as any;
       
@@ -2449,11 +2452,16 @@ const MMP = () => {
                (workflow?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes(workflow?.currentStage));
       } else {
         // For admin/other roles: Include verified, approved, specific workflow stages, OR MMPs with verified sites
-        return normalizedStatus === 'verified' ||
+        // Also catch any MMP not already shown in New or Forwarded tabs so nothing is invisible
+        const matchesVerifiedCriteria = normalizedStatus === 'verified' ||
                normalizedStatus === 'approved' || 
                mmp.type === 'verified-template' ||
                hasVerifiedSites ||
                (workflow?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes(workflow?.currentStage));
+
+        const notInOtherTabs = !newMMPIds.has(mmp.id) && !forwardedMMPIds.has(mmp.id);
+
+        return matchesVerifiedCriteria || notInOtherTabs;
       }
     });
 
