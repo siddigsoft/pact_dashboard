@@ -570,6 +570,7 @@ export default function UnifiedCostRequestForm({
           });
         }
       } else {
+        const groupId = lineItems.length > 1 ? uuidv4() : null;
         const insertRows = lineItems.map(item => ({
           expense_category: item.expenseCategory,
           amount_cents: Math.round(item.amount * 100).toString(),
@@ -586,6 +587,8 @@ export default function UnifiedCostRequestForm({
           status: 'pending',
           tier1_status: 'pending',
           tier2_status: 'pending',
+          request_group_id: groupId,
+          request_title: requestTitle.trim() || null,
         }));
 
         const { error } = await supabase
