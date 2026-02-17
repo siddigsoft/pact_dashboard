@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -89,7 +90,9 @@ const MMPCycleClose = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterHub, setFilterHub] = useState<string>('all');
   const [filterReason, setFilterReason] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState('active');
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'active';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [closedCycles, setClosedCycles] = useState<ClosedCycleRecord[]>([]);
   const [expandedCycle, setExpandedCycle] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -267,7 +270,51 @@ const MMPCycleClose = () => {
 
       if (svError) throw svError;
 
-      toast({ title: 'Cycle Closing Started', description: 'Uncovered sites have been flagged. Supervisors must now provide reasons.' });
+      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      const mmpName = mmp?.name || 'MMP';
+      const mmpHub = mmp?.hub || mmp?.region || '';
+
+      let supervisorQuery = supabase
+        .from('profiles')
+        .select('id, full_name, hub_id')
+        .in('role', ['Supervisor', 'supervisor'])
+        .eq('status', 'approved');
+
+      if (mmpHub) {
+        const { data: hubData } = await supabase
+          .from('hubs')
+          .select('id')
+          .ilike('name', `%${mmpHub}%`)
+          .limit(1);
+
+        if (hubData && hubData.length > 0) {
+          supervisorQuery = supervisorQuery.eq('hub_id', hubData[0].id);
+        }
+      }
+
+      const { data: supervisors } = await supervisorQuery;
+
+      if (supervisors && supervisors.length > 0) {
+        await Promise.allSettled(
+          supervisors.map(sup =>
+            NotificationTriggerService.send({
+              userId: sup.id,
+              title: `Cycle Closing: Reasons Required`,
+              message: `MMP "${mmpName}" is being closed. Please provide reasons for uncovered sites in your hub.`,
+              titleAr: `إغلاق الدورة: الأسباب مطلوبة`,
+              messageAr: `يتم إغلاق MMP "${mmpName}". يرجى تقديم أسباب للمواقع غير المغطاة في مركزك.`,
+              type: 'warning',
+              category: 'assignments',
+              priority: 'high',
+              link: '/mmp/cycle-close?tab=uncovered',
+              relatedEntityId: mmpId,
+              relatedEntityType: 'mmpFile',
+            })
+          )
+        );
+      }
+
+      toast({ title: 'Cycle Closing Started', description: 'Uncovered sites have been flagged. Supervisors have been notified to provide reasons.' });
       await refreshMMPFiles();
       await fetchUncoveredSites();
     } catch (err: any) {
