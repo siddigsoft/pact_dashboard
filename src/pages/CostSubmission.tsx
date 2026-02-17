@@ -473,7 +473,7 @@ const CostSubmission = () => {
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.status === 'rejected') return 'rejected';
     if (hasThreeTiers(oc)) {
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved') return 'approved';
-      if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending')) return 'under_review';
+      if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending' || (oc.tier2_status === 'approved' && (oc.tier3_status === null || oc.tier3_status === 'pending')))) return 'under_review';
     } else {
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'pending') return 'under_review';
@@ -507,7 +507,9 @@ const CostSubmission = () => {
 
   const canTier3Approve = (oc: OperationalCostSubmission): boolean => {
     if (!hasThreeTiers(oc)) return false;
-    if (oc.tier2_status !== 'approved' || oc.tier3_status !== 'pending') return false;
+    if (oc.tier2_status !== 'approved') return false;
+    if (oc.tier3_status !== 'pending' && oc.tier3_status !== null) return false;
+    if (oc.tier3_status === 'approved' || oc.tier3_status === 'rejected') return false;
     if (isSuperAdmin) return true;
     return isAdmin;
   };
@@ -621,7 +623,7 @@ const CostSubmission = () => {
         updateQuery = updateQuery.eq('request_group_id', submission.request_group_id);
         if (tier === 1) updateQuery = updateQuery.eq('tier1_status', 'pending');
         else if (tier === 2) updateQuery = updateQuery.eq('tier2_status', 'pending');
-        else if (tier === 3) updateQuery = updateQuery.eq('tier3_status', 'pending');
+        else if (tier === 3) updateQuery = updateQuery.or('tier3_status.eq.pending,tier3_status.is.null');
       } else {
         updateQuery = updateQuery.eq('id', submission.id);
       }
