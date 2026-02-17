@@ -5417,8 +5417,8 @@ const MMP = () => {
                             Drafts
                             <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').trim().toLowerCase();
-                                return status === 'in progress' || status === 'ongoing';
+                                const status = (site.status || '').trim().toLowerCase().replace(/[-_\s]/g, '');
+                                return status === 'inprogress' || status === 'ongoing';
                               }).length}
                             </Badge>
                           </Button>
@@ -5649,8 +5649,8 @@ const MMP = () => {
                               ? unsyncedCompletedVisits.length
                               : mySitesSubTab === 'all'
                               ? enumeratorMySites.filter(site => {
-                                  const status = (site.status || '').trim().toLowerCase();
-                                  return status === 'in progress' || status === 'ongoing';
+                                  const status = (site.status || '').trim().toLowerCase().replace(/[-_\s]/g, '');
+                                  return status === 'inprogress' || status === 'ongoing';
                                 }).length
                               : enumeratorMySites.filter(site => {
                                   const status = (site.status || '').toLowerCase();
@@ -5675,10 +5675,9 @@ const MMP = () => {
                       let sitesToShow: any[] = [];
                       if (enumeratorSubTab === 'mySites') {
                         if (mySitesSubTab === 'all') {
-                          // Drafts: Show both "In Progress" and "Ongoing" status site entries
                           sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').trim().toLowerCase();
-                            return status === 'in progress' || status === 'ongoing';
+                            const status = (site.status || '').trim().toLowerCase().replace(/[-_\s]/g, '');
+                            return status === 'inprogress' || status === 'ongoing';
                           });
                         } else if (mySitesSubTab === 'pending') {
                           sitesToShow = enumeratorMySites.filter(site => {
