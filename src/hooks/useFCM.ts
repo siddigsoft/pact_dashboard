@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useServiceWorker } from '@/hooks/use-service-worker';
-import { FCMService } from '@/services/FCMService';
+// Import FCMService lazily inside the effect to avoid transforming/server-side
+// evaluation issues from Firebase packages when the dev server requests this file.
 import { firebaseConfig, firebaseVapidPublicKey, isFirebaseConfigured } from '@/config/firebase';
 import { NotificationService } from '@/services/NotificationService';
 
@@ -26,6 +27,11 @@ export function useFCM() {
 
     (async () => {
       initializedRef.current = true;
+
+      // Lazy-import to ensure Firebase-related modules are only loaded in the
+      // browser runtime and after service worker registration is ready.
+      const { FCMService } = await import('@/services/FCMService');
+
       await FCMService.init({
         config: firebaseConfig,
         vapidKey: firebaseVapidPublicKey,
