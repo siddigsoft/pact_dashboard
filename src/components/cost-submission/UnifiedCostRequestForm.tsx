@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,10 @@ import {
   ChevronUp,
   ChevronDown,
   AlertCircle,
-  Copy
+  Copy,
+  Save,
+  RotateCcw,
+  Clock
 } from "lucide-react";
 import { SupportingDocument } from "@/types/cost-submission";
 import CostDocumentUpload from "./CostDocumentUpload";
@@ -109,6 +112,49 @@ interface UnifiedCostRequestFormProps {
 }
 
 type ItemErrors = Record<string, Record<string, string>>;
+
+const DRAFT_STORAGE_KEY = 'pact_cost_submission_draft';
+const AUTO_SAVE_INTERVAL_MS = 30000;
+
+interface DraftData {
+  fundingType: 'advance' | 'reimbursement';
+  projectId: string;
+  hubId: string;
+  requestDate: string;
+  requestTitle: string;
+  lineItems: LineItem[];
+  supportingDocuments: SupportingDocument[];
+  savedAt: string;
+}
+
+function saveDraft(userId: string, data: Omit<DraftData, 'savedAt'>): void {
+  try {
+    const draft: DraftData = { ...data, savedAt: new Date().toISOString() };
+    localStorage.setItem(`${DRAFT_STORAGE_KEY}_${userId}`, JSON.stringify(draft));
+  } catch { /* quota exceeded or private browsing */ }
+}
+
+function loadDraft(userId: string): DraftData | null {
+  try {
+    const raw = localStorage.getItem(`${DRAFT_STORAGE_KEY}_${userId}`);
+    if (!raw) return null;
+    const draft = JSON.parse(raw) as DraftData;
+    if (!draft.lineItems || !Array.isArray(draft.lineItems) || draft.lineItems.length === 0) return null;
+    const savedDate = new Date(draft.savedAt);
+    const daysSince = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSince > 7) {
+      localStorage.removeItem(`${DRAFT_STORAGE_KEY}_${userId}`);
+      return null;
+    }
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft(userId: string): void {
+  try { localStorage.removeItem(`${DRAFT_STORAGE_KEY}_${userId}`); } catch { /* ignore */ }
+}
 
 function createEmptyItem(): LineItem {
   return {
@@ -199,6 +245,59 @@ export default function UnifiedCostRequestForm({
   const [lineItems, setLineItems] = useState<LineItem[]>([initialItem]);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set([initialItem.id]));
   const [itemErrors, setItemErrors] = useState<ItemErrors>({});
+  const [draftBanner, setDraftBanner] = useState<DraftData | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const draftInitialized = useRef(false);
+
+  useEffect(() => {
+    if (isEditMode || draftInitialized.current || !currentUser?.id) return;
+    draftInitialized.current = true;
+    const existing = loadDraft(currentUser.id);
+    if (existing) {
+      setDraftBanner(existing);
+    }
+  }, [currentUser?.id, isEditMode]);
+
+  const restoreDraft = useCallback(() => {
+    if (!draftBanner) return;
+    setFundingType(draftBanner.fundingType);
+    setProjectId(draftBanner.projectId || '');
+    setHubId(draftBanner.hubId || '');
+    setRequestDate(draftBanner.requestDate || new Date().toISOString().split('T')[0]);
+    setRequestTitle(draftBanner.requestTitle || '');
+    setLineItems(draftBanner.lineItems);
+    setExpandedItems(new Set([draftBanner.lineItems[0]?.id].filter(Boolean)));
+    setSupportingDocuments(draftBanner.supportingDocuments || []);
+    setLastSavedAt(draftBanner.savedAt);
+    setDraftBanner(null);
+    toast({ title: "Draft Restored", description: "Your saved draft has been loaded." });
+  }, [draftBanner, toast]);
+
+  const dismissDraft = useCallback(() => {
+    if (currentUser?.id) clearDraft(currentUser.id);
+    setDraftBanner(null);
+  }, [currentUser?.id]);
+
+  const handleSaveDraft = useCallback(() => {
+    if (!currentUser?.id) return;
+    setIsSavingDraft(true);
+    saveDraft(currentUser.id, { fundingType, projectId, hubId, requestDate, requestTitle, lineItems, supportingDocuments });
+    setLastSavedAt(new Date().toISOString());
+    setTimeout(() => setIsSavingDraft(false), 600);
+    toast({ title: "Draft Saved", description: "Your work has been saved. You can close this page and come back later." });
+  }, [currentUser?.id, fundingType, projectId, hubId, requestDate, requestTitle, lineItems, supportingDocuments, toast]);
+
+  useEffect(() => {
+    if (isEditMode || !currentUser?.id) return;
+    const hasContent = lineItems.some(i => i.expenseCategory || i.title || i.unitCost > 0 || i.description);
+    if (!hasContent) return;
+    const timer = setInterval(() => {
+      saveDraft(currentUser.id, { fundingType, projectId, hubId, requestDate, requestTitle, lineItems, supportingDocuments });
+      setLastSavedAt(new Date().toISOString());
+    }, AUTO_SAVE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [isEditMode, currentUser?.id, fundingType, projectId, hubId, requestDate, requestTitle, lineItems, supportingDocuments]);
 
   const updateLineItem = useCallback((itemId: string, field: keyof LineItem, value: any) => {
     setLineItems(prev => prev.map(item => {
@@ -547,6 +646,8 @@ export default function UnifiedCostRequestForm({
         });
       }
 
+      if (currentUser?.id) clearDraft(currentUser.id);
+      setLastSavedAt(null);
       const freshItem = createEmptyItem();
       setLineItems([freshItem]);
       setExpandedItems(new Set([freshItem.id]));
@@ -614,6 +715,30 @@ export default function UnifiedCostRequestForm({
         </CardHeader>
 
         <CardContent className="p-4 sm:p-6 space-y-6">
+          {draftBanner && !isEditMode && (
+            <Alert className="border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">
+              <Clock className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="font-medium text-amber-800 dark:text-amber-200">You have a saved draft</span>
+                  <span className="text-xs text-amber-600 dark:text-amber-400 ml-2">
+                    saved {new Date(draftBanner.savedAt).toLocaleString()} — {draftBanner.lineItems.length} item{draftBanner.lineItems.length !== 1 ? 's' : ''}
+                    {draftBanner.requestTitle ? ` — "${draftBanner.requestTitle}"` : ''}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={dismissDraft} data-testid="button-dismiss-draft">
+                    Discard
+                  </Button>
+                  <Button type="button" size="sm" onClick={restoreDraft} className="gap-1" data-testid="button-restore-draft">
+                    <RotateCcw className="h-3 w-3" />
+                    Restore Draft
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex gap-2 p-1 bg-muted rounded-lg">
             <Button
               type="button"
@@ -1183,6 +1308,12 @@ export default function UnifiedCostRequestForm({
           )}
 
           <div className="flex items-center gap-3 flex-wrap">
+            {lastSavedAt && !isEditMode && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Save className="h-3 w-3" />
+                Auto-saved {new Date(lastSavedAt).toLocaleTimeString()}
+              </span>
+            )}
             {isEditMode && onCancelEdit && (
               <Button
                 type="button"
@@ -1191,6 +1322,23 @@ export default function UnifiedCostRequestForm({
                 data-testid="button-cancel-edit"
               >
                 Cancel
+              </Button>
+            )}
+            {!isEditMode && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSaveDraft}
+                disabled={isSavingDraft}
+                className="gap-2"
+                data-testid="button-save-draft"
+              >
+                {isSavingDraft ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save Draft
               </Button>
             )}
             <Button
