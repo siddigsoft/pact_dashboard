@@ -113,6 +113,7 @@ const NotificationPreferences = lazy(() => import('./pages/NotificationPreferenc
 const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
 const MMPCycleClose = lazy(() => import('./pages/MMPCycleClose'));
+const DataExportCenter = lazy(() => import('./pages/DataExportCenter'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -222,6 +223,7 @@ const AppRoutes = () => {
         <Route path="/mmp/:id/permit-message" element={<MMPPermitMessagePage />} />
         <Route path="/mmp/:id/review-assign-coordinators" element={<ReviewAssignCoordinators />} />
         <Route path="/mmp/cycle-close" element={<MMPCycleClose />} />
+        <Route path="/data-export-center" element={<DataExportCenter />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/field-team" element={<FieldTeam />} />
         <Route path="/finance" element={<Finance />} />

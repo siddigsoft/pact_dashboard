@@ -306,6 +306,9 @@
     if (!isHidden('/mmp/cycle-close') && (isSuperAdmin || isAdmin || isFOM || isSupervisor)) {
       cycleItems.push({ id: 'mmp-cycle-close', title: "Cycle Management", url: "/mmp/cycle-close", icon: CheckCircle, priority: 1, isPinned: isPinned('/mmp/cycle-close') });
     }
+    if (!isHidden('/data-export-center') && (isSuperAdmin || isAdmin)) {
+      cycleItems.push({ id: 'data-export-center', title: "Data Export Center", url: "/data-export-center", icon: BarChart3, priority: 2, isPinned: isPinned('/data-export-center') });
+    }
     if (cycleItems.length) groups.push({ id: 'cycle-management', label: "Cycle Management", order: 3.5, items: cycleItems });
 
     const verificationItems: MenuGroup['items'] = [];

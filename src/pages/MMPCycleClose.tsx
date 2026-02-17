@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import { logMMPAudit } from '@/services/mmpAudit.service';
+import { checkAndSendCycleReminders } from '@/services/cycleReminderService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +21,8 @@ import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, MapPin,
   ArrowRight, FileText, BarChart3, Filter, Download,
-  ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet
+  ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet,
+  Bell, TrendingUp, TrendingDown, Minus, Star, Shield
 } from 'lucide-react';
 
 const NOT_COVERED_REASONS = [
@@ -77,6 +79,24 @@ interface ClosedCycleRecord {
   reasonBreakdown?: Record<string, number>;
 }
 
+interface FollowUpRecord {
+  id: string;
+  siteId: string;
+  siteName: string;
+  reason: string;
+  suggestedAction: string;
+  createdAt: string;
+  mmpName?: string;
+}
+
+const HIGH_PRIORITY_REASONS = ['security_concerns', 'access_denied', 'staff_unavailable'];
+
+const FOLLOW_UP_ACTIONS: Record<string, string> = {
+  security_concerns: 'Coordinate with security team and local authorities before next cycle visit',
+  access_denied: 'Engage community leaders and obtain required access permits for next cycle',
+  staff_unavailable: 'Pre-assign backup staff and confirm availability before next cycle starts',
+};
+
 const MMPCycleClose = () => {
   const { currentUser } = useAppContext();
   const { mmpFiles, refreshMMPFiles } = useMMP();
@@ -107,6 +127,22 @@ const MMPCycleClose = () => {
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
   const [selectedMmpId, setSelectedMmpId] = useState<string>('all');
+  const followUps = useMemo<FollowUpRecord[]>(() => {
+    return uncoveredSites
+      .filter(s => s.not_covered_reason && HIGH_PRIORITY_REASONS.includes(s.not_covered_reason))
+      .map(s => ({
+        id: s.id,
+        siteId: s.id,
+        siteName: s.site_name,
+        reason: s.not_covered_reason!,
+        suggestedAction: FOLLOW_UP_ACTIONS[s.not_covered_reason!] || 'Review and address before next cycle',
+        createdAt: s.not_covered_at || new Date().toISOString(),
+        mmpName: s.mmp_name,
+      }));
+  }, [uncoveredSites]);
+  const [comparisonCycle1, setComparisonCycle1] = useState<string>('');
+  const [comparisonCycle2, setComparisonCycle2] = useState<string>('');
+  const [qualityData, setQualityData] = useState<{ hub: string; avgScore: number; count: number }[]>([]);
 
   const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
   const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
@@ -131,7 +167,7 @@ const MMPCycleClose = () => {
   const activeMmps = useMemo(() => {
     return (mmpFiles || []).filter(m => {
       const cycleStatus = (m as any).cycle_status || 'active';
-      return m.status === 'approved' && (cycleStatus === 'active' || cycleStatus === 'closing');
+      return m.status === 'approved' && (cycleStatus === 'active' || cycleStatus === 'closing' || cycleStatus === 'pending_approval');
     });
   }, [mmpFiles]);
 
@@ -250,6 +286,41 @@ const MMPCycleClose = () => {
     fetchUncoveredSites();
     fetchClosedCycles();
   }, [fetchUncoveredSites, fetchClosedCycles]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      checkAndSendCycleReminders().catch(console.error);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    const fetchQualityData = async () => {
+      try {
+        const { data } = await supabase
+          .from('site_visits')
+          .select('mmp_id, quality_score')
+          .not('quality_score', 'is', null);
+        if (data && data.length > 0) {
+          const hubScores: Record<string, { total: number; count: number }> = {};
+          data.forEach((s: any) => {
+            const mmp = mmpFiles?.find(m => m.id === s.mmp_id);
+            const hub = mmp?.hub || mmp?.region || 'Unknown';
+            if (!hubScores[hub]) hubScores[hub] = { total: 0, count: 0 };
+            hubScores[hub].total += s.quality_score;
+            hubScores[hub].count++;
+          });
+          setQualityData(Object.entries(hubScores).map(([hub, d]) => ({
+            hub,
+            avgScore: Math.round((d.total / d.count) * 10) / 10,
+            count: d.count,
+          })));
+        }
+      } catch (err) {
+        console.error('Error fetching quality data:', err);
+      }
+    };
+    fetchQualityData();
+  }, [mmpFiles]);
 
   const cycleStats = useMemo((): CycleStats => {
     const totalSites = uncoveredSites.length;
@@ -458,6 +529,7 @@ const MMPCycleClose = () => {
           reason: reason,
           metadata: { cycleAction: 'assign_reason', siteId, siteName: site.site_name, reason },
         });
+
       }
 
       toast({ title: 'Reason Assigned', description: 'The reason has been saved.' });
@@ -528,22 +600,11 @@ const MMPCycleClose = () => {
       const { error } = await supabase
         .from('mmp_files')
         .update({
-          cycle_status: 'closed',
-          cycle_closed_at: new Date().toISOString(),
-          cycle_closed_by: currentUser?.id,
+          cycle_status: 'pending_approval',
         } as any)
         .eq('id', mmpId);
 
       if (error) throw error;
-
-      const { error: svError } = await supabase
-        .from('site_visits')
-        .update({ status: 'cancelled' })
-        .eq('mmp_id', mmpId)
-        .eq('not_covered_flag', true)
-        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
-
-      if (svError) throw svError;
 
       const mmp = mmpFiles?.find(m => m.id === mmpId);
       await logMMPAudit({
@@ -553,19 +614,102 @@ const MMPCycleClose = () => {
         performedBy: currentUser?.id || '',
         performedByName: currentUser?.fullName,
         previousStatus: 'closing',
-        newStatus: 'closed',
+        newStatus: 'pending_approval',
         affectedSites: uncoveredSites.filter(s => s.mmp_id === mmpId).length,
-        metadata: { cycleAction: 'finalize_close' },
+        metadata: { cycleAction: 'submit_for_approval' },
       });
 
-      toast({ title: 'Cycle Closed', description: 'The MMP cycle has been closed successfully.' });
+      toast({ title: 'Submitted for Approval', description: 'The cycle has been submitted for FOM/Director approval.' });
       await refreshMMPFiles();
       await fetchUncoveredSites();
-      await fetchClosedCycles();
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to close cycle', variant: 'destructive' });
+      toast({ title: 'Error', description: err.message || 'Failed to submit for approval', variant: 'destructive' });
     } finally {
       setFinalizingCycle(false);
+    }
+  };
+
+  const handleApproveCycle = async (mmpId: string) => {
+    try {
+      const { error } = await supabase
+        .from('mmp_files')
+        .update({
+          cycle_status: 'closed',
+          cycle_closed_at: new Date().toISOString(),
+          cycle_closed_by: currentUser?.id,
+          cycle_approved_by: currentUser?.id,
+        } as any)
+        .eq('id', mmpId);
+
+      if (error) throw error;
+
+      await supabase
+        .from('site_visits')
+        .update({ status: 'cancelled' })
+        .eq('mmp_id', mmpId)
+        .eq('not_covered_flag', true)
+        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+
+      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      await logMMPAudit({
+        mmpId,
+        mmpName: mmp?.name || 'MMP',
+        action: 'status_change',
+        performedBy: currentUser?.id || '',
+        performedByName: currentUser?.fullName,
+        previousStatus: 'pending_approval',
+        newStatus: 'closed',
+        metadata: { cycleAction: 'approve_close' },
+      });
+
+      toast({ title: 'Cycle Approved & Closed', description: 'The MMP cycle has been approved and closed.' });
+      await refreshMMPFiles();
+      await fetchClosedCycles();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to approve cycle', variant: 'destructive' });
+    }
+  };
+
+  const handleRejectCycle = async (mmpId: string, note: string) => {
+    try {
+      const { error } = await supabase
+        .from('mmp_files')
+        .update({
+          cycle_status: 'closing',
+          cycle_approval_note: note,
+        } as any)
+        .eq('id', mmpId);
+
+      if (error) throw error;
+
+      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      await logMMPAudit({
+        mmpId,
+        mmpName: mmp?.name || 'MMP',
+        action: 'status_change',
+        performedBy: currentUser?.id || '',
+        performedByName: currentUser?.fullName,
+        previousStatus: 'pending_approval',
+        newStatus: 'closing',
+        metadata: { cycleAction: 'reject_close', rejectionNote: note },
+      });
+
+      toast({ title: 'Cycle Rejected', description: 'Cycle has been returned to closing status.' });
+      await refreshMMPFiles();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to reject cycle', variant: 'destructive' });
+    }
+  };
+
+  const handleScheduleReminders = async () => {
+    try {
+      const result = await checkAndSendCycleReminders();
+      toast({
+        title: 'Reminders Processed',
+        description: `Sent ${result.sent} reminders across ${result.cycles} overdue cycles.`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to send reminders', variant: 'destructive' });
     }
   };
 
@@ -757,10 +901,12 @@ const MMPCycleClose = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList data-testid="tabs-cycle-close">
+        <TabsList data-testid="tabs-cycle-close" className="flex-wrap">
           <TabsTrigger value="active" data-testid="tab-active">Active Cycles</TabsTrigger>
           <TabsTrigger value="uncovered" data-testid="tab-uncovered">Uncovered Sites ({cycleStats.uncoveredSites})</TabsTrigger>
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
+          <TabsTrigger value="comparison" data-testid="tab-comparison">Comparison</TabsTrigger>
+          <TabsTrigger value="scorecard" data-testid="tab-scorecard">Scorecard</TabsTrigger>
           <TabsTrigger value="archive" data-testid="tab-archive">Closed Cycles ({closedCycles.length})</TabsTrigger>
         </TabsList>
 
@@ -791,8 +937,8 @@ const MMPCycleClose = () => {
                             {mmp.hub || mmp.region || 'No hub'} &middot; {mmp.month ? `Month ${mmp.month}` : ''} {mmp.year || ''}
                           </CardDescription>
                         </div>
-                        <Badge variant={cycleStatus === 'closing' ? 'default' : 'secondary'} className={cycleStatus === 'closing' ? 'bg-amber-500' : ''} data-testid={`badge-status-${mmp.id}`}>
-                          {cycleStatus === 'closing' ? 'Closing' : 'Active'}
+                        <Badge variant={cycleStatus === 'closing' ? 'default' : cycleStatus === 'pending_approval' ? 'default' : 'secondary'} className={cycleStatus === 'closing' ? 'bg-amber-500' : cycleStatus === 'pending_approval' ? 'bg-purple-500' : ''} data-testid={`badge-status-${mmp.id}`}>
+                          {cycleStatus === 'closing' ? 'Closing' : cycleStatus === 'pending_approval' ? 'Pending Approval' : 'Active'}
                         </Badge>
                       </div>
                     </CardHeader>
@@ -914,12 +1060,104 @@ const MMPCycleClose = () => {
                             <AlertTriangle className="h-3 w-3 mr-1" /> Send Reminders
                           </Button>
                         )}
+
+                        {cycleStatus === 'pending_approval' && (isFOM || isAdmin) && (
+                          <>
+                            <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApproveCycle(mmp.id)} data-testid={`button-approve-${mmp.id}`}>
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Approve & Close
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="destructive" data-testid={`button-reject-${mmp.id}`}>
+                                  <XCircle className="h-3 w-3 mr-1" /> Reject
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Reject Cycle Close</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will return the cycle to &quot;Closing&quot; status. The team will need to address issues before resubmitting.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleRejectCycle(mmp.id, 'Cycle close rejected - additional review needed')} data-testid="button-confirm-reject">
+                                    Reject
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </>
+                        )}
                       </div>
+
+                      {(mmp as any).cycle_approval_note && (
+                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-950 rounded text-xs text-red-700 dark:text-red-300">
+                          <span className="font-medium">Rejection Note:</span> {(mmp as any).cycle_approval_note}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 );
               })}
             </div>
+          )}
+
+          {canManageCycle && (
+            <div className="flex gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={handleScheduleReminders} data-testid="button-schedule-reminders">
+                <Bell className="h-4 w-4 mr-1" /> Schedule Reminders
+              </Button>
+            </div>
+          )}
+
+          {activeMmps.filter(m => (m as any).cycle_status === 'active' || !(m as any).cycle_status).length > 0 && (
+            <Card className="mt-4" data-testid="card-coverage-prediction">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" /> Coverage Prediction
+                </CardTitle>
+                <CardDescription>Projected coverage based on current visit progress</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {activeMmps.filter(m => {
+                    const cs = (m as any).cycle_status || 'active';
+                    return cs === 'active';
+                  }).map(mmp => {
+                    const mmpSitesTotal = uncoveredSites.filter(s => s.mmp_id === mmp.id).length;
+                    const totalSitesForMmp = mmpSitesTotal;
+                    const createdAt = (mmp as any).created_at ? new Date((mmp as any).created_at) : new Date();
+                    const daysElapsed = Math.max(1, Math.ceil((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)));
+                    const expectedDuration = 30;
+                    const visitedSoFar = totalSitesForMmp > 0 ? Math.max(0, totalSitesForMmp - mmpSitesTotal) : 0;
+                    const dailyRate = visitedSoFar / daysElapsed;
+                    const daysRemaining = Math.max(0, expectedDuration - daysElapsed);
+                    const projectedTotal = visitedSoFar + (dailyRate * daysRemaining);
+                    const projectedCoverage = totalSitesForMmp > 0 ? Math.min(100, Math.round((projectedTotal / (totalSitesForMmp + visitedSoFar)) * 100)) : 100;
+                    const isAtRisk = projectedCoverage < 80;
+
+                    return (
+                      <div key={mmp.id} className={`p-3 rounded-lg border ${isAtRisk ? 'border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800' : 'border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800'}`} data-testid={`prediction-${mmp.id}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium truncate">{mmp.name}</span>
+                          {isAtRisk ? (
+                            <Badge variant="destructive" className="text-xs">At Risk</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs">On Track</Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <div className="flex justify-between"><span>Days elapsed:</span><span>{daysElapsed}/{expectedDuration}</span></div>
+                          <div className="flex justify-between"><span>Pending visits:</span><span>{mmpSitesTotal}</span></div>
+                          <div className="flex justify-between"><span>Projected coverage:</span><span className={isAtRisk ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>{projectedCoverage}%</span></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 
@@ -1139,6 +1377,282 @@ const MMPCycleClose = () => {
                   <div className="text-xs text-gray-500">Completion Rate</div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {followUps.length > 0 && (
+            <Card data-testid="card-follow-ups">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" /> Follow-up Actions ({followUps.length})
+                </CardTitle>
+                <CardDescription>High-priority reasons requiring follow-up for the next cycle</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {followUps.map(fu => (
+                    <div key={fu.id} className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800" data-testid={`follow-up-${fu.id}`}>
+                      <Shield className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">{fu.siteName}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          <Badge variant="outline" className="text-xs mr-2">{getReasonLabel(fu.reason)}</Badge>
+                          {fu.mmpName && <span>{fu.mmpName}</span>}
+                        </div>
+                        <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">{fu.suggestedAction}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {qualityData.length > 0 && (
+            <Card data-testid="card-visit-quality">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Star className="h-4 w-4" /> Visit Quality Scores
+                </CardTitle>
+                <CardDescription>Average quality scores per hub from completed site visits</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {qualityData.sort((a, b) => b.avgScore - a.avgScore).map(q => (
+                    <div key={q.hub} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">{q.hub}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex">
+                            {[1, 2, 3, 4, 5].map(i => (
+                              <Star key={i} className={`h-3 w-3 ${i <= Math.round(q.avgScore) ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`} />
+                            ))}
+                          </div>
+                          <span className="text-xs text-gray-500">{q.avgScore}/5 ({q.count} visits)</span>
+                        </div>
+                      </div>
+                      <Progress value={(q.avgScore / 5) * 100} className="h-1.5" />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="comparison" className="space-y-4">
+          <Card data-testid="card-comparison">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" /> Cycle Comparison
+              </CardTitle>
+              <CardDescription>Select two closed cycles to compare side-by-side</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-4">
+                <div className="space-y-1 flex-1 min-w-[200px]">
+                  <label className="text-xs text-gray-500">Cycle A</label>
+                  <Select value={comparisonCycle1} onValueChange={setComparisonCycle1}>
+                    <SelectTrigger data-testid="select-comparison-cycle-1">
+                      <SelectValue placeholder="Select cycle..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {closedCycles.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name} ({c.month}/{c.year})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 flex-1 min-w-[200px]">
+                  <label className="text-xs text-gray-500">Cycle B</label>
+                  <Select value={comparisonCycle2} onValueChange={setComparisonCycle2}>
+                    <SelectTrigger data-testid="select-comparison-cycle-2">
+                      <SelectValue placeholder="Select cycle..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {closedCycles.filter(c => c.id !== comparisonCycle1).map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name} ({c.month}/{c.year})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {comparisonCycle1 && comparisonCycle2 && (() => {
+                const c1 = closedCycles.find(c => c.id === comparisonCycle1);
+                const c2 = closedCycles.find(c => c.id === comparisonCycle2);
+                if (!c1 || !c2) return null;
+                const rate1 = c1.totalSites > 0 ? Math.round(((c1.totalSites - c1.uncoveredSites) / c1.totalSites) * 100) : 0;
+                const rate2 = c2.totalSites > 0 ? Math.round(((c2.totalSites - c2.uncoveredSites) / c2.totalSites) * 100) : 0;
+                const allReasons = new Set([...Object.keys(c1.reasonBreakdown || {}), ...Object.keys(c2.reasonBreakdown || {})]);
+
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div className="text-sm font-medium text-gray-500">Metric</div>
+                      <div className="text-sm font-medium">{c1.name}</div>
+                      <div className="text-sm font-medium">{c2.name}</div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Coverage Rate</div>
+                      <div className="text-lg font-bold">{rate1}%</div>
+                      <div className="text-lg font-bold flex items-center justify-center gap-1">
+                        {rate2}%
+                        {rate2 > rate1 ? <TrendingUp className="h-4 w-4 text-green-500" /> : rate2 < rate1 ? <TrendingDown className="h-4 w-4 text-red-500" /> : <Minus className="h-4 w-4 text-gray-400" />}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Uncovered Sites</div>
+                      <div className="text-lg font-bold text-red-600">{c1.uncoveredSites}</div>
+                      <div className="text-lg font-bold text-red-600 flex items-center justify-center gap-1">
+                        {c2.uncoveredSites}
+                        {c2.uncoveredSites < c1.uncoveredSites ? <TrendingDown className="h-4 w-4 text-green-500" /> : c2.uncoveredSites > c1.uncoveredSites ? <TrendingUp className="h-4 w-4 text-red-500" /> : <Minus className="h-4 w-4 text-gray-400" />}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Total Sites</div>
+                      <div className="text-lg font-bold">{c1.totalSites}</div>
+                      <div className="text-lg font-bold">{c2.totalSites}</div>
+                    </div>
+
+                    {allReasons.size > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Reason Breakdown Comparison</h4>
+                        {Array.from(allReasons).map(reason => {
+                          const v1 = (c1.reasonBreakdown || {})[reason] || 0;
+                          const v2 = (c2.reasonBreakdown || {})[reason] || 0;
+                          const diff = v2 - v1;
+                          return (
+                            <div key={reason} className="grid grid-cols-3 gap-4 text-sm items-center">
+                              <span className="text-gray-600 dark:text-gray-400">{getReasonLabel(reason)}</span>
+                              <span className="text-center font-medium">{v1}</span>
+                              <span className="text-center font-medium flex items-center justify-center gap-1">
+                                {v2}
+                                {diff !== 0 && (
+                                  <span className={`text-xs ${diff > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                    ({diff > 0 ? '+' : ''}{diff})
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {(!comparisonCycle1 || !comparisonCycle2) && closedCycles.length < 2 && (
+                <p className="text-gray-500 text-sm text-center py-4">At least two closed cycles are needed for comparison.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="scorecard" className="space-y-4">
+          <Card data-testid="card-scorecard">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" /> Performance Scorecard
+              </CardTitle>
+              <CardDescription>Hub performance across closed cycles</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {closedCycles.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-4">No closed cycles available for scoring.</p>
+              ) : (() => {
+                const hubPerf: Record<string, {
+                  cycles: { name: string; rate: number; month: number | null; year: number | null }[];
+                  totalUncovered: number;
+                  totalSites: number;
+                  reasons: Record<string, number>;
+                }> = {};
+
+                closedCycles.forEach(c => {
+                  const hub = c.region || 'Unknown';
+                  if (!hubPerf[hub]) hubPerf[hub] = { cycles: [], totalUncovered: 0, totalSites: 0, reasons: {} };
+                  const rate = c.totalSites > 0 ? Math.round(((c.totalSites - c.uncoveredSites) / c.totalSites) * 100) : 100;
+                  hubPerf[hub].cycles.push({ name: c.name, rate, month: c.month, year: c.year });
+                  hubPerf[hub].totalUncovered += c.uncoveredSites;
+                  hubPerf[hub].totalSites += c.totalSites;
+                  if (c.reasonBreakdown) {
+                    Object.entries(c.reasonBreakdown).forEach(([r, count]) => {
+                      hubPerf[hub].reasons[r] = (hubPerf[hub].reasons[r] || 0) + count;
+                    });
+                  }
+                });
+
+                return (
+                  <div className="space-y-6">
+                    {Object.entries(hubPerf).sort((a, b) => {
+                      const avgA = a[1].cycles.reduce((s, c) => s + c.rate, 0) / a[1].cycles.length;
+                      const avgB = b[1].cycles.reduce((s, c) => s + c.rate, 0) / b[1].cycles.length;
+                      return avgB - avgA;
+                    }).map(([hub, data]) => {
+                      const avgRate = Math.round(data.cycles.reduce((s, c) => s + c.rate, 0) / data.cycles.length);
+                      const sortedCycles = [...data.cycles].sort((a, b) => (a.year || 0) - (b.year || 0) || (a.month || 0) - (b.month || 0));
+                      const lastTwo = sortedCycles.slice(-2);
+                      const improving = lastTwo.length === 2 && lastTwo[1].rate >= lastTwo[0].rate;
+                      const declining = lastTwo.length === 2 && lastTwo[1].rate < lastTwo[0].rate;
+                      const topReasons = Object.entries(data.reasons).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+                      return (
+                        <div key={hub} className="p-4 border rounded-lg space-y-3" data-testid={`scorecard-hub-${hub}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-gray-400" />
+                              <span className="font-medium text-gray-900 dark:text-white">{hub}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={avgRate >= 80 ? 'secondary' : 'destructive'} className="text-xs">
+                                Avg: {avgRate}%
+                              </Badge>
+                              {improving && <Badge variant="secondary" className="text-xs text-green-600"><TrendingUp className="h-3 w-3 mr-1" /> Improving</Badge>}
+                              {declining && <Badge variant="secondary" className="text-xs text-red-600"><TrendingDown className="h-3 w-3 mr-1" /> Declining</Badge>}
+                            </div>
+                          </div>
+
+                          <div className="text-xs text-gray-500">
+                            <span className="font-medium">Coverage trend: </span>
+                            {sortedCycles.map((c, i) => (
+                              <span key={i}>
+                                {c.name}: {c.rate}%{i < sortedCycles.length - 1 ? ' → ' : ''}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
+                              <div className="font-bold text-sm">{data.cycles.length}</div>
+                              <div className="text-gray-500">Cycles</div>
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
+                              <div className="font-bold text-sm">{data.totalSites}</div>
+                              <div className="text-gray-500">Total Sites</div>
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
+                              <div className="font-bold text-sm text-red-600">{data.totalUncovered}</div>
+                              <div className="text-gray-500">Uncovered</div>
+                            </div>
+                          </div>
+
+                          {topReasons.length > 0 && (
+                            <div className="text-xs">
+                              <span className="text-gray-500 font-medium">Top gap reasons: </span>
+                              {topReasons.map(([r, count], i) => (
+                                <Badge key={r} variant="outline" className="text-xs mr-1">
+                                  {getReasonLabel(r)} ({count})
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

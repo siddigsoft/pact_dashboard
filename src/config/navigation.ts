@@ -3,7 +3,7 @@ import {
   DollarSign, Wallet, BarChart, Calendar, Settings,
   Archive, FolderOpen, CheckCircle, Banknote, CreditCard,
   TrendingUp, MapPin, Sparkles, Bell, Search, User,
-  Moon, Sun, LogOut
+  Moon, Sun, LogOut, BarChart3
 } from 'lucide-react';
 import { AppRole } from '@/types';
 
@@ -119,6 +119,16 @@ export const navigationConfig: NavigationGroup[] = [
         priority: 80,
         roles: ['Admin' as AppRole, 'Super Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole],
         description: 'View past closed cycles and coverage reports'
+      },
+      {
+        id: 'data-export-center',
+        icon: BarChart3,
+        label: 'Data Export Center',
+        path: '/data-export-center',
+        category: 'secondary',
+        priority: 70,
+        roles: ['Admin' as AppRole, 'Super Admin' as AppRole],
+        description: 'Export cycle reports, site visits, and analytics data'
       }
     ]
   },
