@@ -498,7 +498,8 @@ const MMPSiteEntriesTable = ({
                           {(() => {
                             const rawStatus = (row.status || '').toLowerCase();
                             const acceptedBy = row.acceptedBy || (site as any).accepted_by;
-                            const displayStatus = (rawStatus === 'assigned' && acceptedBy) ? 'accepted' : rawStatus;
+                            const displayStatus = acceptedBy && (!rawStatus || rawStatus === 'pending' || rawStatus === 'dispatched' || rawStatus === 'assigned' || rawStatus === 'claimed')
+                              ? 'accepted' : rawStatus;
                             return (
                               <Badge 
                                 className={
