@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useMMP } from '@/context/mmp/MMPContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,10 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Download, FileSpreadsheet, FileText, BarChart3,
-  Calendar, MapPin, TrendingUp, Loader2
+  Download, FileText, MapPin, TrendingUp, Loader2
 } from 'lucide-react';
 
 type ExportFormat = 'csv' | 'excel';
@@ -27,6 +26,7 @@ interface ExportJob {
 const DataExportCenter = () => {
   const { currentUser } = useAppContext();
   const { hasAnyRole } = useAuthorization();
+  const { mmpFiles } = useMMP();
   const { toast } = useToast();
 
   const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
@@ -35,7 +35,6 @@ const DataExportCenter = () => {
   const [dateTo, setDateTo] = useState('');
   const [format, setFormat] = useState<ExportFormat>('csv');
   const [exportStatus, setExportStatus] = useState<Record<string, ExportJob>>({});
-  const [hubFilter, setHubFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
   const setJobStatus = (category: string, status: ExportJob['status'], progress = 0) => {
@@ -78,21 +77,20 @@ const DataExportCenter = () => {
   const exportCycleReports = useCallback(async () => {
     setJobStatus('cycles', 'exporting', 10);
     try {
-      let query = supabase
-        .from('mmp_files')
-        .select('id, name, month, year, region, hub, cycle_status, cycle_closed_at, cycle_closing_started_at')
-        .eq('cycle_status', 'closed')
-        .order('cycle_closed_at', { ascending: false });
+      const closedMmps = (mmpFiles || []).filter(m => {
+        const cycleStatus = (m as any).cycle_status || (m as any).cycleStatus;
+        return cycleStatus === 'closed';
+      });
 
-      if (dateFrom) query = query.gte('cycle_closed_at', dateFrom);
-      if (dateTo) query = query.lte('cycle_closed_at', dateTo);
+      if (closedMmps.length === 0) {
+        toast({ title: 'No Data', description: 'No closed cycles found to export.', variant: 'destructive' });
+        setJobStatus('cycles', 'idle', 0);
+        return;
+      }
 
-      const { data: cycles, error } = await query;
-      if (error) throw error;
+      setJobStatus('cycles', 'exporting', 30);
 
-      setJobStatus('cycles', 'exporting', 40);
-
-      const cycleIds = (cycles || []).map(c => c.id);
+      const cycleIds = closedMmps.map(c => c.id);
       let siteStats: any[] = [];
       if (cycleIds.length > 0) {
         const { data } = await supabase
@@ -104,7 +102,8 @@ const DataExportCenter = () => {
 
       setJobStatus('cycles', 'exporting', 70);
 
-      const exportData = (cycles || []).map(c => {
+      const exportData = closedMmps.map(c => {
+        const mmpAny = c as any;
         const sites = siteStats.filter(s => s.mmp_id === c.id);
         const uncovered = sites.filter(s => s.not_covered_flag).length;
         const completed = sites.filter(s => s.status === 'completed').length;
@@ -114,15 +113,14 @@ const DataExportCenter = () => {
         });
         return {
           'Cycle Name': c.name,
-          'Month': c.month || '',
-          'Year': c.year || '',
-          'Region': c.region || '',
-          'Hub': (c as any).hub || '',
+          'Month': mmpAny.month || '',
+          'Project': mmpAny.projectName || mmpAny.project_name || '',
+          'Status': c.status || '',
           'Total Sites': sites.length,
           'Completed': completed,
           'Uncovered': uncovered,
           'Coverage Rate': sites.length > 0 ? `${Math.round((completed / sites.length) * 100)}%` : 'N/A',
-          'Closed At': c.cycle_closed_at || '',
+          'Closed At': mmpAny.cycle_closed_at || mmpAny.cycleClosedAt || '',
           'Top Reasons': Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([r, n]) => `${r}(${n})`).join('; '),
         };
       });
@@ -140,14 +138,14 @@ const DataExportCenter = () => {
       setJobStatus('cycles', 'error', 0);
       toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
     }
-  }, [dateFrom, dateTo, format, toast]);
+  }, [mmpFiles, format, toast]);
 
   const exportSiteVisits = useCallback(async () => {
     setJobStatus('visits', 'exporting', 10);
     try {
       let query = supabase
         .from('site_visits')
-        .select('id, site_name, site_code, state, locality, status, mmp_id, not_covered_flag, not_covered_reason, not_covered_reason_other, quality_score, quality_notes, created_at')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') query = query.eq('status', statusFilter);
@@ -160,17 +158,22 @@ const DataExportCenter = () => {
 
       setJobStatus('visits', 'exporting', 70);
 
-      const exportData = (data || []).map(s => ({
-        'Site Name': s.site_name,
+      const mmpLookup: Record<string, string> = {};
+      (mmpFiles || []).forEach(m => { mmpLookup[m.id] = m.name; });
+
+      const exportData = (data || []).map((s: any) => ({
+        'Site Name': s.site_name || '',
         'Site Code': s.site_code || '',
         'State': s.state || '',
         'Locality': s.locality || '',
-        'Status': s.status,
+        'Status': s.status || '',
+        'MMP': mmpLookup[s.mmp_id] || s.mmp_id || '',
+        'Visit Date': s.visit_date || '',
         'Not Covered': s.not_covered_flag ? 'Yes' : 'No',
         'Reason': s.not_covered_reason || '',
         'Reason Details': s.not_covered_reason_other || '',
-        'Quality Score': s.quality_score || '',
-        'Quality Notes': s.quality_notes || '',
+        'Assigned To': s.assigned_to || '',
+        'Completed By': s.completed_by || '',
         'Created': s.created_at || '',
       }));
 
@@ -187,46 +190,50 @@ const DataExportCenter = () => {
       setJobStatus('visits', 'error', 0);
       toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
     }
-  }, [dateFrom, dateTo, format, statusFilter, toast]);
+  }, [dateFrom, dateTo, format, statusFilter, mmpFiles, toast]);
 
   const exportCoverageAnalytics = useCallback(async () => {
     setJobStatus('analytics', 'exporting', 10);
     try {
-      const { data: cycles, error } = await supabase
-        .from('mmp_files')
-        .select('id, name, hub, region, month, year, cycle_status, cycle_closed_at')
-        .eq('cycle_status', 'closed');
+      const allMmps = mmpFiles || [];
+      if (allMmps.length === 0) {
+        toast({ title: 'No Data', description: 'No MMPs found to analyze.', variant: 'destructive' });
+        setJobStatus('analytics', 'idle', 0);
+        return;
+      }
 
-      if (error) throw error;
+      setJobStatus('analytics', 'exporting', 30);
 
-      setJobStatus('analytics', 'exporting', 40);
-
-      const cycleIds = (cycles || []).map(c => c.id);
+      const mmpIds = allMmps.map(m => m.id);
       let allSites: any[] = [];
-      if (cycleIds.length > 0) {
+
+      const batchSize = 50;
+      for (let i = 0; i < mmpIds.length; i += batchSize) {
+        const batch = mmpIds.slice(i, i + batchSize);
         const { data } = await supabase
           .from('site_visits')
           .select('mmp_id, status, not_covered_flag, not_covered_reason')
-          .in('mmp_id', cycleIds);
-        allSites = data || [];
+          .in('mmp_id', batch);
+        if (data) allSites = allSites.concat(data);
       }
 
       setJobStatus('analytics', 'exporting', 70);
 
       const hubMap: Record<string, { total: number; completed: number; uncovered: number; cycles: number }> = {};
-      (cycles || []).forEach(c => {
-        const hub = (c as any).hub || c.region || 'Unknown';
-        if (!hubMap[hub]) hubMap[hub] = { total: 0, completed: 0, uncovered: 0, cycles: 0 };
-        hubMap[hub].cycles++;
+      allMmps.forEach(c => {
+        const mmpAny = c as any;
+        const hubName = mmpAny.hub || mmpAny.hubOffice || mmpAny.projectName || mmpAny.project_name || 'Unknown';
+        if (!hubMap[hubName]) hubMap[hubName] = { total: 0, completed: 0, uncovered: 0, cycles: 0 };
+        hubMap[hubName].cycles++;
         const sites = allSites.filter(s => s.mmp_id === c.id);
-        hubMap[hub].total += sites.length;
-        hubMap[hub].completed += sites.filter(s => s.status === 'completed').length;
-        hubMap[hub].uncovered += sites.filter(s => s.not_covered_flag).length;
+        hubMap[hubName].total += sites.length;
+        hubMap[hubName].completed += sites.filter(s => s.status === 'completed').length;
+        hubMap[hubName].uncovered += sites.filter(s => s.not_covered_flag).length;
       });
 
       const exportData = Object.entries(hubMap).map(([hub, d]) => ({
-        'Hub': hub,
-        'Total Cycles': d.cycles,
+        'Hub / Project': hub,
+        'Total MMPs': d.cycles,
         'Total Sites': d.total,
         'Completed Sites': d.completed,
         'Uncovered Sites': d.uncovered,
@@ -242,12 +249,12 @@ const DataExportCenter = () => {
       }
 
       setJobStatus('analytics', 'done', 100);
-      toast({ title: 'Export Complete', description: `Exported analytics for ${exportData.length} hubs.` });
+      toast({ title: 'Export Complete', description: `Exported analytics for ${exportData.length} hubs/projects.` });
     } catch (err: any) {
       setJobStatus('analytics', 'error', 0);
       toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
     }
-  }, [format, toast]);
+  }, [mmpFiles, format, toast]);
 
   if (!isAdmin) {
     return (
@@ -305,6 +312,9 @@ const DataExportCenter = () => {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white" data-testid="text-page-title">Data Export Center</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Export cycle reports, site visits, and analytics data</p>
         </div>
+        <Badge variant="secondary" data-testid="badge-mmp-count">
+          {(mmpFiles || []).length} MMPs loaded
+        </Badge>
       </div>
 
       <Card className="mb-6">
@@ -374,7 +384,7 @@ const DataExportCenter = () => {
         <ExportCard
           category="visits"
           title="Site Visits"
-          description="Export site visit records with filters for status, dates, and quality scores"
+          description="Export site visit records with filters for status and dates"
           icon={MapPin}
           onExport={exportSiteVisits}
         />
