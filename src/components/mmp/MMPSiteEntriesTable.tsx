@@ -79,6 +79,7 @@ const MMPSiteEntriesTable = ({
   const [hubFilter, setHubFilter] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
   const [localityFilter, setLocalityFilter] = useState("all");
+  const [activityFilter, setActivityFilter] = useState("all");
   const [enumeratorFilter, setEnumeratorFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
 
@@ -264,11 +265,13 @@ const MMPSiteEntriesTable = ({
     const hubs = new Set<string>();
     const states = new Set<string>();
     const localities = new Set<string>();
+    const activities = new Set<string>();
     const enumerators = new Set<string>();
     for (const { norm } of normalizedEntries) {
       if (norm.hubOffice && norm.hubOffice !== '—') hubs.add(norm.hubOffice);
       if (norm.state && norm.state !== '—') states.add(norm.state);
       if (norm.locality && norm.locality !== '—') localities.add(norm.locality);
+      if (norm.siteActivity && norm.siteActivity !== '—') activities.add(norm.siteActivity);
       if (norm.acceptedByName && norm.acceptedByName !== '—') enumerators.add(norm.acceptedByName);
       else if (norm.monitoringBy && norm.monitoringBy !== '—') enumerators.add(norm.monitoringBy);
     }
@@ -276,16 +279,18 @@ const MMPSiteEntriesTable = ({
       hubs: Array.from(hubs).sort((a, b) => a.localeCompare(b)),
       states: Array.from(states).sort((a, b) => a.localeCompare(b)),
       localities: Array.from(localities).sort((a, b) => a.localeCompare(b)),
+      activities: Array.from(activities).sort((a, b) => a.localeCompare(b)),
       enumerators: Array.from(enumerators).sort((a, b) => a.localeCompare(b)),
     };
   }, [normalizedEntries]);
 
-  const activeFilterCount = [hubFilter, stateFilter, localityFilter, enumeratorFilter].filter(f => f !== 'all').length;
+  const activeFilterCount = [hubFilter, stateFilter, localityFilter, activityFilter, enumeratorFilter].filter(f => f !== 'all').length;
 
   const clearAllFilters = () => {
     setHubFilter("all");
     setStateFilter("all");
     setLocalityFilter("all");
+    setActivityFilter("all");
     setEnumeratorFilter("all");
     setCurrentPage(1);
   };
@@ -302,6 +307,9 @@ const MMPSiteEntriesTable = ({
     if (localityFilter !== 'all') {
       results = results.filter(({ norm }) => norm.locality === localityFilter);
     }
+    if (activityFilter !== 'all') {
+      results = results.filter(({ norm }) => norm.siteActivity === activityFilter);
+    }
     if (enumeratorFilter !== 'all') {
       results = results.filter(({ norm }) => norm.acceptedByName === enumeratorFilter || norm.monitoringBy === enumeratorFilter);
     }
@@ -316,7 +324,7 @@ const MMPSiteEntriesTable = ({
     }
 
     return results.map(({ raw }) => raw);
-  }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, enumeratorFilter]);
+  }, [normalizedEntries, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, activityFilter, enumeratorFilter]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
@@ -374,7 +382,7 @@ const MMPSiteEntriesTable = ({
         </div>
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-border/50">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Hub</label>
                 <Select value={hubFilter} onValueChange={(val) => { setHubFilter(val); setCurrentPage(1); }}>
@@ -423,6 +431,20 @@ const MMPSiteEntriesTable = ({
                 </Select>
               </div>
               <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Activity</label>
+                <Select value={activityFilter} onValueChange={(val) => { setActivityFilter(val); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-full" data-testid="select-activity-filter">
+                    <SelectValue placeholder="All Activities" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Activities</SelectItem>
+                    {filterOptions.activities.map(activity => (
+                      <SelectItem key={activity} value={activity}>{activity}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Data Collector</label>
                 <Select value={enumeratorFilter} onValueChange={(val) => { setEnumeratorFilter(val); setCurrentPage(1); }}>
                   <SelectTrigger className="w-full" data-testid="select-enumerator-filter">
@@ -456,6 +478,12 @@ const MMPSiteEntriesTable = ({
                     <Badge variant="secondary" className="gap-1">
                       Locality: {localityFilter}
                       <X className="h-3 w-3 cursor-pointer" onClick={() => { setLocalityFilter("all"); setCurrentPage(1); }} />
+                    </Badge>
+                  )}
+                  {activityFilter !== 'all' && (
+                    <Badge variant="secondary" className="gap-1">
+                      Activity: {activityFilter}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => { setActivityFilter("all"); setCurrentPage(1); }} />
                     </Badge>
                   )}
                   {enumeratorFilter !== 'all' && (
