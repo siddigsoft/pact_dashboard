@@ -77,6 +77,7 @@ The project uses a unified Supabase client for all interactions, ensuring consis
 *   **Leaflet:** For map components.
 *   **jspdf, jspdf-autotable, xlsx:** For PDF and Excel export functionalities.
 *   **Replit:** Development environment.
+*   **MMP Cycle Close System:** Lifecycle management for MMP cycles (Active → Closing → Closed). Admin-initiated cycle closure flags uncovered site visits, requires supervisors to provide reasons (from predefined list), supports bulk reason assignment, and provides coverage gap reporting by reason and hub. Page at `/mmp/cycle-close`. DB migration in `migrations/20260217_mmp_cycle_close.sql` adds `cycle_status` to `mmp_files` and not-covered tracking fields to `site_visits`.
 *   **Vercel:** Production hosting.
 *   **Capacitor:** For mobile deployment (iOS/Android builds, native API access).
 *   **Flutter Mobile:** Dart/Flutter framework with Supabase Flutter, flutter_webrtc, Hive, flutter_map, Google Fonts, and Shorebird for OTA updates.
