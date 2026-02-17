@@ -1625,10 +1625,10 @@ const MMP = () => {
               .limit(1000);
 
             if (!mySitesError && mySitesData) {
-              const preClaimStatuses = new Set(['approved and costed', 'costed', 'dispatched', 'verified', 'approved', 'pending', 'rejected']);
+              const excludeStatuses = new Set(['rejected']);
               const activeSites = mySitesData.filter((entry: any) => {
                 const status = (entry.status || '').trim().toLowerCase();
-                return !preClaimStatuses.has(status);
+                return !excludeStatuses.has(status);
               });
               const formatEntries = (entries: any[]) => entries.map(entry => {
                 const enumeratorFee = entry.enumerator_fee;
@@ -2108,15 +2108,14 @@ const MMP = () => {
           }
         }
 
-        // Merge and deduplicate, excluding sites that have been sent back to pre-claim statuses
-        const preClaimStatuses = new Set(['approved and costed', 'costed', 'dispatched', 'verified', 'approved', 'pending', 'rejected']);
+        const excludeStatuses = new Set(['rejected']);
         const allEntries = [...(mySitesData || []), ...dpSiteEntries];
         const dedupIds = new Set<string>();
         const deduped = allEntries.filter(e => {
           if (dedupIds.has(e.id)) return false;
           dedupIds.add(e.id);
           const status = (e.status || '').trim().toLowerCase();
-          if (preClaimStatuses.has(status)) return false;
+          if (excludeStatuses.has(status)) return false;
           return true;
         });
 
