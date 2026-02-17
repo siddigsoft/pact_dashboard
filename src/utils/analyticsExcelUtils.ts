@@ -288,7 +288,14 @@ function mergeCollectorsByDevice(
     });
   });
   noDeviceMap.forEach((d, name) => {
-    results.push({ primaryName: name, activities: d.activities, nameVariants: 0 });
+    const existing = results.find(r => r.primaryName === name);
+    if (existing) {
+      d.activities.forEach((count, abbr) => {
+        existing.activities.set(abbr, (existing.activities.get(abbr) || 0) + count);
+      });
+    } else {
+      results.push({ primaryName: name, activities: d.activities, nameVariants: 0 });
+    }
   });
   return results.sort((a, b) => a.primaryName.localeCompare(b.primaryName));
 }
