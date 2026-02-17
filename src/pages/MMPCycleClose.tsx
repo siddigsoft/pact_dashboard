@@ -167,7 +167,7 @@ const MMPCycleClose = () => {
   const activeMmps = useMemo(() => {
     return (mmpFiles || []).filter(m => {
       const cycleStatus = (m as any).cycle_status || 'active';
-      return m.status === 'approved' && (cycleStatus === 'active' || cycleStatus === 'closing' || cycleStatus === 'pending_approval');
+      return cycleStatus === 'active' || cycleStatus === 'closing' || cycleStatus === 'pending_approval';
     });
   }, [mmpFiles]);
 
