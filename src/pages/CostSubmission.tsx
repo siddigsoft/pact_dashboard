@@ -2432,7 +2432,7 @@ const CostSubmission = () => {
                         paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
                         reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
                       };
-                      const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : hasThreeTiers(oc) && oc.tier3_status === 'pending' ? '3' : '?';
+                      const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : (oc.tier3_status === 'pending' || (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && hasThreeTiers(oc))) ? '3' : '?';
                       const statusLabels: Record<string, string> = {
                         pending: `Pending (Tier ${pendingTierLabel})`,
                         under_review: `In Review (Tier ${pendingTierLabel})`,
@@ -2593,7 +2593,7 @@ const CostSubmission = () => {
                       reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
                     };
                     const derivedStatus = getOperationalDerivedStatus(oc);
-                    const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : hasThreeTiers(oc) && oc.tier3_status === 'pending' ? '3' : '?';
+                    const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : (oc.tier3_status === 'pending' || (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && hasThreeTiers(oc))) ? '3' : '?';
                     const statusLabels: Record<string, string> = {
                       pending: `Pending (Tier ${pendingTierLabel}) / معلق (المرحلة ${pendingTierLabel})`,
                       under_review: `In Review (Tier ${pendingTierLabel}) / قيد المراجعة (المرحلة ${pendingTierLabel})`,
