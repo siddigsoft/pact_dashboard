@@ -2019,7 +2019,7 @@ const MMP = () => {
           .from('mmp_site_entries')
           .select('*')
           .eq('accepted_by', currentUser.id)
-          .or('status.is.null,status.not.in.("Approved and Costed","approved and costed","Costed","costed","Dispatched","dispatched","Verified","verified","Approved","approved","Pending","pending","Rejected","rejected")')
+          .or('status.is.null,status.not.in.("Rejected","rejected")')
           .order('created_at', { ascending: false })
           .limit(1000);
 
