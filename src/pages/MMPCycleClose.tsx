@@ -22,7 +22,8 @@ import {
   AlertTriangle, CheckCircle2, Clock, XCircle, MapPin,
   ArrowRight, FileText, BarChart3, Filter, Download,
   ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet,
-  Bell, TrendingUp, TrendingDown, Minus, Star, Shield
+  Bell, TrendingUp, TrendingDown, Minus, Star, Shield,
+  Activity, Target, Layers, SortAsc, SortDesc
 } from 'lucide-react';
 import { CycleMMPCard } from '@/components/cycle/CycleMMPCard';
 import { CycleCoveragePredictor } from '@/components/cycle/CycleCoveragePredictor';
@@ -149,6 +150,10 @@ const MMPCycleClose = () => {
   const [comparisonCycle1, setComparisonCycle1] = useState<string>('');
   const [comparisonCycle2, setComparisonCycle2] = useState<string>('');
   const [qualityData, setQualityData] = useState<{ hub: string; avgScore: number; count: number }[]>([]);
+  const [activeHubFilter, setActiveHubFilter] = useState<string>('all');
+  const [activeSort, setActiveSort] = useState<'name' | 'coverage' | 'status'>('status');
+  const [activeSortDir, setActiveSortDir] = useState<'asc' | 'desc'>('desc');
+  const [archiveSearch, setArchiveSearch] = useState('');
 
   const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
   const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
@@ -908,11 +913,99 @@ const MMPCycleClose = () => {
     return counts;
   }, [uncoveredSites]);
 
+  const overallSummary = useMemo(() => {
+    const totalMmps = activeMmps.length;
+    const closingCount = activeMmps.filter(m => (m as any).cycle_status === 'closing').length;
+    const pendingApprovalCount = activeMmps.filter(m => (m as any).cycle_status === 'pending_approval').length;
+    const activeCount = totalMmps - closingCount - pendingApprovalCount;
+    let totalSites = 0;
+    let completedSites = 0;
+    Object.values(siteVisitCounts).forEach(c => {
+      totalSites += c.total;
+      completedSites += c.completed;
+    });
+    const overallCoverage = totalSites > 0 ? Math.round((completedSites / totalSites) * 100) : 0;
+    const totalUncovered = uncoveredSites.length;
+    const totalReasoned = uncoveredSites.filter(s => s.not_covered_reason).length;
+    const reasonCompletion = totalUncovered > 0 ? Math.round((totalReasoned / totalUncovered) * 100) : 100;
+    const overdueCount = activeMmps.filter(m => {
+      const deadline = (m as any).cycle_close_deadline;
+      return (m as any).cycle_status === 'closing' && deadline && new Date(deadline) < new Date();
+    }).length;
+    return { totalMmps, activeCount, closingCount, pendingApprovalCount, totalSites, completedSites, overallCoverage, totalUncovered, totalReasoned, reasonCompletion, overdueCount };
+  }, [activeMmps, siteVisitCounts, uncoveredSites]);
+
+  const activeHubs = useMemo(() => {
+    const hubSet = new Set(activeMmps.map(m => m.hub || m.region || '').filter(Boolean));
+    return Array.from(hubSet).sort();
+  }, [activeMmps]);
+
+  const filteredActiveMmps = useMemo(() => {
+    let mmps = [...activeMmps];
+    if (activeHubFilter !== 'all') {
+      mmps = mmps.filter(m => (m.hub || m.region || '') === activeHubFilter);
+    }
+    mmps.sort((a, b) => {
+      let cmp = 0;
+      if (activeSort === 'name') {
+        cmp = (a.name || '').localeCompare(b.name || '');
+      } else if (activeSort === 'coverage') {
+        const aCov = siteVisitCounts[a.id] ? (siteVisitCounts[a.id].completed / (siteVisitCounts[a.id].total || 1)) : 0;
+        const bCov = siteVisitCounts[b.id] ? (siteVisitCounts[b.id].completed / (siteVisitCounts[b.id].total || 1)) : 0;
+        cmp = aCov - bCov;
+      } else {
+        const statusOrder: Record<string, number> = { closing: 0, pending_approval: 1, active: 2 };
+        const aOrder = statusOrder[(a as any).cycle_status || 'active'] ?? 2;
+        const bOrder = statusOrder[(b as any).cycle_status || 'active'] ?? 2;
+        cmp = aOrder - bOrder;
+      }
+      return activeSortDir === 'desc' ? -cmp : cmp;
+    });
+    return mmps;
+  }, [activeMmps, activeHubFilter, activeSort, activeSortDir, siteVisitCounts]);
+
+  const hubProgressData = useMemo(() => {
+    const hubMap: Record<string, { total: number; completed: number; uncovered: number; reasoned: number; mmpCount: number }> = {};
+    activeMmps.forEach(m => {
+      const hub = m.hub || m.region || 'Unknown';
+      if (!hubMap[hub]) hubMap[hub] = { total: 0, completed: 0, uncovered: 0, reasoned: 0, mmpCount: 0 };
+      hubMap[hub].mmpCount++;
+      const counts = siteVisitCounts[m.id];
+      if (counts) {
+        hubMap[hub].total += counts.total;
+        hubMap[hub].completed += counts.completed;
+      }
+    });
+    uncoveredSites.forEach(s => {
+      const hub = s.hub || 'Unknown';
+      if (!hubMap[hub]) hubMap[hub] = { total: 0, completed: 0, uncovered: 0, reasoned: 0, mmpCount: 0 };
+      hubMap[hub].uncovered++;
+      if (s.not_covered_reason) hubMap[hub].reasoned++;
+    });
+    return Object.entries(hubMap)
+      .map(([hub, d]) => ({ hub, ...d, coverage: d.total > 0 ? Math.round((d.completed / d.total) * 100) : 0 }))
+      .sort((a, b) => a.coverage - b.coverage);
+  }, [activeMmps, siteVisitCounts, uncoveredSites]);
+
+  const filteredClosedCycles = useMemo(() => {
+    if (!archiveSearch.trim()) return closedCycles;
+    const q = archiveSearch.toLowerCase();
+    return closedCycles.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.region || '').toLowerCase().includes(q)
+    );
+  }, [closedCycles, archiveSearch]);
+
+  const uncoveredMmpOptions = useMemo(() => {
+    const mmpIds = new Set(uncoveredSites.map(s => s.mmp_id));
+    return activeMmps.filter(m => mmpIds.has(m.id));
+  }, [uncoveredSites, activeMmps]);
+
   if (!canManageCycle && !canAssignReasons) {
     return (
-      <div className="max-w-xl mx-auto mt-20 p-8 bg-white dark:bg-gray-900 rounded-xl shadow text-center" data-testid="access-denied">
+      <div className="max-w-xl mx-auto mt-20 p-8 bg-card rounded-xl shadow text-center" data-testid="access-denied">
         <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-        <p className="text-gray-600 dark:text-gray-400">You do not have permission to view this page.</p>
+        <p className="text-muted-foreground">You do not have permission to view this page.</p>
       </div>
     );
   }
@@ -921,12 +1014,12 @@ const MMPCycleClose = () => {
     <div className="container mx-auto px-4 py-6 max-w-7xl" data-testid="mmp-cycle-close-page">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white" data-testid="text-page-title">MMP Cycle Close</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">MMP Cycle Close</h1>
+          <p className="text-muted-foreground text-sm mt-1">
             Manage MMP cycle lifecycle and track coverage gaps
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => { fetchUncoveredSites(); fetchClosedCycles(); }} data-testid="button-refresh">
             <RefreshCw className="h-4 w-4 mr-1" /> Refresh
           </Button>
@@ -938,6 +1031,81 @@ const MMPCycleClose = () => {
           </Button>
         </div>
       </div>
+
+      {overallSummary.totalMmps > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6" data-testid="summary-dashboard">
+          <Card>
+            <CardContent className="p-3 text-center">
+              <Layers className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
+              <div className="text-xl font-bold" data-testid="text-total-mmps">{overallSummary.totalMmps}</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">Active MMPs</div>
+              <div className="flex justify-center gap-1 mt-1 flex-wrap">
+                {overallSummary.activeCount > 0 && <Badge variant="secondary" data-testid="badge-active-count">{overallSummary.activeCount} Active</Badge>}
+                {overallSummary.closingCount > 0 && <Badge variant="destructive" data-testid="badge-closing-count">{overallSummary.closingCount} Closing</Badge>}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <Target className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
+              <div className="text-xl font-bold" data-testid="text-overall-coverage">{overallSummary.overallCoverage}%</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">Site Coverage</div>
+              <Progress value={overallSummary.overallCoverage} className="h-1 mt-1.5" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <CheckCircle2 className="h-4 w-4 mx-auto text-green-500 mb-1" />
+              <div className="text-xl font-bold text-green-600 dark:text-green-400" data-testid="text-completed-total">{overallSummary.completedSites}</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">Completed</div>
+              <div className="text-xs text-muted-foreground mt-1">of {overallSummary.totalSites} sites</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <AlertTriangle className="h-4 w-4 mx-auto text-red-500 mb-1" />
+              <div className="text-xl font-bold text-red-600 dark:text-red-400" data-testid="text-uncovered-total">{overallSummary.totalUncovered}</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">Uncovered</div>
+              {overallSummary.totalUncovered > 0 && (
+                <div className="text-xs text-muted-foreground mt-1">{overallSummary.totalReasoned} reasoned</div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <Activity className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
+              <div className="text-xl font-bold" data-testid="text-reason-completion">{overallSummary.reasonCompletion}%</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">Reasons Done</div>
+              {overallSummary.totalUncovered > 0 && (
+                <Progress value={overallSummary.reasonCompletion} className="h-1 mt-1.5" />
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              {overallSummary.overdueCount > 0 ? (
+                <>
+                  <Clock className="h-4 w-4 mx-auto text-destructive mb-1" />
+                  <div className="text-xl font-bold text-destructive" data-testid="text-overdue-count">{overallSummary.overdueCount}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider">Overdue</div>
+                </>
+              ) : overallSummary.pendingApprovalCount > 0 ? (
+                <>
+                  <Shield className="h-4 w-4 mx-auto text-purple-500 mb-1" />
+                  <div className="text-xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-pending-approval">{overallSummary.pendingApprovalCount}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider">Awaiting Approval</div>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mx-auto text-green-500 mb-1" />
+                  <div className="text-xl font-bold text-green-600 dark:text-green-400" data-testid="text-on-track">0</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider">Overdue</div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList data-testid="tabs-cycle-close" className="flex-wrap">
@@ -953,41 +1121,77 @@ const MMPCycleClose = () => {
           {activeMmps.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
-                <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-600 dark:text-gray-300">No Active MMP Cycles</h3>
-                <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">All MMP cycles have been closed or there are no approved MMPs.</p>
+                <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium">No Active MMP Cycles</h3>
+                <p className="text-muted-foreground mt-1 text-sm">All MMP cycles have been closed or there are no approved MMPs.</p>
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {activeMmps.map(mmp => {
-                const cycleStatus = (mmp as any).cycle_status || 'active';
-                const mmpUncovered = uncoveredSites.filter(s => s.mmp_id === mmp.id);
+            <>
+              <div className="flex flex-col sm:flex-row gap-3 items-end" data-testid="active-filters">
+                <Select value={activeHubFilter} onValueChange={setActiveHubFilter}>
+                  <SelectTrigger className="w-[180px]" data-testid="select-active-hub-filter">
+                    <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                    <SelectValue placeholder="All Hubs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Hubs</SelectItem>
+                    {activeHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={activeSort} onValueChange={v => setActiveSort(v as any)}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-active-sort">
+                    <SelectValue placeholder="Sort by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="status">Sort by Status</SelectItem>
+                    <SelectItem value="name">Sort by Name</SelectItem>
+                    <SelectItem value="coverage">Sort by Coverage</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setActiveSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                  data-testid="button-sort-direction"
+                >
+                  {activeSortDir === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
+                </Button>
+                <div className="text-xs text-muted-foreground ml-auto">
+                  Showing {filteredActiveMmps.length} of {activeMmps.length} MMPs
+                </div>
+              </div>
 
-                return (
-                  <CycleMMPCard
-                    key={mmp.id}
-                    mmp={mmp}
-                    uncoveredSites={mmpUncovered}
-                    cycleStatus={cycleStatus}
-                    canManageCycle={canManageCycle}
-                    isFOM={isFOM}
-                    isAdmin={isAdmin}
-                    closingCycle={closingCycle}
-                    finalizingCycle={finalizingCycle}
-                    siteVisitCounts={siteVisitCounts[mmp.id]}
-                    handleStartClosingCycle={handleStartClosingCycle}
-                    handleFinalizeCycleClose={handleFinalizeCycleClose}
-                    handleApproveCycle={handleApproveCycle}
-                    handleRejectCycle={handleRejectCycle}
-                    handleSendReminders={handleSendReminders}
-                    setSelectedMmpId={setSelectedMmpId}
-                    setActiveTab={setActiveTab}
-                    getReasonLabel={getReasonLabel}
-                  />
-                );
-              })}
-            </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {filteredActiveMmps.map(mmp => {
+                  const cycleStatus = (mmp as any).cycle_status || 'active';
+                  const mmpUncovered = uncoveredSites.filter(s => s.mmp_id === mmp.id);
+
+                  return (
+                    <CycleMMPCard
+                      key={mmp.id}
+                      mmp={mmp}
+                      uncoveredSites={mmpUncovered}
+                      cycleStatus={cycleStatus}
+                      canManageCycle={canManageCycle}
+                      isFOM={isFOM}
+                      isAdmin={isAdmin}
+                      closingCycle={closingCycle}
+                      finalizingCycle={finalizingCycle}
+                      siteVisitCounts={siteVisitCounts[mmp.id]}
+                      handleStartClosingCycle={handleStartClosingCycle}
+                      handleFinalizeCycleClose={handleFinalizeCycleClose}
+                      handleApproveCycle={handleApproveCycle}
+                      handleRejectCycle={handleRejectCycle}
+                      handleSendReminders={handleSendReminders}
+                      setSelectedMmpId={setSelectedMmpId}
+                      setActiveTab={setActiveTab}
+                      getReasonLabel={getReasonLabel}
+                    />
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {canManageCycle && (
@@ -998,13 +1202,50 @@ const MMPCycleClose = () => {
             </div>
           )}
 
+          {hubProgressData.length > 1 && (
+            <Card data-testid="card-hub-progress">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="h-4 w-4" /> Hub Coverage Progress
+                </CardTitle>
+                <CardDescription>Coverage breakdown by hub across all active MMPs</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {hubProgressData.map(h => (
+                    <div key={h.hub} className="space-y-1" data-testid={`hub-progress-${h.hub}`}>
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium truncate">{h.hub}</span>
+                          <Badge variant="outline" className="shrink-0">{h.mmpCount} MMPs</Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                          <span>{h.completed}/{h.total} sites</span>
+                          <span className="font-semibold text-foreground">{h.coverage}%</span>
+                        </div>
+                      </div>
+                      <Progress value={h.coverage} className="h-1.5" />
+                      {h.uncovered > 0 && (
+                        <div className="flex gap-3 text-xs text-muted-foreground pl-1">
+                          <span>{h.uncovered} uncovered</span>
+                          <span>{h.reasoned} reasoned</span>
+                          <span>{h.uncovered - h.reasoned} pending</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <CycleCoveragePredictor activeMmps={activeMmps} siteVisitCounts={siteVisitCounts} />
         </TabsContent>
 
         <TabsContent value="uncovered" className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-end">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <div className="flex flex-col sm:flex-row gap-3 items-end flex-wrap">
+            <div className="flex-1 relative min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by site name, code, state..."
                 value={searchQuery}
@@ -1013,6 +1254,15 @@ const MMPCycleClose = () => {
                 data-testid="input-search-sites"
               />
             </div>
+            <Select value={selectedMmpId} onValueChange={setSelectedMmpId}>
+              <SelectTrigger className="w-[200px]" data-testid="select-filter-mmp">
+                <SelectValue placeholder="All MMPs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All MMPs</SelectItem>
+                {uncoveredMmpOptions.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <Select value={filterHub} onValueChange={setFilterHub}>
               <SelectTrigger className="w-[180px]" data-testid="select-filter-hub">
                 <SelectValue placeholder="All Hubs" />
@@ -1042,6 +1292,15 @@ const MMPCycleClose = () => {
               </Button>
             )}
           </div>
+
+          {filteredSites.length !== uncoveredSites.length && (
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground px-1">
+              <span data-testid="text-filter-count">Showing {filteredSites.length} of {uncoveredSites.length} uncovered sites</span>
+              <Button variant="ghost" size="sm" onClick={() => { setSelectedMmpId('all'); setFilterHub('all'); setFilterReason('all'); setSearchQuery(''); }} data-testid="button-clear-filters">
+                Clear Filters
+              </Button>
+            </div>
+          )}
 
           {canAssignReasons && selectedSites.size > 0 && (
             <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800" data-testid="card-bulk-assign">
@@ -1082,23 +1341,23 @@ const MMPCycleClose = () => {
 
           {loading ? (
             <Card>
-              <CardContent className="py-12 text-center text-gray-500">Loading uncovered sites...</CardContent>
+              <CardContent className="py-12 text-center text-muted-foreground">Loading uncovered sites...</CardContent>
             </Card>
           ) : filteredSites.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 mb-4" />
-                <h3 className="text-lg font-medium text-gray-600 dark:text-gray-300">
+                <h3 className="text-lg font-medium">
                   {uncoveredSites.length === 0 ? 'No Uncovered Sites' : 'No matching sites'}
                 </h3>
-                <p className="text-gray-500 text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1">
                   {uncoveredSites.length === 0 ? 'All sites have been covered or no cycle is in closing phase.' : 'Try adjusting your filters.'}
                 </p>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-1">
-              <div className="flex items-center px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-t-lg text-xs font-medium text-gray-500 dark:text-gray-400">
+              <div className="flex items-center px-3 py-2 bg-muted rounded-t-lg text-xs font-medium text-muted-foreground">
                 <div className="w-8">
                   <Checkbox
                     checked={filteredSites.length > 0 && filteredSites.every(s => selectedSites.has(s.id))}
@@ -1163,65 +1422,94 @@ const MMPCycleClose = () => {
           {closedCycles.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
-                <Clock className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-600 dark:text-gray-300">No Closed Cycles</h3>
-                <p className="text-gray-500 text-sm mt-1">Closed MMP cycles will appear here for historical review.</p>
+                <Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium">No Closed Cycles</h3>
+                <p className="text-muted-foreground text-sm mt-1">Closed MMP cycles will appear here for historical review.</p>
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
-              {closedCycles.map(cycle => (
-                <Card key={cycle.id} data-testid={`card-closed-cycle-${cycle.id}`}>
-                  <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedCycle(expandedCycle === cycle.id ? null : cycle.id)}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-base">{cycle.name}</CardTitle>
-                        <CardDescription className="text-xs">
-                          {cycle.region || 'No region'} &middot; {cycle.month ? `Month ${cycle.month}` : ''} {cycle.year || ''} &middot;
-                          Closed: {cycle.cycle_closed_at ? new Date(cycle.cycle_closed_at).toLocaleDateString() : 'N/A'}
-                        </CardDescription>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-gray-500">Closed</Badge>
-                        {expandedCycle === cycle.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  {expandedCycle === cycle.id && (
-                    <CardContent className="pt-0 space-y-3">
-                      <div className="grid grid-cols-3 gap-3 text-center text-sm">
-                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                          <div className="text-lg font-bold">{cycle.totalSites}</div>
-                          <div className="text-xs text-gray-500">Total Sites</div>
+            <>
+              {closedCycles.length > 3 && (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search closed cycles by name or region..."
+                    value={archiveSearch}
+                    onChange={e => setArchiveSearch(e.target.value)}
+                    className="pl-9 max-w-sm"
+                    data-testid="input-search-archive"
+                  />
+                </div>
+              )}
+              <div className="space-y-3">
+                {filteredClosedCycles.map(cycle => {
+                  const coverageRate = cycle.totalSites > 0 ? Math.round((cycle.completedSites / cycle.totalSites) * 100) : 0;
+                  return (
+                    <Card key={cycle.id} data-testid={`card-closed-cycle-${cycle.id}`}>
+                      <CardHeader className="pb-2 cursor-pointer hover-elevate" onClick={() => setExpandedCycle(expandedCycle === cycle.id ? null : cycle.id)}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <CardTitle className="text-base" data-testid={`text-closed-name-${cycle.id}`}>{cycle.name}</CardTitle>
+                            <CardDescription className="text-xs">
+                              {cycle.region || 'No region'} &middot; {cycle.month ? `Month ${cycle.month}` : ''} {cycle.year || ''} &middot;
+                              Closed: {cycle.cycle_closed_at ? new Date(cycle.cycle_closed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                            </CardDescription>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge variant={coverageRate >= 80 ? 'secondary' : 'destructive'} className="text-xs" data-testid={`badge-coverage-${cycle.id}`}>
+                              {coverageRate}% covered
+                            </Badge>
+                            <Badge variant="outline">Closed</Badge>
+                            {expandedCycle === cycle.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </div>
                         </div>
-                        <div className="bg-green-50 dark:bg-green-950 rounded-lg p-3">
-                          <div className="text-lg font-bold text-green-600">{cycle.completedSites}</div>
-                          <div className="text-xs text-gray-500">Completed</div>
-                        </div>
-                        <div className="bg-red-50 dark:bg-red-950 rounded-lg p-3">
-                          <div className="text-lg font-bold text-red-600">{cycle.uncoveredSites}</div>
-                          <div className="text-xs text-gray-500">Uncovered</div>
-                        </div>
-                      </div>
-                      {cycle.reasonBreakdown && Object.keys(cycle.reasonBreakdown).length > 0 && (
-                        <div className="space-y-1.5">
-                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Reason Breakdown</h4>
-                          {Object.entries(cycle.reasonBreakdown).sort((a,b) => b[1]-a[1]).map(([reason, count]) => (
-                            <div key={reason} className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600 dark:text-gray-400">{getReasonLabel(reason)}</span>
-                              <Badge variant="outline" className="text-xs">{count}</Badge>
+                      </CardHeader>
+                      {expandedCycle === cycle.id && (
+                        <CardContent className="pt-0 space-y-3">
+                          <div className="grid grid-cols-4 gap-3 text-center text-sm">
+                            <div className="bg-muted rounded-lg p-3">
+                              <div className="text-lg font-bold" data-testid={`text-archive-total-${cycle.id}`}>{cycle.totalSites}</div>
+                              <div className="text-xs text-muted-foreground">Total Sites</div>
                             </div>
-                          ))}
-                        </div>
+                            <div className="bg-green-50 dark:bg-green-950 rounded-lg p-3">
+                              <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid={`text-archive-completed-${cycle.id}`}>{cycle.completedSites}</div>
+                              <div className="text-xs text-muted-foreground">Completed</div>
+                            </div>
+                            <div className="bg-red-50 dark:bg-red-950 rounded-lg p-3">
+                              <div className="text-lg font-bold text-red-600 dark:text-red-400" data-testid={`text-archive-uncovered-${cycle.id}`}>{cycle.uncoveredSites}</div>
+                              <div className="text-xs text-muted-foreground">Uncovered</div>
+                            </div>
+                            <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-3">
+                              <div className="text-lg font-bold text-blue-600 dark:text-blue-400" data-testid={`text-archive-coverage-${cycle.id}`}>{coverageRate}%</div>
+                              <div className="text-xs text-muted-foreground">Coverage</div>
+                            </div>
+                          </div>
+                          {cycle.reasonBreakdown && Object.keys(cycle.reasonBreakdown).length > 0 && (
+                            <div className="space-y-1.5">
+                              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason Breakdown</h4>
+                              {Object.entries(cycle.reasonBreakdown).sort((a,b) => b[1]-a[1]).map(([reason, count]) => (
+                                <div key={reason} className="flex items-center justify-between gap-2 text-sm">
+                                  <span className="text-muted-foreground">{getReasonLabel(reason)}</span>
+                                  <Badge variant="outline" className="text-xs">{count}</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => exportCoverageReport(cycle.id)} data-testid={`button-export-csv-${cycle.id}`}>
+                              <Download className="h-3 w-3 mr-1" /> CSV
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => exportCoverageReportExcel(cycle.id)} data-testid={`button-export-xlsx-${cycle.id}`}>
+                              <FileSpreadsheet className="h-3 w-3 mr-1" /> Excel
+                            </Button>
+                          </div>
+                        </CardContent>
                       )}
-                      <Button size="sm" variant="outline" onClick={() => exportCoverageReport(cycle.id)} data-testid={`button-export-${cycle.id}`}>
-                        <Download className="h-3 w-3 mr-1" /> Export Coverage Report
-                      </Button>
-                    </CardContent>
-                  )}
-                </Card>
-              ))}
-            </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
           )}
 
           {closedCycles.length > 1 && (
@@ -1243,16 +1531,16 @@ const MMPCycleClose = () => {
                     }
                   });
                   const total = Object.values(aggregated).reduce((a, b) => a + b, 0);
-                  if (total === 0) return <p className="text-gray-500 text-sm text-center py-4">No trend data available</p>;
+                  if (total === 0) return <p className="text-muted-foreground text-sm text-center py-4">No trend data available</p>;
                   return (
                     <div className="space-y-2">
                       {Object.entries(aggregated).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
                         <div key={reason} className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-700 dark:text-gray-300">{getReasonLabel(reason)}</span>
-                            <span className="text-xs text-gray-500">{count} ({Math.round((count / total) * 100)}%)</span>
+                          <div className="flex items-center justify-between gap-2 text-sm">
+                            <span>{getReasonLabel(reason)}</span>
+                            <span className="text-xs text-muted-foreground">{count} ({Math.round((count / total) * 100)}%)</span>
                           </div>
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div className="w-full bg-muted rounded-full h-2">
                             <div
                               className="h-2 rounded-full bg-indigo-500"
                               style={{ width: `${(count / total) * 100}%` }}
@@ -1260,7 +1548,7 @@ const MMPCycleClose = () => {
                           </div>
                         </div>
                       ))}
-                      <p className="text-xs text-gray-400 mt-3">Aggregated across {closedCycles.length} closed cycles</p>
+                      <p className="text-xs text-muted-foreground mt-3">Aggregated across {closedCycles.length} closed cycles</p>
                     </div>
                   );
                 })()}

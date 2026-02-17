@@ -155,19 +155,19 @@ export function CycleMMPCard({
             <div className="grid grid-cols-4 gap-1 text-center text-xs">
               <div className="bg-green-50 dark:bg-green-950 rounded p-1.5">
                 <div className="text-green-600 dark:text-green-400 font-bold" data-testid={`text-completed-count-${mmp.id}`}>{completedCount}</div>
-                <div className="text-muted-foreground text-[10px]">Completed</div>
+                <div className="text-muted-foreground text-xs">Completed</div>
               </div>
               <div className="bg-yellow-50 dark:bg-yellow-950 rounded p-1.5">
                 <div className="text-yellow-600 dark:text-yellow-400 font-bold" data-testid={`text-pending-count-${mmp.id}`}>{pendingCount}</div>
-                <div className="text-muted-foreground text-[10px]">Pending</div>
+                <div className="text-muted-foreground text-xs">Pending</div>
               </div>
               <div className="bg-blue-50 dark:bg-blue-950 rounded p-1.5">
                 <div className="text-blue-600 dark:text-blue-400 font-bold" data-testid={`text-assigned-count-${mmp.id}`}>{assignedCount}</div>
-                <div className="text-muted-foreground text-[10px]">Assigned</div>
+                <div className="text-muted-foreground text-xs">Assigned</div>
               </div>
               <div className="bg-purple-50 dark:bg-purple-950 rounded p-1.5">
                 <div className="text-purple-600 dark:text-purple-400 font-bold" data-testid={`text-dispatched-count-${mmp.id}`}>{dispatchedCount}</div>
-                <div className="text-muted-foreground text-[10px]">Dispatched</div>
+                <div className="text-muted-foreground text-xs">Dispatched</div>
               </div>
             </div>
           </div>
