@@ -362,119 +362,365 @@ const documentationSections: Section[] = [
     ]
   },
   {
-    title: "8. Monthly Monitoring Plans (MMPs)",
+    title: "8. Monthly Monitoring Plans (MMPs) - Complete Guide",
     content: [
-      "MMPs are structured plans that define sites to be monitored, schedule, personnel, and budget."
+      "Monthly Monitoring Plans (MMPs) are the backbone of field operations in PACT. An MMP is a structured plan that defines which sites need to be monitored during a given period, including the monitoring schedule, assigned personnel, budget allocation, and permit requirements. This section provides a complete end-to-end guide from uploading an MMP to completing all site visits and receiving payment."
     ],
     subsections: [
       {
         title: "8.1 Understanding MMPs",
         content: [
-          "Sites to be monitored",
-          "Monitoring schedule",
-          "Assigned personnel",
-          "Budget allocation",
-          "Permit requirements"
+          "An MMP contains a list of field sites that need monitoring visits during a specific month or period",
+          "Each site entry includes: Site Code, Site Name, State, Locality, Hub Office, Activity Type, CP Name (Cooperating Partner), Planned Visit Date",
+          "Activities include: AM (Acute Malnutrition), DM (Distribution Monitoring), MDM (Market/Dry Monitoring), PDM (Post-Distribution Monitoring), Warehouse monitoring",
+          "MMPs flow through a multi-stage approval process before sites become available for field visits",
+          "Each MMP is linked to a project and can contain hundreds of site entries across multiple states and localities"
         ]
       },
       {
-        title: "8.2 MMP Upload - CSV Requirements",
+        title: "8.2 Step 1: MMP Upload (Admin/ICT/Coordinator)",
         content: [
-          "Required columns: site_code, site_name, state, locality, planned_date",
-          "Optional columns: classification, special_requirements",
-          "Date format: YYYY-MM-DD",
-          "File format: UTF-8 encoded CSV"
+          "Navigate to 'MMP Management' from the sidebar",
+          "Click 'Upload MMP' button",
+          "Select the project this MMP belongs to",
+          "Choose and upload a CSV file containing site entries",
+          "Required CSV columns: site_code, site_name, state, locality, hub_office, activity_at_site, cp_name, visit_date",
+          "Optional CSV columns: monitoring_by, survey_tool, comments, classification, special_requirements",
+          "The system validates the CSV data using Zod schema validation",
+          "Validation checks: Required fields present, date format correct, no duplicate site codes",
+          "If validation passes, the MMP is created with 'Draft' status",
+          "If validation fails, error messages indicate which rows/columns need correction",
+          "You can also use the Excel Upload Parser for bulk import with auto-population features"
         ]
       },
       {
-        title: "8.3 MMP Workflow Stages",
+        title: "8.3 Step 2: MMP Review & Approval (Admin/ICT)",
         content: [
-          "Draft: Initial upload - Edit, Delete",
-          "Submitted: Awaiting review - Review",
-          "Under Review: Being reviewed - Approve, Reject, Request Changes",
-          "Approved: Ready for dispatch - Forward to FOM",
-          "Forwarded to FOM: With Field Operations - Assign Coordinators",
-          "Dispatched: Sites assigned - Monitor Progress",
-          "Completed: All visits done - Archive",
-          "Archived: Historical record - View Only"
+          "Navigate to the 'New' tab in MMP Management to see uploaded MMPs",
+          "Click on an MMP to view its details and site entries",
+          "Review each site entry for accuracy: correct site codes, proper state/locality mapping, valid dates",
+          "The admin can edit individual site entries if corrections are needed",
+          "Options available: Approve (moves to 'Approved' status), Reject (returns to uploader with notes), Request Changes (sends back for modifications)",
+          "Approved MMPs become eligible for the next stage: forwarding to Field Operations Manager (FOM)",
+          "The 'Forward to FOM' action sends the MMP to the field operations team for dispatch planning"
         ]
       },
       {
-        title: "8.4 MMP Verification",
+        title: "8.4 Step 3: Permit Verification (If Required)",
         content: [
-          "Open the MMP",
-          "Click 'Verify'",
-          "Review each site entry: Location accuracy, Permit status, Classification correctness",
-          "Mark items as verified or flag issues",
-          "Complete verification"
+          "Some localities require monitoring permits before field visits can proceed",
+          "The system checks the Locality Permit Requirement configuration for each site",
+          "If a permit is required, the 'Permit Upload' option appears on the MMP detail page",
+          "Upload the permit document (PDF/Image)",
+          "Enter permit details: Permit Number, Issue Date, Expiry Date, Issuing Authority",
+          "Submit permit for verification by the admin team",
+          "Sites without required permits will be flagged and cannot be dispatched",
+          "Once verified, the permit is linked to the relevant site entries"
         ]
       },
       {
-        title: "8.5 Permit Management",
+        title: "8.5 Step 4: Site Verification (Admin/ICT)",
         content: [
-          "Go to MMP detail",
-          "Click 'Permit Upload'",
-          "Upload permit document",
-          "Enter: Permit Number, Issue Date, Expiry Date, Issuing Authority",
-          "Submit for verification"
+          "After approval, sites go through a verification process",
+          "Admin/ICT reviews each site entry to confirm: Location accuracy, Permit status, Fee structure correctness",
+          "Verified sites are marked with a green checkmark",
+          "The 'Verified Sites' tab shows all sites grouped by status: New Sites, Approved & Costed, Dispatched, Smart Assigned, Accepted, Ongoing, Completed, Rejected",
+          "Each sub-tab provides different views and actions appropriate to that stage",
+          "Cost assignment happens here: Enumerator Fee and Transport Fee are set based on classification level and site location"
         ]
       },
       {
-        title: "8.6 Dispatching Sites",
+        title: "8.6 Step 5: Dispatching Sites (FOM/Admin)",
         content: [
-          "Open the MMP",
-          "Select sites to dispatch",
-          "Choose dispatch mode: Open, State, Locality, Individual",
-          "Click 'Dispatch'"
+          "Once sites are verified and costed, they can be dispatched to field teams",
+          "Open the MMP and navigate to verified sites",
+          "Select the sites to dispatch (individually or in bulk)",
+          "Choose a dispatch mode:",
+          "  - Open Dispatch: Sites available to ALL qualified data collectors (first-come, first-served)",
+          "  - State Dispatch: Sites only visible to collectors in the same state",
+          "  - Locality Dispatch: Sites only visible to collectors in the same state AND locality",
+          "  - Individual Dispatch: Direct assignment to a specific data collector",
+          "Click 'Dispatch' to make sites available",
+          "Dispatched sites appear in collectors' 'Claimable' tab on mobile/web",
+          "Smart Assignment: The system can also auto-assign sites to nearby collectors based on GPS proximity, workload, and classification"
+        ]
+      },
+      {
+        title: "8.7 Step 6: Site Claiming (Data Collector - Mobile/Web)",
+        content: [
+          "Data Collectors open the MMP page on their mobile device or web browser",
+          "Three main tabs appear: Claimable (available sites), Assigned (smart-assigned sites), My Sites (claimed/accepted sites)",
+          "CLAIMABLE TAB: Shows all dispatched sites in the collector's area, grouped by State-Locality",
+          "  - Each site card shows: Site Name, Code, Activity Type, Planned Date, Fees",
+          "  - Click 'Claim Site' to reserve a site for yourself",
+          "  - The system uses atomic database transactions to prevent race conditions",
+          "  - Only ONE collector can successfully claim each site",
+          "  - Upon claiming, your classification fees (Enumerator Fee + Transport Fee) are calculated and locked in",
+          "ASSIGNED TAB: Shows sites assigned to you by the system or operations team",
+          "  - These are mandatory visits that must be completed",
+          "  - Click 'Accept' to acknowledge the assignment",
+          "  - Click 'Acknowledge Cost' to confirm the fee amount"
+        ]
+      },
+      {
+        title: "8.8 Step 7: My Sites Tabs (Data Collector - Mobile/Web)",
+        content: [
+          "After claiming or being assigned sites, they appear in the 'My Sites' section with four sub-tabs:",
+          "",
+          "INBOX TAB (Green): Shows sites that are ready to start - Accepted, Claimed, Dispatched, Assigned, Verified, or Approved status",
+          "  - These are sites waiting for you to begin the visit",
+          "  - Each site shows: Name, Code, Location, Activity Type, Status Badge, Total Fee",
+          "  - Actions available: 'Start Visit' button to begin the site visit, 'Request Advance' for transportation advance payment",
+          "  - Badge count shows the number of sites in your inbox",
+          "",
+          "DRAFTS TAB (Blue): Shows sites with 'In Progress' or 'Ongoing' status",
+          "  - These are site visits that you have STARTED but not yet COMPLETED",
+          "  - You can continue data collection on these sites",
+          "  - Actions available: 'Complete Site Visit' button to finish and submit data",
+          "  - GPS tracking is active during these visits",
+          "  - Data is saved locally and syncs when connected",
+          "  - Badge count shows the number of in-progress visits",
+          "",
+          "OUTBOX TAB (Yellow): Shows completed visits that are stored offline and waiting to sync",
+          "  - These visits were completed without internet connection",
+          "  - Data is stored locally on your device",
+          "  - When internet is available, data automatically syncs to the server",
+          "  - Once synced, the visit moves to the 'Sent' tab",
+          "  - Badge count shows the number of unsynced completed visits",
+          "",
+          "SENT TAB (Green): Shows fully completed and synced visits",
+          "  - These visits have been submitted to the server successfully",
+          "  - Payment has been calculated and credited to your wallet",
+          "  - View details of completed visits: date, location, photos, fees",
+          "  - No further actions required on these sites",
+          "  - Badge count shows the number of synced completed visits"
+        ]
+      },
+      {
+        title: "8.9 Step 8: Conducting a Site Visit",
+        content: [
+          "From the Inbox tab, tap 'Start Visit' on a site",
+          "The visit status changes to 'In Progress' and moves to the Drafts tab",
+          "GPS location is automatically captured when you arrive at the site",
+          "Data collection includes: GPS coordinates (automatic), Site photos (camera capture), Survey form responses, Observations and comments",
+          "You can pause and resume the visit if needed - data is saved locally",
+          "When all required data is collected, tap 'Complete Site Visit'",
+          "The system verifies all required fields are filled and photos are taken",
+          "Completed visit data is queued for server sync",
+          "If online: Data syncs immediately and payment is calculated",
+          "If offline: Data is stored in Outbox until internet connection is restored"
+        ]
+      },
+      {
+        title: "8.10 Step 9: Transportation Advance (Optional)",
+        content: [
+          "Before starting a visit, you can request a transportation advance",
+          "Available for sites with transport budget allocated (Transport Fee > 0)",
+          "From Inbox, click 'Request Advance' on an accepted/claimed site",
+          "Enter the requested amount (up to the allocated Transport Fee)",
+          "The request goes through two-tier approval: Supervisor approval (first level), then Admin/Finance approval (final level)",
+          "Approved advances are credited to your wallet immediately",
+          "When the site visit is completed, the advance is automatically deducted from the final payment",
+          "The wallet page shows a reconciliation of advances vs. earned fees",
+          "Digital signature-based receipt confirmation is required for advance acknowledgment"
+        ]
+      },
+      {
+        title: "8.11 Step 10: Visit Completion & Wallet Payment",
+        content: [
+          "When a site visit is marked as 'Completed' and synced to the server:",
+          "1. The system calculates the total payment: Enumerator Fee + Transport Fee",
+          "2. If a transportation advance was taken, it is deducted from the total",
+          "3. The net amount is credited to your digital wallet as a 'Site Visit Fee' transaction",
+          "4. A wallet transaction record is created with full details: Site Name, MMP reference, Fee breakdown, Date/Time",
+          "5. Your wallet balance is updated immediately",
+          "6. You receive a notification confirming the payment",
+          "",
+          "WALLET PAGE shows:",
+          "  - Current Balance: Available funds in SDG",
+          "  - Total Earned: Lifetime earnings from all completed visits",
+          "  - Pending: Amounts awaiting approval or processing",
+          "  - This Month: Current month's earnings",
+          "  - Transaction History: Full list of all credits, debits, advances, and withdrawals",
+          "  - Monthly Statement: Summary with advances receivable and reconciliation"
+        ]
+      },
+      {
+        title: "8.12 Complete Site Status Flow Chart",
+        content: [
+          "The complete lifecycle of a site from MMP upload to wallet payment follows this status flow:",
+          "",
+          "1. DRAFT → MMP uploaded, site entries created in the system",
+          "2. SUBMITTED → MMP sent for review by admin team",
+          "3. APPROVED → Admin approved the MMP and its site entries",
+          "4. VERIFIED → Individual sites verified for accuracy and fees assigned",
+          "5. DISPATCHED → Sites made available for field collectors (visible in Claimable tab)",
+          "6. CLAIMED → A data collector has claimed the site (locked to that collector)",
+          "7. ACCEPTED → The claim is confirmed, fees locked in (appears in Inbox tab)",
+          "8. IN PROGRESS → Collector has started the visit, GPS tracking active (appears in Drafts tab)",
+          "9. COMPLETED → Data collection finished, submitted to server (appears in Sent tab)",
+          "10. WALLET CREDITED → Payment automatically calculated and added to collector's wallet",
+          "",
+          "Additional statuses:",
+          "  - ASSIGNED: Site directly assigned to a collector (skips claiming)",
+          "  - ONGOING: Alternative status for visits in progress",
+          "  - REJECTED: Visit rejected by supervisor during verification",
+          "  - CANCELLED: Visit cancelled by admin or operations team",
+          "  - RECALLED: MMP recalled for modifications using the Multi-Tier Recall System"
+        ]
+      },
+      {
+        title: "8.13 MMP Tabs Reference (Admin/Operations View)",
+        content: [
+          "The MMP Management page provides different tabs for different stages of the workflow:",
+          "",
+          "NEW TAB: Recently uploaded MMPs awaiting review - Actions: Review, Approve, Reject, Edit",
+          "FORWARDED TAB: MMPs forwarded to FOM - Sub-tabs: Pending (awaiting FOM action), Verified (sites verified)",
+          "VERIFIED SITES TAB: All site entries across MMPs grouped by status:",
+          "  - New Sites: Freshly verified, ready for cost assignment",
+          "  - Approved & Costed: Fees assigned, ready for dispatch",
+          "  - Dispatched: Sites sent out to field teams",
+          "  - Smart Assigned: Sites auto-assigned by the system",
+          "  - Accepted: Sites accepted by collectors",
+          "  - Ongoing: Sites with active visits in progress",
+          "  - Completed: All visits finished",
+          "  - Rejected: Sites rejected during verification",
+          "TRACKER TAB: Coverage analytics and progress tracking",
+          "  - Shows completion percentages per hub, state, locality",
+          "  - PDM Sites calculation: Math.ceil(PDM count / 7) for accurate site counting",
+          "  - Export options for Excel and PDF reports"
+        ]
+      },
+      {
+        title: "8.14 MMP Features & Tools",
+        content: [
+          "MMP Recall System: Multi-tier recall allows Admin/FOM to recall an MMP at any stage for modifications",
+          "Visit Postponement: Reschedule planned visit dates with reason documentation",
+          "Date Range Visits: Configure visit windows instead of fixed dates",
+          "Auto-Release System: Automatically release unclaimed sites after configurable timeout",
+          "Coverage Gap Notifications: Alerts when sites in specific areas lack collector coverage",
+          "Smart Dispatch: Uber/Lyft-style system for matching collectors to sites based on proximity and availability",
+          "Historical Trends: View MMP completion trends over time with charts and analytics",
+          "Questionnaire Analytics: Dynamic visualizations of survey data collected during visits",
+          "Coverage Tracker: Track monitoring coverage with export to Excel (includes PDM Sites adjusted totals)"
         ]
       }
     ]
   },
   {
-    title: "9. Site Visits",
+    title: "9. Site Visits - Detailed Guide",
     content: [
-      "Site visits are the core operational unit of the PACT system."
+      "Site visits are the core operational unit of the PACT system. Each visit represents a data collector traveling to a field site to conduct monitoring, collect data, and document findings."
     ],
     subsections: [
       {
-        title: "9.1 Creating Site Visits",
+        title: "9.1 Site Visit Lifecycle Overview",
         content: [
-          "From MMP: Select from approved MMP sites",
-          "Urgent: Create ad-hoc urgent visit",
-          "Fill in: Site information, Planned date, Assigned collector, Special instructions",
-          "Click 'Create'"
+          "A site visit follows a structured lifecycle from dispatch to payment:",
+          "1. Site is dispatched by admin/FOM (made available for claiming)",
+          "2. Collector claims or is assigned the site",
+          "3. Collector travels to the site location",
+          "4. Collector starts the visit (GPS captured, status: In Progress)",
+          "5. Collector collects data, takes photos, fills survey forms",
+          "6. Collector completes the visit (status: Completed)",
+          "7. Data syncs to server (if offline, waits in Outbox)",
+          "8. Payment calculated and credited to wallet",
+          "9. Supervisor can verify the submission quality"
         ]
       },
       {
-        title: "9.2 Site Visit Status Flow",
+        title: "9.2 Site Visit Status Definitions",
         content: [
-          "Dispatched: Available for claiming",
-          "Claimed: Collector has claimed the site",
-          "Accepted: Claim approved, ready to start",
-          "Assigned: Directly assigned by operations",
-          "In Progress: Visit actively being conducted",
-          "Completed: Data collection finished",
-          "Verified: Supervisor has verified data",
-          "Cancelled: Visit cancelled"
+          "DISPATCHED: Site has been sent out and is available for collectors to claim. Appears in the 'Claimable' tab",
+          "CLAIMED: A collector has reserved the site. No other collector can claim it. Pending acceptance",
+          "ACCEPTED: The claim has been confirmed. The site is ready for the collector to visit. Appears in 'Inbox' tab",
+          "ASSIGNED: Site was directly assigned to a collector by admin/FOM (not through claiming). Appears in 'Inbox' tab",
+          "VERIFIED: Site entry has been verified by admin for accuracy and fees. Ready for dispatch",
+          "APPROVED: MMP or cost has been approved by the appropriate authority",
+          "IN PROGRESS: The collector has started the visit. GPS tracking is active. Data collection is underway. Appears in 'Drafts' tab",
+          "ONGOING: Alternative label for visits that are in progress (same as 'In Progress'). Appears in 'Drafts' tab",
+          "COMPLETED: Data collection is finished and submitted. Payment is calculated. Appears in 'Sent' tab",
+          "REJECTED: Visit was rejected during verification (poor data quality, wrong location, etc.)",
+          "CANCELLED: Visit was cancelled by admin or operations team"
         ]
       },
       {
-        title: "9.3 Conducting Site Visits",
+        title: "9.3 Mobile Tabs for Data Collectors",
         content: [
-          "View your assigned/claimed visits on the dashboard",
-          "Click on a visit to open details",
-          "Click 'Start Visit' to begin",
-          "Capture: GPS location (automatic), Photos, Form responses, Face verification (if required)",
-          "Click 'Complete Visit'"
+          "When a Data Collector opens the MMP/Sites page, they see these navigation levels:",
+          "",
+          "TOP LEVEL TABS:",
+          "  Claimable: Available sites you can claim (grouped by State-Locality)",
+          "  Assigned: Sites assigned to you by the system or admin (mandatory visits)",
+          "  My Sites: Your claimed and accepted sites (with sub-tabs below)",
+          "",
+          "MY SITES SUB-TABS:",
+          "  Inbox (Green): Sites ready to start - status is Accepted, Claimed, Assigned, Dispatched, Verified, or Approved",
+          "  Drafts (Blue): Visits in progress - status is 'In Progress' or 'Ongoing'. These are started but not yet completed",
+          "  Outbox (Yellow): Completed visits waiting to sync - stored offline, will auto-sync when connected",
+          "  Sent (Green): Fully completed and synced visits - payment has been processed",
+          "",
+          "Each tab shows a badge count indicating the number of sites in that category",
+          "The badge counts update in real-time as sites move between statuses"
         ]
       },
       {
-        title: "9.4 Completion Requirements",
+        title: "9.4 Starting a Site Visit",
         content: [
-          "GPS location captured",
-          "All required photos taken",
-          "All form fields completed",
-          "Data synced to server"
+          "From the Inbox tab, find the site you want to visit",
+          "Review the site details: Name, Code, Location, Activity Type, Fees",
+          "Ensure you are at or near the site location (GPS will be captured)",
+          "Tap the 'Start Visit' button (black button with Play icon)",
+          "The site status changes to 'In Progress'",
+          "The site card moves from Inbox to the Drafts tab",
+          "GPS location is captured automatically when you start",
+          "A timer begins tracking the visit duration",
+          "You can now begin data collection activities"
+        ]
+      },
+      {
+        title: "9.5 Completing a Site Visit",
+        content: [
+          "After collecting all required data at the site:",
+          "Navigate to the Drafts tab to find your in-progress visit",
+          "Tap the 'Complete Site Visit' button (green button)",
+          "The system checks that all required fields are completed",
+          "Final GPS location is captured for completion verification",
+          "Visit status changes to 'Completed'",
+          "If online: Data syncs immediately to the server, payment is calculated and credited to your wallet",
+          "If offline: Visit moves to the Outbox tab, data stored locally until internet is available",
+          "Once synced, the visit moves to the Sent tab",
+          "A notification confirms the visit completion and payment amount"
+        ]
+      },
+      {
+        title: "9.6 Offline Mode & Data Sync",
+        content: [
+          "The PACT system fully supports offline data collection for remote field areas:",
+          "You can start, conduct, and complete site visits without internet connection",
+          "All data (GPS, photos, form responses) is saved locally on your device",
+          "Completed offline visits appear in the Outbox tab",
+          "When internet connection is restored, data automatically syncs to the server",
+          "The sync process handles: GPS coordinates, captured photos, survey responses, visit timestamps",
+          "If sync fails, data remains safely stored locally and retries automatically",
+          "The Outbox badge count shows how many visits are waiting to sync",
+          "Never delete the app or clear app data while visits are in the Outbox"
+        ]
+      },
+      {
+        title: "9.7 Payment After Completion",
+        content: [
+          "When a visit is completed and synced to the server:",
+          "The system calculates payment based on your classification level fees:",
+          "  - Enumerator Fee: Base payment for the site visit",
+          "  - Transport Fee: Travel cost reimbursement",
+          "  - Total = Enumerator Fee + Transport Fee",
+          "If you received a transportation advance, it is deducted from the total",
+          "The net amount is credited to your digital wallet",
+          "A wallet transaction is created with: Site name, MMP reference, Fee breakdown, Transaction date",
+          "Your wallet balance updates immediately",
+          "View all transactions in the Wallet page under 'Transaction History'",
+          "Monthly statements show a summary of all earnings, advances, and net payments"
         ]
       }
     ]
@@ -488,41 +734,49 @@ const documentationSections: Section[] = [
       {
         title: "10.1 Dispatch Modes",
         content: [
-          "Open: Available to all qualified collectors - Any active data collector can claim",
-          "State: Limited to collectors in specific states - Collectors assigned to those states",
-          "Locality: Limited to collectors in specific localities - Collectors in matching state + locality",
-          "Individual: Direct assignment to specific person - Only the assigned collector"
+          "Open Dispatch: Sites available to ALL qualified data collectors across all locations - Any active collector can claim",
+          "State Dispatch: Sites only visible to collectors assigned to the same state - Limits claiming to that geographic area",
+          "Locality Dispatch: Sites only visible to collectors in the same state AND locality - Most targeted geographic restriction",
+          "Individual Dispatch: Direct assignment to a specific named data collector - Only that person can see and accept the site"
         ]
       },
       {
         title: "10.2 How Claiming Works",
         content: [
-          "Open the Site Visits or My Sites page",
-          "View available dispatched sites in your area",
-          "Click 'Claim' on a site you want to visit",
-          "The system instantly reserves the site for you",
-          "Wait for acceptance (or auto-accept if enabled)",
-          "Once accepted, the site appears in your assignments"
+          "Open the Sites page or MMP page on mobile/web",
+          "Navigate to the 'Claimable' tab to see dispatched sites in your area",
+          "Sites are grouped by State-Locality for easy browsing",
+          "Each site card shows: Site Name, Code, Activity, Date, CP Name, and Fee information",
+          "Tap 'Claim Site' on the site you want to visit",
+          "The system instantly reserves the site for you using atomic database transactions",
+          "Your classification level determines the Enumerator Fee and Transport Fee",
+          "Fees are calculated and locked in at claim time",
+          "The site moves from 'Claimable' to 'My Sites > Inbox'",
+          "Other collectors can no longer see or claim this site"
         ]
       },
       {
-        title: "10.3 Claim Protection",
+        title: "10.3 Claim Protection & Fairness",
         content: [
-          "Uses atomic database transactions (PostgreSQL RPC)",
-          "Only one collector can claim each site",
-          "Claims processed in order received",
-          "Failed claims show immediate feedback",
-          "No race conditions possible"
+          "Uses atomic database transactions (PostgreSQL RPC) for concurrency safety",
+          "Only ONE collector can successfully claim each site - prevents double-claiming",
+          "Claims are processed in the order received - first-come, first-served",
+          "If two collectors try to claim simultaneously, only the first succeeds",
+          "Failed claims show immediate feedback: 'Site already claimed by another collector'",
+          "Auto-Release System: Unclaimed sites can be automatically released after a configurable timeout period"
         ]
       },
       {
         title: "10.4 Fee Calculation at Claim Time",
         content: [
-          "Your classification level (A, B, C) is checked",
-          "The fee structure for your classification is applied",
-          "Enumerator fee and transport fee are calculated",
-          "Fees are locked in at claim time",
-          "Upon completion, fees are credited to your wallet"
+          "When you claim a site, the system automatically calculates your payment:",
+          "1. Your classification level (A/Senior, B/Standard, C/Junior) is retrieved from your profile",
+          "2. The fee structure for your classification is applied to the site",
+          "3. Enumerator Fee: Base payment amount for your classification level",
+          "4. Transport Fee: Travel reimbursement based on site location and classification",
+          "5. Total Cost = Enumerator Fee + Transport Fee",
+          "6. Fees are locked in at claim time and cannot change after",
+          "7. Upon successful completion of the site visit, the total amount is credited to your wallet"
         ]
       }
     ]
@@ -2355,62 +2609,421 @@ const arabicDocumentationSections: Section[] = [
     ]
   },
   {
-    title: "3. خطط المراقبة الشهرية (MMPs)",
+    title: "3. خطط المراقبة الشهرية (MMPs) - الدليل الشامل",
     content: [
-      "خطط المراقبة الشهرية هي خطط منظمة تحدد المواقع المراد مراقبتها والجدول الزمني والأفراد والميزانية."
+      "خطط المراقبة الشهرية (MMPs) هي العمود الفقري للعمليات الميدانية في PACT. تحدد خطة المراقبة الشهرية المواقع التي تحتاج إلى زيارات مراقبة خلال فترة معينة، بما في ذلك جدول المراقبة، والأفراد المعينين، وتخصيص الميزانية، ومتطلبات التصاريح. يقدم هذا القسم دليلاً شاملاً من رفع خطة المراقبة إلى إتمام جميع الزيارات واستلام المدفوعات."
     ],
     subsections: [
       {
-        title: "3.1 مراحل سير عمل MMP",
+        title: "3.1 فهم خطط المراقبة الشهرية",
         content: [
-          "مسودة: الرفع الأولي - تحرير، حذف",
-          "مقدم: بانتظار المراجعة",
-          "قيد المراجعة: جاري المراجعة - موافقة، رفض، طلب تعديلات",
-          "معتمد: جاهز للإرسال - إرسال إلى مدير العمليات الميدانية",
-          "محال إلى FOM: لدى العمليات الميدانية - تعيين المنسقين",
-          "مرسل: المواقع معينة - متابعة التقدم",
-          "مكتمل: جميع الزيارات تمت - أرشفة",
-          "مؤرشف: سجل تاريخي - عرض فقط"
+          "تحتوي خطة المراقبة على قائمة بالمواقع الميدانية التي تحتاج زيارات مراقبة خلال شهر أو فترة محددة",
+          "كل إدخال موقع يتضمن: رمز الموقع، اسم الموقع، الولاية، المحلية، مكتب المحور، نوع النشاط، اسم الشريك المتعاون (CP)، تاريخ الزيارة المخطط",
+          "الأنشطة تشمل: AM (سوء التغذية الحاد)، DM (مراقبة التوزيع)، MDM (مراقبة السوق/الجفاف)، PDM (مراقبة ما بعد التوزيع)، مراقبة المستودعات",
+          "تمر خطط المراقبة بعملية موافقة متعددة المراحل قبل أن تصبح المواقع متاحة للزيارات الميدانية",
+          "كل خطة مراقبة مرتبطة بمشروع ويمكن أن تحتوي على مئات الإدخالات عبر ولايات ومحليات متعددة"
         ]
       },
       {
-        title: "3.2 رفع ملف MMP بصيغة CSV",
+        title: "3.2 الخطوة 1: رفع خطة المراقبة (المسؤول/تكنولوجيا المعلومات/المنسق)",
         content: [
-          "الأعمدة المطلوبة: site_code، site_name، state، locality، planned_date",
-          "الأعمدة الاختيارية: classification، special_requirements",
-          "تنسيق التاريخ: YYYY-MM-DD",
-          "تنسيق الملف: CSV بترميز UTF-8"
+          "انتقل إلى 'إدارة خطط المراقبة' من الشريط الجانبي",
+          "اضغط على زر 'رفع MMP'",
+          "اختر المشروع الذي تنتمي إليه هذه الخطة",
+          "اختر وارفع ملف CSV يحتوي على إدخالات المواقع",
+          "الأعمدة المطلوبة في CSV: site_code، site_name، state، locality، hub_office، activity_at_site، cp_name، visit_date",
+          "الأعمدة الاختيارية: monitoring_by، survey_tool، comments، classification، special_requirements",
+          "يتحقق النظام من بيانات CSV باستخدام مخطط التحقق Zod",
+          "فحوصات التحقق: الحقول المطلوبة موجودة، تنسيق التاريخ صحيح، لا توجد رموز مواقع مكررة",
+          "إذا نجح التحقق، يتم إنشاء خطة المراقبة بحالة 'مسودة'",
+          "إذا فشل التحقق، تظهر رسائل خطأ توضح الصفوف/الأعمدة التي تحتاج تصحيح",
+          "يمكنك أيضاً استخدام محلل رفع Excel للاستيراد بالجملة مع ميزات التعبئة التلقائية"
+        ]
+      },
+      {
+        title: "3.3 الخطوة 2: مراجعة واعتماد خطة المراقبة (المسؤول/تكنولوجيا المعلومات)",
+        content: [
+          "انتقل إلى تبويب 'جديد' في إدارة خطط المراقبة لعرض الخطط المرفوعة",
+          "اضغط على خطة مراقبة لعرض تفاصيلها وإدخالات المواقع",
+          "راجع كل إدخال موقع للتأكد من الدقة: رموز المواقع صحيحة، ربط الولاية/المحلية صحيح، التواريخ سليمة",
+          "يمكن للمسؤول تعديل إدخالات المواقع الفردية إذا لزم التصحيح",
+          "الخيارات المتاحة: اعتماد (ينقل إلى حالة 'معتمد')، رفض (يعود للمرفوع مع ملاحظات)، طلب تعديلات (يرسل مرة أخرى للتعديل)",
+          "الخطط المعتمدة تصبح مؤهلة للمرحلة التالية: الإحالة إلى مدير العمليات الميدانية (FOM)",
+          "إجراء 'إحالة إلى FOM' يرسل خطة المراقبة لفريق العمليات الميدانية للتخطيط للإرسال"
+        ]
+      },
+      {
+        title: "3.4 الخطوة 3: التحقق من التصاريح (إذا لزم)",
+        content: [
+          "بعض المحليات تتطلب تصاريح مراقبة قبل أن تتمكن الزيارات الميدانية من المضي قدماً",
+          "يفحص النظام تكوين متطلبات تصريح المحلية لكل موقع",
+          "إذا كان التصريح مطلوباً، يظهر خيار 'رفع التصريح' في صفحة تفاصيل الخطة",
+          "ارفع وثيقة التصريح (PDF/صورة)",
+          "أدخل تفاصيل التصريح: رقم التصريح، تاريخ الإصدار، تاريخ الانتهاء، جهة الإصدار",
+          "أرسل التصريح للتحقق من فريق المسؤولين",
+          "المواقع التي تفتقر للتصاريح المطلوبة ستُعلَّم ولن يمكن إرسالها",
+          "بعد التحقق، يتم ربط التصريح بإدخالات المواقع ذات الصلة"
+        ]
+      },
+      {
+        title: "3.5 الخطوة 4: التحقق من المواقع (المسؤول/تكنولوجيا المعلومات)",
+        content: [
+          "بعد الاعتماد، تمر المواقع بعملية تحقق",
+          "يراجع المسؤول/تكنولوجيا المعلومات كل إدخال موقع لتأكيد: دقة الموقع، حالة التصريح، صحة هيكل الرسوم",
+          "المواقع المتحقق منها تُعلَّم بعلامة صح خضراء",
+          "تبويب 'المواقع المتحقق منها' يعرض جميع المواقع مجمعة حسب الحالة: مواقع جديدة، معتمدة ومُكلَّفة، مُرسَلة، معينة ذكياً، مقبولة، جارية، مكتملة، مرفوضة",
+          "كل تبويب فرعي يوفر عروض وإجراءات مناسبة لتلك المرحلة",
+          "تعيين التكلفة يحدث هنا: يتم تحديد رسوم الجامع ورسوم النقل بناءً على مستوى التصنيف وموقع الموقع"
+        ]
+      },
+      {
+        title: "3.6 الخطوة 5: إرسال المواقع (مدير العمليات/المسؤول)",
+        content: [
+          "بمجرد التحقق من المواقع وتحديد تكلفتها، يمكن إرسالها لفرق الميدان",
+          "افتح خطة المراقبة وانتقل إلى المواقع المتحقق منها",
+          "اختر المواقع للإرسال (فردياً أو بالجملة)",
+          "اختر نمط الإرسال:",
+          "  - إرسال مفتوح: المواقع متاحة لجميع جامعي البيانات المؤهلين (أول من يطالب أولاً)",
+          "  - إرسال بالولاية: المواقع مرئية فقط للجامعين في نفس الولاية",
+          "  - إرسال بالمحلية: المواقع مرئية فقط للجامعين في نفس الولاية والمحلية",
+          "  - إرسال فردي: تعيين مباشر لجامع بيانات محدد بالاسم",
+          "اضغط 'إرسال' لجعل المواقع متاحة",
+          "المواقع المُرسَلة تظهر في تبويب 'المتاحة للمطالبة' على الهاتف/الويب",
+          "التعيين الذكي: يمكن للنظام تعيين المواقع تلقائياً للجامعين القريبين بناءً على موقع GPS والعبء الوظيفي والتصنيف"
+        ]
+      },
+      {
+        title: "3.7 الخطوة 6: المطالبة بالموقع (جامع البيانات - هاتف/ويب)",
+        content: [
+          "يفتح جامعو البيانات صفحة MMP على جهازهم المحمول أو متصفح الويب",
+          "تظهر ثلاثة تبويبات رئيسية: المتاحة للمطالبة (المواقع المتاحة)، المعينة (المواقع المعينة ذكياً)، مواقعي (المواقع المطالب بها/المقبولة)",
+          "تبويب المتاحة: يعرض جميع المواقع المُرسَلة في منطقة الجامع، مجمعة حسب الولاية-المحلية",
+          "  - كل بطاقة موقع تعرض: اسم الموقع، الرمز، نوع النشاط، التاريخ المخطط، الرسوم",
+          "  - اضغط 'مطالبة بالموقع' لحجز الموقع لنفسك",
+          "  - يستخدم النظام معاملات قاعدة بيانات ذرية لمنع حالات السباق",
+          "  - جامع واحد فقط يمكنه المطالبة بكل موقع بنجاح",
+          "  - عند المطالبة، يتم حساب رسوم تصنيفك (رسوم الجامع + رسوم النقل) وتثبيتها",
+          "تبويب المعينة: يعرض المواقع المعينة لك من النظام أو فريق العمليات",
+          "  - هذه زيارات إلزامية يجب إتمامها",
+          "  - اضغط 'قبول' للإقرار بالتعيين",
+          "  - اضغط 'إقرار بالتكلفة' لتأكيد مبلغ الرسوم"
+        ]
+      },
+      {
+        title: "3.8 الخطوة 7: تبويبات مواقعي (جامع البيانات - هاتف/ويب)",
+        content: [
+          "بعد المطالبة بالمواقع أو تعيينها، تظهر في قسم 'مواقعي' مع أربعة تبويبات فرعية:",
+          "",
+          "تبويب البريد الوارد (أخضر): يعرض المواقع الجاهزة للبدء - حالات مقبول، مطالب به، مرسل، معين، متحقق، أو معتمد",
+          "  - هذه مواقع تنتظرك لبدء الزيارة",
+          "  - كل موقع يعرض: الاسم، الرمز، الموقع، نوع النشاط، شارة الحالة، إجمالي الرسوم",
+          "  - الإجراءات المتاحة: زر 'بدء الزيارة' لبدء زيارة الموقع، 'طلب سلفة' لسلفة النقل",
+          "  - عدد الشارات يظهر عدد المواقع في بريدك الوارد",
+          "",
+          "تبويب المسودات (أزرق): يعرض المواقع بحالة 'قيد التنفيذ' أو 'جاري'",
+          "  - هذه زيارات بدأتها ولم تكملها بعد",
+          "  - يمكنك متابعة جمع البيانات في هذه المواقع",
+          "  - الإجراءات المتاحة: زر 'إكمال زيارة الموقع' لإنهاء وإرسال البيانات",
+          "  - تتبع GPS نشط خلال هذه الزيارات",
+          "  - البيانات تُحفظ محلياً وتُزامن عند الاتصال",
+          "  - عدد الشارات يظهر عدد الزيارات قيد التنفيذ",
+          "",
+          "تبويب صندوق الصادر (أصفر): يعرض الزيارات المكتملة المخزنة بدون اتصال وتنتظر المزامنة",
+          "  - هذه الزيارات اكتملت بدون اتصال بالإنترنت",
+          "  - البيانات مخزنة محلياً على جهازك",
+          "  - عند توفر الإنترنت، تُزامن البيانات تلقائياً مع الخادم",
+          "  - بعد المزامنة، تنتقل الزيارة إلى تبويب 'المُرسَل'",
+          "  - عدد الشارات يظهر عدد الزيارات المكتملة غير المُزامنة",
+          "",
+          "تبويب المُرسَل (أخضر): يعرض الزيارات المكتملة والمُزامنة بالكامل",
+          "  - هذه الزيارات تم إرسالها للخادم بنجاح",
+          "  - تم حساب الدفع وإيداعه في محفظتك",
+          "  - اعرض تفاصيل الزيارات المكتملة: التاريخ، الموقع، الصور، الرسوم",
+          "  - لا حاجة لإجراءات إضافية على هذه المواقع",
+          "  - عدد الشارات يظهر عدد الزيارات المكتملة والمُزامنة"
+        ]
+      },
+      {
+        title: "3.9 الخطوة 8: إجراء زيارة الموقع",
+        content: [
+          "من تبويب البريد الوارد، اضغط 'بدء الزيارة' على الموقع المطلوب",
+          "تتغير حالة الزيارة إلى 'قيد التنفيذ' وتنتقل إلى تبويب المسودات",
+          "يتم التقاط موقع GPS تلقائياً عند وصولك للموقع",
+          "جمع البيانات يشمل: إحداثيات GPS (تلقائي)، صور الموقع (التقاط بالكاميرا)، إجابات نموذج الاستبيان، ملاحظات وتعليقات",
+          "يمكنك إيقاف الزيارة واستئنافها إذا لزم الأمر - البيانات تُحفظ محلياً",
+          "عند جمع جميع البيانات المطلوبة، اضغط 'إكمال زيارة الموقع'",
+          "يتحقق النظام من ملء جميع الحقول المطلوبة والتقاط الصور",
+          "بيانات الزيارة المكتملة تُوضع في قائمة الانتظار للمزامنة مع الخادم",
+          "إذا كان متصلاً: تُزامن البيانات فوراً ويُحسب الدفع",
+          "إذا كان غير متصل: تُخزن البيانات في صندوق الصادر حتى يتوفر الاتصال"
+        ]
+      },
+      {
+        title: "3.10 الخطوة 9: سلفة النقل (اختياري)",
+        content: [
+          "قبل بدء الزيارة، يمكنك طلب سلفة نقل",
+          "متاحة للمواقع التي لديها ميزانية نقل مخصصة (رسوم النقل > 0)",
+          "من البريد الوارد، اضغط 'طلب سلفة' على موقع مقبول/مطالب به",
+          "أدخل المبلغ المطلوب (حتى رسوم النقل المخصصة)",
+          "الطلب يمر بموافقة من مرحلتين: موافقة المشرف (المرحلة الأولى)، ثم موافقة المسؤول/المالية (المرحلة النهائية)",
+          "السلف المعتمدة تُضاف لمحفظتك فوراً",
+          "عند إكمال زيارة الموقع، تُخصم السلفة تلقائياً من الدفعة النهائية",
+          "صفحة المحفظة تعرض مطابقة السلف مقابل الرسوم المكتسبة",
+          "يتطلب تأكيد الاستلام القائم على التوقيع الرقمي لإقرار السلفة"
+        ]
+      },
+      {
+        title: "3.11 الخطوة 10: إكمال الزيارة ودفع المحفظة",
+        content: [
+          "عندما تُعلَّم زيارة الموقع بحالة 'مكتملة' وتُزامن مع الخادم:",
+          "1. يحسب النظام إجمالي الدفع: رسوم الجامع + رسوم النقل",
+          "2. إذا أُخذت سلفة نقل، تُخصم من الإجمالي",
+          "3. يُضاف المبلغ الصافي لمحفظتك الرقمية كمعاملة 'رسوم زيارة موقع'",
+          "4. يُنشأ سجل معاملة محفظة بكامل التفاصيل: اسم الموقع، مرجع MMP، تفصيل الرسوم، التاريخ/الوقت",
+          "5. يُحدَّث رصيد محفظتك فوراً",
+          "6. تتلقى إشعاراً يؤكد الدفع",
+          "",
+          "صفحة المحفظة تعرض:",
+          "  - الرصيد الحالي: الأموال المتاحة بالجنيه السوداني",
+          "  - إجمالي الأرباح: الأرباح مدى الحياة من جميع الزيارات المكتملة",
+          "  - معلق: المبالغ التي تنتظر الموافقة أو المعالجة",
+          "  - هذا الشهر: أرباح الشهر الحالي",
+          "  - سجل المعاملات: قائمة كاملة بجميع الإضافات والخصومات والسلف والسحوبات",
+          "  - كشف شهري: ملخص مع السلف المستحقة والمطابقة"
+        ]
+      },
+      {
+        title: "3.12 مخطط تدفق حالات الموقع الكامل",
+        content: [
+          "دورة حياة الموقع الكاملة من رفع خطة المراقبة إلى دفع المحفظة تتبع هذا المسار:",
+          "",
+          "1. مسودة ← خطة المراقبة مرفوعة، إدخالات المواقع مُنشأة في النظام",
+          "2. مقدم ← خطة المراقبة مُرسلة للمراجعة من فريق المسؤولين",
+          "3. معتمد ← المسؤول اعتمد خطة المراقبة وإدخالات مواقعها",
+          "4. متحقق ← المواقع الفردية تم التحقق منها للدقة والرسوم مُعيَّنة",
+          "5. مُرسَل ← المواقع متاحة لجامعي البيانات (مرئية في تبويب المتاحة)",
+          "6. مُطالب به ← جامع بيانات طالب بالموقع (مقفل لذلك الجامع)",
+          "7. مقبول ← المطالبة مُؤكدة، الرسوم مُثبتة (يظهر في تبويب البريد الوارد)",
+          "8. قيد التنفيذ ← الجامع بدأ الزيارة، تتبع GPS نشط (يظهر في تبويب المسودات)",
+          "9. مكتمل ← جمع البيانات انتهى، أُرسل للخادم (يظهر في تبويب المُرسَل)",
+          "10. إيداع المحفظة ← الدفع يُحسب تلقائياً ويُضاف لمحفظة الجامع",
+          "",
+          "حالات إضافية:",
+          "  - معين: الموقع معين مباشرة لجامع (يتخطى المطالبة)",
+          "  - جاري: حالة بديلة للزيارات قيد التنفيذ",
+          "  - مرفوض: الزيارة رُفضت من المشرف أثناء التحقق",
+          "  - ملغى: الزيارة أُلغيت من المسؤول أو فريق العمليات",
+          "  - مُسترجع: خطة المراقبة استُرجعت للتعديلات باستخدام نظام الاسترجاع متعدد المستويات"
+        ]
+      },
+      {
+        title: "3.13 مرجع تبويبات MMP (عرض المسؤول/العمليات)",
+        content: [
+          "صفحة إدارة خطط المراقبة توفر تبويبات مختلفة لمراحل مختلفة من سير العمل:",
+          "",
+          "تبويب جديد: خطط المراقبة المرفوعة حديثاً بانتظار المراجعة - الإجراءات: مراجعة، اعتماد، رفض، تحرير",
+          "تبويب المُحالة: خطط المراقبة المُحالة لمدير العمليات - تبويبات فرعية: معلقة (بانتظار إجراء FOM)، متحقق منها (مواقع تم التحقق منها)",
+          "تبويب المواقع المتحقق منها: جميع إدخالات المواقع عبر خطط المراقبة مجمعة حسب الحالة:",
+          "  - مواقع جديدة: متحقق منها حديثاً، جاهزة لتعيين التكلفة",
+          "  - معتمدة ومُكلَّفة: الرسوم مُعيَّنة، جاهزة للإرسال",
+          "  - مُرسَلة: المواقع أُرسلت لفرق الميدان",
+          "  - معينة ذكياً: المواقع مُعيَّنة تلقائياً من النظام",
+          "  - مقبولة: المواقع قبلها الجامعون",
+          "  - جارية: المواقع بزيارات نشطة قيد التنفيذ",
+          "  - مكتملة: جميع الزيارات انتهت",
+          "  - مرفوضة: المواقع رُفضت أثناء التحقق",
+          "تبويب المتتبع: تحليلات التغطية وتتبع التقدم",
+          "  - يعرض نسب الإنجاز لكل محور، ولاية، محلية",
+          "  - حساب مواقع PDM: Math.ceil(عدد PDM / 7) لحساب المواقع بدقة",
+          "  - خيارات التصدير لتقارير Excel وPDF"
+        ]
+      },
+      {
+        title: "3.14 ميزات وأدوات MMP",
+        content: [
+          "نظام استرجاع MMP: الاسترجاع متعدد المستويات يسمح للمسؤول/مدير العمليات باسترجاع خطة مراقبة في أي مرحلة للتعديلات",
+          "تأجيل الزيارة: إعادة جدولة تواريخ الزيارات المخططة مع توثيق السبب",
+          "زيارات بنطاق تاريخ: تكوين نوافذ زيارة بدلاً من تواريخ ثابتة",
+          "نظام الإفراج التلقائي: الإفراج التلقائي عن المواقع غير المطالب بها بعد فترة مهلة قابلة للتكوين",
+          "إشعارات فجوة التغطية: تنبيهات عندما تفتقر المواقع في مناطق محددة لتغطية الجامعين",
+          "الإرسال الذكي: نظام بأسلوب أوبر/ليفت لمطابقة الجامعين بالمواقع بناءً على القرب والتوفر",
+          "الاتجاهات التاريخية: عرض اتجاهات إنجاز خطط المراقبة عبر الزمن مع مخططات وتحليلات",
+          "تحليلات الاستبيانات: تصورات ديناميكية لبيانات الاستبيانات المجمعة أثناء الزيارات",
+          "متتبع التغطية: تتبع تغطية المراقبة مع التصدير إلى Excel (يشمل إجماليات مواقع PDM المُعدلة)"
         ]
       }
     ]
   },
   {
-    title: "4. زيارات المواقع",
+    title: "4. زيارات المواقع - دليل مفصل",
     content: [
-      "زيارات المواقع هي الوحدة التشغيلية الأساسية في نظام PACT."
+      "زيارات المواقع هي الوحدة التشغيلية الأساسية في نظام PACT. كل زيارة تمثل سفر جامع بيانات إلى موقع ميداني لإجراء المراقبة وجمع البيانات وتوثيق النتائج."
     ],
     subsections: [
       {
-        title: "4.1 مسار حالة الزيارة",
+        title: "4.1 نظرة عامة على دورة حياة زيارة الموقع",
         content: [
-          "مرسل: متاح للمطالبة",
-          "مطالب به: الجامع طالب بالموقع",
-          "مقبول: الطلب وُوفق عليه، جاهز للبدء",
-          "معين: تعيين مباشر من العمليات",
-          "قيد التنفيذ: الزيارة جارية",
-          "مكتمل: جمع البيانات انتهى",
-          "تم التحقق: المشرف تحقق من البيانات",
-          "ملغى: الزيارة ألغيت"
+          "تتبع زيارة الموقع دورة حياة منظمة من الإرسال إلى الدفع:",
+          "1. يُرسَل الموقع من المسؤول/مدير العمليات (يُتاح للمطالبة)",
+          "2. يطالب الجامع بالموقع أو يُعيَّن له",
+          "3. يسافر الجامع إلى موقع الموقع",
+          "4. يبدأ الجامع الزيارة (يُلتقط GPS، الحالة: قيد التنفيذ)",
+          "5. يجمع الجامع البيانات، يلتقط الصور، يملأ نماذج الاستبيان",
+          "6. يُكمل الجامع الزيارة (الحالة: مكتمل)",
+          "7. تُزامن البيانات مع الخادم (إذا كان غير متصل، تنتظر في صندوق الصادر)",
+          "8. يُحسب الدفع ويُضاف للمحفظة",
+          "9. يمكن للمشرف التحقق من جودة البيانات المقدمة"
         ]
       },
       {
-        title: "4.2 نظام المطالبة بالمواقع",
+        title: "4.2 تعريفات حالات زيارة الموقع",
         content: [
-          "يعمل مثل أوبر/ليفت - المواقع متاحة ويمكن للجامعين المطالبة بها",
-          "أنماط الإرسال: مفتوح (للجميع)، بالولاية، بالمحلية، فردي",
-          "يستخدم معاملات قاعدة بيانات ذرية (PostgreSQL RPC)",
-          "جامع واحد فقط يمكنه المطالبة بكل موقع",
-          "الرسوم تُحسب وتُثبت عند وقت المطالبة"
+          "مُرسَل: الموقع أُرسل ومتاح للجامعين للمطالبة. يظهر في تبويب 'المتاحة'",
+          "مُطالب به: جامع حجز الموقع. لا يمكن لجامع آخر المطالبة به. بانتظار القبول",
+          "مقبول: المطالبة مُؤكدة. الموقع جاهز لزيارة الجامع. يظهر في تبويب 'البريد الوارد'",
+          "معين: الموقع عُيِّن مباشرة لجامع من المسؤول/مدير العمليات (ليس عبر المطالبة). يظهر في تبويب 'البريد الوارد'",
+          "متحقق: إدخال الموقع تم التحقق منه من المسؤول للدقة والرسوم. جاهز للإرسال",
+          "معتمد: خطة المراقبة أو التكلفة اعتُمدت من الجهة المختصة",
+          "قيد التنفيذ: الجامع بدأ الزيارة. تتبع GPS نشط. جمع البيانات جارٍ. يظهر في تبويب 'المسودات'",
+          "جاري: تسمية بديلة للزيارات قيد التنفيذ (نفس 'قيد التنفيذ'). يظهر في تبويب 'المسودات'",
+          "مكتمل: جمع البيانات انتهى وأُرسل. يُحسب الدفع. يظهر في تبويب 'المُرسَل'",
+          "مرفوض: الزيارة رُفضت أثناء التحقق (جودة بيانات ضعيفة، موقع خاطئ، إلخ.)",
+          "ملغى: الزيارة أُلغيت من المسؤول أو فريق العمليات"
+        ]
+      },
+      {
+        title: "4.3 تبويبات الهاتف لجامعي البيانات",
+        content: [
+          "عندما يفتح جامع البيانات صفحة MMP/المواقع، يرى مستويات التنقل التالية:",
+          "",
+          "تبويبات المستوى الأعلى:",
+          "  المتاحة: المواقع المتاحة التي يمكنك المطالبة بها (مجمعة حسب الولاية-المحلية)",
+          "  المعينة: المواقع المعينة لك من النظام أو المسؤول (زيارات إلزامية)",
+          "  مواقعي: المواقع المطالب بها والمقبولة (مع تبويبات فرعية أدناه)",
+          "",
+          "تبويبات فرعية لمواقعي:",
+          "  البريد الوارد (أخضر): المواقع الجاهزة للبدء - الحالة مقبول، مطالب به، معين، مرسل، متحقق، أو معتمد",
+          "  المسودات (أزرق): الزيارات قيد التنفيذ - الحالة 'قيد التنفيذ' أو 'جاري'. هذه بدأت ولم تكتمل بعد",
+          "  صندوق الصادر (أصفر): الزيارات المكتملة بانتظار المزامنة - مخزنة بدون اتصال، ستُزامن تلقائياً عند الاتصال",
+          "  المُرسَل (أخضر): الزيارات المكتملة والمُزامنة بالكامل - تمت معالجة الدفع",
+          "",
+          "كل تبويب يعرض عدد شارات يشير لعدد المواقع في تلك الفئة",
+          "أعداد الشارات تُحدَّث في الوقت الحقيقي مع انتقال المواقع بين الحالات"
+        ]
+      },
+      {
+        title: "4.4 بدء زيارة الموقع",
+        content: [
+          "من تبويب البريد الوارد، جد الموقع الذي تريد زيارته",
+          "راجع تفاصيل الموقع: الاسم، الرمز، الموقع، نوع النشاط، الرسوم",
+          "تأكد من أنك في الموقع أو بالقرب منه (سيُلتقط GPS)",
+          "اضغط زر 'بدء الزيارة' (زر أسود بأيقونة تشغيل)",
+          "تتغير حالة الموقع إلى 'قيد التنفيذ'",
+          "تنتقل بطاقة الموقع من البريد الوارد إلى تبويب المسودات",
+          "يُلتقط موقع GPS تلقائياً عند البدء",
+          "يبدأ مؤقت تتبع مدة الزيارة",
+          "يمكنك الآن بدء أنشطة جمع البيانات"
+        ]
+      },
+      {
+        title: "4.5 إكمال زيارة الموقع",
+        content: [
+          "بعد جمع جميع البيانات المطلوبة في الموقع:",
+          "انتقل إلى تبويب المسودات لإيجاد زيارتك قيد التنفيذ",
+          "اضغط زر 'إكمال زيارة الموقع' (زر أخضر)",
+          "يتحقق النظام من ملء جميع الحقول المطلوبة",
+          "يُلتقط موقع GPS النهائي للتحقق من الإكمال",
+          "تتغير حالة الزيارة إلى 'مكتمل'",
+          "إذا متصل: تُزامن البيانات فوراً مع الخادم، يُحسب الدفع ويُضاف لمحفظتك",
+          "إذا غير متصل: تنتقل الزيارة لتبويب صندوق الصادر، البيانات تُخزن محلياً حتى يتوفر الإنترنت",
+          "بمجرد المزامنة، تنتقل الزيارة لتبويب المُرسَل",
+          "إشعار يؤكد إكمال الزيارة ومبلغ الدفع"
+        ]
+      },
+      {
+        title: "4.6 الوضع بدون اتصال ومزامنة البيانات",
+        content: [
+          "نظام PACT يدعم بالكامل جمع البيانات بدون اتصال للمناطق الميدانية النائية:",
+          "يمكنك بدء وإجراء وإكمال زيارات المواقع بدون اتصال بالإنترنت",
+          "جميع البيانات (GPS، الصور، إجابات النماذج) تُحفظ محلياً على جهازك",
+          "الزيارات المكتملة بدون اتصال تظهر في تبويب صندوق الصادر",
+          "عند استعادة الاتصال بالإنترنت، تُزامن البيانات تلقائياً مع الخادم",
+          "عملية المزامنة تتعامل مع: إحداثيات GPS، الصور الملتقطة، إجابات الاستبيان، طوابع وقت الزيارة",
+          "إذا فشلت المزامنة، تبقى البيانات مخزنة محلياً بأمان وتُعاد المحاولة تلقائياً",
+          "عدد شارات صندوق الصادر يظهر كم زيارة تنتظر المزامنة",
+          "لا تحذف التطبيق أو تمسح بيانات التطبيق أبداً بينما هناك زيارات في صندوق الصادر"
+        ]
+      },
+      {
+        title: "4.7 الدفع بعد الإكمال",
+        content: [
+          "عند إكمال الزيارة ومزامنتها مع الخادم:",
+          "يحسب النظام الدفع بناءً على رسوم مستوى تصنيفك:",
+          "  - رسوم الجامع: الدفع الأساسي لزيارة الموقع",
+          "  - رسوم النقل: تعويض تكاليف السفر",
+          "  - الإجمالي = رسوم الجامع + رسوم النقل",
+          "إذا حصلت على سلفة نقل، تُخصم من الإجمالي",
+          "يُضاف المبلغ الصافي لمحفظتك الرقمية",
+          "تُنشأ معاملة محفظة بالتفاصيل: اسم الموقع، مرجع MMP، تفصيل الرسوم، تاريخ المعاملة",
+          "يُحدَّث رصيد محفظتك فوراً",
+          "اعرض جميع المعاملات في صفحة المحفظة تحت 'سجل المعاملات'",
+          "الكشوف الشهرية تعرض ملخصاً لجميع الأرباح والسلف والمدفوعات الصافية"
+        ]
+      }
+    ]
+  },
+  {
+    title: "5. نظام المطالبة بالمواقع",
+    content: [
+      "نظام الإرسال بالمطالبة الأولى يعمل مثل أوبر/ليفت - المواقع تُتاح وجامعو البيانات الميدانيون يمكنهم المطالبة بها على أساس أول من يأتي أولاً."
+    ],
+    subsections: [
+      {
+        title: "5.1 أنماط الإرسال",
+        content: [
+          "إرسال مفتوح: المواقع متاحة لجميع جامعي البيانات المؤهلين عبر جميع المواقع - أي جامع نشط يمكنه المطالبة",
+          "إرسال بالولاية: المواقع مرئية فقط للجامعين المعينين في نفس الولاية - يحد المطالبة لتلك المنطقة الجغرافية",
+          "إرسال بالمحلية: المواقع مرئية فقط للجامعين في نفس الولاية والمحلية - أكثر تقييد جغرافي استهدافاً",
+          "إرسال فردي: تعيين مباشر لجامع بيانات محدد بالاسم - فقط ذلك الشخص يمكنه رؤية وقبول الموقع"
+        ]
+      },
+      {
+        title: "5.2 كيف تعمل المطالبة",
+        content: [
+          "افتح صفحة المواقع أو صفحة MMP على الهاتف/الويب",
+          "انتقل إلى تبويب 'المتاحة' لرؤية المواقع المُرسَلة في منطقتك",
+          "المواقع مجمعة حسب الولاية-المحلية لسهولة التصفح",
+          "كل بطاقة موقع تعرض: اسم الموقع، الرمز، النشاط، التاريخ، اسم الشريك، ومعلومات الرسوم",
+          "اضغط 'مطالبة بالموقع' على الموقع الذي تريد زيارته",
+          "يحجز النظام الموقع لك فوراً باستخدام معاملات قاعدة بيانات ذرية",
+          "مستوى تصنيفك يحدد رسوم الجامع ورسوم النقل",
+          "الرسوم تُحسب وتُثبت عند وقت المطالبة",
+          "ينتقل الموقع من 'المتاحة' إلى 'مواقعي > البريد الوارد'",
+          "الجامعون الآخرون لم يعد بإمكانهم رؤية هذا الموقع أو المطالبة به"
+        ]
+      },
+      {
+        title: "5.3 حماية المطالبة والعدالة",
+        content: [
+          "يستخدم معاملات قاعدة بيانات ذرية (PostgreSQL RPC) لسلامة التزامن",
+          "جامع واحد فقط يمكنه المطالبة بكل موقع بنجاح - يمنع المطالبة المزدوجة",
+          "تُعالج المطالبات بالترتيب المستلم - أول من يأتي أولاً",
+          "إذا حاول جامعان المطالبة في وقت واحد، ينجح الأول فقط",
+          "المطالبات الفاشلة تعرض رسالة فورية: 'الموقع مطالب به بالفعل من جامع آخر'",
+          "نظام الإفراج التلقائي: يمكن الإفراج التلقائي عن المواقع غير المطالب بها بعد فترة مهلة قابلة للتكوين"
+        ]
+      },
+      {
+        title: "5.4 حساب الرسوم عند المطالبة",
+        content: [
+          "عندما تطالب بموقع، يحسب النظام تلقائياً مدفوعاتك:",
+          "1. يُسترجع مستوى تصنيفك (أ/كبير، ب/عادي، ج/مبتدئ) من ملفك الشخصي",
+          "2. يُطبق هيكل الرسوم لتصنيفك على الموقع",
+          "3. رسوم الجامع: مبلغ الدفع الأساسي لمستوى تصنيفك",
+          "4. رسوم النقل: تعويض السفر بناءً على موقع الموقع والتصنيف",
+          "5. إجمالي التكلفة = رسوم الجامع + رسوم النقل",
+          "6. الرسوم تُثبت عند وقت المطالبة ولا يمكن تغييرها بعد ذلك",
+          "7. عند الإكمال الناجح لزيارة الموقع، يُضاف المبلغ الإجمالي لمحفظتك"
         ]
       }
     ]

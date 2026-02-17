@@ -195,74 +195,174 @@ const mobileDocumentationSections: Section[] = [
     ]
   },
   {
-    title: "5. Site Visits & Data Collection",
+    title: "5. MMP Workflow & Site Visits - Complete Mobile Guide",
     content: [
-      "The core functionality of the mobile app is managing site visits and collecting field data."
+      "This section covers the complete Monthly Monitoring Plan (MMP) workflow from the mobile perspective, including how to claim sites, manage your visits across tabs, collect data, and receive payment in your wallet."
     ],
     subsections: [
       {
-        title: "5.1 Viewing Your Assignments",
+        title: "5.1 Understanding the MMP Workflow on Mobile",
         content: [
-          "Open the Sites tab from the bottom navigation",
-          "View all your assigned and claimed sites in a list",
-          "Each site card shows: site name, code, state, locality, planned date, and status",
-          "Filter sites by status: Available, Claimed, In Progress, Completed",
-          "Geographic filtering by state and locality",
-          "Pull down to refresh the site list"
+          "Monthly Monitoring Plans (MMPs) are uploaded by admin/operations staff on the web platform",
+          "Once approved and dispatched, sites become available for field collectors on mobile",
+          "The mobile app is your primary tool for: Claiming sites, Starting visits, Collecting data, Completing visits, and Receiving wallet payments",
+          "The complete workflow: Admin uploads MMP → Admin approves → Sites dispatched → You claim → You visit → You get paid"
         ]
       },
       {
         title: "5.2 Claiming Sites (Uber/Lyft Style)",
         content: [
-          "Browse available dispatched sites in your area",
-          "Sites are shown on the map with distance indicators",
-          "GPS proximity matching helps find nearby sites",
-          "Tap 'Claim' on an available site to reserve it",
+          "Open the MMP/Sites page from the navigation",
+          "The CLAIMABLE tab shows all dispatched sites available in your area",
+          "Sites are grouped by State-Locality for easy browsing",
+          "Each site card shows: Site Name, Code, Activity Type, CP Name, Planned Date, and Fee information",
+          "Tap 'Claim Site' to reserve a site for yourself",
           "The system uses atomic database transactions to prevent double-claiming",
-          "Only one collector can claim each site (first-come, first-served)",
-          "Your classification fee is locked at the time of claiming",
-          "Claimed sites appear in your 'My Sites' list"
+          "Only ONE collector can successfully claim each site (first-come, first-served)",
+          "Your classification level determines the fees: Enumerator Fee + Transport Fee",
+          "Fees are calculated and locked in at claim time - they cannot change after",
+          "GPS proximity matching helps you find the nearest available sites"
         ]
       },
       {
-        title: "5.3 Starting a Site Visit",
+        title: "5.3 The ASSIGNED Tab",
         content: [
-          "Navigate to your claimed/assigned site",
-          "Tap 'Start Visit' when you arrive at the location",
-          "GPS coordinates are automatically captured",
-          "The system verifies you are within the geofence radius of the site",
-          "If outside the geofence, you will be prompted to move closer",
-          "Visit timer starts automatically to track duration",
-          "Status changes to 'In Progress'"
+          "The ASSIGNED tab shows sites that were directly assigned to you by admin/FOM or by the Smart Dispatch system",
+          "These are mandatory visits that you must complete",
+          "Tap 'Accept' to acknowledge the assignment",
+          "Tap 'Acknowledge Cost' to confirm the fee amount",
+          "After accepting, sites move to your My Sites > Inbox tab"
         ]
       },
       {
-        title: "5.4 Data Collection During Visit",
+        title: "5.4 My Sites - Four Sub-Tabs Explained",
+        content: [
+          "After claiming or being assigned sites, they appear in 'My Sites' with FOUR sub-tabs:",
+          "",
+          "INBOX TAB (Green badge):",
+          "  Shows sites READY TO START - status: Accepted, Claimed, Assigned, Dispatched, Verified, or Approved",
+          "  These are sites waiting for you to begin the visit",
+          "  Each card shows: Name, Code, Location, Activity Type, Status, Total Fee",
+          "  Actions: 'Start Visit' button (black, play icon), 'Request Advance' for transport money",
+          "",
+          "DRAFTS TAB (Blue badge):",
+          "  Shows visits IN PROGRESS - status: 'In Progress' or 'Ongoing'",
+          "  These are visits you STARTED but have NOT COMPLETED yet",
+          "  Continue collecting data on these sites",
+          "  Actions: 'Complete Site Visit' button (green) to finish and submit",
+          "  GPS tracking is active, data saves locally and syncs when connected",
+          "",
+          "OUTBOX TAB (Yellow badge):",
+          "  Shows COMPLETED visits stored OFFLINE waiting to sync",
+          "  Visits completed without internet connection are queued here",
+          "  Data stored safely on your device",
+          "  When internet becomes available, data syncs automatically",
+          "  After sync, visits move to the Sent tab",
+          "  IMPORTANT: Never delete the app while visits are in Outbox!",
+          "",
+          "SENT TAB (Green badge):",
+          "  Shows FULLY COMPLETED and SYNCED visits",
+          "  These have been submitted to the server successfully",
+          "  Payment has been calculated and credited to your wallet",
+          "  View visit details: date, location, photos, fees",
+          "  No further actions needed on these sites"
+        ]
+      },
+      {
+        title: "5.5 Starting a Site Visit",
+        content: [
+          "From the Inbox tab, find the site you want to visit",
+          "Review the site details: Name, Code, Location, Activity Type, Fees",
+          "Travel to the site location (GPS will verify your position)",
+          "Tap the 'Start Visit' button (black button with play icon)",
+          "The system captures your GPS coordinates automatically",
+          "If geofencing is enabled, you must be within the radius of the site",
+          "Visit status changes to 'In Progress'",
+          "The site card moves from Inbox to the Drafts tab",
+          "A visit timer starts tracking the duration",
+          "You can now begin collecting data"
+        ]
+      },
+      {
+        title: "5.6 Data Collection During Visit",
         content: [
           "GPS location is continuously tracked during the visit",
           "Take photos using the integrated camera (tap the camera button)",
           "Photos are geotagged with GPS coordinates and timestamps",
-          "Fill in the required data collection forms",
+          "Fill in the required survey/data collection forms",
           "Record voice notes for additional observations",
           "All data is saved locally first (offline-safe)",
-          "Progress is preserved even if the app closes unexpectedly"
+          "Progress is preserved even if the app closes unexpectedly",
+          "You can pause and resume - data will not be lost"
         ]
       },
       {
-        title: "5.5 Completing a Site Visit",
+        title: "5.7 Completing a Site Visit",
         content: [
+          "Navigate to the Drafts tab to find your in-progress visit",
           "Review all collected data before completing",
-          "Ensure all required fields are filled",
-          "Verify photos are captured and attached",
-          "Tap 'Complete Visit' to finish the visit",
-          "Final GPS coordinates are recorded",
-          "Data syncs to the server when internet is available",
-          "Your fee is calculated based on your classification level",
-          "Payment is credited to your wallet after verification"
+          "Ensure all required fields are filled and photos are taken",
+          "Tap the 'Complete Site Visit' button (green button)",
+          "Final GPS coordinates are recorded for verification",
+          "If ONLINE: Data syncs immediately, payment calculated, wallet credited",
+          "If OFFLINE: Visit moves to Outbox tab, data stored locally until internet available",
+          "Once synced, the visit moves to the Sent tab",
+          "A notification confirms completion and payment amount"
         ]
       },
       {
-        title: "5.6 Digital Signatures for Site Visits",
+        title: "5.8 Transportation Advance (Optional)",
+        content: [
+          "Before starting a visit, you can request a transportation advance for travel costs",
+          "Available for sites with transport budget allocated (Transport Fee > 0)",
+          "From Inbox, tap 'Request Advance' on an accepted/claimed site",
+          "Enter the requested amount (up to the allocated Transport Fee)",
+          "Request goes through two-tier approval: Supervisor first, then Admin/Finance",
+          "Approved advances are credited to your wallet immediately",
+          "When the visit is completed, the advance is automatically deducted from your payment",
+          "Digital signature confirmation is required to acknowledge advance receipt"
+        ]
+      },
+      {
+        title: "5.9 Payment & Wallet Credit After Completion",
+        content: [
+          "When your visit is marked 'Completed' and synced to the server:",
+          "1. The system calculates total payment: Enumerator Fee + Transport Fee",
+          "2. If you took a transportation advance, it is deducted from the total",
+          "3. Net amount is credited to your digital wallet",
+          "4. A wallet transaction is created with: Site Name, MMP reference, Fee breakdown, Date",
+          "5. Your wallet balance updates immediately",
+          "6. You receive a notification confirming the payment",
+          "",
+          "View your earnings in the Wallet tab:",
+          "  Current Balance: Available funds in SDG",
+          "  Total Earned: Lifetime earnings from all completed visits",
+          "  This Month: Current month's earnings",
+          "  Transaction History: All credits, debits, advances, and withdrawals"
+        ]
+      },
+      {
+        title: "5.10 Complete Status Flow Reference",
+        content: [
+          "The complete site lifecycle from MMP upload to wallet payment:",
+          "",
+          "1. DISPATCHED → Site made available by admin (shows in Claimable tab)",
+          "2. CLAIMED → You claimed the site (locked to you)",
+          "3. ACCEPTED → Claim confirmed, fees locked (shows in Inbox tab)",
+          "4. IN PROGRESS → You started the visit, GPS tracking active (shows in Drafts tab)",
+          "5. COMPLETED → Data collection finished (shows in Outbox if offline, Sent if online)",
+          "6. WALLET CREDITED → Payment automatically calculated and added to your wallet",
+          "",
+          "Other statuses you may see:",
+          "  ASSIGNED: Site directly assigned to you (skips claiming) → shows in Inbox",
+          "  ONGOING: Alternative status for in-progress visits → shows in Drafts",
+          "  VERIFIED: Site verified by admin for accuracy",
+          "  REJECTED: Visit rejected by supervisor",
+          "  CANCELLED: Visit cancelled by admin"
+        ]
+      },
+      {
+        title: "5.11 Digital Signatures for Site Visits",
         content: [
           "Some site visits require a digital signature upon completion",
           "Use the full-screen signature pad to sign with your finger",
@@ -950,74 +1050,174 @@ const arabicMobileDocumentationSections: Section[] = [
     ]
   },
   {
-    title: "5. زيارات المواقع وجمع البيانات",
+    title: "5. سير عمل MMP وزيارات المواقع - دليل الهاتف الشامل",
     content: [
-      "الوظيفة الأساسية لتطبيق الهاتف هي إدارة زيارات المواقع وجمع البيانات الميدانية."
+      "يغطي هذا القسم سير عمل خطة المراقبة الشهرية (MMP) الكامل من منظور الهاتف المحمول، بما في ذلك كيفية المطالبة بالمواقع وإدارة زياراتك عبر التبويبات وجمع البيانات واستلام المدفوعات في محفظتك."
     ],
     subsections: [
       {
-        title: "5.1 عرض التعيينات",
+        title: "5.1 فهم سير عمل MMP على الهاتف",
         content: [
-          "افتح تبويب المواقع من شريط التنقل السفلي",
-          "عرض جميع المواقع المعينة والمطالب بها في قائمة",
-          "كل بطاقة موقع تعرض: اسم الموقع، الرمز، الولاية، المحلية، التاريخ المخطط، والحالة",
-          "تصفية المواقع حسب الحالة: متاح، مطالب به، قيد التنفيذ، مكتمل",
-          "تصفية جغرافية حسب الولاية والمحلية",
-          "اسحب لأسفل لتحديث قائمة المواقع"
+          "يتم رفع خطط المراقبة الشهرية (MMPs) من قبل المسؤولين/فريق العمليات على المنصة الإلكترونية",
+          "بمجرد الموافقة والإرسال، تصبح المواقع متاحة لجامعي البيانات على الهاتف",
+          "تطبيق الهاتف هو أداتك الأساسية لـ: المطالبة بالمواقع، بدء الزيارات، جمع البيانات، إكمال الزيارات، واستلام مدفوعات المحفظة",
+          "سير العمل الكامل: المسؤول يرفع MMP ← المسؤول يوافق ← المواقع تُرسل ← أنت تطالب ← أنت تزور ← تحصل على الدفع"
         ]
       },
       {
         title: "5.2 المطالبة بالمواقع (بأسلوب أوبر/ليفت)",
         content: [
-          "تصفح المواقع المرسلة المتاحة في منطقتك",
-          "تُعرض المواقع على الخريطة مع مؤشرات المسافة",
-          "مطابقة القرب GPS تساعد في إيجاد المواقع القريبة",
-          "اضغط 'مطالبة' على موقع متاح لحجزه",
+          "افتح صفحة MMP/المواقع من التنقل",
+          "تبويب المتاحة يعرض جميع المواقع المُرسلة المتاحة في منطقتك",
+          "المواقع مجمعة حسب الولاية-المحلية لسهولة التصفح",
+          "كل بطاقة موقع تعرض: اسم الموقع، الرمز، نوع النشاط، اسم الشريك، التاريخ المخطط، ومعلومات الرسوم",
+          "اضغط 'مطالبة بالموقع' لحجز الموقع لنفسك",
           "يستخدم النظام معاملات قاعدة بيانات ذرية لمنع المطالبة المزدوجة",
-          "جامع واحد فقط يمكنه المطالبة بكل موقع (الأول يحصل عليه)",
-          "يتم تثبيت رسوم تصنيفك في وقت المطالبة",
-          "المواقع المطالب بها تظهر في قائمة 'مواقعي'"
+          "جامع واحد فقط يمكنه المطالبة بنجاح بكل موقع (الأول يحصل عليه)",
+          "مستوى تصنيفك يحدد الرسوم: رسوم الجامع + رسوم النقل",
+          "الرسوم تُحسب وتُثبت عند وقت المطالبة - لا يمكن تغييرها بعد ذلك",
+          "مطابقة القرب GPS تساعدك في إيجاد أقرب المواقع المتاحة"
         ]
       },
       {
-        title: "5.3 بدء زيارة الموقع",
+        title: "5.3 تبويب المعينة",
         content: [
-          "توجه إلى الموقع المطالب به/المعين لك",
-          "اضغط 'بدء الزيارة' عند وصولك إلى الموقع",
-          "يتم التقاط إحداثيات GPS تلقائياً",
-          "يتحقق النظام من وجودك ضمن نطاق السياج الجغرافي للموقع",
-          "إذا كنت خارج السياج الجغرافي، سيُطلب منك الاقتراب أكثر",
-          "يبدأ مؤقت الزيارة تلقائياً لتتبع المدة",
-          "تتغير الحالة إلى 'قيد التنفيذ'"
+          "تبويب المعينة يعرض المواقع المعينة لك مباشرة من المسؤول/مدير العمليات أو نظام الإرسال الذكي",
+          "هذه زيارات إلزامية يجب عليك إتمامها",
+          "اضغط 'قبول' للإقرار بالتعيين",
+          "اضغط 'إقرار بالتكلفة' لتأكيد مبلغ الرسوم",
+          "بعد القبول، تنتقل المواقع إلى مواقعي > تبويب البريد الوارد"
         ]
       },
       {
-        title: "5.4 جمع البيانات أثناء الزيارة",
+        title: "5.4 مواقعي - شرح التبويبات الفرعية الأربعة",
+        content: [
+          "بعد المطالبة بالمواقع أو تعيينها، تظهر في 'مواقعي' مع أربعة تبويبات فرعية:",
+          "",
+          "تبويب البريد الوارد (شارة خضراء):",
+          "  يعرض المواقع الجاهزة للبدء - الحالة: مقبول، مطالب به، معين، مرسل، متحقق، أو معتمد",
+          "  هذه مواقع تنتظرك لبدء الزيارة",
+          "  كل بطاقة تعرض: الاسم، الرمز، الموقع، نوع النشاط، الحالة، إجمالي الرسوم",
+          "  الإجراءات: زر 'بدء الزيارة' (أسود، أيقونة تشغيل)، 'طلب سلفة' لمصاريف النقل",
+          "",
+          "تبويب المسودات (شارة زرقاء):",
+          "  يعرض الزيارات قيد التنفيذ - الحالة: 'قيد التنفيذ' أو 'جاري'",
+          "  هذه زيارات بدأتها ولم تكملها بعد",
+          "  تابع جمع البيانات في هذه المواقع",
+          "  الإجراءات: زر 'إكمال زيارة الموقع' (أخضر) لإنهاء وإرسال البيانات",
+          "  تتبع GPS نشط، البيانات تُحفظ محلياً وتُزامن عند الاتصال",
+          "",
+          "تبويب صندوق الصادر (شارة صفراء):",
+          "  يعرض الزيارات المكتملة المخزنة بدون اتصال بانتظار المزامنة",
+          "  الزيارات المكتملة بدون اتصال بالإنترنت تُوضع في قائمة الانتظار هنا",
+          "  البيانات مخزنة بأمان على جهازك",
+          "  عند توفر الإنترنت، تُزامن البيانات تلقائياً",
+          "  بعد المزامنة، تنتقل الزيارات إلى تبويب المُرسَل",
+          "  مهم: لا تحذف التطبيق أبداً بينما هناك زيارات في صندوق الصادر!",
+          "",
+          "تبويب المُرسَل (شارة خضراء):",
+          "  يعرض الزيارات المكتملة والمُزامنة بالكامل",
+          "  تم إرسالها للخادم بنجاح",
+          "  تم حساب الدفع وإيداعه في محفظتك",
+          "  اعرض تفاصيل الزيارة: التاريخ، الموقع، الصور، الرسوم",
+          "  لا حاجة لإجراءات إضافية على هذه المواقع"
+        ]
+      },
+      {
+        title: "5.5 بدء زيارة الموقع",
+        content: [
+          "من تبويب البريد الوارد، جد الموقع الذي تريد زيارته",
+          "راجع تفاصيل الموقع: الاسم، الرمز، الموقع، نوع النشاط، الرسوم",
+          "سافر إلى موقع الموقع (سيتحقق GPS من موقعك)",
+          "اضغط زر 'بدء الزيارة' (زر أسود بأيقونة تشغيل)",
+          "يلتقط النظام إحداثيات GPS تلقائياً",
+          "إذا كان السياج الجغرافي مفعلاً، يجب أن تكون ضمن نطاق الموقع",
+          "تتغير حالة الزيارة إلى 'قيد التنفيذ'",
+          "تنتقل بطاقة الموقع من البريد الوارد إلى تبويب المسودات",
+          "يبدأ مؤقت الزيارة بتتبع المدة",
+          "يمكنك الآن بدء جمع البيانات"
+        ]
+      },
+      {
+        title: "5.6 جمع البيانات أثناء الزيارة",
         content: [
           "يتم تتبع موقع GPS باستمرار أثناء الزيارة",
           "التقط صوراً باستخدام الكاميرا المدمجة (اضغط زر الكاميرا)",
           "الصور موسومة جغرافياً بإحداثيات GPS والطوابع الزمنية",
-          "أكمل نماذج جمع البيانات المطلوبة",
+          "أكمل نماذج الاستبيان/جمع البيانات المطلوبة",
           "سجل ملاحظات صوتية للملاحظات الإضافية",
           "جميع البيانات تُحفظ محلياً أولاً (آمنة بدون اتصال)",
-          "يُحفظ التقدم حتى لو أُغلق التطبيق بشكل غير متوقع"
+          "يُحفظ التقدم حتى لو أُغلق التطبيق بشكل غير متوقع",
+          "يمكنك الإيقاف والاستئناف - لن تُفقد البيانات"
         ]
       },
       {
-        title: "5.5 إكمال زيارة الموقع",
+        title: "5.7 إكمال زيارة الموقع",
         content: [
+          "انتقل إلى تبويب المسودات لإيجاد زيارتك قيد التنفيذ",
           "راجع جميع البيانات المجمعة قبل الإكمال",
-          "تأكد من ملء جميع الحقول المطلوبة",
-          "تحقق من التقاط الصور وإرفاقها",
-          "اضغط 'إكمال الزيارة' لإنهاء الزيارة",
-          "يتم تسجيل إحداثيات GPS النهائية",
-          "تتم مزامنة البيانات مع الخادم عند توفر الإنترنت",
-          "يتم حساب أجرك بناءً على مستوى تصنيفك",
-          "يُضاف الدفع إلى محفظتك بعد التحقق"
+          "تأكد من ملء جميع الحقول المطلوبة والتقاط الصور",
+          "اضغط زر 'إكمال زيارة الموقع' (زر أخضر)",
+          "يتم تسجيل إحداثيات GPS النهائية للتحقق",
+          "إذا متصل: تُزامن البيانات فوراً، يُحسب الدفع، يُضاف للمحفظة",
+          "إذا غير متصل: تنتقل الزيارة لصندوق الصادر، تُخزن البيانات محلياً حتى يتوفر الإنترنت",
+          "بمجرد المزامنة، تنتقل الزيارة لتبويب المُرسَل",
+          "إشعار يؤكد الإكمال ومبلغ الدفع"
         ]
       },
       {
-        title: "5.6 التوقيعات الرقمية لزيارات المواقع",
+        title: "5.8 سلفة النقل (اختياري)",
+        content: [
+          "قبل بدء الزيارة، يمكنك طلب سلفة نقل لتكاليف السفر",
+          "متاحة للمواقع التي لديها ميزانية نقل مخصصة (رسوم النقل > 0)",
+          "من البريد الوارد، اضغط 'طلب سلفة' على موقع مقبول/مطالب به",
+          "أدخل المبلغ المطلوب (حتى رسوم النقل المخصصة)",
+          "الطلب يمر بموافقة من مرحلتين: المشرف أولاً، ثم المسؤول/المالية",
+          "السلف المعتمدة تُضاف لمحفظتك فوراً",
+          "عند إكمال الزيارة، تُخصم السلفة تلقائياً من مدفوعاتك",
+          "يتطلب تأكيد التوقيع الرقمي لإقرار استلام السلفة"
+        ]
+      },
+      {
+        title: "5.9 الدفع وإيداع المحفظة بعد الإكمال",
+        content: [
+          "عندما تُعلَّم زيارتك بحالة 'مكتملة' وتُزامن مع الخادم:",
+          "1. يحسب النظام إجمالي الدفع: رسوم الجامع + رسوم النقل",
+          "2. إذا أخذت سلفة نقل، تُخصم من الإجمالي",
+          "3. يُضاف المبلغ الصافي لمحفظتك الرقمية",
+          "4. تُنشأ معاملة محفظة بالتفاصيل: اسم الموقع، مرجع MMP، تفصيل الرسوم، التاريخ",
+          "5. يُحدَّث رصيد محفظتك فوراً",
+          "6. تتلقى إشعاراً يؤكد الدفع",
+          "",
+          "اعرض أرباحك في تبويب المحفظة:",
+          "  الرصيد الحالي: الأموال المتاحة بالجنيه السوداني",
+          "  إجمالي الأرباح: الأرباح مدى الحياة من جميع الزيارات المكتملة",
+          "  هذا الشهر: أرباح الشهر الحالي",
+          "  سجل المعاملات: جميع الإضافات والخصومات والسلف والسحوبات"
+        ]
+      },
+      {
+        title: "5.10 مرجع مسار الحالات الكامل",
+        content: [
+          "دورة حياة الموقع الكاملة من رفع MMP إلى دفع المحفظة:",
+          "",
+          "1. مُرسَل ← الموقع متاح من المسؤول (يظهر في تبويب المتاحة)",
+          "2. مُطالب به ← أنت طالبت بالموقع (مقفل لك)",
+          "3. مقبول ← المطالبة مُؤكدة، الرسوم مُثبتة (يظهر في تبويب البريد الوارد)",
+          "4. قيد التنفيذ ← بدأت الزيارة، تتبع GPS نشط (يظهر في تبويب المسودات)",
+          "5. مكتمل ← جمع البيانات انتهى (يظهر في صندوق الصادر إذا غير متصل، المُرسَل إذا متصل)",
+          "6. إيداع المحفظة ← الدفع يُحسب تلقائياً ويُضاف لمحفظتك",
+          "",
+          "حالات أخرى قد تراها:",
+          "  معين: الموقع معين لك مباشرة (يتخطى المطالبة) ← يظهر في البريد الوارد",
+          "  جاري: حالة بديلة للزيارات قيد التنفيذ ← يظهر في المسودات",
+          "  متحقق: الموقع تم التحقق منه من المسؤول للدقة",
+          "  مرفوض: الزيارة رُفضت من المشرف",
+          "  ملغى: الزيارة أُلغيت من المسؤول"
+        ]
+      },
+      {
+        title: "5.11 التوقيعات الرقمية لزيارات المواقع",
         content: [
           "بعض زيارات المواقع تتطلب توقيعاً رقمياً عند الإكمال",
           "استخدم لوحة التوقيع بملء الشاشة للتوقيع بإصبعك",
