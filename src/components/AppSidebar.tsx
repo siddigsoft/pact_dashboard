@@ -303,11 +303,8 @@
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });
 
     const cycleItems: MenuGroup['items'] = [];
-    if (!isHidden('/mmp/cycle-close') && (isSuperAdmin || isAdmin)) {
-      cycleItems.push({ id: 'mmp-cycle-close', title: "Close Cycle", url: "/mmp/cycle-close", icon: CheckCircle, priority: 1, isPinned: isPinned('/mmp/cycle-close') });
-    }
-    if (!isHidden('/mmp/cycle-close?tab=archive') && (isSuperAdmin || isAdmin || isFOM || isSupervisor)) {
-      cycleItems.push({ id: 'cycle-history', title: "Cycle History", url: "/mmp/cycle-close?tab=archive", icon: Archive, priority: 2, isPinned: isPinned('/mmp/cycle-close?tab=archive') });
+    if (!isHidden('/mmp/cycle-close') && (isSuperAdmin || isAdmin || isFOM || isSupervisor)) {
+      cycleItems.push({ id: 'mmp-cycle-close', title: "Cycle Management", url: "/mmp/cycle-close", icon: CheckCircle, priority: 1, isPinned: isPinned('/mmp/cycle-close') });
     }
     if (cycleItems.length) groups.push({ id: 'cycle-management', label: "Cycle Management", order: 3.5, items: cycleItems });
 
