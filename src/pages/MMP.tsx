@@ -4167,16 +4167,29 @@ const MMP = () => {
               </p>
             </div>
           </div>
-          {canCreate && (
-            <Button 
-              onClick={() => navigate('/mmp/upload')} 
-              className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-2"
-              data-testid="button-upload-mmp"
-            >
-              <Upload className="h-4 w-4" />
-              {t('mmpPage.uploadMMP')}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                onClick={() => navigate('/mmp/cycle-close')}
+                variant="outline"
+                className="bg-white/10 text-white border-white/30 flex items-center gap-2"
+                data-testid="button-cycle-close"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Close Cycle
+              </Button>
+            )}
+            {canCreate && (
+              <Button 
+                onClick={() => navigate('/mmp/upload')} 
+                className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-2"
+                data-testid="button-upload-mmp"
+              >
+                <Upload className="h-4 w-4" />
+                {t('mmpPage.uploadMMP')}
+              </Button>
+            )}
+          </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
           <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
