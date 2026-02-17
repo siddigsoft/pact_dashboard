@@ -13,6 +13,8 @@ const BLUE_TEXT = 'FF2563EB';
 const GREEN_TEXT = 'FF16A34A';
 const AMBER_TEXT = 'FFD97706';
 const DARK = 'FF14141E';
+const DUP_BG = 'FFFFF3CD';
+const DUP_TEXT = 'FF92400E';
 
 function thinBorder(): Partial<ExcelJS.Borders> {
   const side: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: BORDER_COLOR } };
@@ -428,7 +430,16 @@ export async function exportCoverageTrackerExcel(
       const stateTotals = new Map<string, number>();
       let statePdmSites = 0;
 
+      const nameCounts = new Map<string, number>();
       merged.forEach(mc => {
+        const n = mc.primaryName.trim().toLowerCase();
+        nameCounts.set(n, (nameCounts.get(n) || 0) + 1);
+      });
+      const dupNames = new Set<string>();
+      nameCounts.forEach((count, n) => { if (count > 1) dupNames.add(n); });
+
+      merged.forEach(mc => {
+        const isDup = dupNames.has(mc.primaryName.trim().toLowerCase());
         const vals: (string | number)[] = [hub, state, mc.primaryName];
         let rowTotal = 0;
         let nonPdmTotal = 0;
@@ -450,7 +461,12 @@ export async function exportCoverageTrackerExcel(
         dataRow.eachCell((cell, ci) => {
           cell.border = thinBorder();
           cell.alignment = { horizontal: ci > 3 ? 'center' : 'left', vertical: 'middle' };
-          cell.font = bodyFont(10);
+          if (isDup) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: DUP_BG } };
+            cell.font = bodyFont(10, DUP_TEXT);
+          } else {
+            cell.font = bodyFont(10);
+          }
         });
         dataRow.height = 20;
       });
