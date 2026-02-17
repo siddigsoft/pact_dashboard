@@ -132,6 +132,7 @@ const MMPCycleClose = () => {
   const [closingCycle, setClosingCycle] = useState(false);
   const [finalizingCycle, setFinalizingCycle] = useState(false);
   const [selectedMmpId, setSelectedMmpId] = useState<string>('all');
+  const [siteVisitCounts, setSiteVisitCounts] = useState<Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number }>>({});
   const followUps = useMemo<FollowUpRecord[]>(() => {
     return uncoveredSites
       .filter(s => s.not_covered_reason && HIGH_PRIORITY_REASONS.includes(s.not_covered_reason))
@@ -291,6 +292,39 @@ const MMPCycleClose = () => {
     fetchUncoveredSites();
     fetchClosedCycles();
   }, [fetchUncoveredSites, fetchClosedCycles]);
+
+  useEffect(() => {
+    const fetchSiteVisitCounts = async () => {
+      const mmpIds = (mmpFiles || []).filter(m => {
+        const cs = (m as any).cycle_status || 'active';
+        return cs === 'active' || cs === 'closing' || cs === 'pending_approval';
+      }).map(m => m.id);
+      if (mmpIds.length === 0) return;
+      try {
+        const { data } = await supabase
+          .from('site_visits')
+          .select('mmp_id, status')
+          .in('mmp_id', mmpIds);
+        if (data) {
+          const counts: Record<string, { total: number; completed: number; pending: number; assigned: number; dispatched: number }> = {};
+          data.forEach(sv => {
+            const mid = sv.mmp_id;
+            if (!mid) return;
+            if (!counts[mid]) counts[mid] = { total: 0, completed: 0, pending: 0, assigned: 0, dispatched: 0 };
+            counts[mid].total++;
+            if (sv.status === 'completed') counts[mid].completed++;
+            else if (sv.status === 'pending') counts[mid].pending++;
+            else if (sv.status === 'assigned') counts[mid].assigned++;
+            else if (sv.status === 'dispatched') counts[mid].dispatched++;
+          });
+          setSiteVisitCounts(counts);
+        }
+      } catch (err) {
+        console.error('Error fetching site visit counts:', err);
+      }
+    };
+    fetchSiteVisitCounts();
+  }, [mmpFiles]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -941,6 +975,7 @@ const MMPCycleClose = () => {
                     isAdmin={isAdmin}
                     closingCycle={closingCycle}
                     finalizingCycle={finalizingCycle}
+                    siteVisitCounts={siteVisitCounts[mmp.id]}
                     handleStartClosingCycle={handleStartClosingCycle}
                     handleFinalizeCycleClose={handleFinalizeCycleClose}
                     handleApproveCycle={handleApproveCycle}
@@ -963,7 +998,7 @@ const MMPCycleClose = () => {
             </div>
           )}
 
-          <CycleCoveragePredictor activeMmps={activeMmps} uncoveredSites={uncoveredSites} />
+          <CycleCoveragePredictor activeMmps={activeMmps} siteVisitCounts={siteVisitCounts} />
         </TabsContent>
 
         <TabsContent value="uncovered" className="space-y-4">

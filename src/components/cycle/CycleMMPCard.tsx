@@ -23,6 +23,14 @@ interface UncoveredSite {
   not_covered_by: string | null;
 }
 
+interface SiteVisitCounts {
+  total: number;
+  completed: number;
+  pending: number;
+  assigned: number;
+  dispatched: number;
+}
+
 interface CycleMMPCardProps {
   mmp: any;
   uncoveredSites: UncoveredSite[];
@@ -32,6 +40,7 @@ interface CycleMMPCardProps {
   isAdmin: boolean;
   closingCycle: boolean;
   finalizingCycle: boolean;
+  siteVisitCounts?: SiteVisitCounts;
   handleStartClosingCycle: (mmpId: string) => void;
   handleFinalizeCycleClose: (mmpId: string) => void;
   handleApproveCycle: (mmpId: string) => void;
@@ -51,6 +60,7 @@ export function CycleMMPCard({
   isAdmin,
   closingCycle,
   finalizingCycle,
+  siteVisitCounts,
   handleStartClosingCycle,
   handleFinalizeCycleClose,
   handleApproveCycle,
@@ -65,13 +75,12 @@ export function CycleMMPCard({
   const progress = mmpUncovered.length > 0 ? Math.round((mmpReasoned / mmpUncovered.length) * 100) : 100;
 
   const projectName = mmp.projectName || (mmp as any).project?.name || '';
-  const totalSiteCount = mmp.siteEntries?.length || 0;
-  const siteEntries = mmp.siteEntries || [];
 
-  const completedCount = siteEntries.filter((e: any) => e.status === 'completed').length;
-  const pendingCount = siteEntries.filter((e: any) => e.status === 'pending').length;
-  const assignedCount = siteEntries.filter((e: any) => e.status === 'assigned').length;
-  const dispatchedCount = siteEntries.filter((e: any) => e.status === 'dispatched').length;
+  const totalSiteCount = siteVisitCounts?.total || 0;
+  const completedCount = siteVisitCounts?.completed || 0;
+  const pendingCount = siteVisitCounts?.pending || 0;
+  const assignedCount = siteVisitCounts?.assigned || 0;
+  const dispatchedCount = siteVisitCounts?.dispatched || 0;
   const coveragePercent = totalSiteCount > 0 ? Math.round((completedCount / totalSiteCount) * 100) : 0;
 
   return (

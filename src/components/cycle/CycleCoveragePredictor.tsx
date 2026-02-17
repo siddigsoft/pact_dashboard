@@ -2,17 +2,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp } from 'lucide-react';
 
-interface UncoveredSite {
-  id: string;
-  mmp_id: string;
+interface SiteVisitCounts {
+  total: number;
+  completed: number;
+  pending: number;
+  assigned: number;
+  dispatched: number;
 }
 
 interface CycleCoveragePredictorProps {
   activeMmps: any[];
-  uncoveredSites: UncoveredSite[];
+  siteVisitCounts: Record<string, SiteVisitCounts>;
 }
 
-export function CycleCoveragePredictor({ activeMmps, uncoveredSites }: CycleCoveragePredictorProps) {
+export function CycleCoveragePredictor({ activeMmps, siteVisitCounts }: CycleCoveragePredictorProps) {
   const activeOnlyMmps = activeMmps.filter(m => {
     const cs = (m as any).cycle_status || 'active';
     return cs === 'active';
@@ -31,16 +34,30 @@ export function CycleCoveragePredictor({ activeMmps, uncoveredSites }: CycleCove
       <CardContent>
         <div className="grid gap-3 md:grid-cols-2">
           {activeOnlyMmps.map(mmp => {
-            const mmpSitesTotal = uncoveredSites.filter(s => s.mmp_id === mmp.id).length;
-            const totalSitesForMmp = mmpSitesTotal;
+            const counts = siteVisitCounts[mmp.id];
+            const totalSites = counts?.total || 0;
+            const completedSites = counts?.completed || 0;
+            const pendingSites = totalSites - completedSites;
+
+            if (totalSites === 0) {
+              return (
+                <div key={mmp.id} className="p-3 rounded-lg border border-gray-200 dark:border-gray-700" data-testid={`prediction-${mmp.id}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium truncate">{mmp.name}</span>
+                    <Badge variant="secondary" className="text-xs">No Data</Badge>
+                  </div>
+                  <div className="text-xs text-gray-500">No site visits found for this MMP.</div>
+                </div>
+              );
+            }
+
             const createdAt = (mmp as any).created_at ? new Date((mmp as any).created_at) : new Date();
             const daysElapsed = Math.max(1, Math.ceil((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)));
             const expectedDuration = 30;
-            const visitedSoFar = totalSitesForMmp > 0 ? Math.max(0, totalSitesForMmp - mmpSitesTotal) : 0;
-            const dailyRate = visitedSoFar / daysElapsed;
+            const dailyRate = completedSites / daysElapsed;
             const daysRemaining = Math.max(0, expectedDuration - daysElapsed);
-            const projectedTotal = visitedSoFar + (dailyRate * daysRemaining);
-            const projectedCoverage = totalSitesForMmp > 0 ? Math.min(100, Math.round((projectedTotal / (totalSitesForMmp + visitedSoFar)) * 100)) : 100;
+            const projectedTotal = completedSites + (dailyRate * daysRemaining);
+            const projectedCoverage = Math.min(100, Math.round((projectedTotal / totalSites) * 100));
             const isAtRisk = projectedCoverage < 80;
 
             return (
@@ -55,7 +72,9 @@ export function CycleCoveragePredictor({ activeMmps, uncoveredSites }: CycleCove
                 </div>
                 <div className="text-xs text-gray-500 space-y-1">
                   <div className="flex justify-between"><span>Days elapsed:</span><span>{daysElapsed}/{expectedDuration}</span></div>
-                  <div className="flex justify-between"><span>Pending visits:</span><span>{mmpSitesTotal}</span></div>
+                  <div className="flex justify-between"><span>Completed:</span><span>{completedSites}/{totalSites}</span></div>
+                  <div className="flex justify-between"><span>Remaining:</span><span>{pendingSites}</span></div>
+                  <div className="flex justify-between"><span>Daily rate:</span><span>{dailyRate.toFixed(1)} visits/day</span></div>
                   <div className="flex justify-between"><span>Projected coverage:</span><span className={isAtRisk ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>{projectedCoverage}%</span></div>
                 </div>
               </div>
