@@ -773,12 +773,12 @@ const SiteVisits = () => {
               {/* Show Request Advance button for accepted/ongoing sites with transport budget */}
               {['accepted', 'ongoing', 'in progress', 'in_progress', 'assigned'].includes(visit.status?.toLowerCase() || '') && 
                (visit.assignedTo === currentUser?.id || (visit as any).accepted_by === currentUser?.id || (visit as any).acceptedBy === currentUser?.id) &&
-               ((visit as any).transport_fee > 0 || (visit as any).transportFee > 0 || (visit.fees?.transport && visit.fees.transport > 0)) && (
+               ((visit as any).transport_fee > 0 || (visit as any).transportFee > 0 || (visit.fees?.transportation && visit.fees.transportation > 0)) && (
                 <RequestDownPaymentButton
                   site={{
                     id: (visit as any).mmpSiteEntryId || (visit as any).mmp_site_entry_id || visit.id,
                     siteName: visit.siteName,
-                    transportFee: (visit as any).transport_fee || (visit as any).transportFee || visit.fees?.transport || 0,
+                    transportFee: (visit as any).transport_fee || (visit as any).transportFee || visit.fees?.transportation || 0,
                     hubId: (visit as any).hub_id || (visit as any).hubId,
                     hubName: (visit as any).hub_name || (visit as any).hubName,
                     status: visit.status

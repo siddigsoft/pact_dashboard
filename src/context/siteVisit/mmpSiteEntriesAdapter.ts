@@ -62,7 +62,7 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
   const assignedTo = (entry as any).accepted_by || (entry as any).additional_data?.assigned_to || '';
   const assignedBy = (entry as any).additional_data?.assigned_by || entry.dispatched_by;
   const assignedAt = (entry as any).additional_data?.assigned_at || entry.dispatched_at;
-  const appStatus = mapStatus(entry.status);
+  const appStatus = inferStatus(entry, assignedTo);
   const workflow = entry.mmp_files?.workflow as any;
   
   return {
@@ -174,8 +174,41 @@ const mapStatus = (dbStatus: string): SiteVisit['status'] => {
     'verified': 'permitVerified',
     'dispatched': 'dispatched',
     'accepted': 'accepted',
+    'approved': 'dispatched',
   };
   return statusMap[s] || 'pending';
+};
+
+/**
+ * Infers the correct status by cross-referencing the DB status with other fields.
+ * Handles cases where status field is null/empty but other fields indicate the real state.
+ */
+const inferStatus = (entry: MMPSiteEntry, resolvedAssignedTo: string): SiteVisit['status'] => {
+  const dbStatus = (entry.status || '').toLowerCase().trim();
+  const hasAcceptedBy = !!(entry.accepted_by && entry.accepted_by.trim());
+  const hasDispatchedBy = !!(entry.dispatched_by && entry.dispatched_by.trim());
+  const hasAssignedTo = !!(resolvedAssignedTo && resolvedAssignedTo.trim());
+  const hasVisitStarted = !!((entry as any).visit_started_at);
+  const hasVisitCompleted = !!((entry as any).visit_completed_at);
+
+  if (dbStatus && dbStatus !== '') {
+    const mapped = mapStatus(dbStatus);
+    if (mapped === 'pending') {
+      if (hasVisitCompleted) return 'completed';
+      if (hasVisitStarted) return 'inProgress';
+      if (hasAcceptedBy) return 'accepted';
+      if (hasAssignedTo) return 'assigned';
+      if (hasDispatchedBy) return 'dispatched';
+    }
+    return mapped;
+  }
+
+  if (hasVisitCompleted) return 'completed';
+  if (hasVisitStarted) return 'inProgress';
+  if (hasAcceptedBy) return 'accepted';
+  if (hasAssignedTo) return 'assigned';
+  if (hasDispatchedBy) return 'dispatched';
+  return 'pending';
 };
 
 /**
