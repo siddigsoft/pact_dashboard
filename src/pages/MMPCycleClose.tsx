@@ -93,8 +93,14 @@ const MMPCycleClose = () => {
   const [filterHub, setFilterHub] = useState<string>('all');
   const [filterReason, setFilterReason] = useState<string>('all');
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'active';
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'active');
+  
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
   const [closedCycles, setClosedCycles] = useState<ClosedCycleRecord[]>([]);
   const [expandedCycle, setExpandedCycle] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -111,8 +117,8 @@ const MMPCycleClose = () => {
   const [userHubName, setUserHubName] = useState<string>('');
 
   useEffect(() => {
-    if (isSupervisor && currentUser?.hub_id) {
-      supabase.from('hubs').select('name').eq('id', currentUser.hub_id).single()
+    if (isSupervisor && currentUser?.hubId) {
+      supabase.from('hubs').select('name').eq('id', currentUser.hubId).single()
         .then(({ data }) => {
           if (data?.name) {
             setUserHubName(data.name);
@@ -120,7 +126,7 @@ const MMPCycleClose = () => {
           }
         });
     }
-  }, [isSupervisor, currentUser?.hub_id]);
+  }, [isSupervisor, currentUser?.hubId]);
 
   const activeMmps = useMemo(() => {
     return (mmpFiles || []).filter(m => {
@@ -399,7 +405,7 @@ const MMPCycleClose = () => {
         mmpName,
         action: 'status_change',
         performedBy: currentUser?.id || '',
-        performedByName: currentUser?.full_name,
+        performedByName: currentUser?.fullName,
         previousStatus: 'active',
         newStatus: 'closing',
         affectedSites: uncoveredCount,
@@ -448,7 +454,7 @@ const MMPCycleClose = () => {
           mmpName: site.mmp_name || 'MMP',
           action: 'status_change',
           performedBy: currentUser?.id || '',
-          performedByName: currentUser?.full_name,
+          performedByName: currentUser?.fullName,
           reason: reason,
           metadata: { cycleAction: 'assign_reason', siteId, siteName: site.site_name, reason },
         });
@@ -496,7 +502,7 @@ const MMPCycleClose = () => {
         mmpName: 'Bulk Assignment',
         action: 'bulk_operation',
         performedBy: currentUser?.id || '',
-        performedByName: currentUser?.full_name,
+        performedByName: currentUser?.fullName,
         affectedSites: siteIds.length,
         metadata: { cycleAction: 'bulk_assign_reason', reason: bulkReason, siteCount: siteIds.length },
       });
@@ -545,7 +551,7 @@ const MMPCycleClose = () => {
         mmpName: mmp?.name || 'MMP',
         action: 'status_change',
         performedBy: currentUser?.id || '',
-        performedByName: currentUser?.full_name,
+        performedByName: currentUser?.fullName,
         previousStatus: 'closing',
         newStatus: 'closed',
         affectedSites: uncoveredSites.filter(s => s.mmp_id === mmpId).length,
