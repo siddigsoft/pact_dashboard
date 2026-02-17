@@ -112,6 +112,7 @@ const QuestionnaireAnalytics = lazy(() => import('./pages/QuestionnaireAnalytics
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'));
 const NotificationHistory = lazy(() => import('./pages/NotificationHistory'));
 const NotificationAnalytics = lazy(() => import('./pages/NotificationAnalytics'));
+const MMPCycleClose = lazy(() => import('./pages/MMPCycleClose'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -220,6 +221,7 @@ const AppRoutes = () => {
         <Route path="/mmp/:id/verification" element={<MMPVerificationPage />} />
         <Route path="/mmp/:id/permit-message" element={<MMPPermitMessagePage />} />
         <Route path="/mmp/:id/review-assign-coordinators" element={<ReviewAssignCoordinators />} />
+        <Route path="/mmp/cycle-close" element={<MMPCycleClose />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/field-team" element={<FieldTeam />} />
         <Route path="/finance" element={<Finance />} />
