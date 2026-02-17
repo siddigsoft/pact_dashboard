@@ -122,9 +122,9 @@ class CachedLocationAdapter extends TypeAdapter<CachedLocation> {
     return CachedLocation(
       id: fields[0] as String,
       userId: fields[1] as String,
-      lat: fields[2] as double,
-      lng: fields[3] as double,
-      accuracy: fields[4] as double?,
+      lat: (fields[2] as num).toDouble(),
+      lng: (fields[3] as num).toDouble(),
+      accuracy: (fields[4] as num?)?.toDouble(),
       timestamp: fields[5] as int,
       synced: fields[6] as bool? ?? false,
     );
