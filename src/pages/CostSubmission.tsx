@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronUp, ChevronDown, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail } from "lucide-react";
+import { ChevronLeft, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText, Users, Shield, Receipt, ThumbsUp, ThumbsDown, ArrowRight, Calendar, MapPin, Building2, FolderOpen, Hash, Paperclip, Download, Pencil, Trash2, RotateCcw, SendHorizonal, FileSpreadsheet, FileDown, Info, RefreshCw, CircleDollarSign, ClipboardCheck, HelpCircle, Wallet, Ticket, Gift, Wifi, GraduationCap, Car, Package, Printer, Coffee, MoreHorizontal, Briefcase, Mail } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -104,8 +104,6 @@ interface OperationalCostSubmission {
   reconciliation_notes: string | null;
   created_at: string;
   updated_at: string;
-  request_group_id: string | null;
-  request_title: string | null;
 }
 
 const CostSubmission = () => {
@@ -152,7 +150,7 @@ const CostSubmission = () => {
   const canSubmitOperationalCosts = isFOM || isCoordinator || isCountryDirector || isAdmin || isSupervisor || isAdminOrSuperUser;
   const canReconcileAdvances = isCountryDirector || isAdmin || isAdminOrSuperUser;
   
-  const canViewTeamSubmissions = isAdmin || isSupervisor || isFOM || isCountryDirector || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser;
+  const canViewTeamSubmissions = isAdmin || isSupervisor || isSuperAdmin || isFinanceAdmin || isAdminOrSuperUser;
 
   // Default to Submit Request tab for all users
   const [activeTab, setActiveTab] = useState<"submit" | "reconciliation" | "outstanding" | "history">("submit");
@@ -378,9 +376,7 @@ const CostSubmission = () => {
   const filteredOperationalCosts = useMemo(() => {
     let filtered = operationalCosts;
     if (!isAdminOrSuperUser && !isSuperAdmin) {
-      if (isFOM || isCountryDirector) {
-        // FOM and Country Director see all submissions (they approve T1 for supervisors, T2 for coordinators)
-      } else if (isSupervisor && teamMemberIds.length > 0) {
+      if (isSupervisor && teamMemberIds.length > 0) {
         filtered = filtered.filter(o => teamMemberIds.includes(o.submitted_by) || o.submitted_by === currentUser?.id);
       } else if (!canViewTeamSubmissions) {
         filtered = filtered.filter(o => o.submitted_by === currentUser?.id);
@@ -390,68 +386,7 @@ const CostSubmission = () => {
       }
     }
     return filtered;
-  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isSupervisor, isFOM, isCountryDirector, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
-
-  interface GroupedRequest {
-    groupId: string | null;
-    requestTitle: string | null;
-    items: OperationalCostSubmission[];
-    totalAmountCents: number;
-    currency: string;
-    primaryItem: OperationalCostSubmission;
-  }
-
-  const groupedOperationalCosts = useMemo((): GroupedRequest[] => {
-    const groupMap = new Map<string, OperationalCostSubmission[]>();
-    const ungrouped: OperationalCostSubmission[] = [];
-
-    for (const oc of filteredOperationalCosts) {
-      if (oc.request_group_id) {
-        const existing = groupMap.get(oc.request_group_id) || [];
-        existing.push(oc);
-        groupMap.set(oc.request_group_id, existing);
-      } else {
-        ungrouped.push(oc);
-      }
-    }
-
-    const result: GroupedRequest[] = [];
-
-    for (const [groupId, items] of groupMap) {
-      items.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      result.push({
-        groupId,
-        requestTitle: items[0].request_title || null,
-        items,
-        totalAmountCents: items.reduce((s, i) => s + i.amount_cents, 0),
-        currency: items[0].currency,
-        primaryItem: items[0],
-      });
-    }
-
-    for (const oc of ungrouped) {
-      result.push({
-        groupId: null,
-        requestTitle: oc.request_title || null,
-        items: [oc],
-        totalAmountCents: oc.amount_cents,
-        currency: oc.currency,
-        primaryItem: oc,
-      });
-    }
-
-    result.sort((a, b) => new Date(b.primaryItem.created_at).getTime() - new Date(a.primaryItem.created_at).getTime());
-    return result;
-  }, [filteredOperationalCosts]);
-
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const toggleGroupExpanded = useCallback((key: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  }, []);
+  }, [operationalCosts, isAdminOrSuperUser, isSuperAdmin, isSupervisor, teamMemberIds, canViewTeamSubmissions, currentUser?.id, userProjectIds]);
 
   const isCoordinatorSubmission = (oc: OperationalCostSubmission): boolean => {
     const role = (oc.submitter_role || '').toLowerCase();
@@ -473,7 +408,7 @@ const CostSubmission = () => {
     if (oc.tier1_status === 'rejected' || oc.tier2_status === 'rejected' || oc.tier3_status === 'rejected' || oc.status === 'rejected') return 'rejected';
     if (hasThreeTiers(oc)) {
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && oc.tier3_status === 'approved') return 'approved';
-      if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending' || (oc.tier2_status === 'approved' && (oc.tier3_status === null || oc.tier3_status === 'pending')))) return 'under_review';
+      if (oc.tier1_status === 'approved' && (oc.tier2_status === 'pending' || oc.tier3_status === 'pending')) return 'under_review';
     } else {
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'approved') return 'approved';
       if (oc.tier1_status === 'approved' && oc.tier2_status === 'pending') return 'under_review';
@@ -507,9 +442,7 @@ const CostSubmission = () => {
 
   const canTier3Approve = (oc: OperationalCostSubmission): boolean => {
     if (!hasThreeTiers(oc)) return false;
-    if (oc.tier2_status !== 'approved') return false;
-    if (oc.tier3_status !== 'pending' && oc.tier3_status !== null) return false;
-    if (oc.tier3_status === 'approved' || oc.tier3_status === 'rejected') return false;
+    if (oc.tier2_status !== 'approved' || oc.tier3_status !== 'pending') return false;
     if (isSuperAdmin) return true;
     return isAdmin;
   };
@@ -615,20 +548,11 @@ const CostSubmission = () => {
         updates,
       });
 
-      let updateQuery = supabase
+      const { data: updatedRows, error } = await supabase
         .from('operational_cost_submissions')
-        .update(updates);
-
-      if (submission.request_group_id) {
-        updateQuery = updateQuery.eq('request_group_id', submission.request_group_id);
-        if (tier === 1) updateQuery = updateQuery.eq('tier1_status', 'pending');
-        else if (tier === 2) updateQuery = updateQuery.eq('tier2_status', 'pending');
-        else if (tier === 3) updateQuery = updateQuery.or('tier3_status.eq.pending,tier3_status.is.null');
-      } else {
-        updateQuery = updateQuery.eq('id', submission.id);
-      }
-
-      const { data: updatedRows, error } = await updateQuery.select('id');
+        .update(updates)
+        .eq('id', submission.id)
+        .select('id');
 
       if (error) {
         console.error('Approval error:', error);
@@ -1125,17 +1049,10 @@ const CostSubmission = () => {
     if (!deleteConfirm) return;
     setActionProcessing(true);
     try {
-      let deleteQuery = supabase
+      const { error } = await supabase
         .from('operational_cost_submissions')
-        .delete();
-
-      if (deleteConfirm.request_group_id) {
-        deleteQuery = deleteQuery.eq('request_group_id', deleteConfirm.request_group_id);
-      } else {
-        deleteQuery = deleteQuery.eq('id', deleteConfirm.id);
-      }
-
-      const { error } = await deleteQuery
+        .delete()
+        .eq('id', deleteConfirm.id)
         .eq('tier1_status', 'pending')
         .eq('tier2_status', 'pending');
 
@@ -1157,7 +1074,7 @@ const CostSubmission = () => {
     if (!recallConfirm) return;
     setActionProcessing(true);
     try {
-      let recallQuery = supabase
+      const { error } = await supabase
         .from('operational_cost_submissions')
         .update({
           status: 'pending',
@@ -1171,15 +1088,8 @@ const CostSubmission = () => {
           tier2_notes: null,
           rejection_reason: null,
           updated_at: new Date().toISOString(),
-        });
-
-      if (recallConfirm.request_group_id) {
-        recallQuery = recallQuery.eq('request_group_id', recallConfirm.request_group_id);
-      } else {
-        recallQuery = recallQuery.eq('id', recallConfirm.id);
-      }
-
-      const { error } = await recallQuery;
+        })
+        .eq('id', recallConfirm.id);
 
       if (error) {
         toast({ title: "Recall Failed / فشل الاسترجاع", description: error.message, variant: "destructive" });
@@ -2289,13 +2199,13 @@ const CostSubmission = () => {
           {/* Status Filter Tabs */}
           <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-filter-bar">
             {([
-              { key: 'all', label: 'All', labelAr: 'الكل', count: groupedOperationalCosts.length, color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
-              { key: 'pending', label: 'Pending', labelAr: 'معلق', count: groupedOperationalCosts.filter(g => getOperationalDerivedStatus(g.primaryItem) === 'pending').length, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
-              { key: 'under_review', label: 'In Review', labelAr: 'قيد المراجعة', count: groupedOperationalCosts.filter(g => getOperationalDerivedStatus(g.primaryItem) === 'under_review').length, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
-              { key: 'approved', label: 'Approved', labelAr: 'موافق', count: groupedOperationalCosts.filter(g => getOperationalDerivedStatus(g.primaryItem) === 'approved').length, color: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' },
-              { key: 'rejected', label: 'Rejected', labelAr: 'مرفوض', count: groupedOperationalCosts.filter(g => getOperationalDerivedStatus(g.primaryItem) === 'rejected').length, color: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
-              { key: 'paid', label: 'Paid', labelAr: 'مدفوع', count: groupedOperationalCosts.filter(g => getOperationalDerivedStatus(g.primaryItem) === 'paid').length, color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' },
-              { key: 'reconciled', label: 'Reconciled', labelAr: 'مسوّى', count: groupedOperationalCosts.filter(g => getOperationalDerivedStatus(g.primaryItem) === 'reconciled').length, color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
+              { key: 'all', label: 'All', labelAr: 'الكل', count: filteredOperationalCosts.length, color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+              { key: 'pending', label: 'Pending', labelAr: 'معلق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'pending').length, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' },
+              { key: 'under_review', label: 'In Review', labelAr: 'قيد المراجعة', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'under_review').length, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
+              { key: 'approved', label: 'Approved', labelAr: 'موافق', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'approved').length, color: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' },
+              { key: 'rejected', label: 'Rejected', labelAr: 'مرفوض', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'rejected').length, color: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
+              { key: 'paid', label: 'Paid', labelAr: 'مدفوع', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'paid').length, color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' },
+              { key: 'reconciled', label: 'Reconciled', labelAr: 'مسوّى', count: filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === 'reconciled').length, color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300' },
             ] as const).map(f => (
               <Button
                 key={f.key}
@@ -2401,189 +2311,23 @@ const CostSubmission = () => {
             </Card>
           )}
           {(() => {
-            const statusFilteredGroups = statusFilter === 'all'
-              ? groupedOperationalCosts
-              : groupedOperationalCosts.filter(g => getOperationalDerivedStatus(g.primaryItem) === statusFilter);
-            const statusFilteredCount = statusFilteredGroups.reduce((s, g) => s + g.items.length, 0);
-            return statusFilteredGroups.length > 0 ? (
+            const statusFiltered = statusFilter === 'all'
+              ? filteredOperationalCosts
+              : filteredOperationalCosts.filter(o => getOperationalDerivedStatus(o) === statusFilter);
+            return statusFiltered.length > 0 ? (
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Receipt className="h-5 w-5 text-blue-600" />
                     <CardTitle className="text-base">Operational Cost Requests</CardTitle>
-                    <Badge variant="secondary">{statusFilteredGroups.length} request{statusFilteredGroups.length !== 1 ? 's' : ''}{statusFilteredCount !== statusFilteredGroups.length ? ` (${statusFilteredCount} items)` : ''}</Badge>
+                    <Badge variant="secondary">{statusFiltered.length}</Badge>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {statusFilteredGroups.map((group) => {
-                    const isMultiItem = group.items.length > 1;
-                    const groupKey = group.groupId || group.primaryItem.id;
-                    const isGroupExpanded = expandedGroups.has(groupKey);
-
-                    if (isMultiItem) {
-                      const oc = group.primaryItem;
-                      const derivedStatus = getOperationalDerivedStatus(oc);
-                      const statusColors: Record<string, string> = {
-                        pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
-                        under_review: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-                        approved: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-                        rejected: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-                        paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-                        reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
-                      };
-                      const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : (oc.tier3_status === 'pending' || (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && hasThreeTiers(oc))) ? '3' : '?';
-                      const statusLabels: Record<string, string> = {
-                        pending: `Pending (Tier ${pendingTierLabel})`,
-                        under_review: `In Review (Tier ${pendingTierLabel})`,
-                        approved: 'Approved',
-                        rejected: 'Rejected',
-                        paid: 'Paid',
-                        reconciled: 'Reconciled',
-                      };
-                      const submitterName = users.find(u => u.id === oc.submitted_by)?.name || 'Unknown';
-                      const groupTitle = group.requestTitle || oc.description?.match(/<<(.+?)>>/)?.[1] || 'Grouped Request';
-                      const linkedProjectName = oc.project_id ? allProjects.find(p => p.id === oc.project_id)?.name : null;
-                      const categories = [...new Set(group.items.map(i => EXPENSE_CATEGORY_MAP[i.expense_category]?.label || i.expense_category))];
-
-                      return (
-                        <div
-                          key={groupKey}
-                          className="rounded-md border bg-background overflow-hidden"
-                          data-testid={`operational-cost-group-${groupKey}`}
-                        >
-                          <div
-                            className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
-                            onClick={() => toggleGroupExpanded(groupKey)}
-                          >
-                            <div className="flex items-start justify-between gap-3 flex-wrap">
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Badge variant="secondary" className="text-xs shrink-0">
-                                    <Package className="h-3 w-3 mr-1" />
-                                    {group.items.length} items
-                                  </Badge>
-                                  <span className="font-semibold text-base truncate">{groupTitle}</span>
-                                </div>
-                                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                                  <span className="flex items-center gap-1">{categories.join(', ')}</span>
-                                  {linkedProjectName && (
-                                    <span className="flex items-center gap-1">
-                                      <Briefcase className="h-3 w-3" />
-                                      {linkedProjectName}
-                                    </span>
-                                  )}
-                                  {canViewTeamSubmissions && (
-                                    <span className="flex items-center gap-1">
-                                      <Users className="h-3 w-3" />
-                                      {submitterName}
-                                    </span>
-                                  )}
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="h-3 w-3" />
-                                    {oc.created_at ? format(new Date(oc.created_at), 'MMM d, yyyy') : 'N/A'}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end gap-1 shrink-0">
-                                <span className="font-bold text-lg tabular-nums">
-                                  {group.currency} {(group.totalAmountCents / 100).toLocaleString()}
-                                </span>
-                                <Badge className={`text-xs border-0 ${statusColors[derivedStatus] || statusColors.pending}`}>
-                                  {statusLabels[derivedStatus] || derivedStatus}
-                                </Badge>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                              {isGroupExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                              <span>{isGroupExpanded ? 'Hide' : 'Show'} {group.items.length} line items</span>
-                            </div>
-                          </div>
-
-                          {isGroupExpanded && (
-                            <div className="border-t divide-y">
-                              {group.items.map((item, idx) => {
-                                const catMeta = EXPENSE_CATEGORY_MAP[item.expense_category];
-                                const CatIcon = catMeta?.icon;
-                                const itemTitle = item.description?.split('\n')[0]?.replace(/^\[.*?\]\s*/, '')?.replace(/<<.*?>>\s*/, '')?.trim() || 'Untitled';
-                                const itemDesc = item.description?.split('\n\n').slice(1).find(p => !p.startsWith('Justification:') && !p.startsWith('Other Category:'))?.trim();
-                                return (
-                                  <div key={item.id} className="px-4 py-3 bg-muted/20" data-testid={`operational-cost-item-${item.id}`}>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-xs text-muted-foreground font-medium shrink-0">#{idx + 1}</span>
-                                        <Badge variant="outline" className="text-xs flex items-center gap-1 shrink-0">
-                                          {CatIcon && <CatIcon className="h-3 w-3" />}
-                                          {catMeta?.label || item.expense_category}
-                                        </Badge>
-                                        <span className="text-sm truncate">{itemTitle}</span>
-                                      </div>
-                                      <span className="text-sm font-semibold tabular-nums shrink-0">
-                                        {item.currency} {(item.amount_cents / 100).toLocaleString()}
-                                      </span>
-                                    </div>
-                                    {itemDesc && (
-                                      <p className="text-xs text-muted-foreground mt-1 ml-6 line-clamp-2">{itemDesc}</p>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                              <div className="px-4 py-3 flex items-center justify-between bg-muted/30">
-                                <span className="text-sm font-medium">Total ({group.items.length} items)</span>
-                                <span className="text-base font-bold tabular-nums">{group.currency} {(group.totalAmountCents / 100).toLocaleString()}</span>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="px-4 py-3 border-t flex items-center gap-2 flex-wrap">
-                            {canTier1Approve(oc) && (
-                              <>
-                                <Button size="sm" variant="default" onClick={() => openApprovalDialog(oc, 'approve', 1)} data-testid={`button-tier1-approve-group-${groupKey}`}>
-                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Approve T1 (all items)
-                                </Button>
-                                <Button size="sm" variant="destructive" onClick={() => openApprovalDialog(oc, 'reject', 1)} data-testid={`button-tier1-reject-group-${groupKey}`}>
-                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" /> Reject
-                                </Button>
-                              </>
-                            )}
-                            {canTier2Approve(oc) && (
-                              <>
-                                <Button size="sm" variant="default" onClick={() => openApprovalDialog(oc, 'approve', 2)} data-testid={`button-tier2-approve-group-${groupKey}`}>
-                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" /> {hasThreeTiers(oc) ? 'Approve T2' : 'Final Approve'} (all items)
-                                </Button>
-                                <Button size="sm" variant="destructive" onClick={() => openApprovalDialog(oc, 'reject', 2)} data-testid={`button-tier2-reject-group-${groupKey}`}>
-                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" /> Reject
-                                </Button>
-                              </>
-                            )}
-                            {canTier3Approve(oc) && (
-                              <>
-                                <Button size="sm" variant="default" onClick={() => openApprovalDialog(oc, 'approve', 3)} data-testid={`button-tier3-approve-group-${groupKey}`}>
-                                  <ThumbsUp className="h-3.5 w-3.5 mr-1" /> Final Approve (all items)
-                                </Button>
-                                <Button size="sm" variant="destructive" onClick={() => openApprovalDialog(oc, 'reject', 3)} data-testid={`button-tier3-reject-group-${groupKey}`}>
-                                  <ThumbsDown className="h-3.5 w-3.5 mr-1" /> Reject
-                                </Button>
-                              </>
-                            )}
-                            {oc.submitted_by === currentUser?.id && derivedStatus === 'pending' && oc.tier1_status === 'pending' && (
-                              <>
-                                <Button size="sm" variant="outline" onClick={() => setRecallConfirm(oc)} data-testid={`button-recall-group-${groupKey}`}>
-                                  Recall
-                                </Button>
-                                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleteConfirm(oc)} data-testid={`button-delete-group-${groupKey}`}>
-                                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const oc = group.primaryItem;
+                  {statusFiltered.map((oc) => {
                     const catMeta = EXPENSE_CATEGORY_MAP[oc.expense_category];
                     const CatIcon = catMeta?.icon;
                     const statusColors: Record<string, string> = {
@@ -2595,7 +2339,7 @@ const CostSubmission = () => {
                       reconciled: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
                     };
                     const derivedStatus = getOperationalDerivedStatus(oc);
-                    const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : (oc.tier3_status === 'pending' || (oc.tier1_status === 'approved' && oc.tier2_status === 'approved' && hasThreeTiers(oc))) ? '3' : '?';
+                    const pendingTierLabel = oc.tier1_status === 'pending' ? '1' : oc.tier2_status === 'pending' ? '2' : hasThreeTiers(oc) && oc.tier3_status === 'pending' ? '3' : '?';
                     const statusLabels: Record<string, string> = {
                       pending: `Pending (Tier ${pendingTierLabel}) / معلق (المرحلة ${pendingTierLabel})`,
                       under_review: `In Review (Tier ${pendingTierLabel}) / قيد المراجعة (المرحلة ${pendingTierLabel})`,
