@@ -402,6 +402,20 @@ const MMP = () => {
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
   const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'ongoing' | 'completed' | 'all'>('pending');
+
+  const normalizeStatus = (raw: string | null | undefined): string =>
+    (raw || '').trim().toLowerCase().replace(/[-_\s\u00a0]+/g, '');
+
+  const isDraftStatus = (raw: string | null | undefined): boolean => {
+    const s = normalizeStatus(raw);
+    return s === 'inprogress' || s === 'ongoing';
+  };
+
+  const isCompletedStatus = (raw: string | null | undefined): boolean => {
+    const s = normalizeStatus(raw);
+    return s.includes('completed') || s.includes('finished') || s.includes('done');
+  };
+
   // Subcategory state for New MMPs (FOM only)
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified' | 'returned'>('pending');
   // Expanded states for returned sites view
@@ -5397,13 +5411,9 @@ const MMP = () => {
                             Inbox
                             <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                const draftStatuses = new Set(['inprogress', 'ongoing']);
-                                if (draftStatuses.has(status)) return false;
-                                const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
-                                if (completedLike) return false;
-                                const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
-                                if (isUnsynced) return false;
+                                if (isDraftStatus(site.status)) return false;
+                                if (isCompletedStatus(site.status)) return false;
+                                if (unsyncedCompletedVisits.some(uv => uv.id === site.id)) return false;
                                 return true;
                               }).length}
                             </Badge>
@@ -5416,10 +5426,7 @@ const MMP = () => {
                           >
                             Drafts
                             <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
-                              {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').trim().toLowerCase().replace(/[-_\s]/g, '');
-                                return status === 'inprogress' || status === 'ongoing';
-                              }).length}
+                              {enumeratorMySites.filter(site => isDraftStatus(site.status)).length}
                             </Badge>
                           </Button>
                           <Button 
@@ -5442,11 +5449,8 @@ const MMP = () => {
                             Sent
                             <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
-                                const status = (site.status || '').toLowerCase().trim();
-                                const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
-                                if (!isCompleted) return false;
-                                const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
-                                return !isUnsynced;
+                                if (!isCompletedStatus(site.status)) return false;
+                                return !unsyncedCompletedVisits.some(uv => uv.id === site.id);
                               }).length}
                             </Badge>
                           </Button>
@@ -5636,29 +5640,18 @@ const MMP = () => {
                         {enumeratorSubTab === 'mySites'
                           ? (mySitesSubTab === 'pending' 
                               ? enumeratorMySites.filter(site => {
-                                  const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                  const draftStatuses = new Set(['inprogress', 'ongoing']);
-                                  if (draftStatuses.has(status)) return false;
-                                  const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
-                                  if (completedLike) return false;
-                                  const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
-                                  if (isUnsynced) return false;
+                                  if (isDraftStatus(site.status)) return false;
+                                  if (isCompletedStatus(site.status)) return false;
+                                  if (unsyncedCompletedVisits.some(uv => uv.id === site.id)) return false;
                                   return true;
                                 }).length
                               : mySitesSubTab === 'ongoing'
                               ? unsyncedCompletedVisits.length
                               : mySitesSubTab === 'all'
-                              ? enumeratorMySites.filter(site => {
-                                  const status = (site.status || '').trim().toLowerCase().replace(/[-_\s]/g, '');
-                                  return status === 'inprogress' || status === 'ongoing';
-                                }).length
+                              ? enumeratorMySites.filter(site => isDraftStatus(site.status)).length
                               : enumeratorMySites.filter(site => {
-                                  const status = (site.status || '').toLowerCase();
-                                  const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
-                                  if (!isCompleted) return false;
-                                  // Exclude unsynced completed visits
-                                  const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
-                                  return !isUnsynced;
+                                  if (!isCompletedStatus(site.status)) return false;
+                                  return !unsyncedCompletedVisits.some(uv => uv.id === site.id);
                                 }).length)
                           : enumeratorSmartAssigned.length
                         } sites
@@ -5675,34 +5668,20 @@ const MMP = () => {
                       let sitesToShow: any[] = [];
                       if (enumeratorSubTab === 'mySites') {
                         if (mySitesSubTab === 'all') {
-                          sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').trim().toLowerCase().replace(/[-_\s]/g, '');
-                            return status === 'inprogress' || status === 'ongoing';
-                          });
+                          sitesToShow = enumeratorMySites.filter(site => isDraftStatus(site.status));
                         } else if (mySitesSubTab === 'pending') {
                           sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                            const draftStatuses = new Set(['inprogress', 'ongoing']);
-                            if (draftStatuses.has(status)) return false;
-                            const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
-                            if (completedLike) return false;
-                            const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
-                            if (isUnsynced) return false;
+                            if (isDraftStatus(site.status)) return false;
+                            if (isCompletedStatus(site.status)) return false;
+                            if (unsyncedCompletedVisits.some(uv => uv.id === site.id)) return false;
                             return true;
                           });
                         } else if (mySitesSubTab === 'ongoing') {
-                          // Outbox: Show completed visits that are not yet synced (from offline DB)
                           sitesToShow = unsyncedCompletedVisits;
                         } else if (mySitesSubTab === 'completed') {
-                          // Sent: Show ONLY completed/finished/done visits - nothing else
                           sitesToShow = enumeratorMySites.filter(site => {
-                            const status = (site.status || '').toLowerCase().trim();
-                            // ONLY include sites with completed/finished/done status
-                            const isCompleted = status === 'completed' || status.includes('completed') || status.includes('finished') || status.includes('done');
-                            if (!isCompleted) return false;
-                            // Exclude sites that are still unsynced in offline DB
-                            const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
-                            return !isUnsynced;
+                            if (!isCompletedStatus(site.status)) return false;
+                            return !unsyncedCompletedVisits.some(uv => uv.id === site.id);
                           });
                         } else {
                           // Fallback: show nothing (should not reach here)
