@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import {
-  Download, FileText, MapPin, TrendingUp, Loader2
+  Download, FileText, MapPin, TrendingUp, Loader2, ClipboardList
 } from 'lucide-react';
 
 type ExportFormat = 'csv' | 'excel';
@@ -256,6 +256,76 @@ const DataExportCenter = () => {
     }
   }, [mmpFiles, format, toast]);
 
+  const exportAllMmps = useCallback(async () => {
+    setJobStatus('allmmps', 'exporting', 10);
+    try {
+      const allMmps = mmpFiles || [];
+      if (allMmps.length === 0) {
+        toast({ title: 'No Data', description: 'No MMPs found to export.', variant: 'destructive' });
+        setJobStatus('allmmps', 'idle', 0);
+        return;
+      }
+
+      setJobStatus('allmmps', 'exporting', 30);
+
+      const mmpIds = allMmps.map(m => m.id);
+      let allSites: any[] = [];
+      const batchSize = 50;
+      for (let i = 0; i < mmpIds.length; i += batchSize) {
+        const batch = mmpIds.slice(i, i + batchSize);
+        const { data } = await supabase
+          .from('site_visits')
+          .select('mmp_id, status, not_covered_flag')
+          .in('mmp_id', batch);
+        if (data) allSites = allSites.concat(data);
+      }
+
+      setJobStatus('allmmps', 'exporting', 70);
+
+      const exportData = allMmps.map(m => {
+        const mmpAny = m as any;
+        const sites = allSites.filter(s => s.mmp_id === m.id);
+        const completed = sites.filter(s => s.status === 'completed').length;
+        const pending = sites.filter(s => s.status === 'pending').length;
+        const assigned = sites.filter(s => s.status === 'assigned').length;
+        const dispatched = sites.filter(s => s.status === 'dispatched').length;
+        const uncovered = sites.filter(s => s.not_covered_flag).length;
+        const cycleStatus = mmpAny.cycle_status || mmpAny.cycleStatus || 'active';
+        return {
+          'MMP Name': m.name,
+          'Month': mmpAny.month || '',
+          'Year': mmpAny.year || '',
+          'Project': mmpAny.projectName || mmpAny.project_name || '',
+          'Hub': mmpAny.hub || mmpAny.hubOffice || mmpAny.region || '',
+          'Status': m.status || '',
+          'Cycle Status': cycleStatus,
+          'Total Site Visits': sites.length,
+          'Completed': completed,
+          'Pending': pending,
+          'Assigned': assigned,
+          'Dispatched': dispatched,
+          'Uncovered': uncovered,
+          'Coverage Rate': sites.length > 0 ? `${Math.round((completed / sites.length) * 100)}%` : 'N/A',
+          'Created': mmpAny.created_at || mmpAny.createdAt || '',
+          'Closed At': mmpAny.cycle_closed_at || mmpAny.cycleClosedAt || '',
+        };
+      });
+
+      const filename = `all-mmps-${new Date().toISOString().slice(0, 10)}`;
+      if (format === 'excel') {
+        await exportToExcel(exportData, 'All MMPs', `${filename}.xlsx`);
+      } else {
+        downloadFile(toCsv(exportData), `${filename}.csv`, 'text/csv');
+      }
+
+      setJobStatus('allmmps', 'done', 100);
+      toast({ title: 'Export Complete', description: `Exported ${exportData.length} MMPs with full details.` });
+    } catch (err: any) {
+      setJobStatus('allmmps', 'error', 0);
+      toast({ title: 'Export Failed', description: err.message, variant: 'destructive' });
+    }
+  }, [mmpFiles, format, toast]);
+
   if (!isAdmin) {
     return (
       <div className="max-w-xl mx-auto mt-20 p-8 bg-white dark:bg-gray-900 rounded-xl shadow text-center" data-testid="access-denied">
@@ -373,7 +443,14 @@ const DataExportCenter = () => {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <ExportCard
+          category="allmmps"
+          title="All MMPs"
+          description="Export all MMPs with site counts, coverage rates, and cycle status"
+          icon={ClipboardList}
+          onExport={exportAllMmps}
+        />
         <ExportCard
           category="cycles"
           title="Cycle Reports"

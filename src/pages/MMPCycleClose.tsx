@@ -24,6 +24,11 @@ import {
   ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet,
   Bell, TrendingUp, TrendingDown, Minus, Star, Shield
 } from 'lucide-react';
+import { CycleMMPCard } from '@/components/cycle/CycleMMPCard';
+import { CycleCoveragePredictor } from '@/components/cycle/CycleCoveragePredictor';
+import { CycleReportsTab } from '@/components/cycle/CycleReportsTab';
+import { CycleComparisonTab } from '@/components/cycle/CycleComparisonTab';
+import { CycleScorecardTab } from '@/components/cycle/CycleScorecardTab';
 
 const NOT_COVERED_REASONS = [
   { value: 'not_distributed', label: 'Not Distributed', labelAr: 'لم يتم التوزيع' },
@@ -924,180 +929,27 @@ const MMPCycleClose = () => {
               {activeMmps.map(mmp => {
                 const cycleStatus = (mmp as any).cycle_status || 'active';
                 const mmpUncovered = uncoveredSites.filter(s => s.mmp_id === mmp.id);
-                const mmpReasoned = mmpUncovered.filter(s => s.not_covered_reason).length;
-                const progress = mmpUncovered.length > 0 ? Math.round((mmpReasoned / mmpUncovered.length) * 100) : 100;
 
                 return (
-                  <Card key={mmp.id} className="border-l-4" style={{ borderLeftColor: cycleStatus === 'closing' ? '#f59e0b' : '#10b981' }} data-testid={`card-cycle-${mmp.id}`}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-base">{mmp.name}</CardTitle>
-                          <CardDescription className="text-xs mt-1">
-                            {mmp.hub || mmp.region || 'No hub'} &middot; {mmp.month ? `Month ${mmp.month}` : ''} {mmp.year || ''}
-                          </CardDescription>
-                        </div>
-                        <Badge variant={cycleStatus === 'closing' ? 'default' : cycleStatus === 'pending_approval' ? 'default' : 'secondary'} className={cycleStatus === 'closing' ? 'bg-amber-500' : cycleStatus === 'pending_approval' ? 'bg-purple-500' : ''} data-testid={`badge-status-${mmp.id}`}>
-                          {cycleStatus === 'closing' ? 'Closing' : cycleStatus === 'pending_approval' ? 'Pending Approval' : 'Active'}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {cycleStatus === 'closing' && (
-                        <>
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-gray-500">
-                              <span>Reason Assignment Progress</span>
-                              <span>{mmpReasoned}/{mmpUncovered.length}</span>
-                            </div>
-                            <Progress value={progress} className="h-2" />
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                            <div className="bg-red-50 dark:bg-red-950 rounded p-2">
-                              <div className="text-red-600 dark:text-red-400 font-bold text-lg">{mmpUncovered.length}</div>
-                              <div className="text-gray-500">Uncovered</div>
-                            </div>
-                            <div className="bg-amber-50 dark:bg-amber-950 rounded p-2">
-                              <div className="text-amber-600 dark:text-amber-400 font-bold text-lg">{mmpUncovered.length - mmpReasoned}</div>
-                              <div className="text-gray-500">Pending</div>
-                            </div>
-                            <div className="bg-green-50 dark:bg-green-950 rounded p-2">
-                              <div className="text-green-600 dark:text-green-400 font-bold text-lg">{mmpReasoned}</div>
-                              <div className="text-gray-500">Reasoned</div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {cycleStatus === 'closing' && (mmp as any).cycle_close_deadline && (
-                        <div className={`flex items-center gap-2 text-xs mt-2 ${
-                          new Date((mmp as any).cycle_close_deadline) < new Date() 
-                            ? 'text-red-600 dark:text-red-400 font-semibold' 
-                            : 'text-gray-500'
-                        }`}>
-                          <Clock className="h-3.5 w-3.5" />
-                          {new Date((mmp as any).cycle_close_deadline) < new Date() ? (
-                            <span>OVERDUE - Deadline was {new Date((mmp as any).cycle_close_deadline).toLocaleDateString()}</span>
-                          ) : (
-                            <span>Deadline: {new Date((mmp as any).cycle_close_deadline).toLocaleDateString()} ({Math.ceil((new Date((mmp as any).cycle_close_deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days remaining)</span>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {cycleStatus === 'active' && canManageCycle && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="destructive" disabled={closingCycle} data-testid={`button-start-close-${mmp.id}`}>
-                                <AlertTriangle className="h-3 w-3 mr-1" /> Start Cycle Close
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Start Cycle Close</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will flag all incomplete site visits (pending, assigned, dispatched) as &quot;Not Covered&quot;.
-                                  Supervisors will need to provide a reason for each uncovered site before the cycle can be fully closed.
-                                  <br /><br />
-                                  <strong>This action cannot be undone.</strong>
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleStartClosingCycle(mmp.id)} data-testid="button-confirm-start-close">
-                                  Start Closing
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-
-                        {cycleStatus === 'closing' && canManageCycle && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" disabled={finalizingCycle || progress < 100} className="bg-green-600 hover:bg-green-700" data-testid={`button-finalize-${mmp.id}`}>
-                                <CheckCircle2 className="h-3 w-3 mr-1" /> Finalize Close
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Finalize Cycle Close</AlertDialogTitle>
-                                <AlertDialogDescription asChild>
-                                  <div className="space-y-3">
-                                    <p>You are about to close this MMP cycle. Here is a summary:</p>
-                                    <div className="grid grid-cols-2 gap-2 text-sm bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                                      <div>Total Uncovered Sites:</div>
-                                      <div className="font-semibold">{mmpUncovered.length}</div>
-                                      <div>Reasons Assigned:</div>
-                                      <div className="font-semibold text-green-600">{mmpReasoned}</div>
-                                      <div>Top Reason:</div>
-                                      <div className="font-semibold">{(() => { const counts: Record<string, number> = {}; mmpUncovered.forEach(s => { if (s.not_covered_reason) counts[s.not_covered_reason] = (counts[s.not_covered_reason] || 0) + 1; }); const top = Object.entries(counts).sort((a,b) => b[1]-a[1])[0]; return top ? `${getReasonLabel(top[0])} (${top[1]})` : 'N/A'; })()}</div>
-                                      <div>Completion Rate:</div>
-                                      <div className="font-semibold text-blue-600">{progress}%</div>
-                                    </div>
-                                    <p className="text-xs text-gray-500">All uncovered site visits will be cancelled and archived. This action cannot be undone.</p>
-                                  </div>
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleFinalizeCycleClose(mmp.id)} data-testid="button-confirm-finalize">
-                                  Close Cycle
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-
-                        {cycleStatus === 'closing' && (
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedMmpId(mmp.id); setActiveTab('uncovered'); }} data-testid={`button-view-uncovered-${mmp.id}`}>
-                            View Sites <ArrowRight className="h-3 w-3 ml-1" />
-                          </Button>
-                        )}
-
-                        {cycleStatus === 'closing' && canManageCycle && (mmp as any).cycle_close_deadline && new Date((mmp as any).cycle_close_deadline) < new Date() && (
-                          <Button size="sm" variant="outline" className="text-red-600 border-red-300" onClick={() => handleSendReminders(mmp.id)} data-testid={`button-send-reminder-${mmp.id}`}>
-                            <AlertTriangle className="h-3 w-3 mr-1" /> Send Reminders
-                          </Button>
-                        )}
-
-                        {cycleStatus === 'pending_approval' && (isFOM || isAdmin) && (
-                          <>
-                            <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApproveCycle(mmp.id)} data-testid={`button-approve-${mmp.id}`}>
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Approve & Close
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button size="sm" variant="destructive" data-testid={`button-reject-${mmp.id}`}>
-                                  <XCircle className="h-3 w-3 mr-1" /> Reject
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Reject Cycle Close</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This will return the cycle to &quot;Closing&quot; status. The team will need to address issues before resubmitting.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleRejectCycle(mmp.id, 'Cycle close rejected - additional review needed')} data-testid="button-confirm-reject">
-                                    Reject
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </>
-                        )}
-                      </div>
-
-                      {(mmp as any).cycle_approval_note && (
-                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-950 rounded text-xs text-red-700 dark:text-red-300">
-                          <span className="font-medium">Rejection Note:</span> {(mmp as any).cycle_approval_note}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <CycleMMPCard
+                    key={mmp.id}
+                    mmp={mmp}
+                    uncoveredSites={mmpUncovered}
+                    cycleStatus={cycleStatus}
+                    canManageCycle={canManageCycle}
+                    isFOM={isFOM}
+                    isAdmin={isAdmin}
+                    closingCycle={closingCycle}
+                    finalizingCycle={finalizingCycle}
+                    handleStartClosingCycle={handleStartClosingCycle}
+                    handleFinalizeCycleClose={handleFinalizeCycleClose}
+                    handleApproveCycle={handleApproveCycle}
+                    handleRejectCycle={handleRejectCycle}
+                    handleSendReminders={handleSendReminders}
+                    setSelectedMmpId={setSelectedMmpId}
+                    setActiveTab={setActiveTab}
+                    getReasonLabel={getReasonLabel}
+                  />
                 );
               })}
             </div>
@@ -1111,54 +963,7 @@ const MMPCycleClose = () => {
             </div>
           )}
 
-          {activeMmps.filter(m => (m as any).cycle_status === 'active' || !(m as any).cycle_status).length > 0 && (
-            <Card className="mt-4" data-testid="card-coverage-prediction">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" /> Coverage Prediction
-                </CardTitle>
-                <CardDescription>Projected coverage based on current visit progress</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {activeMmps.filter(m => {
-                    const cs = (m as any).cycle_status || 'active';
-                    return cs === 'active';
-                  }).map(mmp => {
-                    const mmpSitesTotal = uncoveredSites.filter(s => s.mmp_id === mmp.id).length;
-                    const totalSitesForMmp = mmpSitesTotal;
-                    const createdAt = (mmp as any).created_at ? new Date((mmp as any).created_at) : new Date();
-                    const daysElapsed = Math.max(1, Math.ceil((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)));
-                    const expectedDuration = 30;
-                    const visitedSoFar = totalSitesForMmp > 0 ? Math.max(0, totalSitesForMmp - mmpSitesTotal) : 0;
-                    const dailyRate = visitedSoFar / daysElapsed;
-                    const daysRemaining = Math.max(0, expectedDuration - daysElapsed);
-                    const projectedTotal = visitedSoFar + (dailyRate * daysRemaining);
-                    const projectedCoverage = totalSitesForMmp > 0 ? Math.min(100, Math.round((projectedTotal / (totalSitesForMmp + visitedSoFar)) * 100)) : 100;
-                    const isAtRisk = projectedCoverage < 80;
-
-                    return (
-                      <div key={mmp.id} className={`p-3 rounded-lg border ${isAtRisk ? 'border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800' : 'border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800'}`} data-testid={`prediction-${mmp.id}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium truncate">{mmp.name}</span>
-                          {isAtRisk ? (
-                            <Badge variant="destructive" className="text-xs">At Risk</Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-xs">On Track</Badge>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500 space-y-1">
-                          <div className="flex justify-between"><span>Days elapsed:</span><span>{daysElapsed}/{expectedDuration}</span></div>
-                          <div className="flex justify-between"><span>Pending visits:</span><span>{mmpSitesTotal}</span></div>
-                          <div className="flex justify-between"><span>Projected coverage:</span><span className={isAtRisk ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>{projectedCoverage}%</span></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <CycleCoveragePredictor activeMmps={activeMmps} uncoveredSites={uncoveredSites} />
         </TabsContent>
 
         <TabsContent value="uncovered" className="space-y-4">
@@ -1290,371 +1095,33 @@ const MMPCycleClose = () => {
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card data-testid="card-reason-breakdown">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4" /> Reason Breakdown
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {Object.keys(reasonBreakdown).length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">No data available</p>
-                ) : (
-                  <div className="space-y-2">
-                    {Object.entries(reasonBreakdown).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
-                      <div key={reason} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-700 dark:text-gray-300">
-                          {reason === 'pending' ? 'Pending Reason' : getReasonLabel(reason)}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full ${reason === 'pending' ? 'bg-red-500' : 'bg-blue-500'}`}
-                              style={{ width: `${(count / uncoveredSites.length) * 100}%` }}
-                            />
-                          </div>
-                          <span className="font-medium w-8 text-right">{count}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card data-testid="card-hub-breakdown">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="h-4 w-4" /> Hub Accountability
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {Object.keys(hubBreakdown).length === 0 ? (
-                  <p className="text-gray-500 text-sm text-center py-4">No data available</p>
-                ) : (
-                  <div className="space-y-3">
-                    {Object.entries(hubBreakdown).sort((a, b) => b[1].total - a[1].total).map(([hub, data]) => (
-                      <div key={hub} className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-gray-700 dark:text-gray-300">{hub}</span>
-                          <span className="text-xs text-gray-500">
-                            {data.reasoned}/{data.total} reasoned
-                          </span>
-                        </div>
-                        <Progress value={data.total > 0 ? (data.reasoned / data.total) * 100 : 0} className="h-1.5" />
-                        {data.pending > 0 && (
-                          <span className="text-xs text-red-500">{data.pending} pending</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Summary Statistics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">{cycleStats.uncoveredSites}</div>
-                  <div className="text-xs text-gray-500">Total Uncovered</div>
-                </div>
-                <div className="bg-green-50 dark:bg-green-950 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-green-600">{cycleStats.reasonedSites}</div>
-                  <div className="text-xs text-gray-500">Reasons Assigned</div>
-                </div>
-                <div className="bg-red-50 dark:bg-red-950 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-red-600">{cycleStats.pendingReasonSites}</div>
-                  <div className="text-xs text-gray-500">Pending Reasons</div>
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-blue-600">{cycleStats.coverageRate}%</div>
-                  <div className="text-xs text-gray-500">Completion Rate</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {followUps.length > 0 && (
-            <Card data-testid="card-follow-ups">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" /> Follow-up Actions ({followUps.length})
-                </CardTitle>
-                <CardDescription>High-priority reasons requiring follow-up for the next cycle</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {followUps.map(fu => (
-                    <div key={fu.id} className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800" data-testid={`follow-up-${fu.id}`}>
-                      <Shield className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">{fu.siteName}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          <Badge variant="outline" className="text-xs mr-2">{getReasonLabel(fu.reason)}</Badge>
-                          {fu.mmpName && <span>{fu.mmpName}</span>}
-                        </div>
-                        <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">{fu.suggestedAction}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {qualityData.length > 0 && (
-            <Card data-testid="card-visit-quality">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Star className="h-4 w-4" /> Visit Quality Scores
-                </CardTitle>
-                <CardDescription>Average quality scores per hub from completed site visits</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {qualityData.sort((a, b) => b.avgScore - a.avgScore).map(q => (
-                    <div key={q.hub} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-gray-700 dark:text-gray-300">{q.hub}</span>
-                        <div className="flex items-center gap-2">
-                          <div className="flex">
-                            {[1, 2, 3, 4, 5].map(i => (
-                              <Star key={i} className={`h-3 w-3 ${i <= Math.round(q.avgScore) ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`} />
-                            ))}
-                          </div>
-                          <span className="text-xs text-gray-500">{q.avgScore}/5 ({q.count} visits)</span>
-                        </div>
-                      </div>
-                      <Progress value={(q.avgScore / 5) * 100} className="h-1.5" />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <CycleReportsTab
+            reasonBreakdown={reasonBreakdown}
+            hubBreakdown={hubBreakdown}
+            cycleStats={cycleStats}
+            followUps={followUps}
+            qualityData={qualityData}
+            uncoveredSitesCount={uncoveredSites.length}
+            getReasonLabel={getReasonLabel}
+          />
         </TabsContent>
 
         <TabsContent value="comparison" className="space-y-4">
-          <Card data-testid="card-comparison">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" /> Cycle Comparison
-              </CardTitle>
-              <CardDescription>Select two closed cycles to compare side-by-side</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-4">
-                <div className="space-y-1 flex-1 min-w-[200px]">
-                  <label className="text-xs text-gray-500">Cycle A</label>
-                  <Select value={comparisonCycle1} onValueChange={setComparisonCycle1}>
-                    <SelectTrigger data-testid="select-comparison-cycle-1">
-                      <SelectValue placeholder="Select cycle..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {closedCycles.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name} ({c.month}/{c.year})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1 flex-1 min-w-[200px]">
-                  <label className="text-xs text-gray-500">Cycle B</label>
-                  <Select value={comparisonCycle2} onValueChange={setComparisonCycle2}>
-                    <SelectTrigger data-testid="select-comparison-cycle-2">
-                      <SelectValue placeholder="Select cycle..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {closedCycles.filter(c => c.id !== comparisonCycle1).map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name} ({c.month}/{c.year})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {comparisonCycle1 && comparisonCycle2 && (() => {
-                const c1 = closedCycles.find(c => c.id === comparisonCycle1);
-                const c2 = closedCycles.find(c => c.id === comparisonCycle2);
-                if (!c1 || !c2) return null;
-                const rate1 = c1.totalSites > 0 ? Math.round(((c1.totalSites - c1.uncoveredSites) / c1.totalSites) * 100) : 0;
-                const rate2 = c2.totalSites > 0 ? Math.round(((c2.totalSites - c2.uncoveredSites) / c2.totalSites) * 100) : 0;
-                const allReasons = new Set([...Object.keys(c1.reasonBreakdown || {}), ...Object.keys(c2.reasonBreakdown || {})]);
-
-                return (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div className="text-sm font-medium text-gray-500">Metric</div>
-                      <div className="text-sm font-medium">{c1.name}</div>
-                      <div className="text-sm font-medium">{c2.name}</div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Coverage Rate</div>
-                      <div className="text-lg font-bold">{rate1}%</div>
-                      <div className="text-lg font-bold flex items-center justify-center gap-1">
-                        {rate2}%
-                        {rate2 > rate1 ? <TrendingUp className="h-4 w-4 text-green-500" /> : rate2 < rate1 ? <TrendingDown className="h-4 w-4 text-red-500" /> : <Minus className="h-4 w-4 text-gray-400" />}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Uncovered Sites</div>
-                      <div className="text-lg font-bold text-red-600">{c1.uncoveredSites}</div>
-                      <div className="text-lg font-bold text-red-600 flex items-center justify-center gap-1">
-                        {c2.uncoveredSites}
-                        {c2.uncoveredSites < c1.uncoveredSites ? <TrendingDown className="h-4 w-4 text-green-500" /> : c2.uncoveredSites > c1.uncoveredSites ? <TrendingUp className="h-4 w-4 text-red-500" /> : <Minus className="h-4 w-4 text-gray-400" />}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Total Sites</div>
-                      <div className="text-lg font-bold">{c1.totalSites}</div>
-                      <div className="text-lg font-bold">{c2.totalSites}</div>
-                    </div>
-
-                    {allReasons.size > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Reason Breakdown Comparison</h4>
-                        {Array.from(allReasons).map(reason => {
-                          const v1 = (c1.reasonBreakdown || {})[reason] || 0;
-                          const v2 = (c2.reasonBreakdown || {})[reason] || 0;
-                          const diff = v2 - v1;
-                          return (
-                            <div key={reason} className="grid grid-cols-3 gap-4 text-sm items-center">
-                              <span className="text-gray-600 dark:text-gray-400">{getReasonLabel(reason)}</span>
-                              <span className="text-center font-medium">{v1}</span>
-                              <span className="text-center font-medium flex items-center justify-center gap-1">
-                                {v2}
-                                {diff !== 0 && (
-                                  <span className={`text-xs ${diff > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                    ({diff > 0 ? '+' : ''}{diff})
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {(!comparisonCycle1 || !comparisonCycle2) && closedCycles.length < 2 && (
-                <p className="text-gray-500 text-sm text-center py-4">At least two closed cycles are needed for comparison.</p>
-              )}
-            </CardContent>
-          </Card>
+          <CycleComparisonTab
+            closedCycles={closedCycles}
+            comparisonCycle1={comparisonCycle1}
+            comparisonCycle2={comparisonCycle2}
+            setComparisonCycle1={setComparisonCycle1}
+            setComparisonCycle2={setComparisonCycle2}
+            getReasonLabel={getReasonLabel}
+          />
         </TabsContent>
 
         <TabsContent value="scorecard" className="space-y-4">
-          <Card data-testid="card-scorecard">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" /> Performance Scorecard
-              </CardTitle>
-              <CardDescription>Hub performance across closed cycles</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {closedCycles.length === 0 ? (
-                <p className="text-gray-500 text-sm text-center py-4">No closed cycles available for scoring.</p>
-              ) : (() => {
-                const hubPerf: Record<string, {
-                  cycles: { name: string; rate: number; month: number | null; year: number | null }[];
-                  totalUncovered: number;
-                  totalSites: number;
-                  reasons: Record<string, number>;
-                }> = {};
-
-                closedCycles.forEach(c => {
-                  const hub = c.region || 'Unknown';
-                  if (!hubPerf[hub]) hubPerf[hub] = { cycles: [], totalUncovered: 0, totalSites: 0, reasons: {} };
-                  const rate = c.totalSites > 0 ? Math.round(((c.totalSites - c.uncoveredSites) / c.totalSites) * 100) : 100;
-                  hubPerf[hub].cycles.push({ name: c.name, rate, month: c.month, year: c.year });
-                  hubPerf[hub].totalUncovered += c.uncoveredSites;
-                  hubPerf[hub].totalSites += c.totalSites;
-                  if (c.reasonBreakdown) {
-                    Object.entries(c.reasonBreakdown).forEach(([r, count]) => {
-                      hubPerf[hub].reasons[r] = (hubPerf[hub].reasons[r] || 0) + count;
-                    });
-                  }
-                });
-
-                return (
-                  <div className="space-y-6">
-                    {Object.entries(hubPerf).sort((a, b) => {
-                      const avgA = a[1].cycles.reduce((s, c) => s + c.rate, 0) / a[1].cycles.length;
-                      const avgB = b[1].cycles.reduce((s, c) => s + c.rate, 0) / b[1].cycles.length;
-                      return avgB - avgA;
-                    }).map(([hub, data]) => {
-                      const avgRate = Math.round(data.cycles.reduce((s, c) => s + c.rate, 0) / data.cycles.length);
-                      const sortedCycles = [...data.cycles].sort((a, b) => (a.year || 0) - (b.year || 0) || (a.month || 0) - (b.month || 0));
-                      const lastTwo = sortedCycles.slice(-2);
-                      const improving = lastTwo.length === 2 && lastTwo[1].rate >= lastTwo[0].rate;
-                      const declining = lastTwo.length === 2 && lastTwo[1].rate < lastTwo[0].rate;
-                      const topReasons = Object.entries(data.reasons).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-                      return (
-                        <div key={hub} className="p-4 border rounded-lg space-y-3" data-testid={`scorecard-hub-${hub}`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-gray-400" />
-                              <span className="font-medium text-gray-900 dark:text-white">{hub}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={avgRate >= 80 ? 'secondary' : 'destructive'} className="text-xs">
-                                Avg: {avgRate}%
-                              </Badge>
-                              {improving && <Badge variant="secondary" className="text-xs text-green-600"><TrendingUp className="h-3 w-3 mr-1" /> Improving</Badge>}
-                              {declining && <Badge variant="secondary" className="text-xs text-red-600"><TrendingDown className="h-3 w-3 mr-1" /> Declining</Badge>}
-                            </div>
-                          </div>
-
-                          <div className="text-xs text-gray-500">
-                            <span className="font-medium">Coverage trend: </span>
-                            {sortedCycles.map((c, i) => (
-                              <span key={i}>
-                                {c.name}: {c.rate}%{i < sortedCycles.length - 1 ? ' → ' : ''}
-                              </span>
-                            ))}
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                            <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
-                              <div className="font-bold text-sm">{data.cycles.length}</div>
-                              <div className="text-gray-500">Cycles</div>
-                            </div>
-                            <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
-                              <div className="font-bold text-sm">{data.totalSites}</div>
-                              <div className="text-gray-500">Total Sites</div>
-                            </div>
-                            <div className="bg-gray-50 dark:bg-gray-800 rounded p-2">
-                              <div className="font-bold text-sm text-red-600">{data.totalUncovered}</div>
-                              <div className="text-gray-500">Uncovered</div>
-                            </div>
-                          </div>
-
-                          {topReasons.length > 0 && (
-                            <div className="text-xs">
-                              <span className="text-gray-500 font-medium">Top gap reasons: </span>
-                              {topReasons.map(([r, count], i) => (
-                                <Badge key={r} variant="outline" className="text-xs mr-1">
-                                  {getReasonLabel(r)} ({count})
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
+          <CycleScorecardTab
+            closedCycles={closedCycles}
+            getReasonLabel={getReasonLabel}
+          />
         </TabsContent>
 
         <TabsContent value="archive" className="space-y-4">
@@ -1669,7 +1136,7 @@ const MMPCycleClose = () => {
           ) : (
             <div className="space-y-3">
               {closedCycles.map(cycle => (
-                <Card key={cycle.id} className="border-l-4 border-l-gray-400" data-testid={`card-closed-cycle-${cycle.id}`}>
+                <Card key={cycle.id} data-testid={`card-closed-cycle-${cycle.id}`}>
                   <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedCycle(expandedCycle === cycle.id ? null : cycle.id)}>
                     <div className="flex items-center justify-between">
                       <div>

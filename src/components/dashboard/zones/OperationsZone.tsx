@@ -88,28 +88,41 @@ export const OperationsZone: React.FC = () => {
   // State for directly loaded dispatched sites (for coordinators/data collectors)
   const [dispatchedSitesFromDB, setDispatchedSitesFromDB] = useState<any[]>([]);
   const [closingCycles, setClosingCycles] = useState<{ id: string; name: string; deadline: string | null; uncovered: number; reasoned: number }[]>([]);
+  const [cycleSummary, setCycleSummary] = useState<{ active: number; closing: number; pending_approval: number; closed: number }>({ active: 0, closing: 0, pending_approval: 0, closed: 0 });
 
   useEffect(() => {
     const isAdminUser = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin', 'ict']);
     if (!isAdminUser) return;
-    const fetchClosing = async () => {
-      const { data: mmps } = await supabase
+    const fetchCycleData = async () => {
+      const { data: allMmps } = await supabase
         .from('mmp_files')
-        .select('id, name, cycle_close_deadline')
-        .eq('cycle_status', 'closing');
-      if (!mmps || mmps.length === 0) { setClosingCycles([]); return; }
-      const mmpIds = mmps.map(m => m.id);
+        .select('id, name, cycle_status, cycle_close_deadline');
+      if (!allMmps) { setClosingCycles([]); return; }
+
+      const counts = { active: 0, closing: 0, pending_approval: 0, closed: 0 };
+      allMmps.forEach(m => {
+        const cs = (m as any).cycle_status || 'active';
+        if (cs === 'closing') counts.closing++;
+        else if (cs === 'pending_approval') counts.pending_approval++;
+        else if (cs === 'closed') counts.closed++;
+        else counts.active++;
+      });
+      setCycleSummary(counts);
+
+      const closingMmps = allMmps.filter(m => (m as any).cycle_status === 'closing');
+      if (closingMmps.length === 0) { setClosingCycles([]); return; }
+      const mmpIds = closingMmps.map(m => m.id);
       const { data: sites } = await supabase
         .from('site_visits')
         .select('mmp_id, not_covered_reason')
         .in('mmp_id', mmpIds)
         .eq('not_covered_flag', true);
-      setClosingCycles(mmps.map(m => {
+      setClosingCycles(closingMmps.map(m => {
         const mSites = (sites || []).filter(s => s.mmp_id === m.id);
         return { id: m.id, name: m.name, deadline: (m as any).cycle_close_deadline, uncovered: mSites.length, reasoned: mSites.filter(s => s.not_covered_reason).length };
       }));
     };
-    fetchClosing();
+    fetchCycleData();
   }, [hasAnyRole]);
 
   // Fetch supervisor's hub name
@@ -452,6 +465,41 @@ export const OperationsZone: React.FC = () => {
           data-testid="card-metric-performance"
         />
       </div>
+
+      {(cycleSummary.active > 0 || cycleSummary.closing > 0 || cycleSummary.pending_approval > 0 || cycleSummary.closed > 0) && (
+        <Card data-testid="card-cycle-summary">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Target className="h-4 w-4" /> MMP Cycle Status
+              </CardTitle>
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => navigate('/mmp/cycle-close')} data-testid="button-view-all-cycles">
+                <ExternalLink className="h-3 w-3 mr-1" /> Manage Cycles
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-4 gap-3">
+              <div className="text-center p-2 rounded-lg bg-green-50 dark:bg-green-950" data-testid="stat-cycle-active">
+                <div className="text-lg font-bold text-green-600 dark:text-green-400">{cycleSummary.active}</div>
+                <div className="text-[11px] text-gray-500">Active</div>
+              </div>
+              <div className="text-center p-2 rounded-lg bg-amber-50 dark:bg-amber-950" data-testid="stat-cycle-closing">
+                <div className="text-lg font-bold text-amber-600 dark:text-amber-400">{cycleSummary.closing}</div>
+                <div className="text-[11px] text-gray-500">Closing</div>
+              </div>
+              <div className="text-center p-2 rounded-lg bg-purple-50 dark:bg-purple-950" data-testid="stat-cycle-pending">
+                <div className="text-lg font-bold text-purple-600 dark:text-purple-400">{cycleSummary.pending_approval}</div>
+                <div className="text-[11px] text-gray-500">Pending</div>
+              </div>
+              <div className="text-center p-2 rounded-lg bg-blue-50 dark:bg-blue-950" data-testid="stat-cycle-closed">
+                <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{cycleSummary.closed}</div>
+                <div className="text-[11px] text-gray-500">Closed</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {closingCycles.length > 0 && (
         <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30" data-testid="card-closing-cycles">
