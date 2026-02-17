@@ -87,6 +87,30 @@ export const OperationsZone: React.FC = () => {
   
   // State for directly loaded dispatched sites (for coordinators/data collectors)
   const [dispatchedSitesFromDB, setDispatchedSitesFromDB] = useState<any[]>([]);
+  const [closingCycles, setClosingCycles] = useState<{ id: string; name: string; deadline: string | null; uncovered: number; reasoned: number }[]>([]);
+
+  useEffect(() => {
+    const isAdminUser = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin', 'ict']);
+    if (!isAdminUser) return;
+    const fetchClosing = async () => {
+      const { data: mmps } = await supabase
+        .from('mmp_files')
+        .select('id, name, cycle_close_deadline')
+        .eq('cycle_status', 'closing');
+      if (!mmps || mmps.length === 0) { setClosingCycles([]); return; }
+      const mmpIds = mmps.map(m => m.id);
+      const { data: sites } = await supabase
+        .from('site_visits')
+        .select('mmp_id, not_covered_reason')
+        .in('mmp_id', mmpIds)
+        .eq('not_covered_flag', true);
+      setClosingCycles(mmps.map(m => {
+        const mSites = (sites || []).filter(s => s.mmp_id === m.id);
+        return { id: m.id, name: m.name, deadline: (m as any).cycle_close_deadline, uncovered: mSites.length, reasoned: mSites.filter(s => s.not_covered_reason).length };
+      }));
+    };
+    fetchClosing();
+  }, [hasAnyRole]);
 
   // Fetch supervisor's hub name
   useEffect(() => {
@@ -428,6 +452,41 @@ export const OperationsZone: React.FC = () => {
           data-testid="card-metric-performance"
         />
       </div>
+
+      {closingCycles.length > 0 && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30" data-testid="card-closing-cycles">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <AlertCircle className="h-4 w-4" /> Cycle Close In Progress
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-3">
+              {closingCycles.map(cycle => {
+                const progress = cycle.uncovered > 0 ? Math.round((cycle.reasoned / cycle.uncovered) * 100) : 100;
+                const isOverdue = cycle.deadline && new Date(cycle.deadline) < new Date();
+                return (
+                  <div key={cycle.id} className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">{cycle.name}</span>
+                        {isOverdue && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">OVERDUE</Badge>}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Progress value={progress} className="h-1.5 flex-1" />
+                        <span className="text-xs text-gray-500 whitespace-nowrap">{cycle.reasoned}/{cycle.uncovered}</span>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" className="text-xs" onClick={() => navigate('/mmp/cycle-close')} data-testid={`button-view-cycle-${cycle.id}`}>
+                      <ExternalLink className="h-3 w-3 mr-1" /> View
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* IT-Style Tab Navigation */}
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">

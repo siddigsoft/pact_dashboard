@@ -6,6 +6,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { logMMPAudit } from '@/services/mmpAudit.service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +20,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, MapPin,
   ArrowRight, FileText, BarChart3, Filter, Download,
-  ChevronDown, ChevronUp, Search, RefreshCw
+  ChevronDown, ChevronUp, Search, RefreshCw, FileSpreadsheet
 } from 'lucide-react';
 
 const NOT_COVERED_REASONS = [
@@ -73,6 +74,7 @@ interface ClosedCycleRecord {
   totalSites: number;
   completedSites: number;
   uncoveredSites: number;
+  reasonBreakdown?: Record<string, number>;
 }
 
 const MMPCycleClose = () => {
@@ -105,6 +107,20 @@ const MMPCycleClose = () => {
   const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)']);
   const canManageCycle = isAdmin;
   const canAssignReasons = isAdmin || isSupervisor || isFOM;
+
+  const [userHubName, setUserHubName] = useState<string>('');
+
+  useEffect(() => {
+    if (isSupervisor && currentUser?.hub_id) {
+      supabase.from('hubs').select('name').eq('id', currentUser.hub_id).single()
+        .then(({ data }) => {
+          if (data?.name) {
+            setUserHubName(data.name);
+            setFilterHub(data.name);
+          }
+        });
+    }
+  }, [isSupervisor, currentUser?.hub_id]);
 
   const activeMmps = useMemo(() => {
     return (mmpFiles || []).filter(m => {
@@ -194,7 +210,29 @@ const MMPCycleClose = () => {
         totalSites: 0,
         completedSites: 0,
         uncoveredSites: 0,
+        reasonBreakdown: {},
       }));
+
+      if (records.length > 0) {
+        const cycleIds = records.map(r => r.id);
+        const { data: siteStats } = await supabase
+          .from('site_visits')
+          .select('mmp_id, status, not_covered_flag, not_covered_reason')
+          .in('mmp_id', cycleIds);
+
+        if (siteStats) {
+          records.forEach(r => {
+            const cycleSites = siteStats.filter(s => s.mmp_id === r.id);
+            r.totalSites = cycleSites.length;
+            r.uncoveredSites = cycleSites.filter(s => s.not_covered_flag).length;
+            r.completedSites = cycleSites.filter(s => s.status === 'completed').length;
+            r.reasonBreakdown = {};
+            cycleSites.filter(s => s.not_covered_flag && s.not_covered_reason).forEach(s => {
+              r.reasonBreakdown![s.not_covered_reason!] = (r.reasonBreakdown![s.not_covered_reason!] || 0) + 1;
+            });
+          });
+        }
+      }
 
       setClosedCycles(records);
     } catch (err) {
@@ -257,6 +295,7 @@ const MMPCycleClose = () => {
           cycle_status: 'closing',
           cycle_closing_started_at: new Date().toISOString(),
           cycle_closing_started_by: currentUser?.id,
+          cycle_close_deadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
         } as any)
         .eq('id', mmpId);
 
@@ -314,7 +353,60 @@ const MMPCycleClose = () => {
         );
       }
 
-      toast({ title: 'Cycle Closing Started', description: 'Uncovered sites have been flagged. Supervisors have been notified to provide reasons.' });
+      let fomQuery = supabase
+        .from('profiles')
+        .select('id, full_name, hub_id')
+        .in('role', ['fom', 'Field Operation Manager (FOM)'])
+        .eq('status', 'approved');
+
+      if (mmpHub) {
+        const { data: hubDataFom } = await supabase
+          .from('hubs')
+          .select('id')
+          .ilike('name', `%${mmpHub}%`)
+          .limit(1);
+
+        if (hubDataFom && hubDataFom.length > 0) {
+          fomQuery = fomQuery.eq('hub_id', hubDataFom[0].id);
+        }
+      }
+
+      const { data: foms } = await fomQuery;
+
+      if (foms && foms.length > 0) {
+        await Promise.allSettled(
+          foms.map(fom =>
+            NotificationTriggerService.send({
+              userId: fom.id,
+              title: `Cycle Closing: Reasons Required`,
+              message: `MMP "${mmpName}" is being closed. Please ensure your supervisors provide reasons for uncovered sites.`,
+              titleAr: `إغلاق الدورة: الأسباب مطلوبة`,
+              messageAr: `يتم إغلاق MMP "${mmpName}". يرجى التأكد من أن المشرفين يقدمون أسباباً للمواقع غير المغطاة.`,
+              type: 'warning',
+              category: 'assignments',
+              priority: 'high',
+              link: '/mmp/cycle-close?tab=uncovered',
+              relatedEntityId: mmpId,
+              relatedEntityType: 'mmpFile',
+            })
+          )
+        );
+      }
+
+      const uncoveredCount = uncoveredSites.filter(s => s.mmp_id === mmpId).length;
+      await logMMPAudit({
+        mmpId,
+        mmpName,
+        action: 'status_change',
+        performedBy: currentUser?.id || '',
+        performedByName: currentUser?.full_name,
+        previousStatus: 'active',
+        newStatus: 'closing',
+        affectedSites: uncoveredCount,
+        metadata: { cycleAction: 'start_close' },
+      });
+
+      toast({ title: 'Cycle Closing Started', description: 'Uncovered sites have been flagged. Supervisors and FOMs have been notified to provide reasons.' });
       await refreshMMPFiles();
       await fetchUncoveredSites();
     } catch (err: any) {
@@ -348,6 +440,19 @@ const MMPCycleClose = () => {
           ? { ...s, not_covered_reason: reason, not_covered_reason_other: reason === 'other' ? otherText || null : null, not_covered_at: updateData.not_covered_at, not_covered_by: updateData.not_covered_by }
           : s
       ));
+
+      const site = uncoveredSites.find(s => s.id === siteId);
+      if (site) {
+        await logMMPAudit({
+          mmpId: site.mmp_id,
+          mmpName: site.mmp_name || 'MMP',
+          action: 'status_change',
+          performedBy: currentUser?.id || '',
+          performedByName: currentUser?.full_name,
+          reason: reason,
+          metadata: { cycleAction: 'assign_reason', siteId, siteName: site.site_name, reason },
+        });
+      }
 
       toast({ title: 'Reason Assigned', description: 'The reason has been saved.' });
     } catch (err: any) {
@@ -385,6 +490,17 @@ const MMPCycleClose = () => {
       setSelectedSites(new Set());
       setBulkReason('');
       setBulkOtherText('');
+
+      await logMMPAudit({
+        mmpId: 'bulk',
+        mmpName: 'Bulk Assignment',
+        action: 'bulk_operation',
+        performedBy: currentUser?.id || '',
+        performedByName: currentUser?.full_name,
+        affectedSites: siteIds.length,
+        metadata: { cycleAction: 'bulk_assign_reason', reason: bulkReason, siteCount: siteIds.length },
+      });
+
       toast({ title: 'Bulk Assign Complete', description: `Reason assigned to ${siteIds.length} sites.` });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to bulk assign', variant: 'destructive' });
@@ -422,6 +538,19 @@ const MMPCycleClose = () => {
         .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
 
       if (svError) throw svError;
+
+      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      await logMMPAudit({
+        mmpId,
+        mmpName: mmp?.name || 'MMP',
+        action: 'status_change',
+        performedBy: currentUser?.id || '',
+        performedByName: currentUser?.full_name,
+        previousStatus: 'closing',
+        newStatus: 'closed',
+        affectedSites: uncoveredSites.filter(s => s.mmp_id === mmpId).length,
+        metadata: { cycleAction: 'finalize_close' },
+      });
 
       toast({ title: 'Cycle Closed', description: 'The MMP cycle has been closed successfully.' });
       await refreshMMPFiles();
@@ -498,6 +627,77 @@ const MMPCycleClose = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleSendReminders = async (mmpId: string) => {
+    try {
+      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      const mmpName = mmp?.name || 'MMP';
+      const mmpHub = mmp?.hub || mmp?.region || '';
+
+      let recipientQuery = supabase
+        .from('profiles')
+        .select('id, full_name, hub_id, role')
+        .in('role', ['Supervisor', 'supervisor', 'fom', 'Field Operation Manager (FOM)'])
+        .eq('status', 'approved');
+
+      if (mmpHub) {
+        const { data: hubData } = await supabase
+          .from('hubs')
+          .select('id')
+          .ilike('name', `%${mmpHub}%`)
+          .limit(1);
+        if (hubData && hubData.length > 0) {
+          recipientQuery = recipientQuery.eq('hub_id', hubData[0].id);
+        }
+      }
+
+      const { data: recipients } = await recipientQuery;
+
+      if (recipients && recipients.length > 0) {
+        await Promise.allSettled(
+          recipients.map(r =>
+            NotificationTriggerService.send({
+              userId: r.id,
+              title: `OVERDUE: Cycle Close Reasons Required`,
+              message: `MMP "${mmpName}" cycle close is overdue. Please submit remaining reasons for uncovered sites immediately.`,
+              titleAr: `متأخر: أسباب إغلاق الدورة مطلوبة`,
+              messageAr: `إغلاق دورة MMP "${mmpName}" متأخر. يرجى تقديم الأسباب المتبقية للمواقع غير المغطاة فوراً.`,
+              type: 'error',
+              category: 'assignments',
+              priority: 'urgent',
+              link: '/mmp/cycle-close?tab=uncovered',
+              relatedEntityId: mmpId,
+              relatedEntityType: 'mmpFile',
+            })
+          )
+        );
+      }
+
+      toast({ title: 'Reminders Sent', description: `Reminders sent to ${recipients?.length || 0} supervisors and FOMs.` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to send reminders', variant: 'destructive' });
+    }
+  };
+
+  const exportCoverageReportExcel = async (mmpId?: string) => {
+    const XLSX = await import('xlsx');
+    const sites = mmpId ? uncoveredSites.filter(s => s.mmp_id === mmpId) : uncoveredSites;
+    const wsData = sites.map(s => ({
+      'Site Name': s.site_name,
+      'Site Code': s.site_code,
+      'State': s.state,
+      'Locality': s.locality,
+      'Hub': s.hub || '',
+      'Status': s.status,
+      'Reason': getReasonLabel(s.not_covered_reason),
+      'Other Details': s.not_covered_reason_other || '',
+      'Flagged At': s.not_covered_at || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Uncovered Sites');
+    XLSX.writeFile(wb, `coverage-report-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   const reasonBreakdown = useMemo(() => {
     const counts: Record<string, number> = {};
     uncoveredSites.forEach(s => {
@@ -543,6 +743,9 @@ const MMPCycleClose = () => {
           </Button>
           <Button variant="outline" size="sm" onClick={() => exportCoverageReport()} data-testid="button-export">
             <Download className="h-4 w-4 mr-1" /> Export Report
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exportCoverageReportExcel()} data-testid="button-export-excel">
+            <FileSpreadsheet className="h-4 w-4 mr-1" /> Export Excel
           </Button>
         </div>
       </div>
@@ -614,7 +817,22 @@ const MMPCycleClose = () => {
                         </>
                       )}
 
-                      <div className="flex gap-2 pt-1">
+                      {cycleStatus === 'closing' && (mmp as any).cycle_close_deadline && (
+                        <div className={`flex items-center gap-2 text-xs mt-2 ${
+                          new Date((mmp as any).cycle_close_deadline) < new Date() 
+                            ? 'text-red-600 dark:text-red-400 font-semibold' 
+                            : 'text-gray-500'
+                        }`}>
+                          <Clock className="h-3.5 w-3.5" />
+                          {new Date((mmp as any).cycle_close_deadline) < new Date() ? (
+                            <span>OVERDUE - Deadline was {new Date((mmp as any).cycle_close_deadline).toLocaleDateString()}</span>
+                          ) : (
+                            <span>Deadline: {new Date((mmp as any).cycle_close_deadline).toLocaleDateString()} ({Math.ceil((new Date((mmp as any).cycle_close_deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days remaining)</span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-2 pt-1">
                         {cycleStatus === 'active' && canManageCycle && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -652,9 +870,21 @@ const MMPCycleClose = () => {
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Finalize Cycle Close</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  All {mmpUncovered.length} uncovered sites have reasons assigned.
-                                  This will mark the cycle as closed and archive the uncovered site visits.
+                                <AlertDialogDescription asChild>
+                                  <div className="space-y-3">
+                                    <p>You are about to close this MMP cycle. Here is a summary:</p>
+                                    <div className="grid grid-cols-2 gap-2 text-sm bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                                      <div>Total Uncovered Sites:</div>
+                                      <div className="font-semibold">{mmpUncovered.length}</div>
+                                      <div>Reasons Assigned:</div>
+                                      <div className="font-semibold text-green-600">{mmpReasoned}</div>
+                                      <div>Top Reason:</div>
+                                      <div className="font-semibold">{(() => { const counts: Record<string, number> = {}; mmpUncovered.forEach(s => { if (s.not_covered_reason) counts[s.not_covered_reason] = (counts[s.not_covered_reason] || 0) + 1; }); const top = Object.entries(counts).sort((a,b) => b[1]-a[1])[0]; return top ? `${getReasonLabel(top[0])} (${top[1]})` : 'N/A'; })()}</div>
+                                      <div>Completion Rate:</div>
+                                      <div className="font-semibold text-blue-600">{progress}%</div>
+                                    </div>
+                                    <p className="text-xs text-gray-500">All uncovered site visits will be cancelled and archived. This action cannot be undone.</p>
+                                  </div>
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -670,6 +900,12 @@ const MMPCycleClose = () => {
                         {cycleStatus === 'closing' && (
                           <Button size="sm" variant="outline" onClick={() => { setSelectedMmpId(mmp.id); setActiveTab('uncovered'); }} data-testid={`button-view-uncovered-${mmp.id}`}>
                             View Sites <ArrowRight className="h-3 w-3 ml-1" />
+                          </Button>
+                        )}
+
+                        {cycleStatus === 'closing' && canManageCycle && (mmp as any).cycle_close_deadline && new Date((mmp as any).cycle_close_deadline) < new Date() && (
+                          <Button size="sm" variant="outline" className="text-red-600 border-red-300" onClick={() => handleSendReminders(mmp.id)} data-testid={`button-send-reminder-${mmp.id}`}>
+                            <AlertTriangle className="h-3 w-3 mr-1" /> Send Reminders
                           </Button>
                         )}
                       </div>
@@ -713,6 +949,14 @@ const MMPCycleClose = () => {
                 {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
               </SelectContent>
             </Select>
+            {canAssignReasons && filterHub !== 'all' && (
+              <Button size="sm" variant="outline" onClick={() => {
+                const hubSites = filteredSites.filter(s => !s.not_covered_reason).map(s => s.id);
+                setSelectedSites(new Set(hubSites));
+              }} data-testid="button-select-hub-pending">
+                Select All Pending in {filterHub}
+              </Button>
+            )}
           </div>
 
           {canAssignReasons && selectedSites.size > 0 && (
@@ -922,7 +1166,32 @@ const MMPCycleClose = () => {
                     </div>
                   </CardHeader>
                   {expandedCycle === cycle.id && (
-                    <CardContent className="pt-0">
+                    <CardContent className="pt-0 space-y-3">
+                      <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                          <div className="text-lg font-bold">{cycle.totalSites}</div>
+                          <div className="text-xs text-gray-500">Total Sites</div>
+                        </div>
+                        <div className="bg-green-50 dark:bg-green-950 rounded-lg p-3">
+                          <div className="text-lg font-bold text-green-600">{cycle.completedSites}</div>
+                          <div className="text-xs text-gray-500">Completed</div>
+                        </div>
+                        <div className="bg-red-50 dark:bg-red-950 rounded-lg p-3">
+                          <div className="text-lg font-bold text-red-600">{cycle.uncoveredSites}</div>
+                          <div className="text-xs text-gray-500">Uncovered</div>
+                        </div>
+                      </div>
+                      {cycle.reasonBreakdown && Object.keys(cycle.reasonBreakdown).length > 0 && (
+                        <div className="space-y-1.5">
+                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Reason Breakdown</h4>
+                          {Object.entries(cycle.reasonBreakdown).sort((a,b) => b[1]-a[1]).map(([reason, count]) => (
+                            <div key={reason} className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600 dark:text-gray-400">{getReasonLabel(reason)}</span>
+                              <Badge variant="outline" className="text-xs">{count}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => exportCoverageReport(cycle.id)} data-testid={`button-export-${cycle.id}`}>
                         <Download className="h-3 w-3 mr-1" /> Export Coverage Report
                       </Button>
@@ -931,6 +1200,50 @@ const MMPCycleClose = () => {
                 </Card>
               ))}
             </div>
+          )}
+
+          {closedCycles.length > 1 && (
+            <Card data-testid="card-trend-analysis">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" /> Trend Analysis Across Cycles
+                </CardTitle>
+                <CardDescription>Recurring patterns in uncovered site reasons</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const aggregated: Record<string, number> = {};
+                  closedCycles.forEach(c => {
+                    if (c.reasonBreakdown) {
+                      Object.entries(c.reasonBreakdown).forEach(([reason, count]) => {
+                        aggregated[reason] = (aggregated[reason] || 0) + count;
+                      });
+                    }
+                  });
+                  const total = Object.values(aggregated).reduce((a, b) => a + b, 0);
+                  if (total === 0) return <p className="text-gray-500 text-sm text-center py-4">No trend data available</p>;
+                  return (
+                    <div className="space-y-2">
+                      {Object.entries(aggregated).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
+                        <div key={reason} className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-700 dark:text-gray-300">{getReasonLabel(reason)}</span>
+                            <span className="text-xs text-gray-500">{count} ({Math.round((count / total) * 100)}%)</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div
+                              className="h-2 rounded-full bg-indigo-500"
+                              style={{ width: `${(count / total) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-xs text-gray-400 mt-3">Aggregated across {closedCycles.length} closed cycles</p>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
       </Tabs>

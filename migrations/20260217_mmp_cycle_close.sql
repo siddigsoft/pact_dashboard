@@ -17,6 +17,9 @@ ADD COLUMN IF NOT EXISTS cycle_closing_started_at TIMESTAMPTZ;
 ALTER TABLE mmp_files 
 ADD COLUMN IF NOT EXISTS cycle_closing_started_by UUID;
 
+ALTER TABLE mmp_files 
+ADD COLUMN IF NOT EXISTS cycle_close_deadline TIMESTAMPTZ;
+
 -- 2. Add not-covered tracking fields to site_visits table
 ALTER TABLE site_visits 
 ADD COLUMN IF NOT EXISTS not_covered_flag BOOLEAN DEFAULT FALSE;

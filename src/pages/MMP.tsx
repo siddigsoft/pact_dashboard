@@ -2167,6 +2167,21 @@ const MMP = () => {
   // that may have broad permissions from seeing the upload control.
   const canCreate = isAdmin || isICT;
 
+  const [hasClosingCycle, setHasClosingCycle] = useState(false);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const checkClosingCycles = async () => {
+      const { data } = await supabase
+        .from('mmp_files')
+        .select('id')
+        .eq('cycle_status', 'closing')
+        .limit(1);
+      setHasClosingCycle(!!data && data.length > 0);
+    };
+    checkClosingCycles();
+  }, [isAdmin]);
+
   // Real-time subscription for site claims (Uber-like first-claim system)
   // When another enumerator claims a site, it will be removed from available sites in real-time
   const handleSiteClaimedRealtime = React.useCallback((siteId: string, claimedBy: string) => {
@@ -4184,9 +4199,11 @@ const MMP = () => {
                 onClick={() => navigate('/mmp/upload')} 
                 className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-2"
                 data-testid="button-upload-mmp"
+                disabled={hasClosingCycle}
+                title={hasClosingCycle ? 'Cannot upload while a cycle is being closed' : ''}
               >
                 <Upload className="h-4 w-4" />
-                {t('mmpPage.uploadMMP')}
+                {hasClosingCycle ? 'Upload Blocked (Cycle Closing)' : t('mmpPage.uploadMMP')}
               </Button>
             )}
           </div>
