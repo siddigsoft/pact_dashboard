@@ -5399,10 +5399,12 @@ const MMP = () => {
                             <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                return status === 'claimed' || 
-                                       status === 'accepted' || 
-                                       status === 'acknowledged' ||
-                                       status === 'costandacknowledged';
+                                const draftStatuses = new Set(['inprogress', 'ongoing']);
+                                const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
+                                if (draftStatuses.has(status) || completedLike) return false;
+                                if (status === 'claimed' || status === 'accepted' || status === 'acknowledged' || status === 'costandacknowledged') return true;
+                                if (!status && site.accepted_by) return true;
+                                return false;
                               }).length}
                             </Badge>
                           </Button>
@@ -5445,6 +5447,7 @@ const MMP = () => {
                                 const inboxStatuses = new Set(['claimed', 'accepted', 'acknowledged', 'costandacknowledged']);
                                 const draftStatuses = new Set(['in progress', 'ongoing', 'inprogress', 'in_progress']);
                                 if (inboxStatuses.has(normalizedStatus)) return false;
+                                if (!status && site.accepted_by) return false;
                                 if (draftStatuses.has(normalizedStatus)) return false;
                                 const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
                                 if (!isCompleted) return false;
@@ -5640,16 +5643,14 @@ const MMP = () => {
                           ? (mySitesSubTab === 'pending' 
                               ? enumeratorMySites.filter(site => {
                                   const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                                  return status === 'accepted' || 
-                                         status === 'assigned' || 
-                                         status === 'dispatched' ||
-                                         status === 'smartassigned' ||
-                                         status === 'pending' ||
-                                         status === 'acknowledged' ||
-                                         status === 'costandacknowledged' ||
-                                         status.includes('pending') ||
-                                         status.includes('accepted') ||
-                                         status.includes('assigned');
+                                  const draftStatuses = new Set(['inprogress', 'ongoing']);
+                                  const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
+                                  if (draftStatuses.has(status) || completedLike) return false;
+                                  if (status === 'claimed' || status === 'accepted' || status === 'acknowledged' || status === 'costandacknowledged') return true;
+                                  if (status === 'assigned' || status === 'dispatched' || status === 'smartassigned' || status === 'pending') return true;
+                                  if (status.includes('pending') || status.includes('accepted') || status.includes('assigned')) return true;
+                                  if (!status && site.accepted_by) return true;
+                                  return false;
                                 }).length
                               : mySitesSubTab === 'ongoing'
                               ? unsyncedCompletedVisits.length
@@ -5689,10 +5690,12 @@ const MMP = () => {
                         } else if (mySitesSubTab === 'pending') {
                           sitesToShow = enumeratorMySites.filter(site => {
                             const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
-                            return status === 'claimed' || 
-                                   status === 'accepted' || 
-                                   status === 'acknowledged' ||
-                                   status === 'costandacknowledged';
+                            const draftStatuses = new Set(['inprogress', 'ongoing']);
+                            const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
+                            if (draftStatuses.has(status) || completedLike) return false;
+                            if (status === 'claimed' || status === 'accepted' || status === 'acknowledged' || status === 'costandacknowledged') return true;
+                            if (!status && site.accepted_by) return true;
+                            return false;
                           });
                         } else if (mySitesSubTab === 'ongoing') {
                           // Outbox: Show completed visits that are not yet synced (from offline DB)
