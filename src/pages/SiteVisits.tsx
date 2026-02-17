@@ -372,21 +372,20 @@ const SiteVisits = () => {
         
         console.log(`📊 Dispatched sites matching user geography: ${filtered.length} of ${siteVisits.filter(v => v.status?.toLowerCase() === 'dispatched').length}`);
       } else if (statusFilter === "all") {
-        // For "all", show dispatched (geo-filtered) + assigned/accepted/ongoing/completed (filtered by user)
+        // For "all", show dispatched (geo-filtered) + user's own sites (claimed/assigned/accepted/ongoing/completed/verified)
         const dispatchedVisits = siteVisits.filter(visit => {
           if (visit.status?.toLowerCase() !== 'dispatched') return false;
           return siteMatchesUserGeography(visit);
         });
-        const userAssignedVisits = siteVisits.filter(visit => {
+        const userOwnVisits = siteVisits.filter(visit => {
           const status = visit.status?.toLowerCase();
           return visit.assignedTo === currentUser.id && 
-                 (status === 'assigned' || status === 'accepted' || 
-                  status === 'ongoing' || status === 'completed');
+                 status !== 'dispatched';
         });
-        filtered = [...dispatchedVisits, ...userAssignedVisits];
+        filtered = [...dispatchedVisits, ...userOwnVisits];
       } else {
-        // For specific statuses (assigned, accepted, ongoing, completed), filter by user
-        const statusesToFilterByUser = ['assigned', 'accepted', 'ongoing', 'completed'];
+        // For specific statuses, filter by user's own sites
+        const statusesToFilterByUser = ['claimed', 'assigned', 'accepted', 'ongoing', 'completed', 'verified', 'approved', 'in-progress', 'in_progress'];
         if (statusesToFilterByUser.includes(statusFilter.toLowerCase())) {
           filtered = siteVisits.filter(visit => 
             visit.assignedTo === currentUser.id && 
@@ -441,7 +440,7 @@ const SiteVisits = () => {
         // For other statuses, only apply filter if:
         // - User is NOT a field worker, OR
         // - User is a field worker but the status is not one we already filtered (assigned, accepted, ongoing, completed)
-        const statusesAlreadyFiltered = ['assigned', 'accepted', 'ongoing', 'completed'];
+        const statusesAlreadyFiltered = ['claimed', 'assigned', 'accepted', 'ongoing', 'completed', 'verified', 'approved', 'in-progress', 'in_progress'];
         if (!isFieldWorker || !statusesAlreadyFiltered.includes(statusFilter.toLowerCase())) {
           filtered = filtered.filter(visit => visit.status?.toLowerCase() === statusFilter.toLowerCase());
         }
