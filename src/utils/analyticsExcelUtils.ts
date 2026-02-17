@@ -359,9 +359,10 @@ export async function exportCoverageTrackerExcel(
     ACTIVITY_COLS.forEach(col => {
       const v = totals.get(col) || 0;
       vals.push(v);
-      overall += v;
+      if (col !== 'PDM') overall += v;
     });
     vals.push(pdmSites);
+    overall += pdmSites;
     vals.push(overall);
     const row = sheet.addRow(vals);
     row.eachCell((cell, ci) => {
@@ -382,9 +383,10 @@ export async function exportCoverageTrackerExcel(
     ACTIVITY_COLS.forEach(col => {
       const v = totals.get(col) || 0;
       vals.push(v);
-      overall += v;
+      if (col !== 'PDM') overall += v;
     });
     vals.push(pdmSites);
+    overall += pdmSites;
     vals.push(overall);
     const row = sheet.addRow(vals);
     row.eachCell((cell, ci) => {
@@ -415,13 +417,14 @@ export async function exportCoverageTrackerExcel(
         ACTIVITY_COLS.forEach(col => {
           const v = mc.activities.get(col) || 0;
           vals.push(v || '');
-          rowTotal += v;
+          if (col !== 'PDM') rowTotal += v;
           stateTotals.set(col, (stateTotals.get(col) || 0) + v);
         });
         const pdmCount = mc.activities.get('PDM') || 0;
         const pdmSites = pdmCount > 0 ? Math.ceil(pdmCount / 7) : 0;
         vals.push(pdmSites || '');
         statePdmSites += pdmSites;
+        rowTotal += pdmSites;
         vals.push(rowTotal || '');
         const dataRow = ws.addRow(vals);
         dataRow.eachCell((cell, ci) => {
@@ -473,7 +476,7 @@ export async function exportCoverageTrackerExcel(
       ACTIVITY_COLS.forEach(col => {
         const v = am.get(col) || 0;
         vals.push(v);
-        rowTotal += v;
+        if (col !== 'PDM') rowTotal += v;
         hubTotals.set(col, (hubTotals.get(col) || 0) + v);
         grandTotals.set(col, (grandTotals.get(col) || 0) + v);
       });
@@ -481,6 +484,7 @@ export async function exportCoverageTrackerExcel(
       const pdmSites = pdmCount > 0 ? Math.ceil(pdmCount / 7) : 0;
       hubPdmSites += pdmSites;
       vals.push(pdmSites);
+      rowTotal += pdmSites;
       vals.push(rowTotal);
       const dataRow = ws2.addRow(vals);
       dataRow.eachCell((cell, ci) => {
@@ -500,9 +504,10 @@ export async function exportCoverageTrackerExcel(
   ACTIVITY_COLS.forEach(col => {
     const v = grandTotals.get(col) || 0;
     overallVals.push(v);
-    grandOverall += v;
+    if (col !== 'PDM') grandOverall += v;
   });
   overallVals.push(grandPdmSites);
+  grandOverall += grandPdmSites;
   overallVals.push(grandOverall);
   const grandRow = ws2.addRow(overallVals);
   grandRow.eachCell((cell, ci) => {
