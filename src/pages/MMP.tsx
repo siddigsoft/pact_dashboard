@@ -5400,11 +5400,12 @@ const MMP = () => {
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
                                 const draftStatuses = new Set(['inprogress', 'ongoing']);
+                                if (draftStatuses.has(status)) return false;
                                 const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
-                                if (draftStatuses.has(status) || completedLike) return false;
-                                if (status === 'claimed' || status === 'accepted' || status === 'acknowledged' || status === 'costandacknowledged') return true;
-                                if (!status && site.accepted_by) return true;
-                                return false;
+                                if (completedLike) return false;
+                                const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                                if (isUnsynced) return false;
+                                return true;
                               }).length}
                             </Badge>
                           </Button>
@@ -5443,12 +5444,6 @@ const MMP = () => {
                             <Badge variant="secondary" className="ml-0.5 text-xs px-0.5 py-0.5 min-w-[0.75rem] h-3 flex items-center justify-center">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase().trim();
-                                const normalizedStatus = status.replace(/[-_\s]/g, '');
-                                const inboxStatuses = new Set(['claimed', 'accepted', 'acknowledged', 'costandacknowledged']);
-                                const draftStatuses = new Set(['in progress', 'ongoing', 'inprogress', 'in_progress']);
-                                if (inboxStatuses.has(normalizedStatus)) return false;
-                                if (!status && site.accepted_by) return false;
-                                if (draftStatuses.has(normalizedStatus)) return false;
                                 const isCompleted = status.includes('completed') || status.includes('finished') || status.includes('done');
                                 if (!isCompleted) return false;
                                 const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
@@ -5644,13 +5639,12 @@ const MMP = () => {
                               ? enumeratorMySites.filter(site => {
                                   const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
                                   const draftStatuses = new Set(['inprogress', 'ongoing']);
+                                  if (draftStatuses.has(status)) return false;
                                   const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
-                                  if (draftStatuses.has(status) || completedLike) return false;
-                                  if (status === 'claimed' || status === 'accepted' || status === 'acknowledged' || status === 'costandacknowledged') return true;
-                                  if (status === 'assigned' || status === 'dispatched' || status === 'smartassigned' || status === 'pending') return true;
-                                  if (status.includes('pending') || status.includes('accepted') || status.includes('assigned')) return true;
-                                  if (!status && site.accepted_by) return true;
-                                  return false;
+                                  if (completedLike) return false;
+                                  const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                                  if (isUnsynced) return false;
+                                  return true;
                                 }).length
                               : mySitesSubTab === 'ongoing'
                               ? unsyncedCompletedVisits.length
@@ -5691,11 +5685,12 @@ const MMP = () => {
                           sitesToShow = enumeratorMySites.filter(site => {
                             const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
                             const draftStatuses = new Set(['inprogress', 'ongoing']);
+                            if (draftStatuses.has(status)) return false;
                             const completedLike = status.includes('completed') || status.includes('finished') || status.includes('done');
-                            if (draftStatuses.has(status) || completedLike) return false;
-                            if (status === 'claimed' || status === 'accepted' || status === 'acknowledged' || status === 'costandacknowledged') return true;
-                            if (!status && site.accepted_by) return true;
-                            return false;
+                            if (completedLike) return false;
+                            const isUnsynced = unsyncedCompletedVisits.some(uv => uv.id === site.id);
+                            if (isUnsynced) return false;
+                            return true;
                           });
                         } else if (mySitesSubTab === 'ongoing') {
                           // Outbox: Show completed visits that are not yet synced (from offline DB)
