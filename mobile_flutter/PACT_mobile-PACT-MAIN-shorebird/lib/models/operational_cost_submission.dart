@@ -2,6 +2,8 @@
 /// Mirrors the web application's operational cost submission system
 /// Supports advance payments, reimbursements, reconciliation workflow
 
+import 'dart:ui' show Color;
+
 /// Expense categories matching web version
 enum ExpenseCategory {
   permits('permits', 'Permits & Licenses', 'تصاريح ورخص'),
