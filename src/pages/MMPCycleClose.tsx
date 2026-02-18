@@ -1148,71 +1148,103 @@ const MMPCycleClose = () => {
       {overallSummary.totalMmps > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6" data-testid="summary-dashboard">
           <Card>
-            <CardContent className="p-3 text-center">
-              <Layers className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
-              <div className="text-xl font-bold" data-testid="text-total-mmps">{overallSummary.totalMmps}</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Active MMPs</div>
-              <div className="flex justify-center gap-1 mt-1 flex-wrap">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center justify-center h-7 w-7 rounded-md bg-blue-500/10 shrink-0">
+                  <Layers className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">Active MMPs</div>
+              </div>
+              <div className="text-2xl font-bold" data-testid="text-total-mmps">{overallSummary.totalMmps}</div>
+              <div className="flex gap-1 mt-1.5 flex-wrap">
                 {overallSummary.activeCount > 0 && <Badge variant="secondary" data-testid="badge-active-count">{overallSummary.activeCount} Active</Badge>}
                 {overallSummary.closingCount > 0 && <Badge variant="destructive" data-testid="badge-closing-count">{overallSummary.closingCount} Closing</Badge>}
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-3 text-center">
-              <Target className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
-              <div className="text-xl font-bold" data-testid="text-overall-coverage">{overallSummary.overallCoverage}%</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Site Coverage</div>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center justify-center h-7 w-7 rounded-md bg-emerald-500/10 shrink-0">
+                  <Target className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">Coverage</div>
+              </div>
+              <div className="text-2xl font-bold" data-testid="text-overall-coverage">{overallSummary.overallCoverage}%</div>
               <Progress value={overallSummary.overallCoverage} className="h-1 mt-1.5" />
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-3 text-center">
-              <CheckCircle2 className="h-4 w-4 mx-auto text-green-500 mb-1" />
-              <div className="text-xl font-bold text-green-600 dark:text-green-400" data-testid="text-completed-total">{overallSummary.completedSites}</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Completed</div>
-              <div className="text-xs text-muted-foreground mt-1">of {overallSummary.totalSites} sites</div>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center justify-center h-7 w-7 rounded-md bg-green-500/10 shrink-0">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">Completed</div>
+              </div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-completed-total">{overallSummary.completedSites}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">of {overallSummary.totalSites} sites</div>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-3 text-center">
-              <AlertTriangle className="h-4 w-4 mx-auto text-red-500 mb-1" />
-              <div className="text-xl font-bold text-red-600 dark:text-red-400" data-testid="text-uncovered-total">{overallSummary.totalUncovered}</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Uncovered</div>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center justify-center h-7 w-7 rounded-md bg-red-500/10 shrink-0">
+                  <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">Uncovered</div>
+              </div>
+              <div className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="text-uncovered-total">{overallSummary.totalUncovered}</div>
               {overallSummary.totalUncovered > 0 && (
-                <div className="text-xs text-muted-foreground mt-1">{overallSummary.totalReasoned} reasoned</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{overallSummary.totalReasoned} reasoned</div>
               )}
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-3 text-center">
-              <Activity className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
-              <div className="text-xl font-bold" data-testid="text-reason-completion">{overallSummary.reasonCompletion}%</div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Reasons Done</div>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center justify-center h-7 w-7 rounded-md bg-amber-500/10 shrink-0">
+                  <Activity className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">Reasons</div>
+              </div>
+              <div className="text-2xl font-bold" data-testid="text-reason-completion">{overallSummary.reasonCompletion}%</div>
               {overallSummary.totalUncovered > 0 && (
                 <Progress value={overallSummary.reasonCompletion} className="h-1 mt-1.5" />
               )}
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-3 text-center">
+            <CardContent className="p-3">
               {overallSummary.overdueCount > 0 ? (
                 <>
-                  <Clock className="h-4 w-4 mx-auto text-destructive mb-1" />
-                  <div className="text-xl font-bold text-destructive" data-testid="text-overdue-count">{overallSummary.overdueCount}</div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider">Overdue</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center justify-center h-7 w-7 rounded-md bg-destructive/10 shrink-0">
+                      <Clock className="h-3.5 w-3.5 text-destructive" />
+                    </div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">Overdue</div>
+                  </div>
+                  <div className="text-2xl font-bold text-destructive" data-testid="text-overdue-count">{overallSummary.overdueCount}</div>
                 </>
               ) : overallSummary.pendingApprovalCount > 0 ? (
                 <>
-                  <Shield className="h-4 w-4 mx-auto text-purple-500 mb-1" />
-                  <div className="text-xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-pending-approval">{overallSummary.pendingApprovalCount}</div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider">Awaiting Approval</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center justify-center h-7 w-7 rounded-md bg-purple-500/10 shrink-0">
+                      <Shield className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">Approval</div>
+                  </div>
+                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-pending-approval">{overallSummary.pendingApprovalCount}</div>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="h-4 w-4 mx-auto text-green-500 mb-1" />
-                  <div className="text-xl font-bold text-green-600 dark:text-green-400" data-testid="text-on-track">0</div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider">Overdue</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center justify-center h-7 w-7 rounded-md bg-green-500/10 shrink-0">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">Overdue</div>
+                  </div>
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-on-track">0</div>
                 </>
               )}
             </CardContent>
@@ -1234,46 +1266,63 @@ const MMPCycleClose = () => {
           {activeMmps.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
-                <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <div className="flex items-center justify-center h-16 w-16 mx-auto bg-muted rounded-full mb-4">
+                  <FileText className="h-8 w-8 text-muted-foreground" />
+                </div>
                 <h3 className="text-lg font-medium">No Active MMP Cycles</h3>
-                <p className="text-muted-foreground mt-1 text-sm">All MMP cycles have been closed or there are no approved MMPs.</p>
+                <p className="text-muted-foreground mt-1 text-sm max-w-md mx-auto">
+                  All MMP cycles have been closed or there are no approved MMPs available for cycle management.
+                </p>
               </CardContent>
             </Card>
           ) : (
             <>
-              <div className="flex flex-col sm:flex-row gap-3 items-end" data-testid="active-filters">
-                <Select value={activeHubFilter} onValueChange={setActiveHubFilter}>
-                  <SelectTrigger className="w-[180px]" data-testid="select-active-hub-filter">
-                    <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                    <SelectValue placeholder="All Hubs" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Hubs</SelectItem>
-                    {activeHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={activeSort} onValueChange={v => setActiveSort(v as any)}>
-                  <SelectTrigger className="w-[160px]" data-testid="select-active-sort">
-                    <SelectValue placeholder="Sort by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="status">Sort by Status</SelectItem>
-                    <SelectItem value="name">Sort by Name</SelectItem>
-                    <SelectItem value="coverage">Sort by Coverage</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setActiveSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-                  data-testid="button-sort-direction"
-                >
-                  {activeSortDir === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
-                </Button>
-                <div className="text-xs text-muted-foreground ml-auto">
-                  Showing {filteredActiveMmps.length} of {activeMmps.length} MMPs
-                </div>
-              </div>
+              <Card data-testid="active-filters">
+                <CardContent className="p-3">
+                  <div className="flex flex-col sm:flex-row gap-3 items-center">
+                    <div className="flex items-center gap-2 flex-wrap flex-1">
+                      <Select value={activeHubFilter} onValueChange={setActiveHubFilter}>
+                        <SelectTrigger className="w-[180px]" data-testid="select-active-hub-filter">
+                          <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                          <SelectValue placeholder="All Hubs" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Hubs</SelectItem>
+                          {activeHubs.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={activeSort} onValueChange={v => setActiveSort(v as any)}>
+                        <SelectTrigger className="w-[160px]" data-testid="select-active-sort">
+                          <SelectValue placeholder="Sort by..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="status">Sort by Status</SelectItem>
+                          <SelectItem value="name">Sort by Name</SelectItem>
+                          <SelectItem value="coverage">Sort by Coverage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setActiveSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                        data-testid="button-sort-direction"
+                      >
+                        {activeSortDir === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {canManageCycle && (
+                        <Button variant="outline" size="sm" onClick={handleScheduleReminders} data-testid="button-schedule-reminders">
+                          <Bell className="h-3.5 w-3.5 mr-1.5" /> Reminders
+                        </Button>
+                      )}
+                      <Badge variant="secondary" data-testid="badge-showing-count">
+                        {filteredActiveMmps.length} of {activeMmps.length} MMPs
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <div className="grid gap-4 md:grid-cols-2">
                 {filteredActiveMmps.map(mmp => {
@@ -1305,14 +1354,6 @@ const MMPCycleClose = () => {
                 })}
               </div>
             </>
-          )}
-
-          {canManageCycle && (
-            <div className="flex gap-2 mt-4">
-              <Button variant="outline" size="sm" onClick={handleScheduleReminders} data-testid="button-schedule-reminders">
-                <Bell className="h-4 w-4 mr-1" /> Schedule Reminders
-              </Button>
-            </div>
           )}
 
           {hubProgressData.length > 1 && (
