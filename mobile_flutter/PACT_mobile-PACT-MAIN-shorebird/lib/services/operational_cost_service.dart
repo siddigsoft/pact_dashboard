@@ -216,6 +216,7 @@ class OperationalCostService {
     String? vendor,
     String? referenceNumber,
     String? projectId,
+    String? hubId,
     List<SupportingDocument>? supportingDocuments,
   }) async {
     try {
@@ -232,6 +233,7 @@ class OperationalCostService {
       if (vendor != null) updates['vendor'] = vendor;
       if (referenceNumber != null) updates['reference_number'] = referenceNumber;
       if (projectId != null) updates['project_id'] = projectId;
+      if (hubId != null) updates['hub_id'] = hubId;
       if (supportingDocuments != null) {
         updates['supporting_documents'] = supportingDocuments.map((d) => d.toJson()).toList();
       }

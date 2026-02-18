@@ -39,11 +39,29 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
   double? _budgetLimit;
   double? _budgetUsed;
 
+  List<Map<String, dynamic>> _projects = [];
+  List<Map<String, dynamic>> _hubs = [];
+  String? _selectedHubId;
+
   @override
   void initState() {
     super.initState();
     if (widget.editSubmissionId != null) _loadExisting();
     _amountController.addListener(_onAmountChanged);
+    _loadPickerData();
+  }
+
+  Future<void> _loadPickerData() async {
+    try {
+      final projects = await _costService.getAvailableProjects();
+      final hubs = await _costService.getAvailableHubs();
+      if (mounted) {
+        setState(() {
+          _projects = projects;
+          _hubs = hubs;
+        });
+      }
+    } catch (_) {}
   }
 
   void _onAmountChanged() {
@@ -68,6 +86,7 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
           _selectedCurrency = s.currency;
           _selectedSiteVisitId = s.siteVisitId;
           _selectedProjectId = s.projectId;
+          _selectedHubId = s.hubId;
           if (s.expenseDate != null) {
             _expenseDate = DateTime.tryParse(s.expenseDate!) ?? DateTime.now();
           }
@@ -124,6 +143,8 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
                   _buildDescriptionField(),
                   const SizedBox(height: 16),
                   _buildJustificationField(),
+                  const SizedBox(height: 16),
+                  _buildProjectHubPickers(),
                   const SizedBox(height: 16),
                   _buildVendorAndReference(),
                   if (_budgetLimit != null) ...[
@@ -403,6 +424,75 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
     );
   }
 
+  Widget _buildProjectHubPickers() {
+    final isArabic = widget.isArabic;
+    return Row(
+      children: [
+        if (_projects.isNotEmpty)
+          Expanded(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(isArabic ? 'المشروع' : 'Project', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _selectedProjectId,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      isExpanded: true,
+                      hint: Text(isArabic ? 'اختر' : 'Select', style: const TextStyle(fontSize: 13)),
+                      items: _projects.map((p) => DropdownMenuItem<String>(
+                        value: p['id'] as String,
+                        child: Text(p['name'] as String, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                      )).toList(),
+                      onChanged: (v) => setState(() => _selectedProjectId = v),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (_projects.isNotEmpty && _hubs.isNotEmpty) const SizedBox(width: 8),
+        if (_hubs.isNotEmpty)
+          Expanded(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(isArabic ? 'المحور' : 'Hub', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _selectedHubId,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      isExpanded: true,
+                      hint: Text(isArabic ? 'اختر' : 'Select', style: const TextStyle(fontSize: 13)),
+                      items: _hubs.map((h) => DropdownMenuItem<String>(
+                        value: h['id'] as String,
+                        child: Text(h['name'] as String, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                      )).toList(),
+                      onChanged: (v) => setState(() => _selectedHubId = v),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildVendorAndReference() {
     final isArabic = widget.isArabic;
     return Row(
@@ -531,45 +621,73 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
       final currentUser = Supabase.instance.client.auth.currentUser;
       if (currentUser == null) throw Exception('Not authenticated');
 
-      final data = {
-        'user_id': currentUser.id,
-        'expense_category': _selectedCategory.value,
-        'funding_type': _selectedFundingType.value,
-        'amount': double.parse(_amountController.text),
-        'currency': _selectedCurrency,
-        'description': _descriptionController.text.trim(),
-        'justification': _justificationController.text.trim().isNotEmpty ? _justificationController.text.trim() : null,
-        'vendor': _vendorController.text.trim().isNotEmpty ? _vendorController.text.trim() : null,
-        'reference_number': _referenceController.text.trim().isNotEmpty ? _referenceController.text.trim() : null,
-        'expense_date': _expenseDate.toIso8601String().split('T').first,
-        'site_visit_id': _selectedSiteVisitId,
-        'project_id': _selectedProjectId,
-      };
+      final amount = double.parse(_amountController.text);
+      final description = _descriptionController.text.trim();
+      final justification = _justificationController.text.trim().isNotEmpty ? _justificationController.text.trim() : null;
+      final vendor = _vendorController.text.trim().isNotEmpty ? _vendorController.text.trim() : null;
+      final reference = _referenceController.text.trim().isNotEmpty ? _referenceController.text.trim() : null;
+      final expDate = _expenseDate.toIso8601String().split('T').first;
 
-      bool success;
       if (widget.editSubmissionId != null) {
-        success = await _costService.updateSubmission(widget.editSubmissionId!, data);
+        final result = await _costService.updateSubmission(
+          submissionId: widget.editSubmissionId!,
+          expenseCategory: _selectedCategory,
+          fundingType: _selectedFundingType,
+          amount: amount,
+          description: description,
+          justification: justification,
+          vendor: vendor,
+          referenceNumber: reference,
+          expenseDate: expDate,
+          projectId: _selectedProjectId,
+          hubId: _selectedHubId,
+        );
+        if (result != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(widget.isArabic ? 'تم تحديث الطلب' : 'Submission updated'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(widget.isArabic ? 'فشل في تحديث الطلب' : 'Failed to update submission'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       } else {
-        success = await _costService.createSubmission(data);
-      }
-
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.isArabic
-                ? (widget.editSubmissionId != null ? 'تم تحديث الطلب' : 'تم تقديم الطلب بنجاح')
-                : (widget.editSubmissionId != null ? 'Submission updated' : 'Submission created successfully')),
-            backgroundColor: Colors.green,
-          ),
+        final result = await _costService.submitCost(
+          expenseCategory: _selectedCategory,
+          fundingType: _selectedFundingType,
+          amount: amount,
+          currency: _selectedCurrency,
+          description: description,
+          justification: justification,
+          vendor: vendor,
+          referenceNumber: reference,
+          expenseDate: expDate,
+          projectId: _selectedProjectId,
+          hubId: _selectedHubId,
         );
-        Navigator.pop(context, true);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.isArabic ? 'فشل في حفظ الطلب' : 'Failed to save submission'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (result != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(widget.isArabic ? 'تم تقديم الطلب بنجاح' : 'Submission created successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(widget.isArabic ? 'فشل في حفظ الطلب' : 'Failed to save submission'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

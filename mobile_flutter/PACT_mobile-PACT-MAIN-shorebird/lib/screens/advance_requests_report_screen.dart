@@ -564,6 +564,7 @@ class _AdvanceRequestsReportScreenState
                     final req = _requests[index];
                     return _RequestCard(
                       request: req,
+                      isArabic: widget.isArabic,
                       onReceiptConfirmed: _loadData,
                     );
                   },
@@ -589,7 +590,7 @@ class _AdvanceRequestsReportScreenState
                   itemCount: grouped.length,
                   itemBuilder: (context, index) {
                     final group = grouped[index];
-                    return _GroupCard(group: group, groupLabel: groupLabel);
+                    return _GroupCard(group: group, groupLabel: groupLabel, isArabic: widget.isArabic);
                   },
                 ),
         ),
@@ -739,9 +740,10 @@ class _StatCard extends StatelessWidget {
 
 class _RequestCard extends StatelessWidget {
   final AdvanceRequestData request;
+  final bool isArabic;
   final VoidCallback? onReceiptConfirmed;
 
-  const _RequestCard({required this.request, this.onReceiptConfirmed});
+  const _RequestCard({required this.request, this.isArabic = false, this.onReceiptConfirmed});
 
   @override
   Widget build(BuildContext context) {
@@ -814,21 +816,21 @@ class _RequestCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: _buildAmountColumn(
-                    'Requested',
+                    isArabic ? 'المطلوب' : 'Requested',
                     formatter.format(request.requestedAmount),
                     const Color(0xFF1E40AF),
                   ),
                 ),
                 Expanded(
                   child: _buildAmountColumn(
-                    'Paid',
+                    isArabic ? 'المدفوع' : 'Paid',
                     formatter.format(request.totalPaidAmount),
                     Colors.green,
                   ),
                 ),
                 Expanded(
                   child: _buildAmountColumn(
-                    'Remaining',
+                    isArabic ? 'المتبقي' : 'Remaining',
                     formatter.format(remaining),
                     remaining > 0 ? Colors.orange : Colors.grey,
                   ),
@@ -980,8 +982,9 @@ class _RequestCard extends StatelessWidget {
 class _GroupCard extends StatelessWidget {
   final ReportGroupData group;
   final String groupLabel;
+  final bool isArabic;
 
-  const _GroupCard({required this.group, required this.groupLabel});
+  const _GroupCard({required this.group, required this.groupLabel, this.isArabic = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1016,7 +1019,7 @@ class _GroupCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${group.requests} requests',
+                    '${group.requests} ${isArabic ? "طلب" : "requests"}',
                     style: const TextStyle(
                       color: Color(0xFF1E40AF),
                       fontSize: 12,
@@ -1031,21 +1034,21 @@ class _GroupCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: _buildMetricColumn(
-                    'Total Requested',
+                    isArabic ? 'إجمالي المطلوب' : 'Total Requested',
                     'SDG ${formatter.format(group.totalRequested)}',
                     const Color(0xFF1E40AF),
                   ),
                 ),
                 Expanded(
                   child: _buildMetricColumn(
-                    'Total Approved',
+                    isArabic ? 'إجمالي الموافق' : 'Total Approved',
                     'SDG ${formatter.format(group.totalApproved)}',
                     Colors.green,
                   ),
                 ),
                 Expanded(
                   child: _buildMetricColumn(
-                    'Pending',
+                    isArabic ? 'قيد الانتظار' : 'Pending',
                     '${group.pending}',
                     group.pending > 0 ? Colors.orange : Colors.grey,
                   ),

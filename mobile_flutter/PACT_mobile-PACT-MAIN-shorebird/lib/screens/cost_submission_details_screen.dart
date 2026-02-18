@@ -52,22 +52,6 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
     }
   }
 
-  String _getDerivedStatus(OperationalCostSubmission s) {
-    if (s.status == OperationalCostStatus.cancelled) return 'cancelled';
-    if (s.isReconciled) return 'reconciled';
-    if (s.status == OperationalCostStatus.paid) return 'paid';
-    if (s.tier1Status == 'rejected' || s.tier2Status == 'rejected' || s.tier3Status == 'rejected' || s.status == OperationalCostStatus.rejected) return 'rejected';
-    if (s.hasThreeTiers) {
-      if (s.tier1Status == 'approved' && s.tier2Status == 'approved' && s.tier3Status == 'approved') return 'approved';
-      if (s.tier1Status == 'approved') return 'under_review';
-    } else {
-      if (s.tier1Status == 'approved' && s.tier2Status == 'approved') return 'approved';
-      if (s.tier1Status == 'approved') return 'under_review';
-    }
-    if (s.status == OperationalCostStatus.underReview) return 'under_review';
-    return 'pending';
-  }
-
   @override
   Widget build(BuildContext context) {
     final isArabic = widget.isArabic;
@@ -151,43 +135,9 @@ class _CostSubmissionDetailsScreenState extends State<CostSubmissionDetailsScree
   Widget _buildHeader() {
     final s = _submission!;
     final isArabic = widget.isArabic;
-    final derivedStatus = _getDerivedStatus(s);
-
-    Color statusColor;
-    String statusLabel;
-    switch (derivedStatus) {
-      case 'pending':
-        statusColor = Colors.orange;
-        statusLabel = isArabic ? 'قيد الانتظار' : 'PENDING';
-        break;
-      case 'under_review':
-        statusColor = Colors.blue;
-        statusLabel = isArabic ? 'قيد المراجعة' : 'UNDER REVIEW';
-        break;
-      case 'approved':
-        statusColor = Colors.green;
-        statusLabel = isArabic ? 'موافق عليه' : 'APPROVED';
-        break;
-      case 'rejected':
-        statusColor = Colors.red;
-        statusLabel = isArabic ? 'مرفوض' : 'REJECTED';
-        break;
-      case 'paid':
-        statusColor = Colors.purple;
-        statusLabel = isArabic ? 'مدفوع' : 'PAID';
-        break;
-      case 'reconciled':
-        statusColor = Colors.teal;
-        statusLabel = isArabic ? 'تمت التسوية' : 'RECONCILED';
-        break;
-      case 'cancelled':
-        statusColor = Colors.grey;
-        statusLabel = isArabic ? 'ملغى' : 'CANCELLED';
-        break;
-      default:
-        statusColor = Colors.grey;
-        statusLabel = derivedStatus.toUpperCase();
-    }
+    final statusDisplay = OperationalCostSubmission.getStatusDisplay(s.derivedStatus, isArabic);
+    final statusColor = statusDisplay['color'] as Color;
+    final statusLabel = (statusDisplay['label'] as String).toUpperCase();
 
     return Container(
       width: double.infinity,

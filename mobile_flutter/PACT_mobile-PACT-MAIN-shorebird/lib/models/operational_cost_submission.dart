@@ -252,6 +252,43 @@ class OperationalCostSubmission {
            (tier3Notes?.contains('[Signed:') ?? false);
   }
 
+  String get derivedStatus {
+    if (status == OperationalCostStatus.cancelled) return 'cancelled';
+    if (isReconciled) return 'reconciled';
+    if (status == OperationalCostStatus.paid) return 'paid';
+    if (tier1Status == 'rejected' || tier2Status == 'rejected' || tier3Status == 'rejected' || status == OperationalCostStatus.rejected) return 'rejected';
+    if (hasThreeTiers) {
+      if (tier1Status == 'approved' && tier2Status == 'approved' && tier3Status == 'approved') return 'approved';
+      if (tier1Status == 'approved') return 'under_review';
+    } else {
+      if (tier1Status == 'approved' && tier2Status == 'approved') return 'approved';
+      if (tier1Status == 'approved') return 'under_review';
+    }
+    if (status == OperationalCostStatus.underReview) return 'under_review';
+    return 'pending';
+  }
+
+  static Map<String, dynamic> getStatusDisplay(String derivedStatus, bool isArabic) {
+    switch (derivedStatus) {
+      case 'pending':
+        return {'color': const Color(0xFFFF9800), 'label': isArabic ? 'قيد الانتظار' : 'Pending'};
+      case 'under_review':
+        return {'color': const Color(0xFF2196F3), 'label': isArabic ? 'قيد المراجعة' : 'Under Review'};
+      case 'approved':
+        return {'color': const Color(0xFF4CAF50), 'label': isArabic ? 'موافق عليه' : 'Approved'};
+      case 'rejected':
+        return {'color': const Color(0xFFF44336), 'label': isArabic ? 'مرفوض' : 'Rejected'};
+      case 'paid':
+        return {'color': const Color(0xFF9C27B0), 'label': isArabic ? 'مدفوع' : 'Paid'};
+      case 'reconciled':
+        return {'color': const Color(0xFF009688), 'label': isArabic ? 'تمت التسوية' : 'Reconciled'};
+      case 'cancelled':
+        return {'color': const Color(0xFF9E9E9E), 'label': isArabic ? 'ملغى' : 'Cancelled'};
+      default:
+        return {'color': const Color(0xFF9E9E9E), 'label': derivedStatus};
+    }
+  }
+
   factory OperationalCostSubmission.fromJson(Map<String, dynamic> json) {
     List<SupportingDocument> docs = [];
     if (json['supporting_documents'] != null) {

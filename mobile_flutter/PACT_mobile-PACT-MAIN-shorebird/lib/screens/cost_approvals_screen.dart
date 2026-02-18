@@ -223,7 +223,7 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple.withOpacity(0.1),
+                      color: Colors.deepPurple.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -400,11 +400,13 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
               statusLabel = s.status.labelEn;
           }
 
+          final canRecordPayment = s.isFullyApproved && s.status != OperationalCostStatus.paid && (_permissions.isAdmin || _permissions.isSuperAdmin);
+
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               leading: CircleAvatar(
-                backgroundColor: statusColor.withOpacity(0.1),
+                backgroundColor: statusColor.withValues(alpha: 0.1),
                 child: Icon(
                   s.status == OperationalCostStatus.rejected ? Icons.cancel : Icons.check_circle,
                   color: statusColor,
@@ -419,22 +421,110 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
                 '${s.amount.toStringAsFixed(2)} ${s.currency} - ${s.submitterName ?? ""}',
                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
-              trailing: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600),
-                ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (canRecordPayment)
+                    IconButton(
+                      icon: const Icon(Icons.payments, color: Colors.purple, size: 20),
+                      tooltip: isArabic ? 'تسجيل الدفع' : 'Record Payment',
+                      onPressed: () => _showRecordPaymentDialog(s),
+                    ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
         },
       ),
     );
+  }
+
+  Future<void> _showRecordPaymentDialog(OperationalCostSubmission submission) async {
+    final isArabic = widget.isArabic;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isArabic ? 'تسجيل الدفع' : 'Record Payment'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${isArabic ? submission.expenseCategory.labelAr : submission.expenseCategory.labelEn}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${submission.amount.toStringAsFixed(2)} ${submission.currency}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isArabic
+                  ? 'هل أنت متأكد من تسجيل دفع هذا المبلغ؟'
+                  : 'Are you sure you want to record payment for this amount?',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(isArabic ? 'إلغاء' : 'Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.payments, size: 18),
+            label: Text(isArabic ? 'تأكيد الدفع' : 'Confirm Payment'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final success = await _costService.markAsPaid(submission.id);
+        if (success) {
+          await _costService.notifyPaymentRecorded(
+            submissionId: submission.id,
+            submitterId: submission.userId,
+            amount: submission.amount,
+            currency: submission.currency,
+            category: submission.expenseCategory.labelEn,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(isArabic ? 'تم تسجيل الدفع بنجاح' : 'Payment recorded successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            _loadSubmissions();
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _handleApproval(OperationalCostSubmission submission, int tier, bool isApproval) async {
