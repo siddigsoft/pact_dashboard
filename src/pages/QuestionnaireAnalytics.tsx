@@ -1275,21 +1275,34 @@ const QuestionnaireAnalytics = () => {
   const fetchEmailProfiles = useCallback(async () => {
     setEmailProfilesLoading(true);
     try {
-      let { data: profiles, error } = await supabase.from('profiles').select('id, full_name, email, role').eq('status', 'approved');
-      if (error || !profiles || profiles.length === 0) {
-        const fallback = await supabase.from('profiles').select('id, full_name, email, role');
-        if (fallback.data && fallback.data.length > 0) {
-          profiles = fallback.data;
+      let profiles: any[] = [];
+      try {
+        const { data, error } = await supabase.from('profiles').select('id, full_name, email, role').eq('status', 'approved');
+        if (!error && data && data.length > 0) {
+          profiles = data;
         }
+      } catch (_) {}
+      if (profiles.length === 0) {
+        try {
+          const { data } = await supabase.from('profiles').select('id, full_name, email, role');
+          if (data && data.length > 0) {
+            profiles = data;
+          }
+        } catch (_) {}
       }
-      if (profiles && profiles.length > 0) {
-        const mapped = profiles
-          .filter((p: any) => p.email)
-          .map((p: any) => ({ id: p.id, name: p.full_name || p.email, email: p.email, role: p.role || 'Other' }));
-        setEmailUsers(mapped);
+      if (profiles.length === 0) {
+        try {
+          const { data } = await supabase.from('profiles').select('id, full_name, email, role').limit(500);
+          if (data) profiles = data;
+        } catch (_) {}
       }
+      const mapped = profiles
+        .filter((p: any) => p.email)
+        .map((p: any) => ({ id: p.id, name: p.full_name || p.email, email: p.email, role: p.role || 'Other' }));
+      setEmailUsers(mapped);
     } catch (e) {
       console.error('Failed to fetch profiles:', e);
+      setEmailUsers([]);
     } finally {
       setEmailProfilesLoading(false);
     }
@@ -1310,7 +1323,12 @@ const QuestionnaireAnalytics = () => {
     setEmailCcSearchOpen(false);
     setEmailHighPriority(isReport);
     setShowEmailDialog(true);
-    await fetchEmailProfiles();
+    const timeout = setTimeout(() => setEmailProfilesLoading(false), 10000);
+    try {
+      await fetchEmailProfiles();
+    } finally {
+      clearTimeout(timeout);
+    }
   }, [computeReportSummary, fetchEmailProfiles]);
 
   const openEmailDialog = useCallback(() => openSectionEmailDialog('Questionnaire Data Report', 'report'), [openSectionEmailDialog]);
@@ -5158,6 +5176,8 @@ const QuestionnaireAnalytics = () => {
                       <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                       Loading users...
                     </div>
+                  ) : emailUsers.length === 0 ? (
+                    <div className="text-sm text-muted-foreground py-1">No users found. You can type email addresses manually below.</div>
                   ) : (
                     ['FOM', 'Admin', 'Supervisor', 'Super Admin'].map(role => {
                       const count = emailUsers.filter(u => u.role === role).length;
@@ -5268,6 +5288,8 @@ const QuestionnaireAnalytics = () => {
                       <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                       Loading users...
                     </div>
+                  ) : emailUsers.length === 0 ? (
+                    <div className="text-sm text-muted-foreground py-1">No users found. You can type email addresses manually below.</div>
                   ) : (
                     ['FOM', 'Admin', 'Supervisor', 'Super Admin'].map(role => {
                       const count = emailUsers.filter(u => u.role === role).length;
