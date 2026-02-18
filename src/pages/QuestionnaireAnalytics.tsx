@@ -4041,103 +4041,6 @@ const QuestionnaireAnalytics = () => {
                 </CardContent>
               </Card>
 
-              {trackerData.stateBreakdown.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div>
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                          <Globe className="h-5 w-5 text-primary" />
-                          Tracker - Activity by State
-                        </CardTitle>
-                        <CardDescription>Activity breakdown per state</CardDescription>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-act-state">
-                              <Download className="h-4 w-4" />
-                              Export
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={exportActivityByStatePdf}>
-                              <FileDown className="h-4 w-4 mr-2" />
-                              PDF
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={exportActivityByStateExcel}>
-                              <FileSpreadsheet className="h-4 w-4 mr-2" />
-                              Excel
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={exportActivityByStateFormattedExcel}>
-                              <FileSpreadsheet className="h-4 w-4 mr-2" />
-                              Formatted Excel
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openSectionEmailDialog('Activity by State Tracker')} data-testid="button-send-act-state-email">
-                          <Mail className="h-4 w-4" />
-                          Send Email
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {trackerData.stateBreakdown.map(sb => (
-                        <div key={sb.state} className="border rounded-lg">
-                          <button
-                            type="button"
-                            className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
-                            onClick={() => toggleExpand(`tracker-state-${sb.state}`)}
-                            data-testid={`button-tracker-state-${sb.state}`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-primary" />
-                              <span className="font-medium">{sb.state}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="font-mono">{sb.totalQ} Q</Badge>
-                              {expandedRows.has(`tracker-state-${sb.state}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </div>
-                          </button>
-                          {expandedRows.has(`tracker-state-${sb.state}`) && (
-                            <div className="border-t px-3 pb-3">
-                              <table className="w-full text-sm mt-2">
-                                <thead>
-                                  <tr className="border-b">
-                                    <th className="text-left py-1.5 px-2 font-medium text-xs">Activity</th>
-                                    <th className="text-right py-1.5 px-2 font-medium text-xs">Sites</th>
-                                    <th className="text-right py-1.5 px-2 font-medium text-xs">Questionnaires</th>
-                                    <th className="text-right py-1.5 px-2 font-medium text-xs text-amber-600">PDM Sites</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {sb.activities.filter(a => a.questionnaires > 0).map(a => (
-                                    <tr key={a.activity} className="border-b">
-                                      <td className="py-1.5 px-2">{a.activity}</td>
-                                      <td className="py-1.5 px-2 text-right text-blue-600 text-xs">{a.sites}</td>
-                                      <td className="py-1.5 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{a.questionnaires}</Badge></td>
-                                      <td className="py-1.5 px-2 text-right text-amber-600 font-mono text-xs">{isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : '-'}</td>
-                                    </tr>
-                                  ))}
-                                  <tr className="bg-muted/50 font-semibold">
-                                    <td className="py-1.5 px-2">Total</td>
-                                    <td className="py-1.5 px-2 text-right text-blue-700 text-xs">{sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0)}</td>
-                                    <td className="py-1.5 px-2 text-right"><Badge className="font-mono text-xs">{sb.totalQ}</Badge></td>
-                                    <td className="py-1.5 px-2 text-right text-amber-700 font-mono text-xs">{(() => { const total = sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + (isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : a.questionnaires), 0); return total || '-'; })()}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
               {trackerData.hubTrackers.length > 0 && (
                 <Card>
                   <CardHeader className="pb-3">
@@ -4396,6 +4299,103 @@ const QuestionnaireAnalytics = () => {
                         )}
                       </div>
                     ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {trackerData.stateBreakdown.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Globe className="h-5 w-5 text-primary" />
+                          Tracker - Activity by State
+                        </CardTitle>
+                        <CardDescription>Activity breakdown per state</CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-act-state">
+                              <Download className="h-4 w-4" />
+                              Export
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={exportActivityByStatePdf}>
+                              <FileDown className="h-4 w-4 mr-2" />
+                              PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportActivityByStateExcel}>
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Excel
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportActivityByStateFormattedExcel}>
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Formatted Excel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openSectionEmailDialog('Activity by State Tracker')} data-testid="button-send-act-state-email">
+                          <Mail className="h-4 w-4" />
+                          Send Email
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {trackerData.stateBreakdown.map(sb => (
+                        <div key={sb.state} className="border rounded-lg">
+                          <button
+                            type="button"
+                            className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors text-left"
+                            onClick={() => toggleExpand(`tracker-state-${sb.state}`)}
+                            data-testid={`button-tracker-state-${sb.state}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-primary" />
+                              <span className="font-medium">{sb.state}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="font-mono">{sb.totalQ} Q</Badge>
+                              {expandedRows.has(`tracker-state-${sb.state}`) ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </div>
+                          </button>
+                          {expandedRows.has(`tracker-state-${sb.state}`) && (
+                            <div className="border-t px-3 pb-3">
+                              <table className="w-full text-sm mt-2">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="text-left py-1.5 px-2 font-medium text-xs">Activity</th>
+                                    <th className="text-right py-1.5 px-2 font-medium text-xs">Sites</th>
+                                    <th className="text-right py-1.5 px-2 font-medium text-xs">Questionnaires</th>
+                                    <th className="text-right py-1.5 px-2 font-medium text-xs text-amber-600">PDM Sites</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sb.activities.filter(a => a.questionnaires > 0).map(a => (
+                                    <tr key={a.activity} className="border-b">
+                                      <td className="py-1.5 px-2">{a.activity}</td>
+                                      <td className="py-1.5 px-2 text-right text-blue-600 text-xs">{a.sites}</td>
+                                      <td className="py-1.5 px-2 text-right"><Badge variant="outline" className="font-mono text-xs">{a.questionnaires}</Badge></td>
+                                      <td className="py-1.5 px-2 text-right text-amber-600 font-mono text-xs">{isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : '-'}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-muted/50 font-semibold">
+                                    <td className="py-1.5 px-2">Total</td>
+                                    <td className="py-1.5 px-2 text-right text-blue-700 text-xs">{sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + a.sites, 0)}</td>
+                                    <td className="py-1.5 px-2 text-right"><Badge className="font-mono text-xs">{sb.totalQ}</Badge></td>
+                                    <td className="py-1.5 px-2 text-right text-amber-700 font-mono text-xs">{(() => { const total = sb.activities.filter(a => a.questionnaires > 0).reduce((s, a) => s + (isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : a.questionnaires), 0); return total || '-'; })()}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               )}
