@@ -524,8 +524,6 @@ export async function exportCoverageTrackerExcel(
   wb.creator = 'PACT Command Center';
   wb.created = new Date();
 
-  const classificationMap = await fetchCollectorClassifications();
-
   const label = sessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
   const hubStateRows = new Map<string, Map<string, { collector: string; deviceId: string; activity: string; abbr: string }[]>>();
@@ -653,7 +651,6 @@ export async function exportCoverageTrackerExcel(
 
       merged.forEach(mc => {
         const isDup = dupNames.has(mc.primaryName.trim().toLowerCase());
-        const classInfo = matchCollectorClassification(mc.primaryName, classificationMap);
         const vals: (string | number)[] = [hub, state, mc.primaryName];
         let rowTotal = 0;
         let nonPdmTotal = 0;
@@ -672,17 +669,12 @@ export async function exportCoverageTrackerExcel(
         const siteTotal = nonPdmTotal + pdmSites;
         vals.push(siteTotal || '');
 
-        const classLevel = classInfo?.classificationLevel || '';
-        const baseFee = classInfo?.baseFee || 0;
-        const transportFee = classInfo?.transportFee || 0;
-        const totalCost = siteTotal * (baseFee + transportFee);
-
-        vals.push(classLevel);
-        vals.push(baseFee > 0 ? baseFee : '');
-        vals.push(transportFee > 0 ? transportFee : '');
-        vals.push(totalCost > 0 ? totalCost : '');
-        vals.push(classInfo?.bankAccountName || classInfo?.bankAccountNumber || '');
-        vals.push(classInfo?.bankBranch || '');
+        vals.push('');
+        vals.push('');
+        vals.push('');
+        vals.push('');
+        vals.push('');
+        vals.push('');
 
         const dataRow = ws.addRow(vals);
         dataRow.eachCell((cell, ci) => {
@@ -693,9 +685,6 @@ export async function exportCoverageTrackerExcel(
             cell.font = bodyFont(10, DUP_TEXT);
           } else {
             cell.font = bodyFont(10);
-          }
-          if (ci === vals.length - 2 && totalCost > 0) {
-            cell.numFmt = '#,##0.00';
           }
         });
         dataRow.height = 20;
