@@ -133,6 +133,8 @@ const QuestionnaireAnalytics = () => {
   const [drillExpandedActivities, setDrillExpandedActivities] = useState<Set<string>>(new Set());
   const [drillExpandedLocalities, setDrillExpandedLocalities] = useState<Set<string>>(new Set());
   const [showCleanDialog, setShowCleanDialog] = useState(false);
+  const [cleanExpandedSection, setCleanExpandedSection] = useState<string | null>(null);
+  const [duplicateKeepMap, setDuplicateKeepMap] = useState<Map<number, Set<number>>>(new Map());
   const [cleanResults, setCleanResults] = useState<{
     originalCount: number;
     cleanedCount: number;
@@ -141,6 +143,10 @@ const QuestionnaireAnalytics = () => {
     trimmedFields: number;
     namesStandardized: number;
     cleanedData: QuestionnaireRow[];
+    duplicateGroups: { key: string; rows: { index: number; row: QuestionnaireRow; isKept: boolean }[] }[];
+    emptyRows: { index: number; row: QuestionnaireRow }[];
+    trimmedDetails: { index: number; field: string; before: string; after: string }[];
+    nameChanges: { index: number; deviceId: string; oldName: string; newName: string }[];
   } | null>(null);
 
   useEffect(() => {
@@ -199,14 +205,18 @@ const QuestionnaireAnalytics = () => {
     let namesStandardized = 0;
     let emptyRowsRemoved = 0;
     let duplicatesRemoved = 0;
+    const trimmedDetails: { index: number; field: string; before: string; after: string }[] = [];
+    const emptyRows: { index: number; row: QuestionnaireRow }[] = [];
+    const nameChanges: { index: number; deviceId: string; oldName: string; newName: string }[] = [];
 
-    const trimmed = data.map(row => {
+    const trimmed = data.map((row, idx) => {
       const cleaned: QuestionnaireRow = { ...row };
       (Object.keys(cleaned) as (keyof QuestionnaireRow)[]).forEach(key => {
         const val = cleaned[key];
         if (typeof val === 'string') {
           const trimmedVal = val.replace(/\s+/g, ' ').trim();
           if (trimmedVal !== val) {
+            trimmedDetails.push({ index: idx, field: key, before: val, after: trimmedVal });
             (cleaned as any)[key] = trimmedVal;
             trimmedFields++;
           }
@@ -215,17 +225,22 @@ const QuestionnaireAnalytics = () => {
       return cleaned;
     });
 
-    const nonEmpty = trimmed.filter(row => {
+    const indexed = trimmed.map((row, idx) => ({ row, origIdx: idx }));
+
+    const nonEmpty = indexed.filter(({ row, origIdx }) => {
       const hasContent = row.hub || row.state || row.locality || row.activitySite ||
         row.activity || row.dataCollector || row.date;
-      if (!hasContent) emptyRowsRemoved++;
+      if (!hasContent) {
+        emptyRowsRemoved++;
+        emptyRows.push({ index: origIdx, row: data[origIdx] });
+      }
       return hasContent;
     });
 
     const safe = (v: string | undefined | null) => (v || '').trim();
 
     const deviceNameCounts = new Map<string, Map<string, number>>();
-    nonEmpty.forEach(row => {
+    nonEmpty.forEach(({ row }) => {
       const devId = safe(row.deviceId);
       if (!devId) return;
       if (!deviceNameCounts.has(devId)) deviceNameCounts.set(devId, new Map());
@@ -249,28 +264,51 @@ const QuestionnaireAnalytics = () => {
       deviceNameMap.set(devId, primaryName);
     });
 
-    const standardized = nonEmpty.map(row => {
+    const standardized = nonEmpty.map(({ row, origIdx }) => {
       const devId = safe(row.deviceId);
-      if (!devId) return row;
+      if (!devId) return { row, origIdx };
       const primary = deviceNameMap.get(devId);
       if (primary && safe(row.dataCollector) !== primary) {
         namesStandardized++;
-        return { ...row, dataCollector: primary };
+        nameChanges.push({ index: origIdx, deviceId: devId, oldName: safe(row.dataCollector), newName: primary });
+        return { row: { ...row, dataCollector: primary }, origIdx };
       }
-      return row;
+      return { row, origIdx };
     });
 
-    const seen = new Set<string>();
-    const deduped = standardized.filter(row => {
+    const keyGroups = new Map<string, { index: number; row: QuestionnaireRow }[]>();
+    standardized.forEach(({ row, origIdx }) => {
       const key = [safe(row.deviceId), safe(row.dataCollector), safe(row.activitySite), safe(row.activity), safe(row.subActivity), safe(row.date), safe(row.hub), safe(row.state), safe(row.locality)].join('|||');
-      if (seen.has(key)) {
-        duplicatesRemoved++;
-        return false;
-      }
-      seen.add(key);
-      return true;
+      if (!keyGroups.has(key)) keyGroups.set(key, []);
+      keyGroups.get(key)!.push({ index: origIdx, row });
     });
 
+    const duplicateGroups: { key: string; rows: { index: number; row: QuestionnaireRow; isKept: boolean }[] }[] = [];
+    const deduped: QuestionnaireRow[] = [];
+    const seen = new Set<string>();
+
+    standardized.forEach(({ row }) => {
+      const key = [safe(row.deviceId), safe(row.dataCollector), safe(row.activitySite), safe(row.activity), safe(row.subActivity), safe(row.date), safe(row.hub), safe(row.state), safe(row.locality)].join('|||');
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(row);
+        const group = keyGroups.get(key);
+        if (group && group.length > 1) {
+          duplicatesRemoved += group.length - 1;
+          duplicateGroups.push({
+            key,
+            rows: group.map((g, gi) => ({ ...g, isKept: gi === 0 })),
+          });
+        }
+      }
+    });
+
+    const defaultKeepMap = new Map<number, Set<number>>();
+    duplicateGroups.forEach((group, gi) => {
+      defaultKeepMap.set(gi, new Set([0]));
+    });
+    setDuplicateKeepMap(defaultKeepMap);
+    setCleanExpandedSection(null);
     setCleanResults({
       originalCount: data.length,
       cleanedCount: deduped.length,
@@ -279,24 +317,73 @@ const QuestionnaireAnalytics = () => {
       trimmedFields,
       namesStandardized,
       cleanedData: deduped,
+      duplicateGroups,
+      emptyRows,
+      trimmedDetails,
+      nameChanges,
     });
     setShowCleanDialog(true);
   }, [data]);
 
+  const getCustomCleanedData = useCallback(() => {
+    if (!cleanResults) return [];
+    const safe = (v: string | undefined | null) => (v || '').trim();
+    const result: QuestionnaireRow[] = [];
+    const dupKeyToGroupIdx = new Map<string, number>();
+    cleanResults.duplicateGroups.forEach((group, gi) => {
+      dupKeyToGroupIdx.set(group.key, gi);
+    });
+    const processedDupKeys = new Set<string>();
+    cleanResults.cleanedData.forEach(row => {
+      const key = [safe(row.deviceId), safe(row.dataCollector), safe(row.activitySite), safe(row.activity), safe(row.subActivity), safe(row.date), safe(row.hub), safe(row.state), safe(row.locality)].join('|||');
+      const groupIdx = dupKeyToGroupIdx.get(key);
+      if (groupIdx !== undefined) {
+        if (!processedDupKeys.has(key)) {
+          processedDupKeys.add(key);
+          const group = cleanResults.duplicateGroups[groupIdx];
+          const kept = duplicateKeepMap.get(groupIdx) || new Set([0]);
+          group.rows.forEach((r, ri) => {
+            if (kept.has(ri)) result.push(r.row);
+          });
+        }
+      } else {
+        result.push(row);
+      }
+    });
+    return result;
+  }, [cleanResults, duplicateKeepMap]);
+
+  const customDupsRemoved = useMemo(() => {
+    if (!cleanResults) return 0;
+    let removed = 0;
+    cleanResults.duplicateGroups.forEach((group, gi) => {
+      const kept = duplicateKeepMap.get(gi) || new Set([0]);
+      removed += group.rows.length - kept.size;
+    });
+    return removed;
+  }, [cleanResults, duplicateKeepMap]);
+
+  const customCleanedCount = useMemo(() => {
+    if (!cleanResults) return 0;
+    return cleanResults.originalCount - cleanResults.emptyRowsRemoved - customDupsRemoved;
+  }, [cleanResults, customDupsRemoved]);
+
   const applyCleanedData = useCallback(() => {
     if (!cleanResults) return;
-    setData(cleanResults.cleanedData);
+    const finalData = getCustomCleanedData();
+    setData(finalData);
     setShowCleanDialog(false);
     setFilterHubs([]);
     setFilterStates([]);
     setFilterActivities([]);
     setFilterLocalities([]);
     setSearchQuery('');
-  }, [cleanResults]);
+  }, [cleanResults, getCustomCleanedData]);
 
   const downloadCleanedExcel = useCallback(() => {
     if (!cleanResults) return;
-    const rows = cleanResults.cleanedData.map(r => ({
+    const finalData = getCustomCleanedData();
+    const rows = finalData.map(r => ({
       Hub: r.hub,
       State: r.state,
       Locality: r.locality,
@@ -317,8 +404,8 @@ const QuestionnaireAnalytics = () => {
 
     const summaryRows = [
       { Metric: 'Original Rows', Value: cleanResults.originalCount },
-      { Metric: 'Cleaned Rows', Value: cleanResults.cleanedCount },
-      { Metric: 'Duplicates Removed', Value: cleanResults.duplicatesRemoved },
+      { Metric: 'Cleaned Rows', Value: finalData.length },
+      { Metric: 'Duplicates Removed', Value: customDupsRemoved },
       { Metric: 'Empty Rows Removed', Value: cleanResults.emptyRowsRemoved },
       { Metric: 'Fields Trimmed', Value: cleanResults.trimmedFields },
       { Metric: 'Names Standardized', Value: cleanResults.namesStandardized },
@@ -329,7 +416,7 @@ const QuestionnaireAnalytics = () => {
 
     const baseName = fileName.replace(/\.[^.]+$/, '') || 'questionnaire_data';
     XLSX.writeFile(wb, `${baseName}_cleaned.xlsx`);
-  }, [cleanResults, fileName]);
+  }, [cleanResults, fileName, getCustomCleanedData, customDupsRemoved]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -3376,31 +3463,32 @@ const QuestionnaireAnalytics = () => {
             </DialogTitle>
           </DialogHeader>
           {cleanResults && (() => {
-            const totalIssues = cleanResults.duplicatesRemoved + cleanResults.emptyRowsRemoved + cleanResults.trimmedFields + cleanResults.namesStandardized;
-            const rowsRemoved = cleanResults.originalCount - cleanResults.cleanedCount;
+            const totalIssues = customDupsRemoved + cleanResults.emptyRowsRemoved + cleanResults.trimmedFields + cleanResults.namesStandardized;
+            const rowsRemoved = cleanResults.originalCount - customCleanedCount;
             const reductionPct = cleanResults.originalCount > 0 ? Math.round((rowsRemoved / cleanResults.originalCount) * 100) : 0;
             const hasChanges = totalIssues > 0;
 
+            const sections = [
+              { id: 'duplicates', icon: Trash2, iconColor: 'text-red-500 dark:text-red-400', bgColor: 'bg-red-50 dark:bg-red-950/30', borderColor: 'border-red-200 dark:border-red-900/50', label: 'Duplicate rows removed', sublabel: 'Rows with identical key fields', count: customDupsRemoved, badgeVariant: 'destructive' as const },
+              { id: 'empty', icon: X, iconColor: 'text-orange-500 dark:text-orange-400', bgColor: 'bg-orange-50 dark:bg-orange-950/30', borderColor: 'border-orange-200 dark:border-orange-900/50', label: 'Empty rows removed', sublabel: 'Rows with no meaningful data', count: cleanResults.emptyRowsRemoved, badgeVariant: 'default' as const },
+              { id: 'trimmed', icon: CheckCircle2, iconColor: 'text-blue-500 dark:text-blue-400', bgColor: 'bg-blue-50 dark:bg-blue-950/30', borderColor: 'border-blue-200 dark:border-blue-900/50', label: 'Fields trimmed', sublabel: 'Extra whitespace cleaned up', count: cleanResults.trimmedFields, badgeVariant: 'default' as const },
+              { id: 'names', icon: Users, iconColor: 'text-purple-500 dark:text-purple-400', bgColor: 'bg-purple-50 dark:bg-purple-950/30', borderColor: 'border-purple-200 dark:border-purple-900/50', label: 'Collector names standardized', sublabel: 'Unified by device ID', count: cleanResults.namesStandardized, badgeVariant: 'default' as const },
+            ];
+
             return (
-              <div className="space-y-5 py-1">
-                <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-muted/30 to-muted/60 p-4">
+              <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto pr-1">
+                <div className="relative rounded-xl border bg-gradient-to-br from-muted/30 to-muted/60 p-4">
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
                       <p className="text-3xl font-bold tracking-tight">{cleanResults.originalCount.toLocaleString()}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Original Rows</p>
                     </div>
                     <div className="flex flex-col items-center justify-center">
-                      <div className="flex items-center gap-1 text-muted-foreground">
-                        <ArrowRight className="h-4 w-4" />
-                      </div>
-                      {hasChanges && (
-                        <Badge variant="secondary" className="mt-1 text-[10px]">
-                          -{reductionPct}%
-                        </Badge>
-                      )}
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      {hasChanges && <Badge variant="secondary" className="mt-1 text-[10px]">-{reductionPct}%</Badge>}
                     </div>
                     <div>
-                      <p className="text-3xl font-bold tracking-tight text-green-600 dark:text-green-400">{cleanResults.cleanedCount.toLocaleString()}</p>
+                      <p className="text-3xl font-bold tracking-tight text-green-600 dark:text-green-400">{customCleanedCount.toLocaleString()}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Cleaned Rows</p>
                     </div>
                   </div>
@@ -3411,10 +3499,7 @@ const QuestionnaireAnalytics = () => {
                         <span className="font-medium">{rowsRemoved.toLocaleString()} rows removed</span>
                       </div>
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-700"
-                          style={{ width: `${100 - reductionPct}%` }}
-                        />
+                        <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-700" style={{ width: `${100 - reductionPct}%` }} />
                       </div>
                     </div>
                   )}
@@ -3423,71 +3508,170 @@ const QuestionnaireAnalytics = () => {
                 <div>
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Cleaning Operations</h4>
                   <div className="space-y-1.5">
-                    {[
-                      {
-                        icon: Trash2,
-                        iconColor: 'text-red-500 dark:text-red-400',
-                        bgColor: 'bg-red-50 dark:bg-red-950/30',
-                        borderColor: cleanResults.duplicatesRemoved > 0 ? 'border-red-200 dark:border-red-900/50' : '',
-                        label: 'Duplicate rows removed',
-                        sublabel: 'Rows with identical key fields',
-                        count: cleanResults.duplicatesRemoved,
-                        badgeVariant: 'destructive' as const,
-                      },
-                      {
-                        icon: X,
-                        iconColor: 'text-orange-500 dark:text-orange-400',
-                        bgColor: 'bg-orange-50 dark:bg-orange-950/30',
-                        borderColor: cleanResults.emptyRowsRemoved > 0 ? 'border-orange-200 dark:border-orange-900/50' : '',
-                        label: 'Empty rows removed',
-                        sublabel: 'Rows with no meaningful data',
-                        count: cleanResults.emptyRowsRemoved,
-                        badgeVariant: 'default' as const,
-                      },
-                      {
-                        icon: CheckCircle2,
-                        iconColor: 'text-blue-500 dark:text-blue-400',
-                        bgColor: 'bg-blue-50 dark:bg-blue-950/30',
-                        borderColor: cleanResults.trimmedFields > 0 ? 'border-blue-200 dark:border-blue-900/50' : '',
-                        label: 'Fields trimmed',
-                        sublabel: 'Extra whitespace cleaned up',
-                        count: cleanResults.trimmedFields,
-                        badgeVariant: 'default' as const,
-                      },
-                      {
-                        icon: Users,
-                        iconColor: 'text-purple-500 dark:text-purple-400',
-                        bgColor: 'bg-purple-50 dark:bg-purple-950/30',
-                        borderColor: cleanResults.namesStandardized > 0 ? 'border-purple-200 dark:border-purple-900/50' : '',
-                        label: 'Collector names standardized',
-                        sublabel: 'Unified by device ID',
-                        count: cleanResults.namesStandardized,
-                        badgeVariant: 'default' as const,
-                      },
-                    ].map((item, i) => {
+                    {sections.map((item) => {
                       const ItemIcon = item.icon;
                       const isActive = item.count > 0;
+                      const isExpanded = cleanExpandedSection === item.id;
                       return (
-                        <div
-                          key={i}
-                          className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
-                            isActive ? `${item.bgColor} ${item.borderColor}` : 'border-transparent bg-muted/30'
-                          }`}
-                        >
-                          <div className={`flex items-center justify-center h-8 w-8 rounded-md shrink-0 ${isActive ? item.bgColor : 'bg-muted'}`}>
-                            <ItemIcon className={`h-4 w-4 ${isActive ? item.iconColor : 'text-muted-foreground/50'}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${!isActive ? 'text-muted-foreground' : ''}`}>{item.label}</p>
-                            <p className="text-[11px] text-muted-foreground">{item.sublabel}</p>
-                          </div>
-                          <div className="shrink-0">
-                            {isActive ? (
-                              <Badge variant={item.badgeVariant}>{item.count.toLocaleString()}</Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground/50 font-medium px-2">0</span>
-                            )}
-                          </div>
+                        <div key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => isActive && setCleanExpandedSection(isExpanded ? null : item.id)}
+                            className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-colors text-left ${
+                              isActive ? `${item.bgColor} ${item.borderColor} cursor-pointer` : 'border-transparent bg-muted/30 cursor-default'
+                            }`}
+                            data-testid={`button-expand-${item.id}`}
+                          >
+                            <div className={`flex items-center justify-center h-8 w-8 rounded-md shrink-0 ${isActive ? item.bgColor : 'bg-muted'}`}>
+                              <ItemIcon className={`h-4 w-4 ${isActive ? item.iconColor : 'text-muted-foreground/50'}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-medium ${!isActive ? 'text-muted-foreground' : ''}`}>{item.label}</p>
+                              <p className="text-[11px] text-muted-foreground">{item.sublabel}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isActive ? (
+                                <Badge variant={item.badgeVariant}>{item.count.toLocaleString()}</Badge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground/50 font-medium px-2">0</span>
+                              )}
+                              {isActive && (
+                                isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                            </div>
+                          </button>
+
+                          {isExpanded && item.id === 'duplicates' && cleanResults.duplicateGroups.length > 0 && (
+                            <div className="mt-1.5 ml-2 border-l-2 border-red-200 dark:border-red-900/50 pl-3 space-y-2 py-2 max-h-64 overflow-y-auto">
+                              <p className="text-[11px] text-muted-foreground px-1">Select which rows to keep from each duplicate group. Unchecked rows will be removed.</p>
+                              {cleanResults.duplicateGroups.slice(0, 50).map((group, gi) => {
+                                const keptSet = duplicateKeepMap.get(gi) || new Set([0]);
+                                return (
+                                  <div key={gi} className="bg-muted/40 rounded-md p-2 space-y-1">
+                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                      <Badge variant="outline" className="text-[10px]">Group {gi + 1}</Badge>
+                                      <span className="text-[11px] text-muted-foreground">{group.rows.length} identical rows</span>
+                                      <span className="text-[10px] text-muted-foreground ml-auto">Keeping {keptSet.size} of {group.rows.length}</span>
+                                    </div>
+                                    <div className="text-[11px] text-muted-foreground mb-1.5 px-1">
+                                      <span className="font-medium">{group.rows[0]?.row.dataCollector || 'N/A'}</span>
+                                      {group.rows[0]?.row.activitySite && <> | {group.rows[0].row.activitySite}</>}
+                                      {group.rows[0]?.row.date && <> | {group.rows[0].row.date}</>}
+                                    </div>
+                                    {group.rows.map((r, ri) => {
+                                      const isKept = keptSet.has(ri);
+                                      return (
+                                        <label
+                                          key={ri}
+                                          className={`flex items-center gap-2 text-[11px] px-1 py-1 rounded cursor-pointer transition-colors ${isKept ? 'bg-green-50 dark:bg-green-950/30' : 'bg-red-50/50 dark:bg-red-950/20'}`}
+                                          data-testid={`label-dup-${gi}-${ri}`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={isKept}
+                                            onChange={() => {
+                                              setDuplicateKeepMap(prev => {
+                                                const next = new Map(prev);
+                                                const currentSet = new Set(next.get(gi) || [0]);
+                                                if (currentSet.has(ri)) {
+                                                  if (currentSet.size > 1) currentSet.delete(ri);
+                                                } else {
+                                                  currentSet.add(ri);
+                                                }
+                                                next.set(gi, currentSet);
+                                                return next;
+                                              });
+                                            }}
+                                            className="h-3 w-3 rounded border-muted-foreground/40 shrink-0"
+                                            data-testid={`checkbox-dup-${gi}-${ri}`}
+                                          />
+                                          <span className={isKept ? 'font-medium' : 'text-muted-foreground'}>
+                                            Row {r.index + 1}
+                                          </span>
+                                          <span className="text-muted-foreground truncate">
+                                            {r.row.hub && `${r.row.hub}`}{r.row.state && ` / ${r.row.state}`}{r.row.locality && ` / ${r.row.locality}`}
+                                          </span>
+                                          <span className="ml-auto text-[10px] shrink-0">
+                                            {isKept ? <Badge variant="outline" className="text-[9px] h-4">Kept</Badge> : <Badge variant="secondary" className="text-[9px] h-4">Removed</Badge>}
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                              {cleanResults.duplicateGroups.length > 50 && (
+                                <p className="text-[11px] text-muted-foreground text-center py-1">
+                                  Showing 50 of {cleanResults.duplicateGroups.length} duplicate groups
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {isExpanded && item.id === 'empty' && cleanResults.emptyRows.length > 0 && (
+                            <div className="mt-1.5 ml-2 border-l-2 border-orange-200 dark:border-orange-900/50 pl-3 space-y-1 py-2 max-h-48 overflow-y-auto">
+                              {cleanResults.emptyRows.slice(0, 30).map((er, ei) => (
+                                <div key={ei} className="flex items-center gap-2 text-[11px] bg-muted/40 rounded px-2 py-1">
+                                  <X className="h-3 w-3 text-orange-400 shrink-0" />
+                                  <span>Row {er.index + 1}</span>
+                                  <span className="text-muted-foreground">- All key fields are empty</span>
+                                </div>
+                              ))}
+                              {cleanResults.emptyRows.length > 30 && (
+                                <p className="text-[11px] text-muted-foreground text-center py-1">
+                                  Showing 30 of {cleanResults.emptyRows.length} empty rows
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {isExpanded && item.id === 'trimmed' && cleanResults.trimmedDetails.length > 0 && (
+                            <div className="mt-1.5 ml-2 border-l-2 border-blue-200 dark:border-blue-900/50 pl-3 space-y-1 py-2 max-h-48 overflow-y-auto">
+                              {cleanResults.trimmedDetails.slice(0, 30).map((td, ti) => (
+                                <div key={ti} className="text-[11px] bg-muted/40 rounded px-2 py-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle2 className="h-3 w-3 text-blue-400 shrink-0" />
+                                    <span>Row {td.index + 1}</span>
+                                    <Badge variant="outline" className="text-[9px] h-4">{td.field}</Badge>
+                                  </div>
+                                  <div className="mt-1 flex gap-2 items-start pl-5">
+                                    <span className="text-red-500 dark:text-red-400 line-through truncate max-w-[45%]">&ldquo;{td.before}&rdquo;</span>
+                                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
+                                    <span className="text-green-600 dark:text-green-400 truncate max-w-[45%]">&ldquo;{td.after}&rdquo;</span>
+                                  </div>
+                                </div>
+                              ))}
+                              {cleanResults.trimmedDetails.length > 30 && (
+                                <p className="text-[11px] text-muted-foreground text-center py-1">
+                                  Showing 30 of {cleanResults.trimmedDetails.length} trimmed fields
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {isExpanded && item.id === 'names' && cleanResults.nameChanges.length > 0 && (
+                            <div className="mt-1.5 ml-2 border-l-2 border-purple-200 dark:border-purple-900/50 pl-3 space-y-1 py-2 max-h-48 overflow-y-auto">
+                              {cleanResults.nameChanges.slice(0, 30).map((nc, ni) => (
+                                <div key={ni} className="text-[11px] bg-muted/40 rounded px-2 py-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <Users className="h-3 w-3 text-purple-400 shrink-0" />
+                                    <span>Row {nc.index + 1}</span>
+                                    <Badge variant="outline" className="text-[9px] h-4 truncate max-w-[120px]">{nc.deviceId}</Badge>
+                                  </div>
+                                  <div className="mt-1 flex gap-2 items-center pl-5">
+                                    <span className="text-red-500 dark:text-red-400 line-through truncate max-w-[40%]">{nc.oldName}</span>
+                                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                                    <span className="text-green-600 dark:text-green-400 truncate max-w-[40%]">{nc.newName}</span>
+                                  </div>
+                                </div>
+                              ))}
+                              {cleanResults.nameChanges.length > 30 && (
+                                <p className="text-[11px] text-muted-foreground text-center py-1">
+                                  Showing 30 of {cleanResults.nameChanges.length} name changes
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -3510,7 +3694,7 @@ const QuestionnaireAnalytics = () => {
                   <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
                     <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <p className="text-xs text-amber-800 dark:text-amber-300">
-                      Found <strong>{totalIssues.toLocaleString()}</strong> issues across {cleanResults.originalCount.toLocaleString()} rows. Download or apply the cleaned data below.
+                      Found <strong>{totalIssues.toLocaleString()}</strong> issues across {cleanResults.originalCount.toLocaleString()} rows. Click any category above to inspect details.
                     </p>
                   </div>
                 )}
