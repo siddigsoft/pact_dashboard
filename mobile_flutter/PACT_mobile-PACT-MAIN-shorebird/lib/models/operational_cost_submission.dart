@@ -159,6 +159,12 @@ class OperationalCostSubmission {
   final String? tier2Notes;
   final String? tier2Status;
   
+  // Tier 3 approval (Admin/SuperAdmin - for coordinator 3-tier flow)
+  final String? tier3ReviewedBy;
+  final DateTime? tier3ReviewedAt;
+  final String? tier3Notes;
+  final String? tier3Status;
+  
   // Reconciliation
   final bool requiresReconciliation;
   final bool isReconciled;
@@ -176,6 +182,7 @@ class OperationalCostSubmission {
   final String? hubName;
   final String? tier1ReviewerName;
   final String? tier2ReviewerName;
+  final String? tier3ReviewerName;
 
   OperationalCostSubmission({
     required this.id,
@@ -201,6 +208,10 @@ class OperationalCostSubmission {
     this.tier2ReviewedAt,
     this.tier2Notes,
     this.tier2Status,
+    this.tier3ReviewedBy,
+    this.tier3ReviewedAt,
+    this.tier3Notes,
+    this.tier3Status,
     this.requiresReconciliation = false,
     this.isReconciled = false,
     this.reconciledAt,
@@ -214,6 +225,7 @@ class OperationalCostSubmission {
     this.hubName,
     this.tier1ReviewerName,
     this.tier2ReviewerName,
+    this.tier3ReviewerName,
   });
 
   double get amount => amountCents / 100.0;
@@ -221,6 +233,24 @@ class OperationalCostSubmission {
   bool get isEditable => status == OperationalCostStatus.pending;
   bool get isCancellable => status == OperationalCostStatus.pending || status == OperationalCostStatus.underReview;
   bool get needsReconciliation => fundingType == FundingType.advance && !isReconciled && status == OperationalCostStatus.paid;
+
+  bool get hasThreeTiers {
+    final r = submitterRole?.toLowerCase() ?? '';
+    return r.contains('coordinator') || tier3Status != null;
+  }
+
+  bool get isFullyApproved {
+    if (hasThreeTiers) {
+      return tier1Status == 'approved' && tier2Status == 'approved' && tier3Status == 'approved';
+    }
+    return tier1Status == 'approved' && tier2Status == 'approved';
+  }
+
+  bool get hasSignature {
+    return (tier1Notes?.contains('[Signed:') ?? false) ||
+           (tier2Notes?.contains('[Signed:') ?? false) ||
+           (tier3Notes?.contains('[Signed:') ?? false);
+  }
 
   factory OperationalCostSubmission.fromJson(Map<String, dynamic> json) {
     List<SupportingDocument> docs = [];
@@ -257,6 +287,10 @@ class OperationalCostSubmission {
       tier2ReviewedAt: _parseDateTime(json['tier2_reviewed_at']),
       tier2Notes: json['tier2_notes']?.toString(),
       tier2Status: json['tier2_status']?.toString(),
+      tier3ReviewedBy: json['tier3_approved_by']?.toString() ?? json['tier3_reviewed_by']?.toString(),
+      tier3ReviewedAt: _parseDateTime(json['tier3_approved_at'] ?? json['tier3_reviewed_at']),
+      tier3Notes: json['tier3_notes']?.toString(),
+      tier3Status: json['tier3_status']?.toString(),
       requiresReconciliation: json['requires_reconciliation'] == true,
       isReconciled: json['is_reconciled'] == true,
       reconciledAt: _parseDateTime(json['reconciled_at']),
@@ -274,6 +308,7 @@ class OperationalCostSubmission {
                (json['hubs'] is Map ? json['hubs']['name']?.toString() : null),
       tier1ReviewerName: json['tier1_reviewer_name']?.toString(),
       tier2ReviewerName: json['tier2_reviewer_name']?.toString(),
+      tier3ReviewerName: json['tier3_reviewer_name']?.toString(),
     );
   }
 
@@ -314,6 +349,18 @@ class OperationalCostSubmission {
     'reference_number': referenceNumber,
     'status': status.value,
     'supporting_documents': supportingDocuments.map((d) => d.toJson()).toList(),
+    'tier1_reviewed_by': tier1ReviewedBy,
+    'tier1_reviewed_at': tier1ReviewedAt?.toIso8601String(),
+    'tier1_notes': tier1Notes,
+    'tier1_status': tier1Status,
+    'tier2_reviewed_by': tier2ReviewedBy,
+    'tier2_reviewed_at': tier2ReviewedAt?.toIso8601String(),
+    'tier2_notes': tier2Notes,
+    'tier2_status': tier2Status,
+    'tier3_approved_by': tier3ReviewedBy,
+    'tier3_approved_at': tier3ReviewedAt?.toIso8601String(),
+    'tier3_notes': tier3Notes,
+    'tier3_status': tier3Status,
     'requires_reconciliation': requiresReconciliation,
     'is_reconciled': isReconciled,
     'reconciled_amount_cents': reconciledAmountCents,
@@ -344,6 +391,10 @@ class OperationalCostSubmission {
     DateTime? tier2ReviewedAt,
     String? tier2Notes,
     String? tier2Status,
+    String? tier3ReviewedBy,
+    DateTime? tier3ReviewedAt,
+    String? tier3Notes,
+    String? tier3Status,
     bool? requiresReconciliation,
     bool? isReconciled,
     DateTime? reconciledAt,
@@ -380,6 +431,10 @@ class OperationalCostSubmission {
       tier2ReviewedAt: tier2ReviewedAt ?? this.tier2ReviewedAt,
       tier2Notes: tier2Notes ?? this.tier2Notes,
       tier2Status: tier2Status ?? this.tier2Status,
+      tier3ReviewedBy: tier3ReviewedBy ?? this.tier3ReviewedBy,
+      tier3ReviewedAt: tier3ReviewedAt ?? this.tier3ReviewedAt,
+      tier3Notes: tier3Notes ?? this.tier3Notes,
+      tier3Status: tier3Status ?? this.tier3Status,
       requiresReconciliation: requiresReconciliation ?? this.requiresReconciliation,
       isReconciled: isReconciled ?? this.isReconciled,
       reconciledAt: reconciledAt ?? this.reconciledAt,
@@ -393,6 +448,7 @@ class OperationalCostSubmission {
       hubName: hubName ?? this.hubName,
       tier1ReviewerName: tier1ReviewerName,
       tier2ReviewerName: tier2ReviewerName,
+      tier3ReviewerName: tier3ReviewerName,
     );
   }
 
@@ -533,17 +589,35 @@ class CostSubmissionPermissions {
     return false;
   }
 
-  /// Tier 2 approvers: Admin, Country Director (final approval)
-  /// After Tier 1, Country Director or Admin gives final approval
+  /// Tier 2 approvers: Admin, Country Director (final approval for 2-tier)
+  /// For 3-tier coordinator flow: Country Director does Tier 2
   bool canApproveTier2(OperationalCostSubmission submission) {
     if (submission.status != OperationalCostStatus.underReview) return false;
+    if (submission.tier1Status != 'approved') return false;
+    if (submission.tier2Status != null && submission.tier2Status != 'pending') return false;
     
-    // Admin can always do Tier 2 approval
+    if (submission.hasThreeTiers) {
+      if (isCountryDirector) return true;
+      if (isAdmin) return true;
+      return false;
+    }
+    
     if (isAdmin) return true;
     
-    // Country Director can do Tier 2 for non-CD submissions
     final submitterRole = submission.submitterRole?.toLowerCase() ?? '';
     if (isCountryDirector && !submitterRole.contains('country')) return true;
+    
+    return false;
+  }
+
+  /// Tier 3 approvers: Admin/SuperAdmin (final approval for 3-tier coordinator flow)
+  bool canApproveTier3(OperationalCostSubmission submission) {
+    if (!submission.hasThreeTiers) return false;
+    if (submission.status != OperationalCostStatus.underReview) return false;
+    if (submission.tier2Status != 'approved') return false;
+    if (submission.tier3Status != null && submission.tier3Status != 'pending') return false;
+    
+    if (isAdmin) return true;
     
     return false;
   }

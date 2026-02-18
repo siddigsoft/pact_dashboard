@@ -329,13 +329,74 @@ class OperationalCostService {
     }
 
     try {
+      final submission = await _supabase
+          .from('operational_cost_submissions')
+          .select('submitter_role, user_id')
+          .eq('id', submissionId)
+          .single();
+
+      final submitterRole = (submission['submitter_role'] ?? '').toString().toLowerCase();
+      final isThreeTier = submitterRole.contains('coordinator');
+
+      String overallStatus;
+      if (!approved) {
+        overallStatus = 'rejected';
+      } else if (isThreeTier) {
+        overallStatus = 'under_review';
+      } else {
+        overallStatus = 'approved';
+      }
+
+      final updateData = <String, dynamic>{
+        'tier2_reviewed_by': userId,
+        'tier2_reviewed_at': DateTime.now().toIso8601String(),
+        'tier2_notes': notes,
+        'tier2_status': approved ? 'approved' : 'rejected',
+        'status': overallStatus,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (isThreeTier && approved) {
+        updateData['tier3_status'] = 'pending';
+      }
+
+      await _supabase
+          .from('operational_cost_submissions')
+          .update(updateData)
+          .eq('id', submissionId)
+          .eq('status', 'under_review');
+
+      return true;
+    } catch (e) {
+      print('Error tier 2 review: $e');
+      return false;
+    }
+  }
+
+  /// Tier 3 Review (Admin/SuperAdmin - for 3-tier coordinator flow)
+  Future<bool> tier3Review({
+    required String submissionId,
+    required bool approved,
+    String? notes,
+  }) async {
+    final userId = currentUserId;
+    if (userId == null) return false;
+
+    final permissions = await getUserPermissions();
+    if (!permissions.isAdmin) {
+      print('Error: User does not have Tier 3 approval permission');
+      return false;
+    }
+
+    try {
+      final newStatus = approved ? 'approved' : 'rejected';
       await _supabase
           .from('operational_cost_submissions')
           .update({
-            'tier2_reviewed_by': userId,
-            'tier2_reviewed_at': DateTime.now().toIso8601String(),
-            'tier2_notes': notes,
-            'tier2_status': approved ? 'approved' : 'rejected',
+            'tier3_status': newStatus,
+            'tier3_approved_by': userId,
+            'tier3_approved_at': DateTime.now().toIso8601String(),
+            'tier3_notes': notes,
             'status': approved ? 'approved' : 'rejected',
             'updated_at': DateTime.now().toIso8601String(),
           })
@@ -344,7 +405,7 @@ class OperationalCostService {
 
       return true;
     } catch (e) {
-      print('Error tier 2 review: $e');
+      print('Error tier 3 review: $e');
       return false;
     }
   }
@@ -496,6 +557,116 @@ class OperationalCostService {
           },
         )
         .subscribe();
+  }
+
+  /// Trigger notification for cost submission events
+  Future<void> triggerNotification({
+    required String recipientId,
+    required String title,
+    required String titleAr,
+    required String message,
+    required String messageAr,
+    required String category,
+    required String relatedEntityType,
+    required String relatedEntityId,
+    String priority = 'normal',
+  }) async {
+    try {
+      await _supabase.from('notifications').insert({
+        'user_id': recipientId,
+        'title': title,
+        'title_ar': titleAr,
+        'message': message,
+        'message_ar': messageAr,
+        'category': category,
+        'priority': priority,
+        'related_entity_type': relatedEntityType,
+        'related_entity_id': relatedEntityId,
+        'is_read': false,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('Error sending notification: $e');
+    }
+  }
+
+  /// Notify submitter of approval/rejection
+  Future<void> notifyApprovalAction({
+    required OperationalCostSubmission submission,
+    required String action,
+    required int tier,
+    String? reviewerName,
+  }) async {
+    final isApproved = action == 'approved';
+    final tierLabel = 'Tier $tier';
+    
+    await triggerNotification(
+      recipientId: submission.userId,
+      title: isApproved 
+          ? 'Cost Submission $tierLabel Approved' 
+          : 'Cost Submission $tierLabel Rejected',
+      titleAr: isApproved 
+          ? 'تمت الموافقة على طلب التكلفة - $tierLabel' 
+          : 'تم رفض طلب التكلفة - $tierLabel',
+      message: '${submission.expenseCategory.labelEn} submission of ${submission.amount.toStringAsFixed(2)} ${submission.currency} has been $action${reviewerName != null ? " by $reviewerName" : ""}.',
+      messageAr: 'طلب ${submission.expenseCategory.labelAr} بمبلغ ${submission.amount.toStringAsFixed(2)} ${submission.currency} تم ${isApproved ? "الموافقة عليه" : "رفضه"}${reviewerName != null ? " بواسطة $reviewerName" : ""}.',
+      category: 'financial',
+      relatedEntityType: 'operational_cost_submission',
+      relatedEntityId: submission.id,
+      priority: isApproved ? 'normal' : 'high',
+    );
+  }
+
+  /// Notify payment recorded
+  Future<void> notifyPaymentRecorded({
+    required OperationalCostSubmission submission,
+  }) async {
+    await triggerNotification(
+      recipientId: submission.userId,
+      title: 'Payment Recorded',
+      titleAr: 'تم تسجيل الدفع',
+      message: 'Payment of ${submission.amount.toStringAsFixed(2)} ${submission.currency} for ${submission.expenseCategory.labelEn} has been recorded.',
+      messageAr: 'تم تسجيل دفع ${submission.amount.toStringAsFixed(2)} ${submission.currency} لـ ${submission.expenseCategory.labelAr}.',
+      category: 'financial',
+      relatedEntityType: 'operational_cost_submission',
+      relatedEntityId: submission.id,
+      priority: 'normal',
+    );
+  }
+
+  /// Export submissions as CSV string
+  String exportToCsv(List<OperationalCostSubmission> submissions, {bool isArabic = false}) {
+    final buffer = StringBuffer();
+    
+    if (isArabic) {
+      buffer.writeln('المرجع,الفئة,نوع التمويل,المبلغ,العملة,الحالة,الوصف,مقدم الطلب,المشروع,المحور,التاريخ,المستوى 1,المستوى 2,المستوى 3,تمت التسوية');
+    } else {
+      buffer.writeln('Reference,Category,Funding Type,Amount,Currency,Status,Description,Submitter,Project,Hub,Date,Tier 1,Tier 2,Tier 3,Reconciled');
+    }
+    
+    for (final s in submissions) {
+      final ref = 'PACT-OC-${s.id.substring(0, 8).toUpperCase()}';
+      final desc = '"${s.description.replaceAll('"', '""')}"';
+      buffer.writeln([
+        ref,
+        isArabic ? s.expenseCategory.labelAr : s.expenseCategory.labelEn,
+        isArabic ? s.fundingType.labelAr : s.fundingType.labelEn,
+        s.amount.toStringAsFixed(2),
+        s.currency,
+        isArabic ? s.status.labelAr : s.status.labelEn,
+        desc,
+        s.submitterName ?? 'N/A',
+        s.projectName ?? 'N/A',
+        s.hubName ?? 'N/A',
+        s.createdAt.toIso8601String(),
+        s.tier1Status ?? 'N/A',
+        s.tier2Status ?? 'N/A',
+        s.tier3Status ?? 'N/A',
+        s.isReconciled ? (isArabic ? 'نعم' : 'Yes') : (isArabic ? 'لا' : 'No'),
+      ].join(','));
+    }
+    
+    return buffer.toString();
   }
 
   /// Dispose resources
