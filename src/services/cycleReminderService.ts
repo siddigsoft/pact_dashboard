@@ -1,5 +1,15 @@
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { EmailNotificationService } from '@/services/email-notification.service';
+
+const fetchSuperAdminEmails = async (): Promise<string[]> => {
+  const { data } = await supabase
+    .from('profiles')
+    .select('email')
+    .in('role', ['super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin'])
+    .eq('status', 'approved');
+  return (data || []).filter((a: any) => a.email).map((a: any) => a.email);
+};
 
 export async function checkAndSendCycleReminders(): Promise<{ sent: number; cycles: number }> {
   let sentCount = 0;
@@ -25,12 +35,23 @@ export async function checkAndSendCycleReminders(): Promise<{ sent: number; cycl
 
     cycleCount = eligibleCycles.length;
 
+    const superAdminCcEmails = await fetchSuperAdminEmails();
+
+    const { data: superAdminProfiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, hub_id, role')
+      .in('role', ['super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin'])
+      .eq('status', 'approved');
+
     for (const cycle of eligibleCycles) {
       const mmpHub = (cycle as any).hub || (cycle as any).region || '';
+      const deadlineStr = cycle.cycle_close_deadline
+        ? new Date(cycle.cycle_close_deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        : 'N/A';
 
       let recipientQuery = supabase
         .from('profiles')
-        .select('id, full_name, hub_id, role')
+        .select('id, full_name, email, hub_id, role')
         .in('role', ['Supervisor', 'supervisor', 'fom', 'Field Operation Manager (FOM)'])
         .eq('status', 'approved');
 
@@ -47,10 +68,15 @@ export async function checkAndSendCycleReminders(): Promise<{ sent: number; cycl
 
       const { data: recipients } = await recipientQuery;
 
-      if (recipients && recipients.length > 0) {
+      const allRecipients = [...(recipients || []), ...(superAdminProfiles || [])];
+      const uniqueRecipients = allRecipients.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+
+      if (uniqueRecipients.length > 0) {
         await Promise.allSettled(
-          recipients.map(r =>
-            NotificationTriggerService.send({
+          uniqueRecipients.map(async (r: any) => {
+            const isSuperAdminRole = r.role?.includes('super_admin') || r.role?.includes('Super') || r.role?.includes('superAdmin');
+
+            await NotificationTriggerService.send({
               userId: r.id,
               title: `OVERDUE: Cycle Close Reasons Required`,
               message: `MMP "${cycle.name}" cycle close is overdue. Please submit remaining reasons for uncovered sites immediately.`,
@@ -62,10 +88,35 @@ export async function checkAndSendCycleReminders(): Promise<{ sent: number; cycl
               link: '/mmp/cycle-close?tab=uncovered',
               relatedEntityId: cycle.id,
               relatedEntityType: 'mmpFile',
-            })
-          )
+            });
+
+            if (r.email) {
+              const recipientCc = isSuperAdminRole ? [] : superAdminCcEmails.filter(e => e !== r.email);
+
+              await EmailNotificationService.sendNotification(
+                r.email,
+                r.full_name || 'Team',
+                {
+                  title: `OVERDUE: Cycle Close Reasons Required`,
+                  message: `MMP "${cycle.name}" cycle close is overdue. Please submit remaining reasons for uncovered sites immediately.`,
+                  titleAr: `متأخر: أسباب إغلاق الدورة مطلوبة`,
+                  messageAr: `إغلاق دورة MMP "${cycle.name}" متأخر. يرجى تقديم الأسباب المتبقية للمواقع غير المغطاة فوراً.`,
+                  type: 'error',
+                  actionUrl: '/mmp/cycle-close?tab=uncovered',
+                  actionLabel: 'Review & Submit Reasons | مراجعة وتقديم الأسباب',
+                  details: [
+                    { label: 'MMP / خطة الرصد', value: cycle.name },
+                    { label: 'Hub / المحور', value: mmpHub || 'N/A' },
+                    { label: 'Deadline / الموعد النهائي', value: deadlineStr },
+                    { label: 'Status / الحالة', value: 'OVERDUE - Immediate Action Required / متأخر - يتطلب إجراء فوري' },
+                  ],
+                  cc: recipientCc,
+                }
+              );
+            }
+          })
         );
-        sentCount += recipients.length;
+        sentCount += uniqueRecipients.length;
       }
 
       await supabase

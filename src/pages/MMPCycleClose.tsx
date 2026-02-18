@@ -6,6 +6,7 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { EmailNotificationService } from '@/services/email-notification.service';
 import { logMMPAudit } from '@/services/mmpAudit.service';
 import { checkAndSendCycleReminders } from '@/services/cycleReminderService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -116,6 +117,25 @@ interface FollowUpRecord {
   createdAt: string;
   mmpName?: string;
 }
+
+const fetchAdminFomSuperAdminRecipients = async () => {
+  const { data: recipients } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, role, hub_id')
+    .in('role', ['admin', 'Admin', 'super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin', 'fom', 'Field Operation Manager (FOM)'])
+    .eq('status', 'approved');
+
+  return (recipients || []).filter((r: any) => r.email);
+};
+
+const getSuperAdminEmails = async (): Promise<string[]> => {
+  const { data: admins } = await supabase
+    .from('profiles')
+    .select('email')
+    .in('role', ['super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin'])
+    .eq('status', 'approved');
+  return (admins || []).filter((a: any) => a.email).map((a: any) => a.email);
+};
 
 const HIGH_PRIORITY_REASONS = ['security_concerns', 'access_denied', 'staff_unavailable'];
 
@@ -790,6 +810,57 @@ const MMPCycleClose = () => {
           metadata: { cycleAction: 'assign_reason', siteId, siteName: site.site_name, reason },
         });
 
+        const reasonLabel = NOT_COVERED_REASONS.find(nr => nr.value === reason)?.label || reason;
+        const mmpObj = mmpFiles?.find(m => m.id === site.mmp_id);
+        const mmpName = mmpObj?.name || site.mmp_name || 'MMP';
+        const mmpHub = mmpObj?.hub || mmpObj?.region || '';
+        const assignedByName = currentUser?.fullName || 'System';
+
+        const totalMmpUncovered = uncoveredSites.filter(s => s.mmp_id === site.mmp_id).length;
+        const totalMmpReasoned = uncoveredSites.filter(s => s.mmp_id === site.mmp_id && (s.id === siteId || s.not_covered_reason)).length;
+        const progressPct = totalMmpUncovered > 0 ? Math.round((totalMmpReasoned / totalMmpUncovered) * 100) : 100;
+
+        try {
+          const recipients = await fetchAdminFomSuperAdminRecipients();
+          const superAdminCc = await getSuperAdminEmails();
+
+          await Promise.allSettled(
+            recipients.map(async (r: any) => {
+              const recipientCc = r.role?.includes('super_admin') || r.role?.includes('Super') || r.role?.includes('superAdmin')
+                ? [] : superAdminCc.filter(e => e !== r.email);
+
+              await EmailNotificationService.sendNotification(
+                r.email,
+                r.full_name || 'Team',
+                {
+                  title: `Cycle Close: Reason Assigned for Uncovered Site`,
+                  message: `A reason has been assigned for an uncovered site during the cycle close process for MMP "${mmpName}".`,
+                  titleAr: `إغلاق الدورة: تم تعيين سبب لموقع غير مغطى`,
+                  messageAr: `تم تعيين سبب لموقع غير مغطى أثناء عملية إغلاق الدورة لـ MMP "${mmpName}".`,
+                  type: 'warning',
+                  actionUrl: '/mmp/cycle-close?tab=uncovered',
+                  actionLabel: 'View Uncovered Sites | عرض المواقع غير المغطاة',
+                  details: [
+                    { label: 'MMP / خطة الرصد', value: mmpName },
+                    { label: 'Hub / المحور', value: mmpHub || 'N/A' },
+                    { label: 'Site / الموقع', value: site.site_name },
+                    { label: 'Site Code / رمز الموقع', value: site.site_code || 'N/A' },
+                    { label: 'State / الولاية', value: site.state || 'N/A' },
+                    { label: 'Locality / المحلية', value: site.locality || 'N/A' },
+                    { label: 'Reason / السبب', value: reasonLabel },
+                    ...(reason === 'other' && otherText ? [{ label: 'Details / التفاصيل', value: otherText }] : []),
+                    { label: 'Assigned By / تم التعيين بواسطة', value: assignedByName },
+                    { label: 'Date / التاريخ', value: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+                    { label: 'Progress / التقدم', value: `${totalMmpReasoned}/${totalMmpUncovered} sites (${progressPct}%)` },
+                  ],
+                  cc: recipientCc,
+                }
+              );
+            })
+          );
+        } catch (emailErr) {
+          console.error('Error sending cycle close reason email:', emailErr);
+        }
       }
 
       toast({ title: 'Reason Assigned', description: 'The reason has been saved.' });
@@ -838,6 +909,50 @@ const MMPCycleClose = () => {
         affectedSites: siteIds.length,
         metadata: { cycleAction: 'bulk_assign_reason', reason: bulkReason, siteCount: siteIds.length },
       });
+
+      const reasonLabel = NOT_COVERED_REASONS.find(nr => nr.value === bulkReason)?.label || bulkReason;
+      const assignedByName = currentUser?.fullName || 'System';
+      const affectedSiteNames = uncoveredSites.filter(s => siteIds.includes(s.id)).map(s => s.site_name).slice(0, 5);
+      const affectedMmpIds = [...new Set(uncoveredSites.filter(s => siteIds.includes(s.id)).map(s => s.mmp_id))];
+      const affectedMmpNames = affectedMmpIds.map(id => mmpFiles?.find(m => m.id === id)?.name || 'MMP').join(', ');
+
+      try {
+        const recipients = await fetchAdminFomSuperAdminRecipients();
+        const superAdminCc = await getSuperAdminEmails();
+
+        await Promise.allSettled(
+          recipients.map(async (r: any) => {
+            const recipientCc = r.role?.includes('super_admin') || r.role?.includes('Super') || r.role?.includes('superAdmin')
+              ? [] : superAdminCc.filter(e => e !== r.email);
+
+            await EmailNotificationService.sendNotification(
+              r.email,
+              r.full_name || 'Team',
+              {
+                title: `Cycle Close: Bulk Reason Assignment (${siteIds.length} Sites)`,
+                message: `Reasons have been bulk-assigned for ${siteIds.length} uncovered sites during the cycle close process.`,
+                titleAr: `إغلاق الدورة: تعيين أسباب جماعي (${siteIds.length} موقع)`,
+                messageAr: `تم تعيين أسباب بشكل جماعي لـ ${siteIds.length} موقع غير مغطى أثناء عملية إغلاق الدورة.`,
+                type: 'warning',
+                actionUrl: '/mmp/cycle-close?tab=uncovered',
+                actionLabel: 'View Uncovered Sites | عرض المواقع غير المغطاة',
+                details: [
+                  { label: 'MMP(s) / خطط الرصد', value: affectedMmpNames },
+                  { label: 'Sites Affected / المواقع المتأثرة', value: `${siteIds.length} sites` },
+                  { label: 'Sample Sites / نماذج مواقع', value: affectedSiteNames.join(', ') + (siteIds.length > 5 ? ` +${siteIds.length - 5} more` : '') },
+                  { label: 'Reason / السبب', value: reasonLabel },
+                  ...(bulkReason === 'other' && bulkOtherText ? [{ label: 'Details / التفاصيل', value: bulkOtherText }] : []),
+                  { label: 'Assigned By / تم التعيين بواسطة', value: assignedByName },
+                  { label: 'Date / التاريخ', value: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+                ],
+                cc: recipientCc,
+              }
+            );
+          })
+        );
+      } catch (emailErr) {
+        console.error('Error sending bulk assign reason email:', emailErr);
+      }
 
       toast({ title: 'Bulk Assign Complete', description: `Reason assigned to ${siteIds.length} sites.` });
     } catch (err: any) {
@@ -1051,10 +1166,16 @@ const MMPCycleClose = () => {
       const mmpName = mmp?.name || 'MMP';
       const mmpHub = mmp?.hub || mmp?.region || '';
 
+      const mmpUncoveredCount = uncoveredSites.filter(s => s.mmp_id === mmpId).length;
+      const mmpReasonedCount = uncoveredSites.filter(s => s.mmp_id === mmpId && s.not_covered_reason).length;
+      const mmpPendingCount = mmpUncoveredCount - mmpReasonedCount;
+      const progressPct = mmpUncoveredCount > 0 ? Math.round((mmpReasonedCount / mmpUncoveredCount) * 100) : 100;
+      const deadlineStr = (mmp as any)?.cycle_close_deadline ? new Date((mmp as any).cycle_close_deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A';
+
       let recipientQuery = supabase
         .from('profiles')
-        .select('id, full_name, hub_id, role')
-        .in('role', ['Supervisor', 'supervisor', 'fom', 'Field Operation Manager (FOM)'])
+        .select('id, full_name, email, hub_id, role')
+        .in('role', ['Supervisor', 'supervisor', 'fom', 'Field Operation Manager (FOM)', 'super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin'])
         .eq('status', 'approved');
 
       if (mmpHub) {
@@ -1064,33 +1185,131 @@ const MMPCycleClose = () => {
           .ilike('name', `%${mmpHub}%`)
           .limit(1);
         if (hubData && hubData.length > 0) {
-          recipientQuery = recipientQuery.eq('hub_id', hubData[0].id);
+          const hubId = hubData[0].id;
+          const { data: hubRecipients } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, hub_id, role')
+            .in('role', ['Supervisor', 'supervisor', 'fom', 'Field Operation Manager (FOM)'])
+            .eq('hub_id', hubId)
+            .eq('status', 'approved');
+
+          const { data: superAdmins } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, hub_id, role')
+            .in('role', ['super_admin', 'Super Admin', 'superAdmin', 'SuperAdmin'])
+            .eq('status', 'approved');
+
+          const combined = [...(hubRecipients || []), ...(superAdmins || [])];
+          const uniqueById = combined.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+
+          const superAdminCc = await getSuperAdminEmails();
+
+          if (uniqueById.length > 0) {
+            await Promise.allSettled(
+              uniqueById.map(async (r: any) => {
+                const isSuperAdminRole = r.role?.includes('super_admin') || r.role?.includes('Super') || r.role?.includes('superAdmin');
+
+                await NotificationTriggerService.send({
+                  userId: r.id,
+                  title: `OVERDUE: Cycle Close Reasons Required`,
+                  message: `MMP "${mmpName}" cycle close is overdue. ${mmpPendingCount} sites still need reasons. Please submit immediately.`,
+                  titleAr: `متأخر: أسباب إغلاق الدورة مطلوبة`,
+                  messageAr: `إغلاق دورة MMP "${mmpName}" متأخر. ${mmpPendingCount} مواقع لا تزال بحاجة إلى أسباب. يرجى التقديم فوراً.`,
+                  type: 'error',
+                  category: 'assignments',
+                  priority: 'urgent',
+                  link: '/mmp/cycle-close?tab=uncovered',
+                  relatedEntityId: mmpId,
+                  relatedEntityType: 'mmpFile',
+                });
+
+                if (r.email) {
+                  const recipientCc = isSuperAdminRole ? [] : superAdminCc.filter(e => e !== r.email);
+
+                  await EmailNotificationService.sendNotification(
+                    r.email,
+                    r.full_name || 'Team',
+                    {
+                      title: `OVERDUE: Cycle Close Reasons Required`,
+                      message: `MMP "${mmpName}" cycle close is overdue. ${mmpPendingCount} uncovered sites still require reasons to be submitted.`,
+                      titleAr: `متأخر: أسباب إغلاق الدورة مطلوبة`,
+                      messageAr: `إغلاق دورة MMP "${mmpName}" متأخر. ${mmpPendingCount} موقع غير مغطى لا يزال يحتاج إلى تقديم أسباب.`,
+                      type: 'error',
+                      actionUrl: '/mmp/cycle-close?tab=uncovered',
+                      actionLabel: 'Review & Submit Reasons | مراجعة وتقديم الأسباب',
+                      details: [
+                        { label: 'MMP / خطة الرصد', value: mmpName },
+                        { label: 'Hub / المحور', value: mmpHub || 'N/A' },
+                        { label: 'Deadline / الموعد النهائي', value: deadlineStr },
+                        { label: 'Total Uncovered / إجمالي غير المغطى', value: `${mmpUncoveredCount} sites` },
+                        { label: 'Reasons Submitted / الأسباب المقدمة', value: `${mmpReasonedCount} (${progressPct}%)` },
+                        { label: 'Still Pending / لا يزال معلقاً', value: `${mmpPendingCount} sites` },
+                      ],
+                      cc: recipientCc,
+                    }
+                  );
+                }
+              })
+            );
+          }
+
+          toast({ title: 'Reminders Sent', description: `Reminders sent to ${uniqueById.length} supervisors, FOMs, and super admins.` });
+          return;
         }
       }
 
       const { data: recipients } = await recipientQuery;
+      const superAdminCc = await getSuperAdminEmails();
 
       if (recipients && recipients.length > 0) {
         await Promise.allSettled(
-          recipients.map(r =>
-            NotificationTriggerService.send({
+          recipients.map(async (r: any) => {
+            const isSuperAdminRole = r.role?.includes('super_admin') || r.role?.includes('Super') || r.role?.includes('superAdmin');
+
+            await NotificationTriggerService.send({
               userId: r.id,
               title: `OVERDUE: Cycle Close Reasons Required`,
-              message: `MMP "${mmpName}" cycle close is overdue. Please submit remaining reasons for uncovered sites immediately.`,
+              message: `MMP "${mmpName}" cycle close is overdue. ${mmpPendingCount} sites still need reasons. Please submit immediately.`,
               titleAr: `متأخر: أسباب إغلاق الدورة مطلوبة`,
-              messageAr: `إغلاق دورة MMP "${mmpName}" متأخر. يرجى تقديم الأسباب المتبقية للمواقع غير المغطاة فوراً.`,
+              messageAr: `إغلاق دورة MMP "${mmpName}" متأخر. ${mmpPendingCount} مواقع لا تزال بحاجة إلى أسباب. يرجى التقديم فوراً.`,
               type: 'error',
               category: 'assignments',
               priority: 'urgent',
               link: '/mmp/cycle-close?tab=uncovered',
               relatedEntityId: mmpId,
               relatedEntityType: 'mmpFile',
-            })
-          )
+            });
+
+            if (r.email) {
+              const recipientCc = isSuperAdminRole ? [] : superAdminCc.filter(e => e !== r.email);
+              await EmailNotificationService.sendNotification(
+                r.email,
+                r.full_name || 'Team',
+                {
+                  title: `OVERDUE: Cycle Close Reasons Required`,
+                  message: `MMP "${mmpName}" cycle close is overdue. ${mmpPendingCount} uncovered sites still require reasons to be submitted.`,
+                  titleAr: `متأخر: أسباب إغلاق الدورة مطلوبة`,
+                  messageAr: `إغلاق دورة MMP "${mmpName}" متأخر. ${mmpPendingCount} موقع غير مغطى لا يزال يحتاج إلى تقديم أسباب.`,
+                  type: 'error',
+                  actionUrl: '/mmp/cycle-close?tab=uncovered',
+                  actionLabel: 'Review & Submit Reasons | مراجعة وتقديم الأسباب',
+                  details: [
+                    { label: 'MMP / خطة الرصد', value: mmpName },
+                    { label: 'Hub / المحور', value: mmpHub || 'N/A' },
+                    { label: 'Deadline / الموعد النهائي', value: deadlineStr },
+                    { label: 'Total Uncovered / إجمالي غير المغطى', value: `${mmpUncoveredCount} sites` },
+                    { label: 'Reasons Submitted / الأسباب المقدمة', value: `${mmpReasonedCount} (${progressPct}%)` },
+                    { label: 'Still Pending / لا يزال معلقاً', value: `${mmpPendingCount} sites` },
+                  ],
+                  cc: recipientCc,
+                }
+              );
+            }
+          })
         );
       }
 
-      toast({ title: 'Reminders Sent', description: `Reminders sent to ${recipients?.length || 0} supervisors and FOMs.` });
+      toast({ title: 'Reminders Sent', description: `Reminders sent to ${recipients?.length || 0} supervisors, FOMs, and super admins.` });
     } catch (err: any) {
       toast({ title: 'Error', description: err.message || 'Failed to send reminders', variant: 'destructive' });
     }
