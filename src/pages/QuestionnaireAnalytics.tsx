@@ -3642,7 +3642,7 @@ const QuestionnaireAnalytics = () => {
       </Dialog>
 
       <Dialog open={showCleanDialog} onOpenChange={setShowCleanDialog}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-3xl mx-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
               <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-primary/10">
