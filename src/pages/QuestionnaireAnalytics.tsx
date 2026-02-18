@@ -1348,53 +1348,32 @@ const QuestionnaireAnalytics = () => {
 
   const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean) => {
     const s = computeReportSummary;
-    if (!s) return '';
+    const month = s?.monthCoverage || '';
 
     const greeting = recipientName || 'Team';
-    const systemUrl = typeof window !== 'undefined' ? `${window.location.origin}/questionnaire-analytics` : '';
-    const qScore = s.qualityReport ? `Data Quality Score: ${s.qualityReport.qualityScore}%` : '';
 
     const en = [
       `Dear ${greeting},`,
       '',
-      `Please find attached the Questionnaire Data Report for ${s.monthCoverage}.`,
-      '',
-      `Report Summary:`,
-      `  Total Questionnaires: ${s.totalQuestionnaires}`,
-      `  Unique Sites: ${s.uniqueSites}`,
-      `  Hubs: ${s.uniqueHubs} | States: ${s.uniqueStates} | Localities: ${s.uniqueLocalities}`,
-      `  Data Collectors: ${s.totalCollectors} | Supervisors: ${s.totalSupervisors}`,
-      qScore ? `  ${qScore}` : '',
-      '',
-      'Hub Coverage:',
-      ...s.hubBreakdown.map(h => `  ${h.hub}: ${h.questionnaires} questionnaires, ${h.sites} sites`),
-      '',
-      isSystemUser && systemUrl ? `You can view the full interactive report at:\n${systemUrl}` : '',
+      `Please find attached the Questionnaire Data Report${month ? ` for ${month}` : ''}.`,
+      'Kindly review and confirm.',
       '',
       'Best regards,',
       'PACT Command Center',
-    ].filter(Boolean).join('\n');
+    ].join('\n');
 
     const ar = [
       '',
       '---',
       '',
-      `${greeting} عزيزي/عزيزتي`,
+      `عزيزي/عزيزتي ${greeting}،`,
       '',
-      `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق لشهر ${s.monthCoverage}.`,
-      '',
-      `ملخص التقرير:`,
-      `  إجمالي الاستبيانات: ${s.totalQuestionnaires}`,
-      `  المواقع الفريدة: ${s.uniqueSites}`,
-      `  المحاور: ${s.uniqueHubs} | الولايات: ${s.uniqueStates} | المحليات: ${s.uniqueLocalities}`,
-      `  جامعي البيانات: ${s.totalCollectors} | المشرفين: ${s.totalSupervisors}`,
-      s.qualityReport ? `  درجة جودة البيانات: ${s.qualityReport.qualityScore}%` : '',
-      '',
-      isSystemUser && systemUrl ? `يمكنك عرض التقرير التفاعلي الكامل عبر الرابط:\n${systemUrl}` : '',
+      `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق${month ? ` لشهر ${month}` : ''}.`,
+      'يرجى المراجعة والتأكيد.',
       '',
       'مع أطيب التحيات،',
       'مركز قيادة PACT',
-    ].filter(Boolean).join('\n');
+    ].join('\n');
 
     return `${en}\n${ar}`;
   }, [computeReportSummary]);
@@ -1474,24 +1453,23 @@ const QuestionnaireAnalytics = () => {
       let sentCount = 0;
       for (const recipient of emailToUsers) {
         try {
-          const personalBody = buildEmailBody(recipient.name || recipient.email, !!recipient.isSystemUser);
-          const personalArBody = s ? [
-            `${recipient.name || recipient.email} عزيزي/عزيزتي`,
+          const displayName = recipient.isSystemUser && recipient.name && recipient.name !== recipient.email
+            ? recipient.name
+            : recipient.name || recipient.email;
+          const personalBody = buildEmailBody(displayName, !!recipient.isSystemUser);
+          const month = s?.monthCoverage || '';
+          const personalArBody = [
+            `عزيزي/عزيزتي ${displayName}،`,
             '',
-            `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق لشهر ${s.monthCoverage}.`,
-            '',
-            `إجمالي الاستبيانات: ${s.totalQuestionnaires}`,
-            `المواقع الفريدة: ${s.uniqueSites}`,
-            `المحاور: ${s.uniqueHubs} | الولايات: ${s.uniqueStates} | المحليات: ${s.uniqueLocalities}`,
-            `جامعي البيانات: ${s.totalCollectors} | المشرفين: ${s.totalSupervisors}`,
-            s.qualityReport ? `درجة جودة البيانات: ${s.qualityReport.qualityScore}%` : '',
+            `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق${month ? ` لشهر ${month}` : ''}.`,
+            'يرجى المراجعة والتأكيد.',
             '',
             'مع أطيب التحيات،',
             'مركز قيادة PACT',
-          ].filter(Boolean).join('\n') : '';
+          ].join('\n');
           await EmailNotificationService.sendNotification(
             recipient.email,
-            recipient.name || 'Recipient',
+            displayName,
             {
               title: emailSubject,
               message: personalBody,
@@ -1500,7 +1478,6 @@ const QuestionnaireAnalytics = () => {
               type: emailHighPriority ? 'warning' : 'info',
               cc: sentCount === 0 && ccEmails.length > 0 ? ccEmails : undefined,
               attachments: attachments.length > 0 ? attachments : undefined,
-              actionUrl: recipient.isSystemUser ? `${window.location.origin}/questionnaire-analytics` : undefined,
             }
           );
           sentCount++;
