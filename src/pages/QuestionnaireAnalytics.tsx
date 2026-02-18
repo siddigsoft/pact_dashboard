@@ -253,7 +253,7 @@ const QuestionnaireAnalytics = () => {
   const [emailSending, setEmailSending] = useState(false);
   const [emailUsers, setEmailUsers] = useState<{id: string; name: string; email: string; role: string}[]>([]);
   const [emailHighPriority, setEmailHighPriority] = useState(true);
-  const [emailType, setEmailType] = useState<'report' | 'coverage'>('report');
+  const [emailType, setEmailType] = useState<'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel'>('report');
   const [emailProfilesLoading, setEmailProfilesLoading] = useState(false);
   const [reportIssuesExpanded, setReportIssuesExpanded] = useState(false);
 
@@ -1308,7 +1308,7 @@ const QuestionnaireAnalytics = () => {
     }
   }, []);
 
-  const openSectionEmailDialog = useCallback(async (section: string, type: 'report' | 'coverage' = 'coverage') => {
+  const openSectionEmailDialog = useCallback(async (section: string, type: 'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel' = 'coverage') => {
     const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
     const isReport = type === 'report';
     setEmailSubject(`${section} - ${month}`);
@@ -1321,7 +1321,7 @@ const QuestionnaireAnalytics = () => {
     setEmailCcUsers([]);
     setEmailCcInput('');
     setEmailCcSearchOpen(false);
-    setEmailHighPriority(isReport);
+    setEmailHighPriority(isReport || type === 'analytics_pdf');
     setShowEmailDialog(true);
     const timeout = setTimeout(() => setEmailProfilesLoading(false), 10000);
     try {
@@ -1333,6 +1333,9 @@ const QuestionnaireAnalytics = () => {
 
   const openEmailDialog = useCallback(() => openSectionEmailDialog('Questionnaire Data Report', 'report'), [openSectionEmailDialog]);
   const openCoverageEmailDialog = useCallback(() => openSectionEmailDialog('Coverage Tracker Report', 'coverage'), [openSectionEmailDialog]);
+  const openAnalyticsExcelEmailDialog = useCallback(() => openSectionEmailDialog('Questionnaire Analytics (Excel)', 'analytics_excel'), [openSectionEmailDialog]);
+  const openAnalyticsPdfEmailDialog = useCallback(() => openSectionEmailDialog('Questionnaire Analytics (Full PDF)', 'analytics_pdf'), [openSectionEmailDialog]);
+  const openTrackerExcelEmailDialog = useCallback(() => openSectionEmailDialog('Tracker Report (Excel)', 'tracker_excel'), [openSectionEmailDialog]);
 
   const getEmailCcList = useMemo(() => {
     const fromRoles = emailCcRoles.length > 0 ? emailUsers.filter(u => emailCcRoles.includes(u.role)) : [];
@@ -1444,17 +1447,23 @@ const QuestionnaireAnalytics = () => {
     setEmailCcUsers(prev => prev.filter(u => u.email !== email));
   }, []);
 
-  const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean, type?: 'report' | 'coverage') => {
+  const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean, type?: 'report' | 'coverage' | 'analytics_excel' | 'analytics_pdf' | 'tracker_excel') => {
     const s = computeReportSummary;
     const month = s?.monthCoverage || '';
     const greeting = recipientName || 'Team';
-    const reportLabel = type === 'coverage' ? 'Coverage Tracker Report' : 'Questionnaire Data Report';
-    const reportLabelAr = type === 'coverage' ? 'تقرير متابعة التغطية' : 'تقرير بيانات الاستبيانات';
+    const reportLabels: Record<string, { en: string; ar: string }> = {
+      report: { en: 'Questionnaire Data Report', ar: 'تقرير بيانات الاستبيانات' },
+      coverage: { en: 'Coverage Tracker Report', ar: 'تقرير متابعة التغطية' },
+      analytics_excel: { en: 'Questionnaire Analytics Report (Excel)', ar: 'تقرير تحليل الاستبيانات (إكسل)' },
+      analytics_pdf: { en: 'Questionnaire Analytics Report (Full PDF with Collector Details)', ar: 'تقرير تحليل الاستبيانات الشامل (بتفاصيل جامعي البيانات)' },
+      tracker_excel: { en: 'Tracker Report (Excel)', ar: 'تقرير المتابعة (إكسل)' },
+    };
+    const labels = reportLabels[type || 'report'] || reportLabels.report;
 
     const en = [
       `Dear ${greeting},`,
       '',
-      `Please find attached the ${reportLabel}${month ? ` for ${month}` : ''}.`,
+      `Please find attached the ${labels.en}${month ? ` for ${month}` : ''}.`,
       'Kindly review and confirm.',
       '',
       'Best regards,',
@@ -1467,7 +1476,7 @@ const QuestionnaireAnalytics = () => {
       '',
       `عزيزي/عزيزتي ${greeting}،`,
       '',
-      `يرجى الاطلاع على ${reportLabelAr} المرفق${month ? ` لشهر ${month}` : ''}.`,
+      `يرجى الاطلاع على ${labels.ar} المرفق${month ? ` لشهر ${month}` : ''}.`,
       'يرجى المراجعة والتأكيد.',
       '',
       'مع أطيب التحيات،',
@@ -1962,6 +1971,363 @@ const QuestionnaireAnalytics = () => {
     }
   }, [filteredData, cleanResults, data, fileName, currentSessionName, getCustomCleanedData, customDupsRemoved]);
 
+  const generateAnalyticsExcelBase64 = useCallback(async (): Promise<string | null> => {
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      const hFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+      const hFont: ExcelJS.Font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      const bFont: ExcelJS.Font = { size: 9 };
+      const border: Partial<ExcelJS.Borders> = { top: { style: 'thin', color: { argb: 'FFD0D5DD' } }, bottom: { style: 'thin', color: { argb: 'FFD0D5DD' } }, left: { style: 'thin', color: { argb: 'FFD0D5DD' } }, right: { style: 'thin', color: { argb: 'FFD0D5DD' } } };
+      const altBg: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+      const totalFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EBF0' } };
+
+      const addSheet = (name: string, headers: string[], rows: (string | number)[][]) => {
+        const ws = wb.addWorksheet(name);
+        const hr = ws.addRow(headers);
+        hr.eachCell(c => { c.fill = hFill; c.font = hFont; c.border = border; c.alignment = { horizontal: 'center' }; });
+        rows.forEach((row, ri) => {
+          const dr = ws.addRow(row);
+          dr.eachCell(c => { c.font = bFont; c.border = border; if (ri % 2 === 1) c.fill = altBg; });
+        });
+        ws.columns.forEach(col => { col.width = 20; });
+        return ws;
+      };
+
+      const totalQ = filteredData.length;
+      const totalSites = new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size;
+
+      addSheet('By Hub', ['#', 'Hub', 'Sites', 'Questionnaires', '%'],
+        [...hubSummary.map((h, i) => [i + 1, h.name, h.sites, h.questionnaires, h.percentage.toFixed(1) + '%']),
+        ['', 'Total', totalSites, totalQ, '100%']]);
+
+      addSheet('By State', ['#', 'State', 'Sites', 'Questionnaires', '%'],
+        [...stateSummary.map((s, i) => [i + 1, s.name, s.sites, s.questionnaires, s.percentage.toFixed(1) + '%']),
+        ['', 'Total', totalSites, totalQ, '100%']]);
+
+      addSheet('By Locality', ['#', 'Locality', 'Sites', 'Questionnaires', '%'],
+        [...localitySummary.map((l, i) => [i + 1, l.name, l.sites, l.questionnaires, l.percentage.toFixed(1) + '%']),
+        ['', 'Total', totalSites, totalQ, '100%']]);
+
+      addSheet('By Site', ['#', 'Site Name', 'Questionnaires', '%'],
+        siteSummary.map((s, i) => [i + 1, s.name, s.questionnaires, s.percentage.toFixed(1) + '%']));
+
+      const actRows: (string | number)[][] = [];
+      activityBreakdown.forEach(a => {
+        actRows.push([a.name, String(a.siteCount), String(a.questionnaireCount), a.percentage.toFixed(1) + '%']);
+      });
+      actRows.push(['Total', String(totalSites), String(totalQ), '100%']);
+      addSheet('By Activity', ['Activity', 'Sites', 'Questionnaires', '%'], actRows);
+
+      addSheet('By Collector', ['#', 'Device ID', 'Data Collector', 'Hub', 'State', 'Activities', 'Questionnaires', '%'],
+        [...collectorDetails.map((c, i) => [i + 1, c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '),
+          c.activities.map((a: any) => `${a.name} (${a.count})`).join(', '), c.count, c.percentage.toFixed(1) + '%']),
+        ['', '', 'Total', '', '', '', totalQ, '100%']]);
+
+      const { hubs, matrix: tMatrix, hubTotals: tHubTotals } = trackerData;
+      if (hubs.length > 0 && tMatrix.length > 0) {
+        const tHeaders = ['Activity', ...hubs.flatMap(h => [`${h} Sites`, `${h} Actual`, `${h} DC`]), 'Total Sites', 'Total Actual', 'Total DC'];
+        const tRows = tMatrix.map(row => {
+          const r: (string | number)[] = [row.activity];
+          hubs.forEach((_, hi) => { r.push(row.cells[hi].sites, row.cells[hi].questionnaires, row.cells[hi].collectors); });
+          r.push(row.totalSites, row.totalQ, row.totalCollectors);
+          return r;
+        });
+        const totalR: (string | number)[] = ['Grand Total'];
+        hubs.forEach((_, hi) => { totalR.push(tHubTotals[hi].sites, tHubTotals[hi].questionnaires, tHubTotals[hi].collectors); });
+        const gs = tMatrix.reduce((a, r) => a + r.totalSites, 0);
+        const gq = tMatrix.reduce((a, r) => a + r.totalQ, 0);
+        const gc = tMatrix.reduce((a, r) => a + r.totalCollectors, 0);
+        totalR.push(gs, gq, gc);
+        tRows.push(totalR);
+        const ws = addSheet('Tracker', tHeaders, tRows);
+        const lastRowNum = ws.rowCount;
+        ws.getRow(lastRowNum).eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
+      }
+
+      const buffer = await wb.xlsx.writeBuffer();
+      return bufferToBase64(buffer as ArrayBuffer);
+    } catch (e) {
+      console.error('Failed to generate analytics Excel base64:', e);
+      return null;
+    }
+  }, [filteredData, hubSummary, stateSummary, localitySummary, siteSummary, activityBreakdown, collectorDetails, trackerData, bufferToBase64]);
+
+  const generateAnalyticsPdfBase64 = useCallback(async (): Promise<string | null> => {
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      let y = await drawPdfHeader(doc, 'Questionnaire Analytics Report', 'تقرير تحليل الاستبيانات',
+        `Total: ${filteredData.length} Questionnaires  |  ${new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size} Sites`);
+      const hasArabic = await loadArabicFont(doc);
+
+      const totalQ = filteredData.length;
+      const totalSites = new Set(filteredData.map(r => r.activitySite).filter(Boolean)).size;
+
+      const hubRows = hubSummary.map((h, i) => [String(i + 1), h.name, String(h.sites), String(h.questionnaires), h.percentage.toFixed(1) + '%']);
+      hubRows.push(['', 'Total', String(totalSites), String(totalQ), '100%']);
+      y = styledAutoTable(doc, [['#', 'Hub', 'Sites', 'Questionnaires', '%']], hubRows, y - 2, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+      y += 4;
+
+      if (y > 220) { doc.addPage(); addPageHeader(doc, 'By State'); y = 18; }
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('By State', 14, y); y += 3;
+      const stateRows = stateSummary.map((s, i) => [String(i + 1), s.name, String(s.sites), String(s.questionnaires), s.percentage.toFixed(1) + '%']);
+      stateRows.push(['', 'Total', String(totalSites), String(totalQ), '100%']);
+      y = styledAutoTable(doc, [['#', 'State', 'Sites', 'Questionnaires', '%']], stateRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+      y += 4;
+
+      if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Locality'); y = 18; }
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('By Locality', 14, y); y += 3;
+      const locRows = localitySummary.map((l, i) => [String(i + 1), l.name, String(l.sites), String(l.questionnaires), l.percentage.toFixed(1) + '%']);
+      locRows.push(['', 'Total', String(totalSites), String(totalQ), '100%']);
+      y = styledAutoTable(doc, [['#', 'Locality', 'Sites', 'Questionnaires', '%']], locRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+      y += 4;
+
+      if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Activity'); y = 18; }
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('By Activity', 14, y); y += 3;
+      const pdmSitesTotal = activityBreakdown.reduce((s, a) => s + (isPdmActivity(a.name) ? Math.ceil(a.questionnaireCount / 7) : 0), 0);
+      const actRows = activityBreakdown.map(a => [a.name, String(a.siteCount), String(a.questionnaireCount), isPdmActivity(a.name) ? String(Math.ceil(a.questionnaireCount / 7)) : '-', a.percentage.toFixed(1) + '%']);
+      actRows.push(['Total', String(totalSites), String(totalQ), pdmSitesTotal > 0 ? String(pdmSitesTotal) : '-', '100%']);
+      y = styledAutoTable(doc, [['Activity', 'Sites', 'Questionnaires', 'PDM Sites', '%']], actRows, y, { fontSize: 9, boldLastRow: true, columnStyles: { 0: { cellWidth: 65 } }, useArabicFont: hasArabic });
+      y += 4;
+
+      if (y > 220) { doc.addPage(); addPageHeader(doc, 'By Data Collector'); y = 18; }
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('By Data Collector', 14, y); y += 3;
+      const dcRows = collectorDetails.map((c, i) => [String(i + 1), c.deviceId || '-', c.name, c.hubs.join(', '), c.states.join(', '), c.activities.map((a: any) => a.name).join(', '), String(c.count), c.percentage.toFixed(1) + '%']);
+      dcRows.push(['', '', 'Total', '', '', '', String(totalQ), '100%']);
+      y = styledAutoTable(doc, [['#', 'Device ID', 'Collector', 'Hub', 'State', 'Activities', 'Q', '%']], dcRows, y, { fontSize: 7, boldLastRow: true, useArabicFont: hasArabic });
+      y += 4;
+
+      collectorDetails.forEach(c => {
+        doc.addPage();
+        addPageHeader(doc, 'Data Collector Report');
+        y = 18;
+        doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text('Collector:', 14, y);
+        if (hasArabic) { doc.setFont('Amiri', 'normal'); }
+        doc.text(c.name, 42, y);
+        doc.setFont('helvetica', 'normal');
+        y += 5;
+        doc.setFontSize(9); doc.setTextColor(90, 95, 110);
+        doc.text(`Device ID: ${c.deviceId || '-'}  |  Hub: ${c.hubs.join(', ')}  |  State: ${c.states.join(', ')}  |  ${c.count} Q (${c.percentage.toFixed(1)}%)`, 14, y);
+        y += 6;
+        if (c.nameVariants.length > 0) {
+          doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+          doc.text(`Name Variants (${c.nameVariants.length + 1})`, 14, y); y += 3;
+          const vRows = c.nameVariants.map((v: any, i: number) => [String(i + 1), v.name, String(v.count)]);
+          vRows.unshift(['Primary', c.name, String(c.count - c.nameVariants.reduce((s: number, v: any) => s + v.count, 0))]);
+          y = styledAutoTable(doc, [['#', 'Name', 'Count']], vRows, y, { fontSize: 8, useArabicFont: hasArabic });
+          y += 4;
+        }
+        doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text('Activities', 14, y); y += 3;
+        const caRows = c.activities.map((a: any, i: number) => [String(i + 1), a.name, String(a.count)]);
+        caRows.push(['', 'Total', String(c.count)]);
+        y = styledAutoTable(doc, [['#', 'Activity', 'Count']], caRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+        y += 4;
+        if (y > 240) { doc.addPage(); addPageHeader(doc, 'Data Collector Report'); y = 18; }
+        doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text('Localities', 14, y); y += 3;
+        const clRows = c.localities.map((l: any, i: number) => [String(i + 1), l.name, String(l.count)]);
+        clRows.push(['', 'Total', String(c.count)]);
+        y = styledAutoTable(doc, [['#', 'Locality', 'Count']], clRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+      });
+
+      const { hubs: tHubs, matrix: tMatrix, hubTotals: tHubTotals, hubTrackers: tHubTrackers, stateTrackers: tStateTrackers } = trackerData;
+
+      if (tHubs.length > 0 && tMatrix.length > 0) {
+        doc.addPage(); addPageHeader(doc, 'Tracker - Activity by Hub'); y = 18;
+        doc.setFontSize(13); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text('Tracker — Activity by Hub', 14, y); y += 6;
+
+        tHubs.forEach((hub: string, hi: number) => {
+          if (y > 220) { doc.addPage(); addPageHeader(doc, 'Activity by Hub'); y = 18; }
+          doc.setFontSize(11); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+          doc.text(hub, 14, y); y += 3;
+          const aRows = tMatrix.filter(row => row.cells[hi].questionnaires > 0 || row.cells[hi].sites > 0).map(row => [
+            row.activity, String(row.cells[hi].sites || '-'), String(row.cells[hi].questionnaires || '-'),
+            isPdmActivity(row.activity) && row.cells[hi].questionnaires ? String(Math.ceil(row.cells[hi].questionnaires / 7)) : '-',
+            String(row.cells[hi].collectors || '-'),
+          ]);
+          const hubPdm = tMatrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0) : 0), 0);
+          aRows.push(['Total', String(tHubTotals[hi].sites), String(tHubTotals[hi].questionnaires), hubPdm ? String(hubPdm) : '-', String(tHubTotals[hi].collectors)]);
+          y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], aRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
+          y += 6;
+        });
+      }
+
+      tHubTrackers.forEach(ht => {
+        doc.addPage(); addPageHeader(doc, `Hub: ${ht.hub}`); y = 18;
+        doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text(`${ht.hub} — by State`, 14, y); y += 5;
+        ht.states.forEach((st: string, si: number) => {
+          if (y > 240) { doc.addPage(); addPageHeader(doc, `Hub: ${ht.hub}`); y = 18; }
+          doc.setFontSize(10); doc.setTextColor(41, 98, 255); doc.setFont('helvetica', 'bold');
+          doc.text(`State: ${st}`, 18, y); y += 3;
+          const sRows = ht.matrix.filter(row => row.cells[si].questionnaires > 0 || row.cells[si].sites > 0).map(row => [
+            row.activity, String(row.cells[si].sites || '-'), String(row.cells[si].questionnaires || '-'),
+            isPdmActivity(row.activity) && row.cells[si].questionnaires ? String(Math.ceil(row.cells[si].questionnaires / 7)) : '-',
+            String(row.cells[si].collectors || '-'),
+          ]);
+          const colPdm = ht.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[si].questionnaires ? Math.ceil(r.cells[si].questionnaires / 7) : 0) : 0), 0);
+          sRows.push(['Total', String(ht.colTotals[si].sites), String(ht.colTotals[si].questionnaires), colPdm ? String(colPdm) : '-', String(ht.colTotals[si].collectors)]);
+          y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], sRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
+          y += 5;
+        });
+      });
+
+      tStateTrackers.forEach(st => {
+        doc.addPage(); addPageHeader(doc, `State: ${st.state}`); y = 18;
+        doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+        doc.text(`${st.state} — by Locality`, 14, y); y += 5;
+        st.localities.forEach((loc: string, li: number) => {
+          if (y > 240) { doc.addPage(); addPageHeader(doc, `State: ${st.state}`); y = 18; }
+          doc.setFontSize(10); doc.setTextColor(41, 98, 255); doc.setFont('helvetica', 'bold');
+          doc.text(`Locality: ${loc}`, 18, y); y += 3;
+          const lRows = st.matrix.filter(row => row.cells[li].questionnaires > 0 || row.cells[li].sites > 0).map(row => [
+            row.activity, String(row.cells[li].sites || '-'), String(row.cells[li].questionnaires || '-'),
+            isPdmActivity(row.activity) && row.cells[li].questionnaires ? String(Math.ceil(row.cells[li].questionnaires / 7)) : '-',
+            String(row.cells[li].collectors || '-'),
+          ]);
+          const locPdm = st.matrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? (r.cells[li].questionnaires ? Math.ceil(r.cells[li].questionnaires / 7) : 0) : 0), 0);
+          lRows.push(['Total', String(st.colTotals[li].sites), String(st.colTotals[li].questionnaires), locPdm ? String(locPdm) : '-', String(st.colTotals[li].collectors)]);
+          y = styledAutoTable(doc, [['Activity', 'Sites', 'Actual', 'PDM Sites', 'DC']], lRows, y, { fontSize: 8, boldLastRow: true, columnStyles: { 0: { cellWidth: 55 } }, useArabicFont: hasArabic });
+          y += 5;
+        });
+      });
+
+      addAllFooters(doc);
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      return pdfBase64;
+    } catch (e) {
+      console.error('Failed to generate analytics PDF base64:', e);
+      return null;
+    }
+  }, [filteredData, hubSummary, stateSummary, localitySummary, activityBreakdown, collectorDetails, trackerData]);
+
+  const generateTrackerExcelBase64 = useCallback(async (): Promise<string | null> => {
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      const hFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+      const hFont: ExcelJS.Font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      const bFont: ExcelJS.Font = { size: 9 };
+      const border: Partial<ExcelJS.Borders> = { top: { style: 'thin', color: { argb: 'FFD0D5DD' } }, bottom: { style: 'thin', color: { argb: 'FFD0D5DD' } }, left: { style: 'thin', color: { argb: 'FFD0D5DD' } }, right: { style: 'thin', color: { argb: 'FFD0D5DD' } } };
+      const altBg: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+      const totalFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EBF0' } };
+
+      const { hubs, matrix, hubTotals, grandQ, grandSites, grandCollectors, stateBreakdown, hubTrackers, stateTrackers } = trackerData;
+
+      const ws1 = wb.addWorksheet('Activity x Hub');
+      const h1 = ['Activity', ...hubs.flatMap(h => [`${h} Sites`, `${h} Actual`, `${h} PDM Sites`, `${h} DC`]), 'Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC'];
+      const hr1 = ws1.addRow(h1);
+      hr1.eachCell(c => { c.fill = hFill; c.font = hFont; c.border = border; c.alignment = { horizontal: 'center' }; });
+
+      matrix.forEach((row, ri) => {
+        const vals: (string | number)[] = [row.activity];
+        hubs.forEach((_, hi) => {
+          vals.push(row.cells[hi].sites, row.cells[hi].questionnaires,
+            isPdmActivity(row.activity) ? Math.ceil(row.cells[hi].questionnaires / 7) : 0, row.cells[hi].collectors);
+        });
+        vals.push(row.totalSites, row.totalQ, isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0, row.totalCollectors);
+        const dr = ws1.addRow(vals);
+        dr.eachCell(c => { c.font = bFont; c.border = border; if (ri % 2 === 1) c.fill = altBg; });
+      });
+
+      const totalVals: (string | number)[] = ['Grand Total'];
+      hubs.forEach((_, hi) => {
+        const pdmCol = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0) : r.cells[hi].questionnaires), 0);
+        totalVals.push(hubTotals[hi].sites, hubTotals[hi].questionnaires, pdmCol || 0, hubTotals[hi].collectors);
+      });
+      const pdmGrand = matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+      totalVals.push(grandSites, grandQ, pdmGrand || 0, grandCollectors);
+      const tr1 = ws1.addRow(totalVals);
+      tr1.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
+      ws1.columns.forEach(col => { col.width = 16; });
+      if (ws1.columns[0]) ws1.columns[0].width = 28;
+
+      const ws2 = wb.addWorksheet('Activity x State');
+      const h2 = ws2.addRow(['State', 'Activity', 'Sites', 'Questionnaires', 'PDM Sites']);
+      h2.eachCell(c => { c.fill = hFill; c.font = hFont; c.border = border; c.alignment = { horizontal: 'center' }; });
+      let sri = 0;
+      stateBreakdown.forEach(sb => {
+        sb.activities.forEach(a => {
+          if (a.questionnaires > 0) {
+            const dr = ws2.addRow([sb.state, a.activity, a.sites, a.questionnaires, isPdmActivity(a.activity) ? Math.ceil(a.questionnaires / 7) : 0]);
+            dr.eachCell(c => { c.font = bFont; c.border = border; if (sri % 2 === 1) c.fill = altBg; });
+            sri++;
+          }
+        });
+      });
+      ws2.columns = [{ width: 22 }, { width: 28 }, { width: 12 }, { width: 18 }, { width: 14 }];
+
+      hubTrackers.forEach(ht => {
+        const ws = wb.addWorksheet(`Hub-${ht.hub}`.slice(0, 31));
+        const hCols = ['Activity', ...ht.states.flatMap(s => [`${s} Sites`, `${s} Actual`, `${s} PDM Sites`, `${s} DC`]), 'Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC'];
+        const hdr = ws.addRow(hCols);
+        hdr.eachCell(c => { c.fill = hFill; c.font = hFont; c.border = border; c.alignment = { horizontal: 'center' }; });
+        ht.matrix.forEach((row, ri) => {
+          const vals: (string | number)[] = [row.activity];
+          ht.states.forEach((_, si) => {
+            vals.push(row.cells[si].sites, row.cells[si].questionnaires,
+              isPdmActivity(row.activity) ? Math.ceil(row.cells[si].questionnaires / 7) : 0, row.cells[si].collectors);
+          });
+          vals.push(row.totalSites, row.totalQ, isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0, row.totalCollectors);
+          const dr = ws.addRow(vals);
+          dr.eachCell(c => { c.font = bFont; c.border = border; if (ri % 2 === 1) c.fill = altBg; });
+        });
+        const htTotalVals: (string | number)[] = ['Total'];
+        ht.colTotals.forEach((ct, ci) => {
+          const pdm = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+          htTotalVals.push(ct.sites, ct.questionnaires, pdm || 0, ct.collectors);
+        });
+        const htPdm = ht.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+        htTotalVals.push(ht.grandSites, ht.grandQ, htPdm || 0, ht.grandCollectors);
+        const htTr = ws.addRow(htTotalVals);
+        htTr.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
+        ws.columns.forEach(col => { col.width = 16; });
+        if (ws.columns[0]) ws.columns[0].width = 28;
+      });
+
+      stateTrackers.forEach(st => {
+        const ws = wb.addWorksheet(`State-${st.state}`.slice(0, 31));
+        const hCols = ['Activity', ...st.localities.flatMap(l => [`${l} Sites`, `${l} Actual`, `${l} PDM Sites`, `${l} DC`]), 'Total Sites', 'Total Actual', 'Total PDM Sites', 'Total DC'];
+        const hdr = ws.addRow(hCols);
+        hdr.eachCell(c => { c.fill = hFill; c.font = hFont; c.border = border; c.alignment = { horizontal: 'center' }; });
+        st.matrix.forEach((row, ri) => {
+          const vals: (string | number)[] = [row.activity];
+          st.localities.forEach((_, li) => {
+            vals.push(row.cells[li].sites, row.cells[li].questionnaires,
+              isPdmActivity(row.activity) ? Math.ceil(row.cells[li].questionnaires / 7) : 0, row.cells[li].collectors);
+          });
+          vals.push(row.totalSites, row.totalQ, isPdmActivity(row.activity) ? Math.ceil(row.totalQ / 7) : 0, row.totalCollectors);
+          const dr = ws.addRow(vals);
+          dr.eachCell(c => { c.font = bFont; c.border = border; if (ri % 2 === 1) c.fill = altBg; });
+        });
+        const stTotalVals: (string | number)[] = ['Total'];
+        st.colTotals.forEach((ct, ci) => {
+          const pdm = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? (r.cells[ci].questionnaires ? Math.ceil(r.cells[ci].questionnaires / 7) : 0) : r.cells[ci].questionnaires), 0);
+          stTotalVals.push(ct.sites, ct.questionnaires, pdm || 0, ct.collectors);
+        });
+        const stPdm = st.matrix.reduce((a, r) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : r.totalQ), 0);
+        stTotalVals.push(st.grandSites, st.grandQ, stPdm || 0, st.grandCollectors);
+        const stTr = ws.addRow(stTotalVals);
+        stTr.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
+        ws.columns.forEach(col => { col.width = 16; });
+        if (ws.columns[0]) ws.columns[0].width = 28;
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      return bufferToBase64(buffer as ArrayBuffer);
+    } catch (e) {
+      console.error('Failed to generate tracker Excel base64:', e);
+      return null;
+    }
+  }, [trackerData, bufferToBase64]);
+
   const sendEmailReport = useCallback(async () => {
     if (emailToUsers.length === 0) {
       toast({ title: 'Error', description: 'Please add at least one recipient', variant: 'destructive' });
@@ -1972,18 +2338,33 @@ const QuestionnaireAnalytics = () => {
       const ccEmails = getEmailCcList.map(u => u.email).filter(Boolean);
       const s = computeReportSummary;
       const month = s?.monthCoverage || '';
-      const isCoverage = emailType === 'coverage';
-      const reportLabelAr = isCoverage ? 'تقرير متابعة التغطية' : 'تقرير بيانات الاستبيانات';
+      const reportArLabels: Record<string, string> = {
+        report: 'تقرير بيانات الاستبيانات',
+        coverage: 'تقرير متابعة التغطية',
+        analytics_excel: 'تقرير تحليل الاستبيانات (إكسل)',
+        analytics_pdf: 'تقرير تحليل الاستبيانات الشامل',
+        tracker_excel: 'تقرير المتابعة (إكسل)',
+      };
+      const reportLabelAr = reportArLabels[emailType] || reportArLabels.report;
       const titleAr = s ? `${reportLabelAr} - ${s.monthCoverage}` : emailSubject;
 
       const attachments: { filename: string; content: string; type: string }[] = [];
       const baseName = fileName.replace(/\.[^.]+$/, '') || 'report';
 
-      if (isCoverage) {
+      if (emailType === 'coverage') {
         const b64 = await generateCoverageTrackerBase64();
         if (b64) attachments.push({ filename: `coverage_tracker_${baseName}.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const pdf64 = await generatePdfBase64('coverage');
         if (pdf64) attachments.push({ filename: `coverage_tracker_${baseName}.pdf`, content: pdf64, type: 'application/pdf' });
+      } else if (emailType === 'analytics_excel') {
+        const b64 = await generateAnalyticsExcelBase64();
+        if (b64) attachments.push({ filename: `questionnaire_analytics_${baseName}.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      } else if (emailType === 'analytics_pdf') {
+        const pdf64 = await generateAnalyticsPdfBase64();
+        if (pdf64) attachments.push({ filename: `questionnaire_analytics_${baseName}.pdf`, content: pdf64, type: 'application/pdf' });
+      } else if (emailType === 'tracker_excel') {
+        const b64 = await generateTrackerExcelBase64();
+        if (b64) attachments.push({ filename: `tracker_report_${baseName}.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       } else {
         if (emailAttachCleaned && cleanResults) {
           const b64 = await generateExcelBase64('cleaned');
@@ -2048,7 +2429,7 @@ const QuestionnaireAnalytics = () => {
     } finally {
       setEmailSending(false);
     }
-  }, [emailToUsers, emailSubject, emailHighPriority, emailType, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, generateCoverageTrackerBase64, generatePdfBase64, computeReportSummary]);
+  }, [emailToUsers, emailSubject, emailHighPriority, emailType, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, generateCoverageTrackerBase64, generatePdfBase64, generateAnalyticsExcelBase64, generateAnalyticsPdfBase64, generateTrackerExcelBase64, computeReportSummary]);
 
   const exportToExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
@@ -3542,9 +3923,21 @@ const QuestionnaireAnalytics = () => {
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
                     Data Report (Review + Cleaned)
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openAnalyticsExcelEmailDialog} data-testid="button-send-analytics-excel">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Export All to Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openAnalyticsPdfEmailDialog} data-testid="button-send-analytics-pdf">
+                    <FileDown className="h-4 w-4 mr-2" />
+                    Export Full PDF (with Collector Details)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openTrackerExcelEmailDialog} data-testid="button-send-tracker-excel">
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Export Tracker to Excel
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={openCoverageEmailDialog} data-testid="button-send-coverage-report">
                     <Layers className="h-4 w-4 mr-2" />
-                    Coverage Tracker
+                    Coverage Tracker (Hub/State/Collector)
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -5798,6 +6191,21 @@ const QuestionnaireAnalytics = () => {
                   <div className="flex items-center gap-1 ml-2 text-xs text-muted-foreground">
                     <FileSpreadsheet className="h-3 w-3" />Excel + <FileText className="h-3 w-3" />PDF
                   </div>
+                </div>
+              ) : emailType === 'analytics_excel' ? (
+                <div className="flex items-center gap-2">
+                  <Label className="mb-0">Attachments:</Label>
+                  <Badge variant="secondary" className="text-xs gap-1"><FileSpreadsheet className="h-3 w-3" />Analytics Excel (All Tabs)</Badge>
+                </div>
+              ) : emailType === 'analytics_pdf' ? (
+                <div className="flex items-center gap-2">
+                  <Label className="mb-0">Attachments:</Label>
+                  <Badge variant="secondary" className="text-xs gap-1"><FileText className="h-3 w-3" />Full PDF (with Collector Details)</Badge>
+                </div>
+              ) : emailType === 'tracker_excel' ? (
+                <div className="flex items-center gap-2">
+                  <Label className="mb-0">Attachments:</Label>
+                  <Badge variant="secondary" className="text-xs gap-1"><FileSpreadsheet className="h-3 w-3" />Tracker Excel (All Sheets)</Badge>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
