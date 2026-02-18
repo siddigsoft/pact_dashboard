@@ -1485,45 +1485,212 @@ const QuestionnaireAnalytics = () => {
     );
   }, [buildEmailBody, emailToUsers, emailToRecipientLabel, emailType]);
 
+  const bufferToBase64 = useCallback((buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }, []);
+
   const generateExcelBase64 = useCallback(async (type: 'cleaned' | 'review'): Promise<string | null> => {
     if (!cleanResults) return null;
     try {
       if (type === 'cleaned') {
         const finalData = getCustomCleanedData();
-        const rows = finalData.map(r => ({
-          Hub: r.hub, State: r.state, Locality: r.locality, 'Activity Site': r.activitySite,
-          Activity: r.activity, 'Sub Activity': r.subActivity, 'Data Collector': r.dataCollector,
-          'Device ID': r.deviceId, Supervisor: r.supervisor, Date: r.date, 'Site ID': r.siteId, Partner: r.partner,
-        }));
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Cleaned Data');
-        const buf = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-        return buf;
-      } else {
+        const reportSummary = computeSummaryFromData(finalData, data, fileName, cleanResults);
         const wb = new ExcelJS.Workbook();
-        const ws = wb.addWorksheet('Summary');
-        const headerRow = ws.addRow(['Metric', 'Value']);
-        headerRow.eachCell(c => { c.font = { bold: true }; });
-        ws.addRow(['Total Rows', data.length]);
-        ws.addRow(['Duplicates Removed', cleanResults.duplicatesRemoved]);
-        ws.addRow(['Empty Rows Removed', cleanResults.emptyRowsRemoved]);
-        ws.addRow(['Clean Rows', cleanResults.cleanedCount]);
-        ws.columns = [{ width: 25 }, { width: 15 }];
+        wb.creator = 'PACT Command Center';
+        const hFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+        const hFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
+        const bFont: Partial<ExcelJS.Font> = { size: 10, name: 'Calibri' };
+        const border: Partial<ExcelJS.Borders> = { top: { style: 'thin', color: { argb: 'FFC8CDD7' } }, bottom: { style: 'thin', color: { argb: 'FFC8CDD7' } }, left: { style: 'thin', color: { argb: 'FFC8CDD7' } }, right: { style: 'thin', color: { argb: 'FFC8CDD7' } } };
+        const altBg: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+
+        const ws = wb.addWorksheet('Cleaned Data');
+        const headers = ['Hub', 'State', 'Locality', 'Activity Site', 'Activity', 'Sub Activity', 'Data Collector', 'Device ID', 'Supervisor', 'Date', 'Site ID', 'Partner'];
+        const hr = ws.addRow(headers);
+        hr.eachCell(c => { c.fill = hFill; c.font = hFont; c.border = border; c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+        hr.height = 22;
+        finalData.forEach((r, i) => {
+          const row = ws.addRow([r.hub, r.state, r.locality, r.activitySite, r.activity, r.subActivity, r.dataCollector, r.deviceId, r.supervisor, r.date, r.siteId, r.partner]);
+          row.eachCell(c => { c.font = bFont; c.border = border; if (i % 2 === 1) c.fill = altBg; });
+        });
+        ws.columns = [{ width: 18 }, { width: 16 }, { width: 18 }, { width: 30 }, { width: 16 }, { width: 20 }, { width: 25 }, { width: 20 }, { width: 20 }, { width: 14 }, { width: 14 }, { width: 20 }];
+
+        const summaryWs = wb.addWorksheet('Summary');
+        const addSection = (text: string) => {
+          const r = summaryWs.addRow([text, '']);
+          r.eachCell(c => { c.fill = hFill; c.font = hFont; });
+        };
+        const addR = (label: string, value: string | number) => {
+          const r = summaryWs.addRow([label, value]);
+          r.eachCell(c => { c.font = bFont; c.border = border; });
+        };
+        addSection('Report Information');
+        addR('Report Title', 'Data Quality & Coverage Report');
+        addR('Generated Date', format(new Date(), 'MMMM d, yyyy h:mm a'));
+        addR('File Name', fileName);
+        addR('Month Coverage', reportSummary?.monthCoverage || 'N/A');
+        summaryWs.addRow([]);
+        addSection('Cleaning Metrics');
+        addR('Original Rows', cleanResults.originalCount);
+        addR('Cleaned Rows', finalData.length);
+        addR('Duplicates Removed', customDupsRemoved);
+        addR('Empty Rows Removed', cleanResults.emptyRowsRemoved);
+        addR('Fields Trimmed', cleanResults.trimmedFields);
+        addR('Names Standardized', cleanResults.namesStandardized);
+        addR('Data Quality Score', cleanResults.originalCount > 0 ? ((finalData.length / cleanResults.originalCount) * 100).toFixed(1) + '%' : '100%');
+        summaryWs.addRow([]);
+        addSection('Coverage Totals');
+        addR('Total Questionnaires', reportSummary?.totalQuestionnaires || finalData.length);
+        addR('Unique Sites', reportSummary?.uniqueSites || 0);
+        addR('Hubs', reportSummary?.uniqueHubs || 0);
+        addR('States', reportSummary?.uniqueStates || 0);
+        addR('Localities', reportSummary?.uniqueLocalities || 0);
+        addR('Data Collectors', reportSummary?.totalCollectors || 0);
+        addR('Supervisors', reportSummary?.totalSupervisors || 0);
+        if (reportSummary) {
+          summaryWs.addRow([]);
+          addSection('Team Roster');
+          reportSummary.teamOverview.forEach(team => {
+            const sr = summaryWs.addRow([`Supervisor: ${team.supervisor}`, `${team.teamSize} DCs, ${team.totalQ} Q`]);
+            sr.getCell(1).font = { ...bFont, bold: true };
+            team.collectors.forEach(dc => addR(`  ${dc.name}`, `Device: ${dc.deviceId} | ${dc.count} Q`));
+          });
+          summaryWs.addRow([]);
+          addSection('Hub Coverage');
+          reportSummary.hubBreakdown.forEach(h => addR(h.hub, `${h.questionnaires} Q, ${h.sites} sites`));
+        }
+        summaryWs.columns = [{ width: 35 }, { width: 40 }];
+
         const buf = await wb.xlsx.writeBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf as ArrayBuffer)));
-        return base64;
+        return bufferToBase64(buf as ArrayBuffer);
+      } else {
+        const safe = (v: string | undefined | null) => (v || '').trim();
+        const dupRowIndices = new Set<number>();
+        const dupGroupMap = new Map<number, number>();
+        cleanResults.duplicateGroups.forEach((group, gi) => { group.rows.forEach(r => { dupRowIndices.add(r.index); dupGroupMap.set(r.index, gi + 1); }); });
+        const emptyRowIndices = new Set(cleanResults.emptyRows.map(r => r.index));
+        const trimMap = new Map<string, { before: string; after: string }>();
+        cleanResults.trimmedDetails.forEach(td => { trimMap.set(`${td.index}|${td.field}`, { before: td.before, after: td.after }); });
+        const nameMap = new Map<number, { oldName: string; newName: string }>();
+        cleanResults.nameChanges.forEach(nc => { nameMap.set(nc.index, { oldName: nc.oldName, newName: nc.newName }); });
+
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'PACT Command Center';
+        const ws = wb.addWorksheet('Data Review');
+        const headers = ['Row #', 'Issue', 'Hub', 'State', 'Locality', 'Activity Site', 'Activity', 'Sub Activity', 'Data Collector', 'Device ID', 'Supervisor', 'Date', 'Site ID', 'Partner'];
+        const fieldKeys: (keyof QuestionnaireRow)[] = ['hub', 'state', 'locality', 'activitySite', 'activity', 'subActivity', 'dataCollector', 'deviceId', 'supervisor', 'date', 'siteId', 'partner'];
+        const headerRow = ws.addRow(headers);
+        headerRow.eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border = { bottom: { style: 'thin', color: { argb: 'FF374151' } } };
+        });
+        const redFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+        const orangeFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7ED' } };
+        const blueFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+        const purpleFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F3FF' } };
+        const greenFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+        const redFont: Partial<ExcelJS.Font> = { color: { argb: 'FFDC2626' } };
+        const orangeFont: Partial<ExcelJS.Font> = { color: { argb: 'FFEA580C' } };
+        const blueFont: Partial<ExcelJS.Font> = { color: { argb: 'FF2563EB' } };
+        const purpleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF9333EA' } };
+        data.forEach((row, idx) => {
+          const issues: string[] = [];
+          let rowFill: ExcelJS.FillPattern | null = null;
+          let issueFont: Partial<ExcelJS.Font> = {};
+          const isDuplicate = dupRowIndices.has(idx);
+          const isEmpty = emptyRowIndices.has(idx);
+          const hasNameChange = nameMap.has(idx);
+          const hasTrim = fieldKeys.some(k => trimMap.has(`${idx}|${k}`));
+          if (isDuplicate) { issues.push(`DUPLICATE (Group ${dupGroupMap.get(idx)})`); rowFill = redFill; issueFont = redFont; }
+          if (isEmpty) { issues.push('EMPTY ROW'); rowFill = orangeFill; issueFont = orangeFont; }
+          if (hasNameChange) { const nc = nameMap.get(idx)!; issues.push(`NAME: "${nc.oldName}" → "${nc.newName}"`); if (!rowFill) { rowFill = purpleFill; issueFont = purpleFont; } }
+          if (hasTrim) { issues.push(`TRIMMED: ${fieldKeys.filter(k => trimMap.has(`${idx}|${k}`)).join(', ')}`); if (!rowFill) { rowFill = blueFill; issueFont = blueFont; } }
+          const values = [idx + 1, issues.join(' | ') || '', ...fieldKeys.map(k => row[k] || '')];
+          const excelRow = ws.addRow(values);
+          if (rowFill) excelRow.eachCell(cell => { cell.fill = rowFill!; });
+          if (issues.length > 0) excelRow.getCell(2).font = { ...issueFont, bold: true, size: 10 };
+          if (!issues.length) {
+            excelRow.eachCell((cell, colNum) => { if (colNum > 2) cell.fill = greenFill; });
+            excelRow.getCell(2).value = 'OK';
+            excelRow.getCell(2).font = { color: { argb: 'FF16A34A' }, italic: true, size: 10 };
+          }
+          fieldKeys.forEach((key, ki) => {
+            const trimKey = `${idx}|${key}`;
+            if (trimMap.has(trimKey)) { const td = trimMap.get(trimKey)!; const cell = excelRow.getCell(ki + 3); cell.note = `Whitespace trimmed:\nBefore: "${td.before}"\nAfter: "${td.after}"`; cell.font = { color: { argb: 'FF2563EB' }, italic: true }; }
+          });
+          if (hasNameChange) { const nc = nameMap.get(idx)!; const dcCell = excelRow.getCell(fieldKeys.indexOf('dataCollector') + 3); dcCell.note = `Name standardized:\nOriginal: "${nc.oldName}"\nStandard: "${nc.newName}"`; dcCell.font = { color: { argb: 'FF9333EA' }, bold: true }; }
+        });
+        ws.columns = [{ width: 8 }, { width: 35 }, { width: 18 }, { width: 16 }, { width: 18 }, { width: 30 }, { width: 16 }, { width: 20 }, { width: 25 }, { width: 20 }, { width: 20 }, { width: 14 }, { width: 14 }, { width: 20 }];
+        ws.autoFilter = { from: 'A1', to: `N${data.length + 1}` };
+
+        const legendWs = wb.addWorksheet('Legend');
+        const lh = legendWs.addRow(['Color', 'Meaning', 'Details']);
+        lh.eachCell(cell => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } }; cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }; });
+        [{ color: 'FFFEE2E2', label: 'Red', meaning: 'Duplicate Row', details: 'Row has identical key fields to another row.' },
+         { color: 'FFFFF7ED', label: 'Orange', meaning: 'Empty Row', details: 'Row has no meaningful data.' },
+         { color: 'FFEFF6FF', label: 'Blue', meaning: 'Trimmed Fields', details: 'Extra whitespace removed.' },
+         { color: 'FFF5F3FF', label: 'Purple', meaning: 'Name Standardized', details: 'Collector name unified.' },
+         { color: 'FFF0FDF4', label: 'Green', meaning: 'No Issues', details: 'Row passed all checks.' }]
+        .forEach(l => { const r = legendWs.addRow([l.label, l.meaning, l.details]); r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: l.color } }; r.getCell(1).font = { bold: true }; });
+        legendWs.columns = [{ width: 12 }, { width: 25 }, { width: 80 }];
+
+        const summaryWs = wb.addWorksheet('Summary');
+        const rptSummary = computeSummaryFromData(data, data, fileName, cleanResults);
+        const addSec = (text: string) => { const r = summaryWs.addRow([text, '']); r.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } }; c.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }; }); };
+        const addSR = (label: string, value: string | number) => summaryWs.addRow([label, value]);
+        addSec('Report Information');
+        addSR('Report Title', 'Data Quality & Coverage Report');
+        addSR('Generated Date', format(new Date(), 'MMMM d, yyyy h:mm a'));
+        addSR('File Name', fileName);
+        addSR('Month Coverage', rptSummary?.monthCoverage || 'N/A');
+        summaryWs.addRow([]);
+        addSec('Data Quality Metrics');
+        addSR('Total Rows', data.length);
+        addSR('Duplicate Rows', cleanResults.duplicateGroups.reduce((s, g) => s + g.rows.length, 0));
+        addSR('Duplicate Groups', cleanResults.duplicateGroups.length);
+        addSR('Empty Rows', cleanResults.emptyRowsRemoved);
+        addSR('Fields Trimmed', cleanResults.trimmedFields);
+        addSR('Names Standardized', cleanResults.namesStandardized);
+        const cleanRowCount = data.length - cleanResults.emptyRowsRemoved - cleanResults.duplicateGroups.reduce((s, g) => s + g.rows.length, 0);
+        addSR('Clean Rows', cleanRowCount);
+        addSR('Data Quality Score', data.length > 0 ? ((cleanRowCount / data.length) * 100).toFixed(1) + '%' : '100%');
+        if (rptSummary) {
+          summaryWs.addRow([]);
+          addSec('Coverage Totals');
+          addSR('Total Questionnaires', rptSummary.totalQuestionnaires);
+          addSR('Unique Sites', rptSummary.uniqueSites);
+          addSR('Hubs', rptSummary.uniqueHubs);
+          addSR('States', rptSummary.uniqueStates);
+          addSR('Localities', rptSummary.uniqueLocalities);
+          summaryWs.addRow([]);
+          addSec('Hub Coverage');
+          rptSummary.hubBreakdown.forEach(h => addSR(h.hub, `${h.questionnaires} Q, ${h.sites} sites`));
+        }
+        summaryWs.columns = [{ width: 35 }, { width: 40 }];
+
+        const buf = await wb.xlsx.writeBuffer();
+        return bufferToBase64(buf as ArrayBuffer);
       }
-    } catch { return null; }
-  }, [cleanResults, data, getCustomCleanedData]);
+    } catch (e) { console.error('Failed to generate Excel:', e); return null; }
+  }, [cleanResults, data, getCustomCleanedData, fileName, customDupsRemoved, bufferToBase64]);
 
   const generateCoverageTrackerBase64 = useCallback(async (): Promise<string | null> => {
     if (!filteredData || filteredData.length === 0) return null;
     try {
-      const ExcelJSLib = await import('exceljs');
-      const wb = new ExcelJSLib.default.Workbook();
+      const wb = new ExcelJS.Workbook();
       wb.creator = 'PACT Command Center';
       wb.created = new Date();
       const label = currentSessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      const hFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+      const hFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
+      const bFont: Partial<ExcelJS.Font> = { size: 10, name: 'Calibri' };
+      const border: Partial<ExcelJS.Borders> = { top: { style: 'thin', color: { argb: 'FFC8CDD7' } }, bottom: { style: 'thin', color: { argb: 'FFC8CDD7' } }, left: { style: 'thin', color: { argb: 'FFC8CDD7' } }, right: { style: 'thin', color: { argb: 'FFC8CDD7' } } };
+      const altBg: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FC' } };
+      const totalFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
 
       const hubStateRows = new Map<string, Map<string, { collector: string; deviceId: string; activity: string }[]>>();
       const hubOrder: string[] = [];
@@ -1543,27 +1710,257 @@ const QuestionnaireAnalytics = () => {
         const sheetName = hub.substring(0, 31);
         const ws = wb.addWorksheet(sheetName);
         const stateMap = hubStateRows.get(hub)!;
-        ws.addRow([`Coverage Tracker - ${hub}`, '', label]);
+        const titleRow = ws.addRow([`Coverage Tracker - ${hub}`, '', '', label]);
+        titleRow.getCell(1).font = { bold: true, size: 14, name: 'Calibri', color: { argb: 'FF0F2041' } };
+        titleRow.getCell(4).font = { bold: true, size: 11, name: 'Calibri', color: { argb: 'FF2563EB' } };
         ws.addRow([]);
-        const headers = ['State', 'Collector', 'Device ID', 'Activity'];
-        ws.addRow(headers);
+        const headers = ['State', 'Data Collector', 'Device ID', 'Activity'];
+        const hr = ws.addRow(headers);
+        hr.eachCell(c => { c.fill = hFill; c.font = hFont; c.border = border; c.alignment = { horizontal: 'center', vertical: 'middle' }; });
+        hr.height = 22;
+        let rowIdx = 0;
+        let totalRows = 0;
         stateMap.forEach((rows, state) => {
           rows.forEach(r => {
-            ws.addRow([state, r.collector, r.deviceId, r.activity]);
+            const dr = ws.addRow([state, r.collector, r.deviceId, r.activity]);
+            dr.eachCell(c => { c.font = bFont; c.border = border; if (rowIdx % 2 === 1) c.fill = altBg; });
+            rowIdx++;
+            totalRows++;
           });
         });
+        const tr = ws.addRow(['Total', `${totalRows} entries`, '', '']);
+        tr.eachCell(c => { c.fill = totalFill; c.font = { ...bFont, bold: true }; c.border = border; });
+        ws.columns = [{ width: 20 }, { width: 28 }, { width: 28 }, { width: 22 }];
       });
 
       const buffer = await wb.xlsx.writeBuffer();
-      const bytes = new Uint8Array(buffer as ArrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      return btoa(binary);
+      return bufferToBase64(buffer as ArrayBuffer);
     } catch (e) {
       console.error('Failed to generate coverage tracker base64:', e);
       return null;
     }
-  }, [filteredData, currentSessionName]);
+  }, [filteredData, currentSessionName, bufferToBase64]);
+
+  const generatePdfBase64 = useCallback(async (type: 'cleaned' | 'review' | 'coverage'): Promise<string | null> => {
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(15, 32, 65);
+
+      if (type === 'coverage') {
+        if (!filteredData || filteredData.length === 0) return null;
+        const label = currentSessionName?.trim() || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        doc.text(`Coverage Tracker Report - ${label}`, 14, 15);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')}`, 14, 22);
+
+        const hubGroups = new Map<string, { state: string; collector: string; deviceId: string; activity: string }[]>();
+        filteredData.forEach(row => {
+          if (!row.hub) return;
+          if (!hubGroups.has(row.hub)) hubGroups.set(row.hub, []);
+          hubGroups.get(row.hub)!.push({ state: row.state || '', collector: row.dataCollector || '', deviceId: row.deviceId || '', activity: row.activity || '' });
+        });
+
+        let yPos = 28;
+        hubGroups.forEach((rows, hub) => {
+          if (yPos > 170) { doc.addPage(); yPos = 15; }
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(15, 32, 65);
+          doc.text(hub, 14, yPos);
+          yPos += 2;
+          autoTable(doc, {
+            startY: yPos,
+            head: [['State', 'Data Collector', 'Device ID', 'Activity']],
+            body: rows.map(r => [r.state, r.collector, r.deviceId, r.activity]),
+            theme: 'grid',
+            headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+            bodyStyles: { fontSize: 7, textColor: [20, 20, 30] },
+            alternateRowStyles: { fillColor: [245, 247, 252] },
+            margin: { left: 14, right: 14 },
+            tableWidth: 'auto',
+          });
+          yPos = (doc as any).lastAutoTable.finalY + 8;
+        });
+
+        const totalQ = filteredData.length;
+        const totalHubs = hubGroups.size;
+        if (yPos > 170) { doc.addPage(); yPos = 15; }
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Summary: ${totalQ} questionnaires across ${totalHubs} hubs`, 14, yPos);
+      } else if (type === 'cleaned') {
+        if (!cleanResults) return null;
+        const finalData = getCustomCleanedData();
+        const reportSummary = computeSummaryFromData(finalData, data, fileName, cleanResults);
+        doc.text('Cleaned Data Report', 14, 15);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | File: ${fileName}`, 14, 22);
+
+        autoTable(doc, {
+          startY: 28,
+          head: [['Metric', 'Value']],
+          body: [
+            ['Original Rows', String(cleanResults.originalCount)],
+            ['Cleaned Rows', String(finalData.length)],
+            ['Duplicates Removed', String(customDupsRemoved)],
+            ['Empty Rows Removed', String(cleanResults.emptyRowsRemoved)],
+            ['Data Quality Score', cleanResults.originalCount > 0 ? ((finalData.length / cleanResults.originalCount) * 100).toFixed(1) + '%' : '100%'],
+            ['Total Questionnaires', String(reportSummary?.totalQuestionnaires || finalData.length)],
+            ['Unique Sites', String(reportSummary?.uniqueSites || 0)],
+            ['Hubs', String(reportSummary?.uniqueHubs || 0)],
+            ['States', String(reportSummary?.uniqueStates || 0)],
+          ],
+          theme: 'grid',
+          headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontSize: 9, fontStyle: 'bold' },
+          bodyStyles: { fontSize: 8 },
+          columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 }, 1: { cellWidth: 50 } },
+          margin: { left: 14, right: 14 },
+        });
+
+        let yPos = (doc as any).lastAutoTable.finalY + 8;
+        if (reportSummary && reportSummary.hubBreakdown.length > 0) {
+          if (yPos > 170) { doc.addPage(); yPos = 15; }
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(15, 32, 65);
+          doc.text('Coverage by Hub', 14, yPos);
+          yPos += 2;
+          autoTable(doc, {
+            startY: yPos,
+            head: [['Hub', 'Sites', 'Questionnaires']],
+            body: [
+              ...reportSummary.hubBreakdown.map(h => [h.hub, String(h.sites), String(h.questionnaires)]),
+              ['Total', String(reportSummary.hubBreakdown.reduce((s, h) => s + h.sites, 0)), String(reportSummary.hubBreakdown.reduce((s, h) => s + h.questionnaires, 0))],
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+            bodyStyles: { fontSize: 8 },
+            margin: { left: 14, right: 14 },
+          });
+        }
+
+        yPos = (doc as any).lastAutoTable.finalY + 8;
+        if (yPos > 160) { doc.addPage(); yPos = 15; }
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 32, 65);
+        doc.text('Cleaned Data', 14, yPos);
+        yPos += 2;
+        const pageRows = finalData.slice(0, 500);
+        autoTable(doc, {
+          startY: yPos,
+          head: [['Hub', 'State', 'Locality', 'Activity', 'Data Collector', 'Device ID', 'Supervisor', 'Date']],
+          body: pageRows.map(r => [r.hub || '', r.state || '', r.locality || '', r.activity || '', r.dataCollector || '', r.deviceId || '', r.supervisor || '', r.date || '']),
+          theme: 'grid',
+          headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold' },
+          bodyStyles: { fontSize: 6 },
+          alternateRowStyles: { fillColor: [245, 247, 252] },
+          margin: { left: 14, right: 14 },
+        });
+        if (finalData.length > 500) {
+          const fy = (doc as any).lastAutoTable.finalY + 5;
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'italic');
+          doc.text(`Showing first 500 of ${finalData.length} rows. Full data available in Excel attachment.`, 14, fy);
+        }
+      } else {
+        if (!cleanResults) return null;
+        doc.text('Data Review Report', 14, 15);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy h:mm a')} | File: ${fileName}`, 14, 22);
+
+        autoTable(doc, {
+          startY: 28,
+          head: [['Metric', 'Value']],
+          body: [
+            ['Total Rows', String(data.length)],
+            ['Duplicate Rows', String(cleanResults.duplicateGroups.reduce((s, g) => s + g.rows.length, 0))],
+            ['Duplicate Groups', String(cleanResults.duplicateGroups.length)],
+            ['Empty Rows', String(cleanResults.emptyRowsRemoved)],
+            ['Fields Trimmed', String(cleanResults.trimmedFields)],
+            ['Names Standardized', String(cleanResults.namesStandardized)],
+          ],
+          theme: 'grid',
+          headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontSize: 9, fontStyle: 'bold' },
+          bodyStyles: { fontSize: 8 },
+          columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 }, 1: { cellWidth: 50 } },
+          margin: { left: 14, right: 14 },
+        });
+
+        let yPos = (doc as any).lastAutoTable.finalY + 8;
+        if (yPos > 160) { doc.addPage(); yPos = 15; }
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 32, 65);
+        doc.text('Legend', 14, yPos);
+        yPos += 2;
+        autoTable(doc, {
+          startY: yPos,
+          head: [['Color', 'Meaning']],
+          body: [['Red', 'Duplicate Row'], ['Orange', 'Empty Row'], ['Blue', 'Trimmed Fields'], ['Purple', 'Name Standardized'], ['Green', 'No Issues']],
+          theme: 'grid',
+          headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+          bodyStyles: { fontSize: 8 },
+          margin: { left: 14, right: 14 },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 8;
+        if (yPos > 160) { doc.addPage(); yPos = 15; }
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 32, 65);
+        doc.text('Data Review (First 300 rows)', 14, yPos);
+        yPos += 2;
+        const dupRowIndices = new Set<number>();
+        cleanResults.duplicateGroups.forEach(g => g.rows.forEach(r => dupRowIndices.add(r.index)));
+        const emptyRowIndices = new Set(cleanResults.emptyRows.map(r => r.index));
+        const previewRows = data.slice(0, 300);
+        autoTable(doc, {
+          startY: yPos,
+          head: [['#', 'Issue', 'Hub', 'State', 'Activity', 'Collector', 'Device ID']],
+          body: previewRows.map((row, idx) => {
+            let issue = 'OK';
+            if (dupRowIndices.has(idx)) issue = 'DUPLICATE';
+            else if (emptyRowIndices.has(idx)) issue = 'EMPTY';
+            return [String(idx + 1), issue, row.hub || '', row.state || '', row.activity || '', row.dataCollector || '', row.deviceId || ''];
+          }),
+          theme: 'grid',
+          headStyles: { fillColor: [15, 32, 65], textColor: [255, 255, 255], fontSize: 6, fontStyle: 'bold' },
+          bodyStyles: { fontSize: 5.5 },
+          alternateRowStyles: { fillColor: [245, 247, 252] },
+          margin: { left: 14, right: 14 },
+          didParseCell: (hookData: any) => {
+            if (hookData.section === 'body' && hookData.column.index === 1) {
+              const v = hookData.cell.raw;
+              if (v === 'DUPLICATE') hookData.cell.styles.textColor = [220, 38, 38];
+              else if (v === 'EMPTY') hookData.cell.styles.textColor = [234, 88, 12];
+              else hookData.cell.styles.textColor = [22, 163, 74];
+            }
+          },
+        });
+        if (data.length > 300) {
+          const fy = (doc as any).lastAutoTable.finalY + 5;
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'italic');
+          doc.text(`Showing first 300 of ${data.length} rows. Full data available in Excel attachment.`, 14, fy);
+        }
+      }
+
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      return pdfBase64;
+    } catch (e) {
+      console.error('Failed to generate PDF:', e);
+      return null;
+    }
+  }, [filteredData, cleanResults, data, fileName, currentSessionName, getCustomCleanedData, customDupsRemoved]);
 
   const sendEmailReport = useCallback(async () => {
     if (emailToUsers.length === 0) {
@@ -1585,14 +1982,20 @@ const QuestionnaireAnalytics = () => {
       if (isCoverage) {
         const b64 = await generateCoverageTrackerBase64();
         if (b64) attachments.push({ filename: `coverage_tracker_${baseName}.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const pdf64 = await generatePdfBase64('coverage');
+        if (pdf64) attachments.push({ filename: `coverage_tracker_${baseName}.pdf`, content: pdf64, type: 'application/pdf' });
       } else {
         if (emailAttachCleaned && cleanResults) {
           const b64 = await generateExcelBase64('cleaned');
           if (b64) attachments.push({ filename: `${baseName}_cleaned.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          const pdf64 = await generatePdfBase64('cleaned');
+          if (pdf64) attachments.push({ filename: `${baseName}_cleaned.pdf`, content: pdf64, type: 'application/pdf' });
         }
         if (emailAttachReview && cleanResults) {
           const b64 = await generateExcelBase64('review');
           if (b64) attachments.push({ filename: `${baseName}_review.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          const pdf64 = await generatePdfBase64('review');
+          if (pdf64) attachments.push({ filename: `${baseName}_review.pdf`, content: pdf64, type: 'application/pdf' });
         }
       }
 
@@ -1645,7 +2048,7 @@ const QuestionnaireAnalytics = () => {
     } finally {
       setEmailSending(false);
     }
-  }, [emailToUsers, emailSubject, emailHighPriority, emailType, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, generateCoverageTrackerBase64, computeReportSummary]);
+  }, [emailToUsers, emailSubject, emailHighPriority, emailType, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, generateCoverageTrackerBase64, generatePdfBase64, computeReportSummary]);
 
   const exportToExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
@@ -5392,11 +5795,15 @@ const QuestionnaireAnalytics = () => {
                     <Checkbox checked={emailAttachCleaned} onCheckedChange={(checked) => setEmailAttachCleaned(!!checked)} data-testid="checkbox-attach-cleaned" />
                     Cleaned File
                   </label>
+                  <div className="flex items-center gap-1 ml-2 text-xs text-muted-foreground">
+                    <FileSpreadsheet className="h-3 w-3" />Excel + <FileText className="h-3 w-3" />PDF
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Label className="mb-0">Attachment:</Label>
-                  <Badge variant="secondary" className="text-xs">Coverage Tracker Excel</Badge>
+                  <Label className="mb-0">Attachments:</Label>
+                  <Badge variant="secondary" className="text-xs gap-1"><FileSpreadsheet className="h-3 w-3" />Coverage Tracker Excel</Badge>
+                  <Badge variant="secondary" className="text-xs gap-1"><FileText className="h-3 w-3" />Coverage Tracker PDF</Badge>
                 </div>
               )}
               <div className="flex items-center gap-2 ml-auto">
