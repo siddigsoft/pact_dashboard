@@ -3909,56 +3909,6 @@ const QuestionnaireAnalytics = () => {
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="flex items-center gap-2 text-base">
-                        <Users className="h-4 w-4 text-primary" />
-                        Team Overview
-                      </CardTitle>
-                      <CardDescription>
-                        {computeReportSummary.totalCollectors} Data Collectors across {computeReportSummary.totalSupervisors} Supervisors
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {computeReportSummary.teamOverview.map(team => (
-                          <div key={team.supervisor} className="border rounded-lg">
-                            <div className="flex items-center justify-between gap-2 p-3 bg-muted/30">
-                              <div className="flex items-center gap-2">
-                                <Users className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-semibold text-sm">{team.supervisor}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="font-mono text-xs">{team.teamSize} DCs</Badge>
-                                <Badge variant="secondary" className="font-mono text-xs">{team.totalQ} Q</Badge>
-                              </div>
-                            </div>
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-sm" data-testid={`table-team-${team.supervisor}`}>
-                                <thead>
-                                  <tr className="border-b bg-muted/10">
-                                    <th className="text-left py-2 px-3 font-medium text-xs text-muted-foreground">Data Collector</th>
-                                    <th className="text-left py-2 px-3 font-medium text-xs text-muted-foreground">Device ID</th>
-                                    <th className="text-center py-2 px-3 font-medium text-xs text-muted-foreground">Questionnaires</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {team.collectors.map(dc => (
-                                    <tr key={dc.name} className="border-b last:border-b-0 hover:bg-muted/20">
-                                      <td className="py-1.5 px-3">{dc.name}</td>
-                                      <td className="py-1.5 px-3 font-mono text-xs text-muted-foreground">{dc.deviceId}</td>
-                                      <td className="py-1.5 px-3 text-center font-mono">{dc.count}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-base">
                         <Globe className="h-4 w-4 text-primary" />
                         Coverage Summary
                       </CardTitle>
@@ -4039,6 +3989,56 @@ const QuestionnaireAnalytics = () => {
                             </table>
                           </div>
                         </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Users className="h-4 w-4 text-primary" />
+                        Team Overview
+                      </CardTitle>
+                      <CardDescription>
+                        {computeReportSummary.totalCollectors} Data Collectors across {computeReportSummary.totalSupervisors} Supervisors
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {computeReportSummary.teamOverview.map(team => (
+                          <div key={team.supervisor} className="border rounded-lg">
+                            <div className="flex items-center justify-between gap-2 p-3 bg-muted/30">
+                              <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                <span className="font-semibold text-sm">{team.supervisor}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="font-mono text-xs">{team.teamSize} DCs</Badge>
+                                <Badge variant="secondary" className="font-mono text-xs">{team.totalQ} Q</Badge>
+                              </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm" data-testid={`table-team-${team.supervisor}`}>
+                                <thead>
+                                  <tr className="border-b bg-muted/10">
+                                    <th className="text-left py-2 px-3 font-medium text-xs text-muted-foreground">Data Collector</th>
+                                    <th className="text-left py-2 px-3 font-medium text-xs text-muted-foreground">Device ID</th>
+                                    <th className="text-center py-2 px-3 font-medium text-xs text-muted-foreground">Questionnaires</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {team.collectors.map(dc => (
+                                    <tr key={dc.name} className="border-b last:border-b-0 hover:bg-muted/20">
+                                      <td className="py-1.5 px-3">{dc.name}</td>
+                                      <td className="py-1.5 px-3 font-mono text-xs text-muted-foreground">{dc.deviceId}</td>
+                                      <td className="py-1.5 px-3 text-center font-mono">{dc.count}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </CardContent>
                   </Card>
