@@ -4562,12 +4562,17 @@ const QuestionnaireAnalytics = () => {
                               </thead>
                               <tbody>
                                 {computeReportSummary.hubBreakdown.map(h => (
-                                  <tr key={h.hub} className="border-b last:border-b-0 hover:bg-muted/20">
+                                  <tr key={h.hub} className="border-b hover:bg-muted/20">
                                     <td className="py-1.5 px-3 font-medium">{h.hub}</td>
                                     <td className="py-1.5 px-3 text-center font-mono text-blue-600">{h.sites}</td>
                                     <td className="py-1.5 px-3 text-center font-mono">{h.questionnaires}</td>
                                   </tr>
                                 ))}
+                                <tr className="bg-primary/10 font-semibold">
+                                  <td className="py-1.5 px-3">Total</td>
+                                  <td className="py-1.5 px-3 text-center font-mono text-blue-700">{computeReportSummary.hubBreakdown.reduce((s, h) => s + h.sites, 0)}</td>
+                                  <td className="py-1.5 px-3 text-center font-mono">{computeReportSummary.hubBreakdown.reduce((s, h) => s + h.questionnaires, 0)}</td>
+                                </tr>
                               </tbody>
                             </table>
                           </div>
@@ -4586,11 +4591,15 @@ const QuestionnaireAnalytics = () => {
                               </thead>
                               <tbody>
                                 {computeReportSummary.activityBreakdown.map(a => (
-                                  <tr key={a.activity} className="border-b last:border-b-0 hover:bg-muted/20">
+                                  <tr key={a.activity} className="border-b hover:bg-muted/20">
                                     <td className="py-1.5 px-3 font-medium">{a.activity}</td>
                                     <td className="py-1.5 px-3 text-center font-mono">{a.count}</td>
                                   </tr>
                                 ))}
+                                <tr className="bg-primary/10 font-semibold">
+                                  <td className="py-1.5 px-3">Total</td>
+                                  <td className="py-1.5 px-3 text-center font-mono">{computeReportSummary.activityBreakdown.reduce((s, a) => s + a.count, 0)}</td>
+                                </tr>
                               </tbody>
                             </table>
                           </div>
