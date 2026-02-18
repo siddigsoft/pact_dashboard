@@ -251,6 +251,7 @@ const QuestionnaireAnalytics = () => {
   const [emailUsers, setEmailUsers] = useState<{id: string; name: string; email: string; role: string}[]>([]);
   const [emailHighPriority, setEmailHighPriority] = useState(true);
   const [emailType, setEmailType] = useState<'report' | 'coverage'>('report');
+  const [emailProfilesLoading, setEmailProfilesLoading] = useState(false);
   const [reportIssuesExpanded, setReportIssuesExpanded] = useState(false);
 
   useEffect(() => {
@@ -1269,6 +1270,7 @@ const QuestionnaireAnalytics = () => {
   }, [filteredData, data, cleanResults, fileName]);
 
   const fetchEmailProfiles = useCallback(async () => {
+    setEmailProfilesLoading(true);
     try {
       let { data: profiles, error } = await supabase.from('profiles').select('id, full_name, email, role').eq('status', 'approved');
       if (error || !profiles || profiles.length === 0) {
@@ -1285,36 +1287,28 @@ const QuestionnaireAnalytics = () => {
       }
     } catch (e) {
       console.error('Failed to fetch profiles:', e);
+    } finally {
+      setEmailProfilesLoading(false);
     }
   }, []);
 
-  const openEmailDialog = useCallback(async () => {
+  const openSectionEmailDialog = useCallback(async (section: string, type: 'report' | 'coverage' = 'coverage') => {
     const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
-    setEmailSubject(`Questionnaire Data Report - ${month}`);
-    setEmailType('report');
-    setEmailAttachReview(true);
-    setEmailAttachCleaned(true);
+    const isReport = type === 'report';
+    setEmailSubject(`${section} - ${month}`);
+    setEmailType(type);
+    setEmailAttachReview(isReport);
+    setEmailAttachCleaned(isReport);
     setEmailToUsers([]);
     setEmailToInput('');
     setEmailCcRoles([]);
-    setEmailHighPriority(true);
+    setEmailHighPriority(isReport);
     setShowEmailDialog(true);
     await fetchEmailProfiles();
   }, [computeReportSummary, fetchEmailProfiles]);
 
-  const openCoverageEmailDialog = useCallback(async () => {
-    const month = computeReportSummary?.monthCoverage || format(new Date(), 'MMMM yyyy');
-    setEmailSubject(`Coverage Tracker Report - ${month}`);
-    setEmailType('coverage');
-    setEmailAttachReview(false);
-    setEmailAttachCleaned(false);
-    setEmailToUsers([]);
-    setEmailToInput('');
-    setEmailCcRoles([]);
-    setEmailHighPriority(false);
-    setShowEmailDialog(true);
-    await fetchEmailProfiles();
-  }, [computeReportSummary, fetchEmailProfiles]);
+  const openEmailDialog = useCallback(() => openSectionEmailDialog('Questionnaire Data Report', 'report'), [openSectionEmailDialog]);
+  const openCoverageEmailDialog = useCallback(() => openSectionEmailDialog('Coverage Tracker Report', 'coverage'), [openSectionEmailDialog]);
 
   const getEmailCcList = useMemo(() => {
     if (emailCcRoles.length === 0) return [];
@@ -2748,28 +2742,34 @@ const QuestionnaireAnalytics = () => {
               </CardTitle>
               <CardDescription>{hubDrilldown.length} unique hubs found — click a hub to see states, then activities, then localities</CardDescription>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-drilldown">
-                  <Download className="h-4 w-4" />
-                  Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={exportHubDrilldownPdf}>
-                  <FileDown className="h-4 w-4 mr-2" />
-                  PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportHubDrilldownExcel}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportHubDrilldownFormattedExcel}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Formatted Excel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2 flex-wrap">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-hub-drilldown">
+                    <Download className="h-4 w-4" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportHubDrilldownPdf}>
+                    <FileDown className="h-4 w-4 mr-2" />
+                    PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportHubDrilldownExcel}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportHubDrilldownFormattedExcel}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Formatted Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openSectionEmailDialog('Hub Drilldown Report')} data-testid="button-send-hub-drilldown-email">
+                <Mail className="h-4 w-4" />
+                Send Email
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -3873,28 +3873,34 @@ const QuestionnaireAnalytics = () => {
                       </CardTitle>
                       <CardDescription>Cross-tab: Activities (rows) x Hubs (columns) with Sites, Questionnaires & Collectors</CardDescription>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-tracker">
-                          <Download className="h-4 w-4" />
-                          Export
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={exportMainTrackerPdf}>
-                          <FileDown className="h-4 w-4 mr-2" />
-                          PDF
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={exportTrackerToExcel}>
-                          <FileSpreadsheet className="h-4 w-4 mr-2" />
-                          Excel
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={exportMainTrackerFormattedExcel}>
-                          <FileSpreadsheet className="h-4 w-4 mr-2" />
-                          Formatted Excel
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-tracker">
+                            <Download className="h-4 w-4" />
+                            Export
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={exportMainTrackerPdf}>
+                            <FileDown className="h-4 w-4 mr-2" />
+                            PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportTrackerToExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Excel
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={exportMainTrackerFormattedExcel}>
+                            <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            Formatted Excel
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openSectionEmailDialog('Activity by Hub Tracker')} data-testid="button-send-tracker-email">
+                        <Mail className="h-4 w-4" />
+                        Send Email
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -3974,28 +3980,34 @@ const QuestionnaireAnalytics = () => {
                         </CardTitle>
                         <CardDescription>Activity breakdown per state</CardDescription>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-act-state">
-                            <Download className="h-4 w-4" />
-                            Export
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={exportActivityByStatePdf}>
-                            <FileDown className="h-4 w-4 mr-2" />
-                            PDF
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={exportActivityByStateExcel}>
-                            <FileSpreadsheet className="h-4 w-4 mr-2" />
-                            Excel
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={exportActivityByStateFormattedExcel}>
-                            <FileSpreadsheet className="h-4 w-4 mr-2" />
-                            Formatted Excel
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-act-state">
+                              <Download className="h-4 w-4" />
+                              Export
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={exportActivityByStatePdf}>
+                              <FileDown className="h-4 w-4 mr-2" />
+                              PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportActivityByStateExcel}>
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Excel
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportActivityByStateFormattedExcel}>
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Formatted Excel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openSectionEmailDialog('Activity by State Tracker')} data-testid="button-send-act-state-email">
+                          <Mail className="h-4 w-4" />
+                          Send Email
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -4196,28 +4208,34 @@ const QuestionnaireAnalytics = () => {
                         </CardTitle>
                         <CardDescription>Each state: Activity (rows) x Locality (columns) with Sites, Questionnaires & Collectors</CardDescription>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-state-tracker">
-                            <Download className="h-4 w-4" />
-                            Export
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={exportTrackerPerStatePdf}>
-                            <FileDown className="h-4 w-4 mr-2" />
-                            PDF
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={exportTrackerPerStateExcel}>
-                            <FileSpreadsheet className="h-4 w-4 mr-2" />
-                            Excel
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={exportTrackerPerStateFormattedExcel}>
-                            <FileSpreadsheet className="h-4 w-4 mr-2" />
-                            Formatted Excel
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-state-tracker">
+                              <Download className="h-4 w-4" />
+                              Export
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={exportTrackerPerStatePdf}>
+                              <FileDown className="h-4 w-4 mr-2" />
+                              PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportTrackerPerStateExcel}>
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Excel
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportTrackerPerStateFormattedExcel}>
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Formatted Excel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openSectionEmailDialog('Tracker per State')} data-testid="button-send-state-tracker-email">
+                          <Mail className="h-4 w-4" />
+                          Send Email
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -4336,24 +4354,30 @@ const QuestionnaireAnalytics = () => {
                             </span>
                           </CardDescription>
                         </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-report">
-                              <Download className="h-4 w-4" />
-                              Export
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={exportReportExcel} data-testid="button-export-report-excel">
-                              <FileSpreadsheet className="h-4 w-4 mr-2" />
-                              Excel
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={exportReportPdf} data-testid="button-export-report-pdf">
-                              <FileDown className="h-4 w-4 mr-2" />
-                              PDF
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-report">
+                                <Download className="h-4 w-4" />
+                                Export
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={exportReportExcel} data-testid="button-export-report-excel">
+                                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                                Excel
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={exportReportPdf} data-testid="button-export-report-pdf">
+                                <FileDown className="h-4 w-4 mr-2" />
+                                PDF
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openSectionEmailDialog('Summary Report')} data-testid="button-send-report-tab-email">
+                            <Mail className="h-4 w-4" />
+                            Send Email
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                   </Card>
@@ -5037,9 +5061,9 @@ const QuestionnaireAnalytics = () => {
       <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
               <Mail className="h-5 w-5" />
-              {emailType === 'coverage' ? 'Send Coverage Tracker' : 'Send Report Email'}
+              Send Email
               {emailHighPriority && <Badge variant="destructive" className="text-xs gap-1"><AlertTriangle className="h-3 w-3" />High Priority</Badge>}
             </DialogTitle>
           </DialogHeader>
@@ -5048,15 +5072,24 @@ const QuestionnaireAnalytics = () => {
               <Label className="mb-2 block">To</Label>
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {['FOM', 'Admin', 'Supervisor', 'Super Admin'].map(role => {
-                    const count = emailUsers.filter(u => u.role === role).length;
-                    return (
-                      <Button key={role} size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => addEmailToGroup(role)} data-testid={`button-add-group-${role.toLowerCase().replace(/\s+/g, '-')}`}>
-                        <UserPlus className="h-3 w-3" />
-                        {role} {count > 0 && `(${count})`}
-                      </Button>
-                    );
-                  })}
+                  {emailProfilesLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-1">
+                      <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      Loading users...
+                    </div>
+                  ) : (
+                    ['FOM', 'Admin', 'Supervisor', 'Super Admin'].map(role => {
+                      const count = emailUsers.filter(u => u.role === role).length;
+                      const allAdded = count > 0 && emailUsers.filter(u => u.role === role).every(u => emailToUsers.some(eu => eu.email === u.email));
+                      return (
+                        <Button key={role} size="sm" variant={allAdded ? 'default' : 'outline'} className="gap-1.5 text-xs" onClick={() => addEmailToGroup(role)} disabled={count === 0 || allAdded} data-testid={`button-add-group-${role.toLowerCase().replace(/\s+/g, '-')}`}>
+                          <UserPlus className="h-3 w-3" />
+                          {role} {count > 0 ? `(${count})` : '(0)'}
+                          {allAdded && <CheckCircle2 className="h-3 w-3" />}
+                        </Button>
+                      );
+                    })
+                  )}
                 </div>
 
                 <div className="relative">
