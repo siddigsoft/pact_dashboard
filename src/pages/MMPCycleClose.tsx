@@ -88,6 +88,25 @@ interface ClosedCycleRecord {
   reasonBreakdown?: Record<string, number>;
 }
 
+type CloseScope = 'full' | 'hub' | 'state' | 'activity';
+
+interface CycleCloseRecord {
+  id: string;
+  scope: CloseScope;
+  scopeValue: string;
+  closedAt: string;
+  closedBy: string;
+  closedByName: string;
+  siteCount: number;
+  status: 'closing' | 'pending_approval' | 'closed';
+}
+
+interface MmpScopeOptions {
+  hubs: string[];
+  states: string[];
+  activities: string[];
+}
+
 interface FollowUpRecord {
   id: string;
   siteId: string;
@@ -158,6 +177,7 @@ const MMPCycleClose = () => {
   const [activeSortDir, setActiveSortDir] = useState<'asc' | 'desc'>('desc');
   const [archiveSearch, setArchiveSearch] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
+  const [mmpScopeOptions, setMmpScopeOptions] = useState<Record<string, MmpScopeOptions>>({});
 
   const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
   const isSupervisor = hasAnyRole(['Supervisor', 'supervisor']);
@@ -297,10 +317,179 @@ const MMPCycleClose = () => {
     }
   }, []);
 
+  const fetchMmpScopeOptions = useCallback(async (mmpId: string): Promise<MmpScopeOptions> => {
+    try {
+      const { data: entries } = await supabase
+        .from('mmp_site_entries')
+        .select('hub_office, state, main_activity, activity_at_site')
+        .eq('mmp_file_id', mmpId);
+
+      const hubs = new Set<string>();
+      const states = new Set<string>();
+      const activities = new Set<string>();
+
+      (entries || []).forEach((e: any) => {
+        if (e.hub_office) hubs.add(e.hub_office);
+        if (e.state) states.add(e.state);
+        if (e.main_activity) activities.add(e.main_activity);
+        if (e.activity_at_site) activities.add(e.activity_at_site);
+      });
+
+      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      if (mmp?.hub) hubs.add(mmp.hub);
+      if (mmp?.region) hubs.add(mmp.region);
+
+      const options: MmpScopeOptions = {
+        hubs: Array.from(hubs).filter(Boolean).sort(),
+        states: Array.from(states).filter(Boolean).sort(),
+        activities: Array.from(activities).filter(Boolean).sort(),
+      };
+
+      setMmpScopeOptions(prev => ({ ...prev, [mmpId]: options }));
+      return options;
+    } catch (err) {
+      console.error('Error fetching scope options:', err);
+      return { hubs: [], states: [], activities: [] };
+    }
+  }, [mmpFiles]);
+
+  const handleScopedClose = async (mmpId: string, scope: CloseScope, scopeValue: string) => {
+    if (!canManageCycle) return;
+    setClosingCycle(true);
+    try {
+      const mmp = mmpFiles?.find(m => m.id === mmpId);
+      const mmpName = mmp?.name || 'MMP';
+
+      let siteEntryIds: string[] = [];
+
+      if (scope === 'full') {
+        setClosingCycle(false);
+        handleStartClosingCycle(mmpId);
+        return;
+      }
+
+      if (scope === 'hub') {
+        const { data: entries } = await supabase
+          .from('mmp_site_entries')
+          .select('id')
+          .eq('mmp_file_id', mmpId)
+          .eq('hub_office', scopeValue);
+        siteEntryIds = (entries || []).map((e: any) => e.id);
+      } else if (scope === 'state') {
+        const { data: entries } = await supabase
+          .from('mmp_site_entries')
+          .select('id')
+          .eq('mmp_file_id', mmpId)
+          .eq('state', scopeValue);
+        siteEntryIds = (entries || []).map((e: any) => e.id);
+      } else if (scope === 'activity') {
+        const { data: entries } = await supabase
+          .from('mmp_site_entries')
+          .select('id')
+          .eq('mmp_file_id', mmpId)
+          .or(`main_activity.eq.${scopeValue},activity_at_site.eq.${scopeValue}`);
+        siteEntryIds = (entries || []).map((e: any) => e.id);
+      }
+
+      if (siteEntryIds.length === 0) {
+        toast({ title: 'No Sites Found', description: `No site entries match the selected ${scope}.`, variant: 'destructive' });
+        setClosingCycle(false);
+        return;
+      }
+
+      const { data: matchedVisits } = await supabase
+        .from('site_visits')
+        .select('id')
+        .eq('mmp_id', mmpId)
+        .in('mmp_site_entry_id', siteEntryIds)
+        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+
+      const visitIds = (matchedVisits || []).map((v: any) => v.id);
+
+      if (visitIds.length > 0) {
+        const { error: svError } = await supabase
+          .from('site_visits')
+          .update({ not_covered_flag: true } as any)
+          .in('id', visitIds);
+        if (svError) throw svError;
+      }
+
+      const newRecord: CycleCloseRecord = {
+        id: crypto.randomUUID(),
+        scope,
+        scopeValue,
+        closedAt: new Date().toISOString(),
+        closedBy: currentUser?.id || '',
+        closedByName: currentUser?.fullName || '',
+        siteCount: visitIds.length,
+        status: 'closing',
+      };
+
+      const existingRecords: CycleCloseRecord[] = (mmp as any)?.cycle_close_records || [];
+      const updatedRecords = [...existingRecords, newRecord];
+
+      const currentStatus = (mmp as any)?.cycle_status || 'active';
+      const updateData: any = {
+        cycle_close_records: updatedRecords,
+      };
+      if (currentStatus === 'active') {
+        updateData.cycle_status = 'closing';
+        updateData.cycle_closing_started_at = new Date().toISOString();
+        updateData.cycle_closing_started_by = currentUser?.id;
+        updateData.cycle_close_deadline = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
+      const { error } = await supabase
+        .from('mmp_files')
+        .update(updateData)
+        .eq('id', mmpId);
+
+      if (error) throw error;
+
+      const scopeLabels: Record<CloseScope, string> = { full: 'Full MMP', hub: 'Hub', state: 'State', activity: 'Activity' };
+
+      await logMMPAudit({
+        mmpId,
+        mmpName,
+        action: 'status_change',
+        performedBy: currentUser?.id || '',
+        performedByName: currentUser?.fullName,
+        previousStatus: currentStatus,
+        newStatus: 'closing',
+        affectedSites: visitIds.length,
+        metadata: {
+          cycleAction: 'scoped_close',
+          closeScope: scope,
+          closeScopeValue: scopeValue,
+          closeScopeLabel: scopeLabels[scope],
+        },
+      });
+
+      toast({
+        title: `${scopeLabels[scope]} Close Started`,
+        description: `Closing ${scopeValue}: ${visitIds.length} site visits flagged as not covered.`,
+      });
+      await refreshMMPFiles();
+      await fetchUncoveredSites();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to start scoped close', variant: 'destructive' });
+    } finally {
+      setClosingCycle(false);
+    }
+  };
+
   useEffect(() => {
     fetchUncoveredSites();
     fetchClosedCycles();
   }, [fetchUncoveredSites, fetchClosedCycles]);
+
+  useEffect(() => {
+    activeMmps.forEach(mmp => {
+      if (!mmpScopeOptions[mmp.id]) {
+        fetchMmpScopeOptions(mmp.id);
+      }
+    });
+  }, [activeMmps, fetchMmpScopeOptions, mmpScopeOptions]);
 
   useEffect(() => {
     const fetchSiteVisitCounts = async () => {
@@ -414,6 +603,28 @@ const MMPCycleClose = () => {
     if (!canManageCycle) return;
     setClosingCycle(true);
     try {
+      const { data: affectedVisits } = await supabase
+        .from('site_visits')
+        .select('id')
+        .eq('mmp_id', mmpId)
+        .in('status', ['pending', 'assigned', 'dispatched', 'accepted']);
+
+      const affectedCount = affectedVisits?.length || 0;
+
+      const fullCloseRecord: CycleCloseRecord = {
+        id: crypto.randomUUID(),
+        scope: 'full',
+        scopeValue: 'Full MMP',
+        closedAt: new Date().toISOString(),
+        closedBy: currentUser?.id || '',
+        closedByName: currentUser?.fullName || '',
+        siteCount: affectedCount,
+        status: 'closing',
+      };
+
+      const mmpData = mmpFiles?.find(m => m.id === mmpId);
+      const existingRecords: CycleCloseRecord[] = (mmpData as any)?.cycle_close_records || [];
+
       const { error } = await supabase
         .from('mmp_files')
         .update({
@@ -421,6 +632,7 @@ const MMPCycleClose = () => {
           cycle_closing_started_at: new Date().toISOString(),
           cycle_closing_started_by: currentUser?.id,
           cycle_close_deadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+          cycle_close_records: [...existingRecords, fullCloseRecord],
         } as any)
         .eq('id', mmpId);
 
@@ -679,6 +891,13 @@ const MMPCycleClose = () => {
 
   const handleApproveCycle = async (mmpId: string) => {
     try {
+      const mmpData = mmpFiles?.find(m => m.id === mmpId);
+      const existingRecords: CycleCloseRecord[] = (mmpData as any)?.cycle_close_records || [];
+      const updatedRecords = existingRecords.map(r => ({
+        ...r,
+        status: 'closed' as const,
+      }));
+
       const { error } = await supabase
         .from('mmp_files')
         .update({
@@ -686,6 +905,7 @@ const MMPCycleClose = () => {
           cycle_closed_at: new Date().toISOString(),
           cycle_closed_by: currentUser?.id,
           cycle_approved_by: currentUser?.id,
+          cycle_close_records: updatedRecords,
         } as any)
         .eq('id', mmpId);
 
@@ -1341,7 +1561,9 @@ const MMPCycleClose = () => {
                       closingCycle={closingCycle}
                       finalizingCycle={finalizingCycle}
                       siteVisitCounts={siteVisitCounts[mmp.id]}
+                      scopeOptions={mmpScopeOptions[mmp.id]}
                       handleStartClosingCycle={handleStartClosingCycle}
+                      handleScopedClose={handleScopedClose}
                       handleFinalizeCycleClose={handleFinalizeCycleClose}
                       handleApproveCycle={handleApproveCycle}
                       handleRejectCycle={handleRejectCycle}

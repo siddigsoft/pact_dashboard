@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import {
   AlertTriangle, CheckCircle2, Clock, XCircle, ArrowRight, MapPin,
   ChevronDown, ChevronUp, FileText, Calendar, User, Users, Eye,
-  ShieldCheck, FolderOpen, Info, BarChart3, CircleDot, Wallet
+  ShieldCheck, FolderOpen, Info, BarChart3, CircleDot, Wallet,
+  Building2, Globe, Activity, History
 } from 'lucide-react';
 
 interface UncoveredSite {
@@ -36,6 +38,25 @@ interface SiteVisitCounts {
   dispatched: number;
 }
 
+type CloseScope = 'full' | 'hub' | 'state' | 'activity';
+
+interface CycleCloseRecord {
+  id: string;
+  scope: CloseScope;
+  scopeValue: string;
+  closedAt: string;
+  closedBy: string;
+  closedByName: string;
+  siteCount: number;
+  status: 'closing' | 'pending_approval' | 'closed';
+}
+
+interface MmpScopeOptions {
+  hubs: string[];
+  states: string[];
+  activities: string[];
+}
+
 interface CycleMMPCardProps {
   mmp: any;
   uncoveredSites: UncoveredSite[];
@@ -46,7 +67,9 @@ interface CycleMMPCardProps {
   closingCycle: boolean;
   finalizingCycle: boolean;
   siteVisitCounts?: SiteVisitCounts;
+  scopeOptions?: MmpScopeOptions;
   handleStartClosingCycle: (mmpId: string) => void;
+  handleScopedClose: (mmpId: string, scope: CloseScope, scopeValue: string) => void;
   handleFinalizeCycleClose: (mmpId: string) => void;
   handleApproveCycle: (mmpId: string) => void;
   handleRejectCycle: (mmpId: string, note: string) => void;
@@ -122,6 +145,20 @@ function StatBox({ count, label, colorClass, testId }: { count: number; label: s
   );
 }
 
+const SCOPE_LABELS: Record<CloseScope, string> = {
+  full: 'Full MMP',
+  hub: 'Hub',
+  state: 'State',
+  activity: 'Activity',
+};
+
+const SCOPE_ICONS: Record<CloseScope, any> = {
+  full: FileText,
+  hub: Building2,
+  state: Globe,
+  activity: Activity,
+};
+
 export function CycleMMPCard({
   mmp,
   uncoveredSites,
@@ -132,7 +169,9 @@ export function CycleMMPCard({
   closingCycle,
   finalizingCycle,
   siteVisitCounts,
+  scopeOptions,
   handleStartClosingCycle,
+  handleScopedClose,
   handleFinalizeCycleClose,
   handleApproveCycle,
   handleRejectCycle,
@@ -142,7 +181,12 @@ export function CycleMMPCard({
   getReasonLabel,
 }: CycleMMPCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [closeScope, setCloseScope] = useState<CloseScope>('full');
+  const [closeScopeValue, setCloseScopeValue] = useState<string>('');
+  const [showCloseHistory, setShowCloseHistory] = useState(false);
   const navigate = useNavigate();
+
+  const closeRecords: CycleCloseRecord[] = (mmp as any)?.cycle_close_records || [];
 
   const mmpUncovered = uncoveredSites;
   const mmpReasoned = mmpUncovered.filter(s => s.not_covered_reason).length;
@@ -344,7 +388,7 @@ export function CycleMMPCard({
                       <Users className="h-3 w-3 text-muted-foreground" />
                     </div>
                     <div>
-                      <div className="text-[11px] text-muted-foreground leading-tight">Supervisors</div>
+                      <div className="text-xs text-muted-foreground leading-tight">Supervisors</div>
                       <div className="text-xs font-medium leading-tight">{mmp.team.supervisors.join(', ')}</div>
                     </div>
                   </div>
@@ -390,88 +434,253 @@ export function CycleMMPCard({
           </div>
         )}
 
+        {closeRecords.length > 0 && (
+          <div className="px-4 pb-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between text-xs"
+              onClick={() => setShowCloseHistory(!showCloseHistory)}
+              data-testid={`button-toggle-close-history-${mmp.id}`}
+            >
+              <span className="flex items-center gap-1.5">
+                <History className="h-3.5 w-3.5" />
+                Close History ({closeRecords.length} {closeRecords.length === 1 ? 'record' : 'records'})
+              </span>
+              {showCloseHistory ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </Button>
+            {showCloseHistory && (
+              <div className="mt-2 space-y-1.5" data-testid={`close-history-${mmp.id}`}>
+                {closeRecords.map(record => {
+                  const ScopeIcon = SCOPE_ICONS[record.scope] || FileText;
+                  return (
+                    <div key={record.id} className="bg-muted/30 rounded-md p-2.5 flex items-start gap-2 text-xs">
+                      <div className="flex items-center justify-center h-5 w-5 rounded bg-muted shrink-0 mt-0.5">
+                        <ScopeIcon className="h-3 w-3 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">{SCOPE_LABELS[record.scope]}: {record.scopeValue}</span>
+                          <Badge variant={record.status === 'closed' ? 'default' : 'secondary'}>
+                            {record.status === 'closed' ? 'Closed' : record.status === 'pending_approval' ? 'Pending' : 'Closing'}
+                          </Badge>
+                        </div>
+                        <div className="text-muted-foreground mt-0.5">
+                          {record.siteCount} sites | {formatDate(record.closedAt)} | by {record.closedByName || 'System'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {(canManageCycle || cycleStatus === 'closing' || cycleStatus === 'pending_approval') && (
           <>
             <div className="px-4"><Separator /></div>
-            <div className="px-4 py-3 flex flex-wrap gap-2">
+            <div className="px-4 py-3 space-y-3">
               {cycleStatus === 'active' && canManageCycle && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="destructive" disabled={closingCycle} data-testid={`button-start-close-${mmp.id}`}>
-                      <AlertTriangle className="h-3.5 w-3.5 mr-1.5" /> Start Cycle Close
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Start Cycle Close</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will flag all incomplete site visits (pending, assigned, dispatched) as &quot;Not Covered&quot;.
-                        Supervisors will need to provide a reason for each uncovered site before the cycle can be fully closed.
-                        <br /><br />
-                        <strong>This action cannot be undone.</strong>
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleStartClosingCycle(mmp.id)} data-testid="button-confirm-start-close">
-                        Start Closing
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
-
-              {cycleStatus === 'closing' && canManageCycle && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button size="sm" disabled={finalizingCycle || progress < 100} data-testid={`button-finalize-${mmp.id}`}>
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Finalize Close
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Finalize Cycle Close</AlertDialogTitle>
-                      <AlertDialogDescription asChild>
-                        <div className="space-y-3">
-                          <p>You are about to close this MMP cycle. Here is a summary:</p>
-                          <div className="grid grid-cols-2 gap-2 text-sm bg-muted rounded-lg p-3">
-                            <div>Total Uncovered Sites:</div>
-                            <div className="font-semibold" data-testid="text-summary-uncovered">{mmpUncovered.length}</div>
-                            <div>Reasons Assigned:</div>
-                            <div className="font-semibold text-green-600 dark:text-green-400" data-testid="text-summary-reasoned">{mmpReasoned}</div>
-                            <div>Top Reason:</div>
-                            <div className="font-semibold" data-testid="text-summary-top-reason">{(() => { const counts: Record<string, number> = {}; mmpUncovered.forEach(s => { if (s.not_covered_reason) counts[s.not_covered_reason] = (counts[s.not_covered_reason] || 0) + 1; }); const top = Object.entries(counts).sort((a,b) => b[1]-a[1])[0]; return top ? `${getReasonLabel(top[0])} (${top[1]})` : 'N/A'; })()}</div>
-                            <div>Completion Rate:</div>
-                            <div className="font-semibold text-blue-600 dark:text-blue-400" data-testid="text-summary-completion">{progress}%</div>
-                          </div>
-                          <p className="text-xs text-muted-foreground">All uncovered site visits will be cancelled and archived. This action cannot be undone.</p>
-                        </div>
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleFinalizeCycleClose(mmp.id)} data-testid="button-confirm-finalize">
-                        Close Cycle
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <div className="space-y-2" data-testid={`close-scope-section-${mmp.id}`}>
+                  <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5" /> Close Scope
+                  </div>
+                  <div className="flex flex-wrap gap-2 items-end">
+                    <Select value={closeScope} onValueChange={(v) => { setCloseScope(v as CloseScope); setCloseScopeValue(''); }}>
+                      <SelectTrigger className="w-[140px]" data-testid={`select-close-scope-${mmp.id}`}>
+                        <SelectValue placeholder="Close Scope" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="full">Full MMP</SelectItem>
+                        {(scopeOptions?.hubs?.length ?? 0) > 0 && <SelectItem value="hub">By Hub</SelectItem>}
+                        {(scopeOptions?.states?.length ?? 0) > 0 && <SelectItem value="state">By State</SelectItem>}
+                        {(scopeOptions?.activities?.length ?? 0) > 0 && <SelectItem value="activity">By Activity</SelectItem>}
+                      </SelectContent>
+                    </Select>
+                    {closeScope !== 'full' && (
+                      <Select value={closeScopeValue} onValueChange={setCloseScopeValue}>
+                        <SelectTrigger className="w-[180px]" data-testid={`select-close-scope-value-${mmp.id}`}>
+                          <SelectValue placeholder={`Select ${SCOPE_LABELS[closeScope]}`} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {closeScope === 'hub' && scopeOptions?.hubs?.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                          {closeScope === 'state' && scopeOptions?.states?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                          {closeScope === 'activity' && scopeOptions?.activities?.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={closingCycle || (closeScope !== 'full' && !closeScopeValue)}
+                          data-testid={`button-start-close-${mmp.id}`}
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                          {closeScope === 'full' ? 'Close Full MMP' : `Close ${SCOPE_LABELS[closeScope]}`}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            {closeScope === 'full' ? 'Start Full MMP Cycle Close' : `Close by ${SCOPE_LABELS[closeScope]}: ${closeScopeValue}`}
+                          </AlertDialogTitle>
+                          <AlertDialogDescription asChild>
+                            <div className="space-y-3">
+                              {closeScope === 'full' ? (
+                                <p>
+                                  This will flag all incomplete site visits (pending, assigned, dispatched) as &quot;Not Covered&quot;.
+                                  Supervisors will need to provide a reason for each uncovered site before the cycle can be fully closed.
+                                </p>
+                              ) : (
+                                <p>
+                                  This will flag all incomplete site visits for <strong>{SCOPE_LABELS[closeScope]}: {closeScopeValue}</strong> as &quot;Not Covered&quot;.
+                                  Only sites matching this {closeScope} will be affected. Other sites will remain active.
+                                </p>
+                              )}
+                              <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
+                                <div className="flex items-center gap-2">
+                                  {(() => { const ScopeIcon = SCOPE_ICONS[closeScope]; return <ScopeIcon className="h-4 w-4 text-muted-foreground" />; })()}
+                                  <span className="font-medium">Scope: {SCOPE_LABELS[closeScope]}</span>
+                                </div>
+                                {closeScope !== 'full' && (
+                                  <div className="text-muted-foreground">Target: {closeScopeValue}</div>
+                                )}
+                                <div className="text-muted-foreground">Close date will be recorded: {new Date().toLocaleDateString()}</div>
+                              </div>
+                              <p className="text-xs text-muted-foreground"><strong>This action cannot be undone.</strong></p>
+                            </div>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => {
+                              if (closeScope === 'full') {
+                                handleStartClosingCycle(mmp.id);
+                              } else {
+                                handleScopedClose(mmp.id, closeScope, closeScopeValue);
+                              }
+                            }}
+                            data-testid="button-confirm-start-close"
+                          >
+                            Start Closing
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
               )}
 
               {cycleStatus === 'closing' && (
-                <Button size="sm" variant="outline" onClick={() => { setSelectedMmpId(mmp.id); setActiveTab('uncovered'); }} data-testid={`button-view-uncovered-${mmp.id}`}>
-                  View Sites <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                </Button>
-              )}
+                <div className="flex flex-wrap gap-2">
+                  {canManageCycle && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" disabled={finalizingCycle || progress < 100} data-testid={`button-finalize-${mmp.id}`}>
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Finalize Close
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Finalize Cycle Close</AlertDialogTitle>
+                          <AlertDialogDescription asChild>
+                            <div className="space-y-3">
+                              <p>You are about to close this MMP cycle. Here is a summary:</p>
+                              <div className="grid grid-cols-2 gap-2 text-sm bg-muted rounded-lg p-3">
+                                <div>Total Uncovered Sites:</div>
+                                <div className="font-semibold" data-testid="text-summary-uncovered">{mmpUncovered.length}</div>
+                                <div>Reasons Assigned:</div>
+                                <div className="font-semibold text-green-600 dark:text-green-400" data-testid="text-summary-reasoned">{mmpReasoned}</div>
+                                <div>Top Reason:</div>
+                                <div className="font-semibold" data-testid="text-summary-top-reason">{(() => { const counts: Record<string, number> = {}; mmpUncovered.forEach(s => { if (s.not_covered_reason) counts[s.not_covered_reason] = (counts[s.not_covered_reason] || 0) + 1; }); const top = Object.entries(counts).sort((a,b) => b[1]-a[1])[0]; return top ? `${getReasonLabel(top[0])} (${top[1]})` : 'N/A'; })()}</div>
+                                <div>Completion Rate:</div>
+                                <div className="font-semibold text-blue-600 dark:text-blue-400" data-testid="text-summary-completion">{progress}%</div>
+                              </div>
+                              {closeRecords.length > 0 && (
+                                <div className="bg-muted/50 rounded-lg p-3 space-y-1.5">
+                                  <div className="text-xs font-medium text-muted-foreground">Scoped Closures Recorded:</div>
+                                  {closeRecords.map(r => (
+                                    <div key={r.id} className="text-xs flex items-center gap-2">
+                                      <Badge variant="outline">{SCOPE_LABELS[r.scope]}</Badge>
+                                      <span>{r.scopeValue}</span>
+                                      <span className="text-muted-foreground">({formatDate(r.closedAt)})</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <p className="text-xs text-muted-foreground">All uncovered site visits will be cancelled and archived. This action cannot be undone.</p>
+                            </div>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleFinalizeCycleClose(mmp.id)} data-testid="button-confirm-finalize">
+                            Close Cycle
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
 
-              {cycleStatus === 'closing' && canManageCycle && (mmp as any).cycle_close_deadline && new Date((mmp as any).cycle_close_deadline) < new Date() && (
-                <Button size="sm" variant="outline" onClick={() => handleSendReminders(mmp.id)} data-testid={`button-send-reminder-${mmp.id}`}>
-                  <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Send Reminders
-                </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setSelectedMmpId(mmp.id); setActiveTab('uncovered'); }} data-testid={`button-view-uncovered-${mmp.id}`}>
+                    View Sites <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+
+                  {canManageCycle && (mmp as any).cycle_close_deadline && new Date((mmp as any).cycle_close_deadline) < new Date() && (
+                    <Button size="sm" variant="outline" onClick={() => handleSendReminders(mmp.id)} data-testid={`button-send-reminder-${mmp.id}`}>
+                      <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Send Reminders
+                    </Button>
+                  )}
+
+                  {canManageCycle && (scopeOptions?.hubs?.length ?? 0) + (scopeOptions?.states?.length ?? 0) + (scopeOptions?.activities?.length ?? 0) > 0 && (
+                    <div className="w-full mt-2 pt-2 border-t border-border">
+                      <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+                        <Building2 className="h-3.5 w-3.5" /> Close Additional Scope
+                      </div>
+                      <div className="flex flex-wrap gap-2 items-end">
+                        <Select value={closeScope} onValueChange={(v) => { setCloseScope(v as CloseScope); setCloseScopeValue(''); }}>
+                          <SelectTrigger className="w-[140px]" data-testid={`select-close-scope-closing-${mmp.id}`}>
+                            <SelectValue placeholder="Scope" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(scopeOptions?.hubs?.length ?? 0) > 0 && <SelectItem value="hub">By Hub</SelectItem>}
+                            {(scopeOptions?.states?.length ?? 0) > 0 && <SelectItem value="state">By State</SelectItem>}
+                            {(scopeOptions?.activities?.length ?? 0) > 0 && <SelectItem value="activity">By Activity</SelectItem>}
+                          </SelectContent>
+                        </Select>
+                        {closeScope !== 'full' && (
+                          <Select value={closeScopeValue} onValueChange={setCloseScopeValue}>
+                            <SelectTrigger className="w-[160px]" data-testid={`select-scope-val-closing-${mmp.id}`}>
+                              <SelectValue placeholder={`Select ${SCOPE_LABELS[closeScope]}`} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {closeScope === 'hub' && scopeOptions?.hubs?.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                              {closeScope === 'state' && scopeOptions?.states?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                              {closeScope === 'activity' && scopeOptions?.activities?.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={closingCycle || !closeScopeValue}
+                          onClick={() => handleScopedClose(mmp.id, closeScope, closeScopeValue)}
+                          data-testid={`button-scoped-close-${mmp.id}`}
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5 mr-1.5" /> Close
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {cycleStatus === 'pending_approval' && (isFOM || isAdmin) && (
-                <>
+                <div className="flex flex-wrap gap-2">
                   <Button size="sm" onClick={() => handleApproveCycle(mmp.id)} data-testid={`button-approve-${mmp.id}`}>
                     <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Approve & Close
                   </Button>
@@ -496,7 +705,7 @@ export function CycleMMPCard({
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                </>
+                </div>
               )}
             </div>
           </>
