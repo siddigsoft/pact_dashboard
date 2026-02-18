@@ -1129,6 +1129,12 @@ const MMPCycleClose = () => {
     return r?.label || reason;
   };
 
+  const getReasonLabelAr = (reason: string | null) => {
+    if (!reason) return 'معلق';
+    const r = NOT_COVERED_REASONS.find(nr => nr.value === reason);
+    return r?.labelAr || '';
+  };
+
   const getReasonBadgeVariant = (reason: string | null): 'default' | 'secondary' | 'destructive' | 'outline' => {
     if (!reason) return 'destructive';
     return 'secondary';
@@ -1692,13 +1698,37 @@ const MMPCycleClose = () => {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList data-testid="tabs-cycle-close" className="flex-wrap">
-          <TabsTrigger value="active" data-testid="tab-active">Active Cycles</TabsTrigger>
-          <TabsTrigger value="uncovered" data-testid="tab-uncovered">Uncovered Sites ({cycleStats.uncoveredSites})</TabsTrigger>
-          <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
-          <TabsTrigger value="comparison" data-testid="tab-comparison">Comparison</TabsTrigger>
-          <TabsTrigger value="scorecard" data-testid="tab-scorecard">Scorecard</TabsTrigger>
-          <TabsTrigger value="archive" data-testid="tab-archive">Closed Cycles ({closedCycles.length})</TabsTrigger>
+        <TabsList data-testid="tabs-cycle-close" className="flex-wrap gap-1 h-auto p-1">
+          <TabsTrigger value="active" data-testid="tab-active" className="gap-1.5 px-3 py-2">
+            <Activity className="h-3.5 w-3.5" />
+            <span>Active Cycles</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">الدورات النشطة</span>
+          </TabsTrigger>
+          <TabsTrigger value="uncovered" data-testid="tab-uncovered" className="gap-1.5 px-3 py-2">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            <span>Uncovered Sites</span>
+            {cycleStats.uncoveredSites > 0 && <Badge variant="destructive" className="ml-0.5 text-[10px] px-1.5 py-0">{cycleStats.uncoveredSites}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="reports" data-testid="tab-reports" className="gap-1.5 px-3 py-2">
+            <BarChart3 className="h-3.5 w-3.5" />
+            <span>Reports</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">التقارير</span>
+          </TabsTrigger>
+          <TabsTrigger value="comparison" data-testid="tab-comparison" className="gap-1.5 px-3 py-2">
+            <Layers className="h-3.5 w-3.5" />
+            <span>Comparison</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">المقارنة</span>
+          </TabsTrigger>
+          <TabsTrigger value="scorecard" data-testid="tab-scorecard" className="gap-1.5 px-3 py-2">
+            <Star className="h-3.5 w-3.5" />
+            <span>Scorecard</span>
+            <span dir="rtl" className="text-[10px] font-normal text-muted-foreground hidden sm:inline">بطاقة الاداء</span>
+          </TabsTrigger>
+          <TabsTrigger value="archive" data-testid="tab-archive" className="gap-1.5 px-3 py-2">
+            <BookOpen className="h-3.5 w-3.5" />
+            <span>Closed Cycles</span>
+            {closedCycles.length > 0 && <Badge variant="secondary" className="ml-0.5 text-[10px] px-1.5 py-0">{closedCycles.length}</Badge>}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="active" className="space-y-4">
@@ -1875,7 +1905,7 @@ const MMPCycleClose = () => {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="pending">Pending Reason</SelectItem>
                 <SelectItem value="assigned">Reason Assigned</SelectItem>
-                {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label} <span dir="rtl" className="text-muted-foreground/70 text-xs ml-1">{r.labelAr}</span></SelectItem>)}
               </SelectContent>
             </Select>
             {canAssignReasons && filterHub !== 'all' && (
@@ -1909,7 +1939,7 @@ const MMPCycleClose = () => {
                       <SelectValue placeholder="Select reason..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                      {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label} <span dir="rtl" className="text-muted-foreground/70 text-xs ml-1">{r.labelAr}</span></SelectItem>)}
                     </SelectContent>
                   </Select>
                   {bulkReason === 'other' && (
@@ -2084,7 +2114,7 @@ const MMPCycleClose = () => {
                               <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason Breakdown</h4>
                               {Object.entries(cycle.reasonBreakdown).sort((a,b) => b[1]-a[1]).map(([reason, count]) => (
                                 <div key={reason} className="flex items-center justify-between gap-2 text-sm">
-                                  <span className="text-muted-foreground">{getReasonLabel(reason)}</span>
+                                  <span className="text-muted-foreground">{getReasonLabel(reason)} <span dir="rtl" className="text-muted-foreground/70 text-xs">{getReasonLabelAr(reason)}</span></span>
                                   <Badge variant="outline" className="text-xs">{count}</Badge>
                                 </div>
                               ))}
@@ -2132,7 +2162,7 @@ const MMPCycleClose = () => {
                       {Object.entries(aggregated).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
                         <div key={reason} className="space-y-1">
                           <div className="flex items-center justify-between gap-2 text-sm">
-                            <span>{getReasonLabel(reason)}</span>
+                            <span>{getReasonLabel(reason)} <span dir="rtl" className="text-muted-foreground/70 text-xs">{getReasonLabelAr(reason)}</span></span>
                             <span className="text-xs text-muted-foreground">{count} ({Math.round((count / total) * 100)}%)</span>
                           </div>
                           <div className="w-full bg-muted rounded-full h-2">
@@ -2193,7 +2223,7 @@ const SiteRow = ({ site, selected, onToggle, onAssignReason, canAssign, saving }
           </div>
           <div>
             <Badge variant={getReasonBadgeVariant(site.not_covered_reason)} data-testid={`badge-reason-${site.id}`}>
-              {site.not_covered_reason ? getReasonLabel(site.not_covered_reason) : 'No Reason'}
+              {site.not_covered_reason ? (<>{getReasonLabel(site.not_covered_reason)} <span dir="rtl" className="text-muted-foreground/70 text-[10px]">{getReasonLabelAr(site.not_covered_reason)}</span></>) : 'No Reason'}
             </Badge>
           </div>
         </div>
@@ -2212,7 +2242,7 @@ const SiteRow = ({ site, selected, onToggle, onAssignReason, canAssign, saving }
                   <SelectValue placeholder="Select reason..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                  {NOT_COVERED_REASONS.map(r => <SelectItem key={r.value} value={r.value}>{r.label} <span dir="rtl" className="text-muted-foreground/70 text-xs ml-1">{r.labelAr}</span></SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -2257,6 +2287,12 @@ function getReasonLabel(reason: string | null) {
   if (!reason) return 'Pending';
   const r = NOT_COVERED_REASONS.find(nr => nr.value === reason);
   return r?.label || reason;
+}
+
+function getReasonLabelAr(reason: string | null) {
+  if (!reason) return 'معلق';
+  const r = NOT_COVERED_REASONS.find(nr => nr.value === reason);
+  return r?.labelAr || '';
 }
 
 export default MMPCycleClose;
