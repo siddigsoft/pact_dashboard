@@ -2312,6 +2312,237 @@ const QuestionnaireAnalytics = () => {
     await exportFormattedExcel(sheets, 'hub_drilldown.xlsx');
   }, [hubDrilldown]);
 
+  const exportReportExcel = useCallback(async () => {
+    if (!computeReportSummary) return;
+    const rpt = computeReportSummary;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'PACT Command Center';
+    wb.created = new Date();
+
+    const addSection = (ws: any, text: string) => {
+      const r = ws.addRow([text, '']);
+      r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+      r.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Calibri' };
+      r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F2041' } };
+      r.getCell(2).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Calibri' };
+      r.height = 22;
+    };
+    const bFont = (sz = 10, color = 'FF14141E'): Partial<ExcelJS.Font> => ({ size: sz, name: 'Calibri', color: { argb: color } });
+    const tBorder = (): Partial<ExcelJS.Borders> => {
+      const s: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: 'FFC8CDD7' } };
+      return { top: s, bottom: s, left: s, right: s };
+    };
+    const addPair = (ws: any, label: string, value: string | number) => {
+      const r = ws.addRow([label, value]);
+      r.getCell(1).font = bFont(10);
+      r.getCell(2).font = bFont(10);
+      r.getCell(1).border = tBorder();
+      r.getCell(2).border = tBorder();
+    };
+
+    const ws1 = wb.addWorksheet('Report Summary');
+    const titleRow = ws1.addRow(['Data Quality & Coverage Report']);
+    titleRow.font = { bold: true, size: 14, name: 'Calibri', color: { argb: 'FF0F2041' } };
+    titleRow.height = 26;
+    ws1.addRow([]);
+
+    addSection(ws1, 'Report Information');
+    addPair(ws1, 'Generated Date', rpt.generatedDate);
+    addPair(ws1, 'File Name', rpt.fileName);
+    addPair(ws1, 'Month Coverage', rpt.monthCoverage);
+    ws1.addRow([]);
+
+    addSection(ws1, 'Coverage Summary');
+    addPair(ws1, 'Total Questionnaires', rpt.totalQuestionnaires);
+    addPair(ws1, 'Original Rows', rpt.originalRows);
+    addPair(ws1, 'Unique Sites', rpt.uniqueSites);
+    addPair(ws1, 'Hubs', rpt.uniqueHubs);
+    addPair(ws1, 'States', rpt.uniqueStates);
+    addPair(ws1, 'Localities', rpt.uniqueLocalities);
+    addPair(ws1, 'Data Collectors', rpt.totalCollectors);
+    addPair(ws1, 'Supervisors', rpt.totalSupervisors);
+    ws1.addRow([]);
+
+    if (trackerData && trackerData.matrix && trackerData.matrix.length > 0) {
+      const { hubs: tH, matrix: tM, hubTotals: tHT, grandQ: tGQ, grandSites: tGS, grandCollectors: tGC } = trackerData;
+      const pdmGrand = tM.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : 0), 0);
+      const actualSitesGrand = tM.reduce((a: number, r: any) => {
+        let np = 0; r.cells.forEach((c: any) => { if (!isPdmActivity(r.activity)) np += (c.questionnaires || 0); });
+        return a + np;
+      }, 0) + pdmGrand;
+
+      addSection(ws1, 'Tracker Grand Totals');
+      const tHdr = ws1.addRow(['Hub', 'Sites', 'Actual', 'PDM Sites', 'DC']);
+      tHdr.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' };
+        cell.border = tBorder();
+        cell.alignment = { horizontal: 'center' };
+      });
+      tHdr.getCell(1).alignment = { horizontal: 'left' };
+      tH.forEach((hub: string, hi: number) => {
+        const ht = tHT[hi];
+        const hubPdm = tM.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) && r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0), 0);
+        const r = ws1.addRow([hub, ht.sites, ht.questionnaires, hubPdm || '-', ht.collectors]);
+        r.eachCell((cell, ci) => {
+          cell.font = bFont(10);
+          cell.border = tBorder();
+          cell.alignment = { horizontal: ci > 1 ? 'center' : 'left' };
+        });
+      });
+      const gtRow = ws1.addRow(['Grand Total', tGS, tGQ, pdmGrand || '-', tGC]);
+      gtRow.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+        cell.font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+        cell.border = tBorder();
+        cell.alignment = { horizontal: 'center' };
+      });
+      gtRow.getCell(1).alignment = { horizontal: 'left' };
+      const tsRow = ws1.addRow(['Total Sites (PDM/7)', actualSitesGrand, '', '', '']);
+      tsRow.getCell(1).font = { bold: true, size: 11, name: 'Calibri', color: { argb: 'FF107838' } };
+      tsRow.getCell(2).font = { bold: true, size: 14, name: 'Calibri', color: { argb: 'FF107838' } };
+      tsRow.getCell(1).border = tBorder();
+      tsRow.getCell(2).border = tBorder();
+      ws1.addRow([]);
+    }
+
+    addSection(ws1, 'Hub Coverage');
+    rpt.hubBreakdown.forEach(h => addPair(ws1, h.hub, `${h.questionnaires} Q, ${h.sites} sites`));
+    ws1.addRow([]);
+
+    addSection(ws1, 'Activity Coverage');
+    rpt.activityBreakdown.forEach(a => addPair(ws1, a.activity, `${a.count} Q`));
+    ws1.addRow([]);
+
+    if (rpt.qualityReport) {
+      addSection(ws1, 'Data Quality');
+      addPair(ws1, 'Quality Score', rpt.qualityReport.qualityScore + '%');
+      addPair(ws1, 'Original Rows', rpt.qualityReport.originalRows);
+      addPair(ws1, 'Clean Rows', rpt.qualityReport.cleanRows);
+      addPair(ws1, 'Duplicates Removed', rpt.qualityReport.duplicatesRemoved);
+      addPair(ws1, 'Empty Rows Removed', rpt.qualityReport.emptyRowsRemoved);
+      addPair(ws1, 'Fields Trimmed', rpt.qualityReport.trimmedFields);
+      addPair(ws1, 'Names Standardized', rpt.qualityReport.namesStandardized);
+      ws1.addRow([]);
+    }
+
+    addSection(ws1, 'Team Roster');
+    rpt.teamOverview.forEach(team => {
+      const supRow = ws1.addRow([`Supervisor: ${team.supervisor}`, `${team.teamSize} DCs, ${team.totalQ} Q`]);
+      supRow.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF14141E' } };
+      supRow.getCell(2).font = bFont(10);
+      supRow.getCell(1).border = tBorder();
+      supRow.getCell(2).border = tBorder();
+      team.collectors.forEach(dc => addPair(ws1, `  ${dc.name}`, `Device: ${dc.deviceId} | ${dc.count} Q`));
+    });
+
+    ws1.columns = [{ width: 40 }, { width: 45 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'report_summary.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [computeReportSummary, trackerData]);
+
+  const exportReportPdf = useCallback(async () => {
+    if (!computeReportSummary) return;
+    const rpt = computeReportSummary;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    let y = await drawPdfHeader(doc, 'Data Quality & Coverage Report', 'تقرير جودة البيانات والتغطية',
+      `${rpt.totalQuestionnaires} Questionnaires  |  ${rpt.uniqueSites} Sites  |  ${rpt.uniqueHubs} Hubs`);
+    const hasArabic = await loadArabicFont(doc);
+
+    doc.setFontSize(10); doc.setTextColor(90, 95, 110);
+    doc.text(`File: ${rpt.fileName}  |  Month: ${rpt.monthCoverage}  |  Generated: ${rpt.generatedDate}`, 14, y);
+    y += 6;
+
+    doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('Coverage Summary', 14, y); y += 3;
+    const covRows = [
+      ['Questionnaires', String(rpt.totalQuestionnaires)],
+      ['Unique Sites', String(rpt.uniqueSites)],
+      ['Hubs', String(rpt.uniqueHubs)],
+      ['States', String(rpt.uniqueStates)],
+      ['Localities', String(rpt.uniqueLocalities)],
+      ['Data Collectors', String(rpt.totalCollectors)],
+      ['Supervisors', String(rpt.totalSupervisors)],
+    ];
+    y = styledAutoTable(doc, [['Metric', 'Value']], covRows, y, { fontSize: 9, useArabicFont: hasArabic });
+    y += 5;
+
+    if (trackerData && trackerData.matrix && trackerData.matrix.length > 0) {
+      const { hubs: tH, matrix: tM, hubTotals: tHT, grandQ: tGQ, grandSites: tGS, grandCollectors: tGC } = trackerData;
+      const pdmGrand = tM.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : 0), 0);
+      const actualSitesGrand = tM.reduce((a: number, r: any) => {
+        let np = 0; r.cells.forEach((c: any) => { if (!isPdmActivity(r.activity)) np += (c.questionnaires || 0); });
+        return a + np;
+      }, 0) + pdmGrand;
+
+      if (y > 220) { doc.addPage(); addPageHeader(doc, 'Tracker Grand Totals'); y = 18; }
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('Tracker Grand Totals', 14, y); y += 3;
+      const tRows = tH.map((hub: string, hi: number) => {
+        const ht = tHT[hi];
+        const hubPdm = tM.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) && r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0), 0);
+        return [hub, String(ht.sites), String(ht.questionnaires), String(hubPdm || '-'), String(ht.collectors)];
+      });
+      tRows.push(['Grand Total', String(tGS), String(tGQ), String(pdmGrand || '-'), String(tGC)]);
+      tRows.push(['Total Sites (PDM/7)', String(actualSitesGrand), '', '', '']);
+      y = styledAutoTable(doc, [['Hub', 'Sites', 'Actual', 'PDM Sites', 'DC']], tRows, y, { fontSize: 9, boldLastRow: true, useArabicFont: hasArabic });
+      y += 5;
+    }
+
+    if (y > 220) { doc.addPage(); addPageHeader(doc, 'Hub Coverage'); y = 18; }
+    doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('Hub Coverage', 14, y); y += 3;
+    const hubRows = rpt.hubBreakdown.map(h => [h.hub, String(h.sites), String(h.questionnaires)]);
+    y = styledAutoTable(doc, [['Hub', 'Sites', 'Questionnaires']], hubRows, y, { fontSize: 9, useArabicFont: hasArabic });
+    y += 5;
+
+    if (y > 220) { doc.addPage(); addPageHeader(doc, 'Activity Coverage'); y = 18; }
+    doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('Activity Coverage', 14, y); y += 3;
+    const actRows = rpt.activityBreakdown.map(a => [a.activity, String(a.count)]);
+    y = styledAutoTable(doc, [['Activity', 'Questionnaires']], actRows, y, { fontSize: 9, useArabicFont: hasArabic });
+    y += 5;
+
+    if (rpt.qualityReport) {
+      if (y > 220) { doc.addPage(); addPageHeader(doc, 'Data Quality'); y = 18; }
+      doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text('Data Quality Report', 14, y); y += 3;
+      const qRows = [
+        ['Quality Score', rpt.qualityReport.qualityScore + '%'],
+        ['Original Rows', String(rpt.qualityReport.originalRows)],
+        ['Clean Rows', String(rpt.qualityReport.cleanRows)],
+        ['Duplicates Removed', String(rpt.qualityReport.duplicatesRemoved)],
+        ['Empty Rows Removed', String(rpt.qualityReport.emptyRowsRemoved)],
+        ['Fields Trimmed', String(rpt.qualityReport.trimmedFields)],
+        ['Names Standardized', String(rpt.qualityReport.namesStandardized)],
+      ];
+      y = styledAutoTable(doc, [['Metric', 'Value']], qRows, y, { fontSize: 9, useArabicFont: hasArabic });
+      y += 5;
+    }
+
+    doc.addPage(); addPageHeader(doc, 'Team Roster'); y = 18;
+    doc.setFontSize(12); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+    doc.text('Team Roster', 14, y); y += 3;
+    rpt.teamOverview.forEach(team => {
+      if (y > 250) { doc.addPage(); addPageHeader(doc, 'Team Roster'); y = 18; }
+      doc.setFontSize(10); doc.setTextColor(15, 32, 65); doc.setFont('helvetica', 'bold');
+      doc.text(`${team.supervisor} (${team.teamSize} DCs, ${team.totalQ} Q)`, 14, y); y += 3;
+      const dcRows = team.collectors.map(dc => [dc.name, dc.deviceId || '-', String(dc.count)]);
+      y = styledAutoTable(doc, [['Data Collector', 'Device ID', 'Questionnaires']], dcRows, y, { fontSize: 8, useArabicFont: hasArabic });
+      y += 4;
+    });
+
+    addAllFooters(doc);
+    doc.save('report_summary.pdf');
+  }, [computeReportSummary, trackerData]);
+
   const hubDrilldownTable = (
       <Card>
         <CardHeader className="pb-3">
@@ -3886,23 +4117,45 @@ const QuestionnaireAnalytics = () => {
                 <>
                   <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-lg" data-testid="text-report-title">
-                        <FileText className="h-5 w-5 text-primary" />
-                        Data Quality & Coverage Report
-                      </CardTitle>
-                      <CardDescription>
-                        <span className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline" className="gap-1" data-testid="text-report-month">
-                            <Clock className="h-3 w-3" />
-                            {computeReportSummary.monthCoverage}
-                          </Badge>
-                          <Badge variant="secondary" className="gap-1" data-testid="text-report-file">
-                            <FileSpreadsheet className="h-3 w-3" />
-                            {computeReportSummary.fileName}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">Generated: {computeReportSummary.generatedDate}</span>
-                        </span>
-                      </CardDescription>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-lg" data-testid="text-report-title">
+                            <FileText className="h-5 w-5 text-primary" />
+                            Data Quality & Coverage Report
+                          </CardTitle>
+                          <CardDescription>
+                            <span className="flex flex-wrap items-center gap-2 mt-1">
+                              <Badge variant="outline" className="gap-1" data-testid="text-report-month">
+                                <Clock className="h-3 w-3" />
+                                {computeReportSummary.monthCoverage}
+                              </Badge>
+                              <Badge variant="secondary" className="gap-1" data-testid="text-report-file">
+                                <FileSpreadsheet className="h-3 w-3" />
+                                {computeReportSummary.fileName}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">Generated: {computeReportSummary.generatedDate}</span>
+                            </span>
+                          </CardDescription>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-1.5" data-testid="button-export-report">
+                              <Download className="h-4 w-4" />
+                              Export
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={exportReportExcel} data-testid="button-export-report-excel">
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Excel
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={exportReportPdf} data-testid="button-export-report-pdf">
+                              <FileDown className="h-4 w-4 mr-2" />
+                              PDF
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </CardHeader>
                   </Card>
 
