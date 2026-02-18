@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -3366,86 +3366,170 @@ const QuestionnaireAnalytics = () => {
       </Dialog>
 
       <Dialog open={showCleanDialog} onOpenChange={setShowCleanDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-primary/10">
+                <Sparkles className="h-4.5 w-4.5 text-primary" />
+              </div>
               Data Cleaning Results
             </DialogTitle>
           </DialogHeader>
-          {cleanResults && (
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="border rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold">{cleanResults.originalCount}</p>
-                  <p className="text-xs text-muted-foreground">Original Rows</p>
-                </div>
-                <div className="border rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-green-600">{cleanResults.cleanedCount}</p>
-                  <p className="text-xs text-muted-foreground">Cleaned Rows</p>
-                </div>
-              </div>
+          {cleanResults && (() => {
+            const totalIssues = cleanResults.duplicatesRemoved + cleanResults.emptyRowsRemoved + cleanResults.trimmedFields + cleanResults.namesStandardized;
+            const rowsRemoved = cleanResults.originalCount - cleanResults.cleanedCount;
+            const reductionPct = cleanResults.originalCount > 0 ? Math.round((rowsRemoved / cleanResults.originalCount) * 100) : 0;
+            const hasChanges = totalIssues > 0;
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
-                  <span className="flex items-center gap-2">
-                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                    Duplicate rows removed
-                  </span>
-                  <Badge variant={cleanResults.duplicatesRemoved > 0 ? 'destructive' : 'secondary'}>
-                    {cleanResults.duplicatesRemoved}
-                  </Badge>
+            return (
+              <div className="space-y-5 py-1">
+                <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-muted/30 to-muted/60 p-4">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-3xl font-bold tracking-tight">{cleanResults.originalCount.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Original Rows</p>
+                    </div>
+                    <div className="flex flex-col items-center justify-center">
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                      {hasChanges && (
+                        <Badge variant="secondary" className="mt-1 text-[10px]">
+                          -{reductionPct}%
+                        </Badge>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-3xl font-bold tracking-tight text-green-600 dark:text-green-400">{cleanResults.cleanedCount.toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Cleaned Rows</p>
+                    </div>
+                  </div>
+                  {hasChanges && (
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+                        <span>Data reduction</span>
+                        <span className="font-medium">{rowsRemoved.toLocaleString()} rows removed</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-700"
+                          style={{ width: `${100 - reductionPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
-                  <span className="flex items-center gap-2">
-                    <X className="h-3.5 w-3.5 text-orange-500" />
-                    Empty rows removed
-                  </span>
-                  <Badge variant={cleanResults.emptyRowsRemoved > 0 ? 'default' : 'secondary'}>
-                    {cleanResults.emptyRowsRemoved}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
-                  <span className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />
-                    Fields trimmed (whitespace)
-                  </span>
-                  <Badge variant={cleanResults.trimmedFields > 0 ? 'default' : 'secondary'}>
-                    {cleanResults.trimmedFields}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
-                  <span className="flex items-center gap-2">
-                    <Users className="h-3.5 w-3.5 text-purple-500" />
-                    Collector names standardized
-                  </span>
-                  <Badge variant={cleanResults.namesStandardized > 0 ? 'default' : 'secondary'}>
-                    {cleanResults.namesStandardized}
-                  </Badge>
-                </div>
-              </div>
 
-              {cleanResults.duplicatesRemoved === 0 && cleanResults.emptyRowsRemoved === 0 && cleanResults.trimmedFields === 0 && cleanResults.namesStandardized === 0 && (
-                <div className="flex items-center gap-2 p-3 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30">
-                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                  <p className="text-sm text-green-800 dark:text-green-300">Your data is already clean. No issues were found.</p>
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Cleaning Operations</h4>
+                  <div className="space-y-1.5">
+                    {[
+                      {
+                        icon: Trash2,
+                        iconColor: 'text-red-500 dark:text-red-400',
+                        bgColor: 'bg-red-50 dark:bg-red-950/30',
+                        borderColor: cleanResults.duplicatesRemoved > 0 ? 'border-red-200 dark:border-red-900/50' : '',
+                        label: 'Duplicate rows removed',
+                        sublabel: 'Rows with identical key fields',
+                        count: cleanResults.duplicatesRemoved,
+                        badgeVariant: 'destructive' as const,
+                      },
+                      {
+                        icon: X,
+                        iconColor: 'text-orange-500 dark:text-orange-400',
+                        bgColor: 'bg-orange-50 dark:bg-orange-950/30',
+                        borderColor: cleanResults.emptyRowsRemoved > 0 ? 'border-orange-200 dark:border-orange-900/50' : '',
+                        label: 'Empty rows removed',
+                        sublabel: 'Rows with no meaningful data',
+                        count: cleanResults.emptyRowsRemoved,
+                        badgeVariant: 'default' as const,
+                      },
+                      {
+                        icon: CheckCircle2,
+                        iconColor: 'text-blue-500 dark:text-blue-400',
+                        bgColor: 'bg-blue-50 dark:bg-blue-950/30',
+                        borderColor: cleanResults.trimmedFields > 0 ? 'border-blue-200 dark:border-blue-900/50' : '',
+                        label: 'Fields trimmed',
+                        sublabel: 'Extra whitespace cleaned up',
+                        count: cleanResults.trimmedFields,
+                        badgeVariant: 'default' as const,
+                      },
+                      {
+                        icon: Users,
+                        iconColor: 'text-purple-500 dark:text-purple-400',
+                        bgColor: 'bg-purple-50 dark:bg-purple-950/30',
+                        borderColor: cleanResults.namesStandardized > 0 ? 'border-purple-200 dark:border-purple-900/50' : '',
+                        label: 'Collector names standardized',
+                        sublabel: 'Unified by device ID',
+                        count: cleanResults.namesStandardized,
+                        badgeVariant: 'default' as const,
+                      },
+                    ].map((item, i) => {
+                      const ItemIcon = item.icon;
+                      const isActive = item.count > 0;
+                      return (
+                        <div
+                          key={i}
+                          className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
+                            isActive ? `${item.bgColor} ${item.borderColor}` : 'border-transparent bg-muted/30'
+                          }`}
+                        >
+                          <div className={`flex items-center justify-center h-8 w-8 rounded-md shrink-0 ${isActive ? item.bgColor : 'bg-muted'}`}>
+                            <ItemIcon className={`h-4 w-4 ${isActive ? item.iconColor : 'text-muted-foreground/50'}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium ${!isActive ? 'text-muted-foreground' : ''}`}>{item.label}</p>
+                            <p className="text-[11px] text-muted-foreground">{item.sublabel}</p>
+                          </div>
+                          <div className="shrink-0">
+                            {isActive ? (
+                              <Badge variant={item.badgeVariant}>{item.count.toLocaleString()}</Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/50 font-medium px-2">0</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
-          <DialogFooter className="gap-2 sm:gap-0">
+
+                {!hasChanges && (
+                  <div className="flex items-center gap-3 p-4 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30">
+                    <div className="flex items-center justify-center h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/50 shrink-0">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-green-800 dark:text-green-300">Your data is already clean</p>
+                      <p className="text-xs text-green-700/70 dark:text-green-400/60 mt-0.5">No duplicates, empty rows, or inconsistencies were found.</p>
+                    </div>
+                  </div>
+                )}
+
+                {hasChanges && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      Found <strong>{totalIssues.toLocaleString()}</strong> issues across {cleanResults.originalCount.toLocaleString()} rows. Download or apply the cleaned data below.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <DialogFooter className="flex-col sm:flex-row gap-2 pt-1">
             <Button variant="outline" onClick={() => setShowCleanDialog(false)} data-testid="button-clean-cancel">Close</Button>
             {cleanResults && (cleanResults.duplicatesRemoved > 0 || cleanResults.emptyRowsRemoved > 0 || cleanResults.trimmedFields > 0 || cleanResults.namesStandardized > 0) && (
-              <>
+              <div className="flex gap-2 flex-1 sm:justify-end">
                 <Button variant="outline" className="gap-1.5" onClick={downloadCleanedExcel} data-testid="button-download-cleaned">
                   <Download className="h-4 w-4" />
-                  Download Cleaned File
+                  Download Cleaned
                 </Button>
                 <Button className="gap-1.5" onClick={applyCleanedData} data-testid="button-apply-cleaned">
                   <CheckCircle2 className="h-4 w-4" />
-                  Apply to Current View
+                  Apply to View
                 </Button>
-              </>
+              </div>
             )}
           </DialogFooter>
         </DialogContent>
