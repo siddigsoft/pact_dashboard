@@ -2225,8 +2225,8 @@ const QuestionnaireAnalytics = () => {
   }, [trackerData]);
 
   const exportMainTrackerFormattedExcel = useCallback(async () => {
-    await exportFormattedTrackerExcel(trackerData, isPdmActivity, 'tracker_activity_by_hub.xlsx');
-  }, [trackerData]);
+    await exportFormattedTrackerExcel(trackerData, isPdmActivity, 'tracker_activity_by_hub.xlsx', filteredData);
+  }, [trackerData, filteredData]);
 
   const exportActivityByStateFormattedExcel = useCallback(async () => {
     const sheets = trackerData.stateBreakdown.map(sb => {

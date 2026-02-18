@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { parse as dateParse, isValid as dateIsValid, format as dateFmt } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 
 const NAVY = 'FF0F2041';
@@ -132,7 +133,8 @@ export async function exportFormattedExcel(
 export async function exportFormattedTrackerExcel(
   trackerData: any,
   isPdmActivity: (a: string) => boolean,
-  filename: string
+  filename: string,
+  filteredRows?: FilteredRow[]
 ) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'PACT Command Center';
@@ -226,6 +228,10 @@ export async function exportFormattedTrackerExcel(
 
   autoFitColumns(ws);
 
+  if (filteredRows && filteredRows.length > 0) {
+    buildSummarySheet(wb, filteredRows, 'Tracker Summary Report');
+  }
+
   const buffer = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
 }
@@ -241,16 +247,124 @@ function activityAbbrev(name: string): string {
   return name;
 }
 
+function buildSummarySheet(wb: ExcelJS.Workbook, rows: FilteredRow[], sheetTitle: string) {
+  const ws = wb.addWorksheet('Summary');
+  const titleR = ws.addRow([sheetTitle]);
+  titleR.font = { bold: true, size: 14, name: 'Calibri', color: { argb: NAVY } };
+  titleR.height = 26;
+  ws.addRow([]);
+
+  const addSection = (text: string) => {
+    const r = ws.addRow([text, '']);
+    r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+    r.getCell(1).font = { bold: true, color: { argb: WHITE }, size: 11, name: 'Calibri' };
+    r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+    r.getCell(2).font = { bold: true, color: { argb: WHITE }, size: 11, name: 'Calibri' };
+    r.height = 22;
+  };
+  const addPair = (label: string, value: string | number) => {
+    const r = ws.addRow([label, value]);
+    r.getCell(1).font = bodyFont(10);
+    r.getCell(2).font = bodyFont(10);
+    r.getCell(1).border = thinBorder();
+    r.getCell(2).border = thinBorder();
+  };
+
+  const uniqueHubs = new Set(rows.map(r => r.hub).filter(Boolean));
+  const uniqueStates = new Set(rows.map(r => r.state).filter(Boolean));
+  const uniqueLocalities = new Set(rows.map(r => r.locality).filter(Boolean));
+  const uniqueSites = new Set(rows.map(r => r.activitySite).filter(Boolean));
+  const uniqueCollectors = new Set(rows.map(r => r.dataCollector).filter(Boolean));
+  const uniqueSupervisors = new Set(rows.map(r => r.supervisor).filter(Boolean));
+
+  const parseDateFmts = ['yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy/MM/dd', 'M/d/yyyy', 'd/M/yyyy'];
+  const dates: Date[] = [];
+  rows.forEach(r => {
+    if (!r.date) return;
+    for (const fmt of parseDateFmts) {
+      try {
+        const d = dateParse(r.date, fmt, new Date());
+        if (dateIsValid(d)) { dates.push(d); break; }
+      } catch { /* skip */ }
+    }
+  });
+  let monthCoverage = 'N/A';
+  if (dates.length > 0) {
+    dates.sort((a, b) => a.getTime() - b.getTime());
+    const first = dateFmt(dates[0], 'MMMM yyyy');
+    const last = dateFmt(dates[dates.length - 1], 'MMMM yyyy');
+    monthCoverage = first === last ? first : `${first} - ${last}`;
+  }
+
+  addSection('Report Information');
+  addPair('Generated Date', new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
+  addPair('Month Coverage', monthCoverage);
+  ws.addRow([]);
+
+  addSection('Coverage Totals');
+  addPair('Total Questionnaires', rows.length);
+  addPair('Unique Sites', uniqueSites.size);
+  addPair('Hubs', uniqueHubs.size);
+  addPair('States', uniqueStates.size);
+  addPair('Localities', uniqueLocalities.size);
+  addPair('Data Collectors', uniqueCollectors.size);
+  addPair('Supervisors', uniqueSupervisors.size);
+  ws.addRow([]);
+
+  addSection('Hub Coverage');
+  Array.from(uniqueHubs).sort().forEach(hub => {
+    const hubRows = rows.filter(r => r.hub === hub);
+    const hubSites = new Set(hubRows.map(r => r.activitySite).filter(Boolean)).size;
+    addPair(hub, `${hubRows.length} Q, ${hubSites} sites`);
+  });
+  ws.addRow([]);
+
+  addSection('Team Roster');
+  const supMap = new Map<string, Map<string, { deviceId: string; count: number }>>();
+  rows.forEach(r => {
+    const sup = r.supervisor || '(Unassigned)';
+    const dc = r.dataCollector || '(Unknown)';
+    if (!supMap.has(sup)) supMap.set(sup, new Map());
+    const cm = supMap.get(sup)!;
+    if (!cm.has(dc)) cm.set(dc, { deviceId: r.deviceId || '', count: 0 });
+    cm.get(dc)!.count++;
+  });
+  Array.from(supMap.entries())
+    .sort(([, a], [, b]) => {
+      const totalA = Array.from(a.values()).reduce((s, c) => s + c.count, 0);
+      const totalB = Array.from(b.values()).reduce((s, c) => s + c.count, 0);
+      return totalB - totalA;
+    })
+    .forEach(([sup, dcMap]) => {
+      const totalQ = Array.from(dcMap.values()).reduce((s, c) => s + c.count, 0);
+      const supRow = ws.addRow([`Supervisor: ${sup}`, `${dcMap.size} DCs, ${totalQ} Q`]);
+      supRow.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: DARK } };
+      supRow.getCell(2).font = bodyFont(10);
+      supRow.getCell(1).border = thinBorder();
+      supRow.getCell(2).border = thinBorder();
+      Array.from(dcMap.entries())
+        .sort(([, a], [, b]) => b.count - a.count)
+        .forEach(([name, info]) => {
+          addPair(`  ${name}`, `Device: ${info.deviceId} | ${info.count} Q`);
+        });
+    });
+
+  ws.columns = [{ width: 40 }, { width: 45 }];
+}
+
 const GREEN_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF107838' } };
 const GREEN_FONT: Partial<ExcelJS.Font> = { bold: true, color: { argb: WHITE }, size: 10, name: 'Calibri' };
 
 interface FilteredRow {
   hub?: string;
   state?: string;
+  locality?: string;
   activity?: string;
   dataCollector?: string;
   activitySite?: string;
   deviceId?: string;
+  supervisor?: string;
+  date?: string;
 }
 
 const isPdmActivity = (activity: string) => /pdm/i.test(activity);
@@ -675,6 +789,10 @@ export async function exportCoverageTrackerExcel(
   grandRow.height = 22;
 
   autoFitColumns(ws2);
+
+  if (filteredData.length > 0) {
+    buildSummarySheet(wb, filteredData, 'Coverage Tracker Summary');
+  }
 
   const buf = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
