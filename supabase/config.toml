@@ -1,9 +1,1 @@
-project_id = "abznugnirnlrqnnfkein"  # Use your actual project ref here
-
-[auth]
-enabled = true
-jwt_expiry = 120
-# remove deprecated refresh‑rotation lines
-
-[storage]
-# Remove bucket definitions here — define buckets via Supabase dashboard or CLI
+project_ref = "jfgqaexjdzvisxlovilf"
