@@ -466,6 +466,77 @@ class NotificationService {
     );
   }
 
+  static Future<void> showCostPaymentRecordedNotification({
+    required String submissionId,
+    required double amount,
+    required String currency,
+    required String category,
+  }) async {
+    await initialize();
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'cost_submission_payments',
+          'Cost Submission Payments',
+          channelDescription:
+              'Notifications for cost submission payment recording',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+        );
+
+    const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails();
+
+    const NotificationDetails platformDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iOSDetails,
+    );
+
+    await _notifications.show(
+      submissionId.hashCode + 1000,
+      'Payment Recorded / تم تسجيل الدفع',
+      'Payment of ${amount.toStringAsFixed(2)} $currency for $category has been recorded.\nتم تسجيل دفع ${amount.toStringAsFixed(2)} $currency لـ $category.',
+      platformDetails,
+      payload: 'cost_submission_paid:$submissionId',
+    );
+  }
+
+  static Future<void> showNewCostSubmissionNotification({
+    required String submissionId,
+    required String submitterName,
+    required double amount,
+    required String currency,
+    required String category,
+  }) async {
+    await initialize();
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'cost_submission_new',
+          'New Cost Submissions',
+          channelDescription:
+              'Notifications for new cost submissions requiring approval',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+        );
+
+    const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails();
+
+    const NotificationDetails platformDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iOSDetails,
+    );
+
+    await _notifications.show(
+      submissionId.hashCode + 2000,
+      'New Cost Submission / طلب تكلفة جديد',
+      '$submitterName submitted ${amount.toStringAsFixed(2)} $currency for $category.\n$submitterName قدم ${amount.toStringAsFixed(2)} $currency لـ $category.',
+      platformDetails,
+      payload: 'cost_submission_new:$submissionId',
+    );
+  }
+
   static Future<void> showOfflineSyncCompletedNotification({
     required int syncedCount,
   }) async {

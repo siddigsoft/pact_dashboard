@@ -12,10 +12,12 @@ class RealtimeNotificationService {
   RealtimeChannel? _chatChannel;
   RealtimeChannel? _mmpChannel;
 
+  RealtimeChannel? _costChannel;
+  RealtimeChannel? _notificationsChannel;
+
   String? _currentUserId;
   bool _isInitialized = false;
 
-  // Initialize real-time listeners
   Future<void> initialize() async {
     if (_isInitialized) return;
 
@@ -28,6 +30,8 @@ class RealtimeNotificationService {
 
     await _setupChatListener();
     await _setupMMPFileListener();
+    await _setupCostSubmissionListener();
+    await _setupNotificationsListener();
 
     _isInitialized = true;
     print('Realtime notification service initialized');
@@ -152,14 +156,153 @@ class RealtimeNotificationService {
     }
   }
 
+  // ==================== COST SUBMISSION LISTENER ====================
+
+  Future<void> _setupCostSubmissionListener() async {
+    try {
+      _costChannel = _supabase
+          .channel('cost_submissions_notifications')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'operational_cost_submissions',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: _currentUserId!,
+            ),
+            callback: (payload) async {
+              await _handleCostSubmissionUpdate(payload);
+            },
+          )
+          .subscribe();
+
+      print('Cost submission listener started');
+    } catch (e) {
+      print('Error setting up cost submission listener: $e');
+    }
+  }
+
+  Future<void> _handleCostSubmissionUpdate(PostgresChangePayload payload) async {
+    try {
+      final updated = payload.newRecord;
+      final old = payload.oldRecord;
+      final submissionId = updated['id']?.toString() ?? '';
+
+      final newStatus = updated['status']?.toString() ?? '';
+      final oldStatus = old['status']?.toString() ?? '';
+
+      final rawAmount = updated['amount_cents'] ?? updated['amount'];
+      double amount = 0.0;
+      if (rawAmount is int) {
+        amount = rawAmount / 100.0;
+      } else if (rawAmount is double) {
+        amount = rawAmount < 1000 ? rawAmount : rawAmount / 100.0;
+      }
+      final currency = updated['currency']?.toString() ?? 'SDG';
+      final category = updated['expense_category']?.toString() ?? '';
+
+      final newT1 = updated['tier1_status']?.toString();
+      final oldT1 = old['tier1_status']?.toString();
+      final newT2 = updated['tier2_status']?.toString();
+      final oldT2 = old['tier2_status']?.toString();
+      final newT3 = updated['tier3_status']?.toString();
+      final oldT3 = old['tier3_status']?.toString();
+
+      if (newStatus == 'paid' && oldStatus != 'paid') {
+        await NotificationService.showCostPaymentRecordedNotification(
+          submissionId: submissionId,
+          amount: amount,
+          currency: currency,
+          category: category,
+        );
+      } else if (_tierChanged(newT1, oldT1) || _tierChanged(newT2, oldT2) || _tierChanged(newT3, oldT3) || newStatus != oldStatus) {
+        if (_isRejected(newT1, oldT1) || _isRejected(newT2, oldT2) || _isRejected(newT3, oldT3) || newStatus == 'rejected') {
+          final reason = updated['rejection_reason']?.toString() ??
+              updated['tier1_notes']?.toString() ??
+              updated['tier2_notes']?.toString() ??
+              updated['tier3_notes']?.toString() ??
+              'No reason provided';
+          await NotificationService.showCostSubmissionRejectedNotification(
+            submissionId: submissionId,
+            siteVisitId: submissionId,
+            rejectionReason: reason,
+          );
+        } else if (_isApproved(newT1, oldT1) || _isApproved(newT2, oldT2) || _isApproved(newT3, oldT3) || newStatus == 'approved') {
+          await NotificationService.showCostSubmissionApprovedNotification(
+            submissionId: submissionId,
+            siteVisitId: submissionId,
+            approvedAmount: amount,
+            currency: currency,
+          );
+        }
+      }
+
+      print('Cost submission update handled: $submissionId status=$newStatus');
+    } catch (e) {
+      print('Error handling cost submission update: $e');
+    }
+  }
+
+  bool _tierChanged(String? newVal, String? oldVal) => newVal != null && newVal != oldVal;
+  bool _isApproved(String? newVal, String? oldVal) => newVal == 'approved' && oldVal != 'approved';
+  bool _isRejected(String? newVal, String? oldVal) => newVal == 'rejected' && oldVal != 'rejected';
+
+  // ==================== GENERAL NOTIFICATIONS LISTENER ====================
+
+  Future<void> _setupNotificationsListener() async {
+    try {
+      _notificationsChannel = _supabase
+          .channel('user_notifications_realtime')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: _currentUserId!,
+            ),
+            callback: (payload) async {
+              await _handleNewNotification(payload);
+            },
+          )
+          .subscribe();
+
+      print('Notifications listener started');
+    } catch (e) {
+      print('Error setting up notifications listener: $e');
+    }
+  }
+
+  Future<void> _handleNewNotification(PostgresChangePayload payload) async {
+    try {
+      final record = payload.newRecord;
+      final title = record['title']?.toString() ?? 'Notification';
+      final message = record['message']?.toString() ?? '';
+      final notifId = record['id']?.toString() ?? '';
+
+      await NotificationService.showUserNotification(
+        notificationId: notifId,
+        title: title,
+        body: message,
+      );
+    } catch (e) {
+      print('Error handling new notification: $e');
+    }
+  }
+
   // ==================== UTILITY METHODS ====================
 
-  // Stop all listeners
   void dispose() {
     _chatChannel?.unsubscribe();
     _mmpChannel?.unsubscribe();
+    _costChannel?.unsubscribe();
+    _notificationsChannel?.unsubscribe();
     _chatChannel = null;
     _mmpChannel = null;
+    _costChannel = null;
+    _notificationsChannel = null;
     _isInitialized = false;
     print('Realtime notification service disposed');
   }

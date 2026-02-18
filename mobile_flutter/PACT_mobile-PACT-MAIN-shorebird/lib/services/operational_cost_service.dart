@@ -613,7 +613,7 @@ class OperationalCostService {
       message: '${submission.expenseCategory.labelEn} submission of ${submission.amount.toStringAsFixed(2)} ${submission.currency} has been $action${reviewerName != null ? " by $reviewerName" : ""}.',
       messageAr: 'طلب ${submission.expenseCategory.labelAr} بمبلغ ${submission.amount.toStringAsFixed(2)} ${submission.currency} تم ${isApproved ? "الموافقة عليه" : "رفضه"}${reviewerName != null ? " بواسطة $reviewerName" : ""}.',
       category: 'financial',
-      relatedEntityType: 'operational_cost_submission',
+      relatedEntityType: 'costSubmission',
       relatedEntityId: submission.id,
       priority: isApproved ? 'normal' : 'high',
     );
@@ -630,10 +630,31 @@ class OperationalCostService {
       message: 'Payment of ${submission.amount.toStringAsFixed(2)} ${submission.currency} for ${submission.expenseCategory.labelEn} has been recorded.',
       messageAr: 'تم تسجيل دفع ${submission.amount.toStringAsFixed(2)} ${submission.currency} لـ ${submission.expenseCategory.labelAr}.',
       category: 'financial',
-      relatedEntityType: 'operational_cost_submission',
+      relatedEntityType: 'costSubmission',
       relatedEntityId: submission.id,
       priority: 'normal',
     );
+  }
+
+  /// Notify approvers when a new cost submission is created
+  Future<void> notifyNewSubmission({
+    required OperationalCostSubmission submission,
+    required List<String> approverIds,
+    String? submitterName,
+  }) async {
+    for (final approverId in approverIds) {
+      await triggerNotification(
+        recipientId: approverId,
+        title: 'New Cost Submission',
+        titleAr: 'طلب تكلفة جديد',
+        message: '${submitterName ?? "A team member"} submitted a ${submission.expenseCategory.labelEn} cost of ${submission.amount.toStringAsFixed(2)} ${submission.currency} for approval.',
+        messageAr: '${submitterName ?? "عضو فريق"} قدم طلب تكلفة ${submission.expenseCategory.labelAr} بمبلغ ${submission.amount.toStringAsFixed(2)} ${submission.currency} للموافقة.',
+        category: 'financial',
+        relatedEntityType: 'costSubmission',
+        relatedEntityId: submission.id,
+        priority: 'high',
+      );
+    }
   }
 
   /// Export submissions as CSV string

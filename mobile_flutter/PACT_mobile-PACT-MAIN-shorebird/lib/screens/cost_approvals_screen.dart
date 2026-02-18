@@ -501,11 +501,7 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
         final success = await _costService.markAsPaid(submission.id);
         if (success) {
           await _costService.notifyPaymentRecorded(
-            submissionId: submission.id,
-            submitterId: submission.userId,
-            amount: submission.amount,
-            currency: submission.currency,
-            category: submission.expenseCategory.labelEn,
+            submission: submission,
           );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(

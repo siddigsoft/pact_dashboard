@@ -612,6 +612,47 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
     );
   }
 
+  Future<void> _notifyApproversOfNewSubmission(OperationalCostSubmission submission) async {
+    try {
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      final userProfile = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name, role')
+          .eq('id', currentUser!.id)
+          .maybeSingle();
+
+      final submitterName = userProfile?['full_name'] as String? ?? 'Team Member';
+      final submitterRole = userProfile?['role'] as String? ?? '';
+
+      List<String> approverRoles;
+      if (submitterRole.toLowerCase().contains('coordinator')) {
+        approverRoles = ['supervisor', 'Supervisor', 'hubSupervisor'];
+      } else if (submitterRole.toLowerCase().contains('supervisor')) {
+        approverRoles = ['admin', 'Admin', 'CountryDirector', 'Field Operation Manager (FOM)'];
+      } else {
+        approverRoles = ['admin', 'Admin', 'super_admin', 'SuperAdmin'];
+      }
+
+      final approvers = await Supabase.instance.client
+          .from('profiles')
+          .select('id')
+          .inFilter('role', approverRoles)
+          .eq('status', 'approved');
+
+      final approverIds = (approvers as List).map((a) => a['id'] as String).toList();
+
+      if (approverIds.isNotEmpty) {
+        await _costService.notifyNewSubmission(
+          submission: submission,
+          approverIds: approverIds,
+          submitterName: submitterName,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error notifying approvers: $e');
+    }
+  }
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -673,6 +714,7 @@ class _CostSubmissionFormScreenState extends State<CostSubmissionFormScreen> {
           hubId: _selectedHubId,
         );
         if (result != null && mounted) {
+          _notifyApproversOfNewSubmission(result);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(widget.isArabic ? 'تم تقديم الطلب بنجاح' : 'Submission created successfully'),

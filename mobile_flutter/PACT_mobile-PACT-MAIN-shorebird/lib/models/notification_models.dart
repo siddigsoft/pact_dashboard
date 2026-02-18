@@ -62,6 +62,18 @@ enum RelatedEntityType {
   document,
   @JsonValue('user')
   user,
+  @JsonValue('costSubmission')
+  costSubmission,
+  @JsonValue('wallet')
+  wallet,
+  @JsonValue('downPayment')
+  downPayment,
+  @JsonValue('retainer')
+  retainer,
+  @JsonValue('account')
+  account,
+  @JsonValue('recovery')
+  recovery,
 }
 
 // ==================== NOTIFICATION MODELS ====================
