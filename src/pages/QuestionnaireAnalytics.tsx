@@ -278,6 +278,8 @@ const QuestionnaireAnalytics = () => {
 
     const keyGroups = new Map<string, { index: number; row: QuestionnaireRow }[]>();
     standardized.forEach(({ row, origIdx }) => {
+      const isPDM = safe(row.activity).toLowerCase() === 'pdm';
+      if (isPDM) return;
       const key = [safe(row.deviceId), safe(row.dataCollector), safe(row.activitySite), safe(row.activity), safe(row.subActivity), safe(row.date), safe(row.hub), safe(row.state), safe(row.locality)].join('|||');
       if (!keyGroups.has(key)) keyGroups.set(key, []);
       keyGroups.get(key)!.push({ index: origIdx, row });
@@ -288,6 +290,11 @@ const QuestionnaireAnalytics = () => {
     const seen = new Set<string>();
 
     standardized.forEach(({ row }) => {
+      const isPDM = safe(row.activity).toLowerCase() === 'pdm';
+      if (isPDM) {
+        deduped.push(row);
+        return;
+      }
       const key = [safe(row.deviceId), safe(row.dataCollector), safe(row.activitySite), safe(row.activity), safe(row.subActivity), safe(row.date), safe(row.hub), safe(row.state), safe(row.locality)].join('|||');
       if (!seen.has(key)) {
         seen.add(key);
