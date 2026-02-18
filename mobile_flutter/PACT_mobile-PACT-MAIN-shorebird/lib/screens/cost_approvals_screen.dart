@@ -1,25 +1,15 @@
 import 'package:flutter/material.dart';
-import '../models/cost_submission.dart';
-import '../services/cost_submission_service.dart';
-import '../widgets/cost_approval_widgets.dart';
-
-/// Cost Approvals Screen for Supervisors and Admins
-///
-/// Features:
-/// - Tier 1 approvals (Supervisor/FOM)
-/// - Tier 2 approvals (Admin)
-/// - Approval history
-/// - Filtering by hub/project
+import 'package:flutter/services.dart';
+import '../models/operational_cost_submission.dart';
+import '../services/operational_cost_service.dart';
 
 class CostApprovalsScreen extends StatefulWidget {
-  final CostSubmissionService costService;
   final String userRole;
   final String? hubId;
   final bool isArabic;
 
   const CostApprovalsScreen({
     super.key,
-    required this.costService,
     required this.userRole,
     this.hubId,
     this.isArabic = false,
@@ -32,29 +22,35 @@ class CostApprovalsScreen extends StatefulWidget {
 class _CostApprovalsScreenState extends State<CostApprovalsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<OperationalCostSubmission> _tier1Pending = [];
-  List<OperationalCostSubmission> _tier2Pending = [];
-  List<OperationalCostSubmission> _processed = [];
+  final _costService = OperationalCostService();
+  late CostSubmissionPermissions _permissions;
+  List<OperationalCostSubmission> _allSubmissions = [];
   bool _isLoading = true;
 
-  // Determine which tier this user can approve
-  int get userApprovalTier {
-    final role = widget.userRole.toLowerCase();
-    if (role.contains('admin') || role.contains('super')) {
-      return 2; // Can approve Tier 2
-    } else if (role.contains('supervisor') || role.contains('fom')) {
-      return 1; // Can approve Tier 1
-    }
-    return 0; // Cannot approve
-  }
+  List<OperationalCostSubmission> get _tier1Pending => _allSubmissions
+      .where((s) => _permissions.canApproveTier1(s))
+      .toList();
 
-  bool get canApproveTier1 => userApprovalTier >= 1;
-  bool get canApproveTier2 => userApprovalTier >= 2;
+  List<OperationalCostSubmission> get _tier2Pending => _allSubmissions
+      .where((s) => _permissions.canApproveTier2(s))
+      .toList();
+
+  List<OperationalCostSubmission> get _tier3Pending => _allSubmissions
+      .where((s) => _permissions.canApproveTier3(s))
+      .toList();
+
+  List<OperationalCostSubmission> get _processed => _allSubmissions
+      .where((s) =>
+          s.status == OperationalCostStatus.approved ||
+          s.status == OperationalCostStatus.rejected ||
+          s.status == OperationalCostStatus.paid)
+      .toList();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _permissions = CostSubmissionPermissions.fromRole(widget.userRole);
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
@@ -66,42 +62,31 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-
     try {
-      final results = await Future.wait([
-        widget.costService.getPendingApprovals(tier: 1, hubId: widget.hubId),
-        widget.costService.getPendingApprovals(tier: 2, hubId: widget.hubId),
-        widget.costService.getAllSubmissions(hubId: widget.hubId),
-      ]);
-
+      final permissions = await _costService.getUserPermissions();
+      final submissions = await _costService.getAllSubmissions(hubId: widget.hubId);
       setState(() {
-        _tier1Pending = results[0];
-        _tier2Pending = results[1];
-        _processed = results[2]
-            .where(
-              (s) =>
-                  s.status == CostSubmissionStatus.approved ||
-                  s.status == CostSubmissionStatus.rejected ||
-                  s.status == CostSubmissionStatus.paid,
-            )
-            .toList();
+        _permissions = permissions;
+        _allSubmissions = submissions;
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      _showError('Failed to load approvals');
+      _showError(widget.isArabic ? 'فشل في تحميل البيانات' : 'Failed to load data');
     }
   }
 
-  void _showError(String message) {
+  void _showError(String msg) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
     );
   }
 
-  void _showSuccess(String message) {
+  void _showSuccess(String msg) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
+      SnackBar(content: Text(msg), backgroundColor: Colors.green),
     );
   }
 
@@ -115,34 +100,30 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
         elevation: 0,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (v) {
+              if (v == 'export') _exportCsv();
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'export',
+                child: Row(children: [
+                  const Icon(Icons.file_download, size: 20),
+                  const SizedBox(width: 8),
+                  Text(isArabic ? 'تصدير CSV' : 'Export CSV'),
+                ]),
+              ),
+            ],
+          ),
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: [
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(isArabic ? 'المرحلة 1' : 'Tier 1'),
-                  if (_tier1Pending.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    _buildBadge(_tier1Pending.length),
-                  ],
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(isArabic ? 'المرحلة 2' : 'Tier 2'),
-                  if (_tier2Pending.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    _buildBadge(_tier2Pending.length),
-                  ],
-                ],
-              ),
-            ),
+            _buildTab(isArabic ? 'المستوى 1' : 'Tier 1', _tier1Pending.length),
+            _buildTab(isArabic ? 'المستوى 2' : 'Tier 2', _tier2Pending.length),
+            _buildTab(isArabic ? 'المستوى 3' : 'Tier 3', _tier3Pending.length),
             Tab(text: isArabic ? 'المعالجة' : 'Processed'),
           ],
         ),
@@ -152,126 +133,241 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
           : TabBarView(
               controller: _tabController,
               children: [
-                _buildTier1Tab(),
-                _buildTier2Tab(),
-                _buildProcessedTab(),
+                _buildApprovalList(_tier1Pending, 1),
+                _buildApprovalList(_tier2Pending, 2),
+                _buildApprovalList(_tier3Pending, 3),
+                _buildProcessedList(),
               ],
             ),
     );
   }
 
-  Widget _buildBadge(int count) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.red,
-        borderRadius: BorderRadius.circular(10),
+  Tab _buildTab(String label, int count) {
+    return Tab(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label),
+          if (count > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                count.toString(),
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ],
       ),
-      child: Text(
-        count.toString(),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
+    );
+  }
+
+  Widget _buildApprovalList(List<OperationalCostSubmission> items, int tier) {
+    if (items.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.check_circle_outline,
+        title: widget.isArabic ? 'لا توجد موافقات معلقة' : 'No Pending Approvals',
+        subtitle: widget.isArabic
+            ? 'جميع طلبات المستوى $tier تمت معالجتها'
+            : 'All Tier $tier requests have been processed',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: items.length,
+        itemBuilder: (context, index) => _buildApprovalCard(items[index], tier),
+      ),
+    );
+  }
+
+  Widget _buildApprovalCard(OperationalCostSubmission submission, int tier) {
+    final isArabic = widget.isArabic;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isArabic
+                            ? submission.expenseCategory.labelAr
+                            : submission.expenseCategory.labelEn,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      if (submission.submitterName != null)
+                        Text(
+                          submission.submitterName!,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                    ],
+                  ),
+                ),
+                if (submission.hasThreeTiers)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      isArabic ? '3 مستويات' : '3-Tier',
+                      style: const TextStyle(fontSize: 10, color: Colors.deepPurple, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${submission.amount.toStringAsFixed(2)} ${submission.currency}',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).primaryColor,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              submission.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.grey[700]),
+            ),
+            if (submission.projectName != null || submission.hubName != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  if (submission.projectName != null) ...[
+                    Icon(Icons.folder, size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        submission.projectName!,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ),
+                  ],
+                  if (submission.hubName != null) ...[
+                    const SizedBox(width: 12),
+                    Icon(Icons.location_city, size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        submission.hubName!,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            _buildTierProgress(submission),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _handleApproval(submission, tier, true),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: Text(isArabic ? 'موافقة' : 'Approve'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _handleApproval(submission, tier, false),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: Text(isArabic ? 'رفض' : 'Reject'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTier1Tab() {
-    if (!canApproveTier1) {
-      return _buildNoPermissionState(
-        widget.isArabic
-            ? 'ليس لديك صلاحية لموافقات المرحلة 1'
-            : 'You do not have permission for Tier 1 approvals',
-      );
-    }
-
-    if (_tier1Pending.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.check_circle_outline,
-        title: widget.isArabic
-            ? 'لا توجد موافقات معلقة'
-            : 'No Pending Approvals',
-        subtitle: widget.isArabic
-            ? 'جميع طلبات المرحلة 1 تمت معالجتها'
-            : 'All Tier 1 requests have been processed',
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _tier1Pending.length,
-        itemBuilder: (context, index) {
-          return CostApprovalCard(
-            submission: _tier1Pending[index],
-            approvalTier: 1,
-            isArabic: widget.isArabic,
-            onAction: (id, approved, notes) => _handleApproval(
-              submissionId: id,
-              tier: 1,
-              approved: approved,
-              notes: notes,
-            ),
-          );
-        },
-      ),
+  Widget _buildTierProgress(OperationalCostSubmission s) {
+    return Row(
+      children: [
+        _buildTierDot(s.tier1Status, widget.isArabic ? 'م1' : 'T1'),
+        _buildArrow(s.tier1Status == 'approved'),
+        _buildTierDot(s.tier2Status, widget.isArabic ? 'م2' : 'T2'),
+        if (s.hasThreeTiers) ...[
+          _buildArrow(s.tier2Status == 'approved'),
+          _buildTierDot(s.tier3Status, widget.isArabic ? 'م3' : 'T3'),
+        ],
+      ],
     );
   }
 
-  Widget _buildTier2Tab() {
-    if (!canApproveTier2) {
-      return _buildNoPermissionState(
-        widget.isArabic
-            ? 'ليس لديك صلاحية لموافقات المرحلة 2'
-            : 'You do not have permission for Tier 2 approvals',
-      );
+  Widget _buildTierDot(String? status, String label) {
+    Color color;
+    IconData icon;
+    switch (status) {
+      case 'approved':
+        color = Colors.green;
+        icon = Icons.check_circle;
+        break;
+      case 'rejected':
+        color = Colors.red;
+        icon = Icons.cancel;
+        break;
+      default:
+        color = Colors.grey;
+        icon = Icons.hourglass_empty;
     }
-
-    if (_tier2Pending.isEmpty) {
-      return _buildEmptyState(
-        icon: Icons.check_circle_outline,
-        title: widget.isArabic
-            ? 'لا توجد موافقات معلقة'
-            : 'No Pending Approvals',
-        subtitle: widget.isArabic
-            ? 'جميع طلبات المرحلة 2 تمت معالجتها'
-            : 'All Tier 2 requests have been processed',
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _tier2Pending.length,
-        itemBuilder: (context, index) {
-          return CostApprovalCard(
-            submission: _tier2Pending[index],
-            approvalTier: 2,
-            isArabic: widget.isArabic,
-            onAction: (id, approved, notes) => _handleApproval(
-              submissionId: id,
-              tier: 2,
-              approved: approved,
-              notes: notes,
-            ),
-          );
-        },
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 3),
+        Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+      ],
     );
   }
 
-  Widget _buildProcessedTab() {
+  Widget _buildArrow(bool active) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Icon(Icons.arrow_forward, size: 14, color: active ? Colors.green : Colors.grey[400]),
+    );
+  }
+
+  Widget _buildProcessedList() {
     if (_processed.isEmpty) {
       return _buildEmptyState(
         icon: Icons.history,
         title: widget.isArabic ? 'لا يوجد سجل' : 'No History',
-        subtitle: widget.isArabic
-            ? 'ستظهر هنا الطلبات المعالجة'
-            : 'Processed requests will appear here',
+        subtitle: widget.isArabic ? 'ستظهر هنا الطلبات المعالجة' : 'Processed requests will appear here',
       );
     }
 
@@ -281,86 +377,214 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
         padding: const EdgeInsets.all(16),
         itemCount: _processed.length,
         itemBuilder: (context, index) {
-          return _buildProcessedCard(_processed[index]);
+          final s = _processed[index];
+          final isArabic = widget.isArabic;
+          Color statusColor;
+          String statusLabel;
+
+          switch (s.status) {
+            case OperationalCostStatus.approved:
+              statusColor = Colors.green;
+              statusLabel = isArabic ? 'موافق عليه' : 'Approved';
+              break;
+            case OperationalCostStatus.rejected:
+              statusColor = Colors.red;
+              statusLabel = isArabic ? 'مرفوض' : 'Rejected';
+              break;
+            case OperationalCostStatus.paid:
+              statusColor = Colors.purple;
+              statusLabel = isArabic ? 'مدفوع' : 'Paid';
+              break;
+            default:
+              statusColor = Colors.grey;
+              statusLabel = s.status.labelEn;
+          }
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: statusColor.withOpacity(0.1),
+                child: Icon(
+                  s.status == OperationalCostStatus.rejected ? Icons.cancel : Icons.check_circle,
+                  color: statusColor,
+                  size: 20,
+                ),
+              ),
+              title: Text(
+                isArabic ? s.expenseCategory.labelAr : s.expenseCategory.labelEn,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                '${s.amount.toStringAsFixed(2)} ${s.currency} - ${s.submitterName ?? ""}',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          );
         },
       ),
     );
   }
 
-  Widget _buildProcessedCard(OperationalCostSubmission submission) {
+  Future<void> _handleApproval(OperationalCostSubmission submission, int tier, bool isApproval) async {
     final isArabic = widget.isArabic;
+    final notesController = TextEditingController();
+    bool useSignature = false;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: _buildStatusIcon(submission.status),
-        title: Text(
-          isArabic
-              ? submission.expenseCategory.labelAr
-              : submission.expenseCategory.labelEn,
-        ),
-        subtitle: Text(submission.formattedAmount),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: _getStatusColor(submission.status).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(
+            isApproval
+                ? (isArabic ? 'تأكيد الموافقة - المستوى $tier' : 'Confirm Approval - Tier $tier')
+                : (isArabic ? 'تأكيد الرفض - المستوى $tier' : 'Confirm Rejection - Tier $tier'),
           ),
-          child: Text(
-            isArabic ? submission.status.labelAr : submission.status.labelEn,
-            style: TextStyle(
-              color: _getStatusColor(submission.status),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${isArabic ? submission.expenseCategory.labelAr : submission.expenseCategory.labelEn} - ${submission.amount.toStringAsFixed(2)} ${submission.currency}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: notesController,
+                  decoration: InputDecoration(
+                    labelText: isArabic ? 'ملاحظات' : 'Notes',
+                    hintText: isArabic ? 'أضف ملاحظاتك...' : 'Add your notes...',
+                    border: const OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+                if (isApproval && (_permissions.isAdmin || _permissions.isSuperAdmin)) ...[
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    value: useSignature,
+                    onChanged: (v) => setDialogState(() => useSignature = v ?? false),
+                    title: Text(isArabic ? 'إضافة توقيع رقمي' : 'Add Digital Signature', style: const TextStyle(fontSize: 14)),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+              ],
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(isArabic ? 'إلغاء' : 'Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isApproval ? Colors.green : Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(isApproval ? (isArabic ? 'موافقة' : 'Approve') : (isArabic ? 'رفض' : 'Reject')),
+            ),
+          ],
         ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    String notes = notesController.text.trim();
+    if (useSignature && isApproval) {
+      final sig = await _showSignatureOtp();
+      if (sig == null) return;
+      notes = notes.isNotEmpty ? '$notes\n$sig' : sig;
+    }
+
+    bool success = false;
+    switch (tier) {
+      case 1:
+        success = await _costService.tier1Review(submissionId: submission.id, approved: isApproval, notes: notes.isNotEmpty ? notes : null);
+        break;
+      case 2:
+        success = await _costService.tier2Review(submissionId: submission.id, approved: isApproval, notes: notes.isNotEmpty ? notes : null);
+        break;
+      case 3:
+        success = await _costService.tier3Review(submissionId: submission.id, approved: isApproval, notes: notes.isNotEmpty ? notes : null);
+        break;
+    }
+
+    if (success) {
+      await _costService.notifyApprovalAction(submission: submission, action: isApproval ? 'approved' : 'rejected', tier: tier);
+      _showSuccess(isArabic
+          ? (isApproval ? 'تمت الموافقة بنجاح' : 'تم الرفض بنجاح')
+          : (isApproval ? 'Approved successfully' : 'Rejected successfully'));
+      _loadData();
+    } else {
+      _showError(isArabic ? 'فشل في تنفيذ الإجراء' : 'Failed to process action');
+    }
+  }
+
+  Future<String?> _showSignatureOtp() async {
+    final isArabic = widget.isArabic;
+    final otpController = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isArabic ? 'تأكيد التوقيع الرقمي' : 'Digital Signature Confirmation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.security, size: 48, color: Theme.of(context).primaryColor),
+            const SizedBox(height: 16),
+            Text(isArabic ? 'أدخل رمز OTP لتأكيد التوقيع' : 'Enter OTP code to confirm signature', textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            TextField(
+              controller: otpController,
+              decoration: InputDecoration(
+                labelText: isArabic ? 'رمز OTP' : 'OTP Code',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.lock),
+              ),
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 20, letterSpacing: 8),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, null), child: Text(isArabic ? 'إلغاء' : 'Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (otpController.text.length >= 4) {
+                final hash = otpController.text.hashCode.toRadixString(16).toUpperCase();
+                Navigator.pop(context, '[Signed: OTP | Hash: $hash | ${DateTime.now().toIso8601String()}]');
+              }
+            },
+            child: Text(isArabic ? 'تأكيد' : 'Confirm'),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildStatusIcon(CostSubmissionStatus status) {
-    IconData icon;
-    Color color;
-
-    switch (status) {
-      case CostSubmissionStatus.approved:
-      case CostSubmissionStatus.paid:
-        icon = Icons.check_circle;
-        color = Colors.green;
-        break;
-      case CostSubmissionStatus.rejected:
-        icon = Icons.cancel;
-        color = Colors.red;
-        break;
-      default:
-        icon = Icons.circle;
-        color = Colors.grey;
-    }
-
-    return CircleAvatar(
-      backgroundColor: color.withOpacity(0.1),
-      child: Icon(icon, color: color, size: 20),
-    );
+  void _exportCsv() {
+    final csv = _costService.exportToCsv(_allSubmissions, isArabic: widget.isArabic);
+    Clipboard.setData(ClipboardData(text: csv));
+    _showSuccess(widget.isArabic ? 'تم نسخ CSV إلى الحافظة' : 'CSV copied to clipboard');
   }
 
-  Color _getStatusColor(CostSubmissionStatus status) {
-    switch (status) {
-      case CostSubmissionStatus.approved:
-      case CostSubmissionStatus.paid:
-        return Colors.green;
-      case CostSubmissionStatus.rejected:
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  Widget _buildEmptyState({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
+  Widget _buildEmptyState({required IconData icon, required String title, required String subtitle}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -369,77 +593,12 @@ class _CostApprovalsScreenState extends State<CostApprovalsScreen>
           children: [
             Icon(icon, size: 64, color: Colors.green[300]),
             const SizedBox(height: 16),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
+            Text(subtitle, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600])),
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildNoPermissionState(String message) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.lock, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _handleApproval({
-    required String submissionId,
-    required int tier,
-    required bool approved,
-    String? notes,
-  }) async {
-    try {
-      bool success;
-
-      if (approved) {
-        success = await widget.costService.approveSubmission(
-          submissionId: submissionId,
-          tier: tier,
-          notes: notes,
-        );
-      } else {
-        success = await widget.costService.rejectSubmission(
-          submissionId: submissionId,
-          tier: tier,
-          notes: notes ?? '',
-        );
-      }
-
-      if (success) {
-        _showSuccess(
-          widget.isArabic
-              ? (approved ? 'تمت الموافقة بنجاح' : 'تم الرفض بنجاح')
-              : (approved ? 'Approved successfully' : 'Rejected successfully'),
-        );
-        await _loadData();
-      } else {
-        _showError(widget.isArabic ? 'فشلت العملية' : 'Operation failed');
-      }
-    } catch (e) {
-      _showError(widget.isArabic ? 'حدث خطأ' : 'An error occurred');
-    }
   }
 }

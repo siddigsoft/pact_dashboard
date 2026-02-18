@@ -11,7 +11,8 @@ import '../services/wallet_service.dart';
 import '../services/offline/offline_db.dart';
 
 class WalletScreen extends StatefulWidget {
-  const WalletScreen({super.key});
+  final bool isArabic;
+  const WalletScreen({super.key, this.isArabic = false});
 
   @override
   State<WalletScreen> createState() => _WalletScreenState();
@@ -568,7 +569,7 @@ class _WalletScreenState extends State<WalletScreen> {
             SafeArea(
               child: Column(
                 children: [
-                  ReusableAppBar(title: 'Wallet', scaffoldKey: _scaffoldKey),
+                  ReusableAppBar(title: widget.isArabic ? 'المحفظة' : 'Wallet', scaffoldKey: _scaffoldKey),
                   Expanded(
                     child: _isLoading
                         ? const Center(child: CircularProgressIndicator())
@@ -610,7 +611,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                               MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
-                                              'Current Balance',
+                                              widget.isArabic ? 'الرصيد الحالي' : 'Current Balance',
                                               style: GoogleFonts.poppins(
                                                 fontSize: 14,
                                                 color: Colors.white.withOpacity(
@@ -638,7 +639,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          'Available for withdrawal',
+                                          widget.isArabic ? 'متاح للسحب' : 'Available for withdrawal',
                                           style: GoogleFonts.poppins(
                                             fontSize: 12,
                                             color: Colors.white.withOpacity(
@@ -657,7 +658,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                     children: [
                                       Expanded(
                                         child: _buildStatCard(
-                                          'Total Earned',
+                                          widget.isArabic ? 'إجمالي الأرباح' : 'Total Earned',
                                           _formatCurrency(_totalEarned),
                                           Icons.trending_up,
                                           Colors.green,
@@ -666,7 +667,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: _buildStatCard(
-                                          'This Month',
+                                          widget.isArabic ? 'هذا الشهر' : 'This Month',
                                           _formatCurrency(_thisMonthEarnings),
                                           Icons.calendar_today,
                                           Colors.purple,
@@ -681,7 +682,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                     children: [
                                       Expanded(
                                         child: _buildStatCard(
-                                          'Pending',
+                                          widget.isArabic ? 'قيد الانتظار' : 'Pending',
                                           _formatCurrency(_pendingWithdrawals),
                                           Icons.pending,
                                           Colors.orange,
@@ -690,7 +691,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: _buildStatCard(
-                                          'Withdrawn',
+                                          widget.isArabic ? 'المسحوب' : 'Withdrawn',
                                           _formatCurrency(_totalWithdrawn),
                                           Icons.check_circle,
                                           Colors.cyan,
@@ -722,19 +723,19 @@ class _WalletScreenState extends State<WalletScreen> {
                                             Expanded(
                                               child: _buildTabButton(
                                                 'overview',
-                                                'Overview',
+                                                widget.isArabic ? 'نظرة عامة' : 'Overview',
                                               ),
                                             ),
                                             Expanded(
                                               child: _buildTabButton(
                                                 'transactions',
-                                                'Transactions',
+                                                widget.isArabic ? 'المعاملات' : 'Transactions',
                                               ),
                                             ),
                                             Expanded(
                                               child: _buildTabButton(
                                                 'withdrawals',
-                                                'Withdrawals',
+                                                widget.isArabic ? 'عمليات السحب' : 'Withdrawals',
                                               ),
                                             ),
                                           ],
@@ -767,7 +768,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 backgroundColor: AppColors.primaryBlue,
                 icon: const Icon(Icons.arrow_downward, color: Colors.white),
                 label: Text(
-                  'Request Withdrawal',
+                  widget.isArabic ? 'طلب سحب' : 'Request Withdrawal',
                   style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
@@ -1027,7 +1028,7 @@ class _WalletScreenState extends State<WalletScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Recent Transactions',
+          widget.isArabic ? 'المعاملات الأخيرة' : 'Recent Transactions',
           style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 16),
@@ -1036,7 +1037,7 @@ class _WalletScreenState extends State<WalletScreen> {
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Text(
-                'No transactions yet',
+                widget.isArabic ? 'لا توجد معاملات بعد' : 'No transactions yet',
                 style: GoogleFonts.poppins(color: AppColors.textLight),
               ),
             ),
@@ -1047,7 +1048,7 @@ class _WalletScreenState extends State<WalletScreen> {
           ),
         const SizedBox(height: 24),
         Text(
-          'Recent Earnings',
+          widget.isArabic ? 'الأرباح الأخيرة' : 'Recent Earnings',
           style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 16),
@@ -1056,7 +1057,7 @@ class _WalletScreenState extends State<WalletScreen> {
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Text(
-                'No earnings yet',
+                widget.isArabic ? 'لا توجد أرباح بعد' : 'No earnings yet',
                 style: GoogleFonts.poppins(color: AppColors.textLight),
               ),
             ),
@@ -1065,6 +1066,60 @@ class _WalletScreenState extends State<WalletScreen> {
           ...earningsTransactions.map(
             (transaction) => _buildTransactionItem(transaction),
           ),
+        const SizedBox(height: 24),
+        _buildAdvanceReconciliationSection(),
+      ],
+    );
+  }
+
+  Widget _buildAdvanceReconciliationSection() {
+    final advanceDeductions = _transactions
+        .where((t) => t['type'] == 'advance_deduction' || t['description']?.toString().toLowerCase().contains('advance') == true)
+        .toList();
+
+    if (advanceDeductions.isEmpty) return const SizedBox();
+
+    final totalDeducted = advanceDeductions
+        .fold(0.0, (sum, t) => sum + (t['amount'] as num).toDouble().abs());
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.sync, color: Colors.blue[700], size: 20),
+            const SizedBox(width: 8),
+            Text(
+              widget.isArabic ? 'تسوية السلف' : 'Advance Reconciliation',
+              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue.withOpacity(0.2)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[600], size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.isArabic
+                      ? 'إجمالي خصومات السلف من رسوم الزيارة: ${_formatCurrency(totalDeducted)}'
+                      : 'Total advance deductions from visit fees: ${_formatCurrency(totalDeducted)}',
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.blue[700]),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...advanceDeductions.take(5).map((t) => _buildTransactionItem(t)),
       ],
     );
   }

@@ -11,7 +11,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:csv/csv.dart';
 
 class AdvanceRequestsReportScreen extends StatefulWidget {
-  const AdvanceRequestsReportScreen({super.key});
+  final bool isArabic;
+  const AdvanceRequestsReportScreen({super.key, this.isArabic = false});
 
   @override
   State<AdvanceRequestsReportScreen> createState() =>
@@ -144,6 +145,8 @@ class _AdvanceRequestsReportScreenState
             'Paid',
             'Remaining',
             'Receipt Confirmed',
+            'Signature Method',
+            'Confirmed At',
           ]);
           for (var req in _requests) {
             rows.add([
@@ -159,6 +162,8 @@ class _AdvanceRequestsReportScreenState
               (req.remainingAmount ??
                   (req.requestedAmount - req.totalPaidAmount)),
               req.isReceiptConfirmed ? 'Yes' : 'No',
+              req.receiptSignatureMethod ?? 'N/A',
+              req.receiptConfirmedAt ?? 'N/A',
             ]);
           }
           break;
@@ -295,7 +300,7 @@ class _AdvanceRequestsReportScreenState
     if (!_hasAccess && !_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Advance Requests Report'),
+          title: Text(widget.isArabic ? 'تقرير طلبات السلفة' : 'Advance Requests Report'),
           backgroundColor: const Color(0xFF1E40AF),
           foregroundColor: Colors.white,
         ),
@@ -308,12 +313,14 @@ class _AdvanceRequestsReportScreenState
                 Icon(Icons.lock_outline, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text(
-                  'Access Restricted',
+                  widget.isArabic ? 'الوصول مقيد' : 'Access Restricted',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'You do not have permission to view this report. Only Admins, Supervisors, Coordinators, FOM, Finance, Country Directors, and Data Team members can access this page.',
+                  widget.isArabic
+                      ? 'ليس لديك صلاحية لعرض هذا التقرير. فقط المسؤولين والمشرفين والمنسقين ومديري الميدان والمالية ومديري الدولة وفريق البيانات يمكنهم الوصول.'
+                      : 'You do not have permission to view this report. Only Admins, Supervisors, Coordinators, FOM, Finance, Country Directors, and Data Team members can access this page.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey[600]),
                 ),
@@ -443,7 +450,7 @@ class _AdvanceRequestsReportScreenState
                           ),
                         ),
                         Text(
-                          'Transportation Advance Cost Report',
+                          widget.isArabic ? 'تقرير تكلفة سلفة النقل' : 'Transportation Advance Cost Report',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 14,
@@ -466,12 +473,12 @@ class _AdvanceRequestsReportScreenState
             _loadData();
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(value: 'all', child: Text('All Time')),
-            const PopupMenuItem(value: 'thisMonth', child: Text('This Month')),
-            const PopupMenuItem(value: 'lastMonth', child: Text('Last Month')),
-            const PopupMenuItem(
+            PopupMenuItem(value: 'all', child: Text(widget.isArabic ? 'كل الفترات' : 'All Time')),
+            PopupMenuItem(value: 'thisMonth', child: Text(widget.isArabic ? 'هذا الشهر' : 'This Month')),
+            PopupMenuItem(value: 'lastMonth', child: Text(widget.isArabic ? 'الشهر الماضي' : 'Last Month')),
+            PopupMenuItem(
               value: 'last3Months',
-              child: Text('Last 3 Months'),
+              child: Text(widget.isArabic ? 'آخر 3 أشهر' : 'Last 3 Months'),
             ),
           ],
         ),
@@ -486,6 +493,7 @@ class _AdvanceRequestsReportScreenState
   Widget _buildStatsCards() {
     final formatter = NumberFormat('#,###');
 
+    final isArabic = widget.isArabic;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -494,9 +502,9 @@ class _AdvanceRequestsReportScreenState
             children: [
               Expanded(
                 child: _StatCard(
-                  title: 'Total Requested',
+                  title: isArabic ? 'إجمالي المطلوب' : 'Total Requested',
                   value: 'SDG ${formatter.format(_stats.totalRequested)}',
-                  subtitle: '${_stats.totalCount} requests',
+                  subtitle: '${_stats.totalCount} ${isArabic ? "طلب" : "requests"}',
                   icon: Icons.account_balance_wallet,
                   color: const Color(0xFF1E40AF),
                 ),
@@ -504,9 +512,9 @@ class _AdvanceRequestsReportScreenState
               const SizedBox(width: 12),
               Expanded(
                 child: _StatCard(
-                  title: 'Approved',
+                  title: isArabic ? 'الموافق عليها' : 'Approved',
                   value: 'SDG ${formatter.format(_stats.totalApproved)}',
-                  subtitle: '${_stats.approvedCount} requests',
+                  subtitle: '${_stats.approvedCount} ${isArabic ? "طلب" : "requests"}',
                   icon: Icons.check_circle,
                   color: Colors.green,
                 ),
@@ -518,9 +526,9 @@ class _AdvanceRequestsReportScreenState
             children: [
               Expanded(
                 child: _StatCard(
-                  title: 'Pending',
+                  title: isArabic ? 'قيد الانتظار' : 'Pending',
                   value: 'SDG ${formatter.format(_stats.totalPending)}',
-                  subtitle: '${_stats.pendingCount} requests',
+                  subtitle: '${_stats.pendingCount} ${isArabic ? "طلب" : "requests"}',
                   icon: Icons.pending_actions,
                   color: Colors.orange,
                 ),
@@ -528,9 +536,9 @@ class _AdvanceRequestsReportScreenState
               const SizedBox(width: 12),
               Expanded(
                 child: _StatCard(
-                  title: 'Rejected',
+                  title: isArabic ? 'المرفوضة' : 'Rejected',
                   value: 'SDG ${formatter.format(_stats.totalRejected)}',
-                  subtitle: '${_stats.rejectedCount} requests',
+                  subtitle: '${_stats.rejectedCount} ${isArabic ? "طلب" : "requests"}',
                   icon: Icons.cancel,
                   color: Colors.red,
                 ),
@@ -598,7 +606,7 @@ class _AdvanceRequestsReportScreenState
           OutlinedButton.icon(
             onPressed: () => _exportToCSV(groupType),
             icon: const Icon(Icons.download, size: 18),
-            label: const Text('Export CSV'),
+            label: Text(widget.isArabic ? 'تصدير CSV' : 'Export CSV'),
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFF1E40AF),
             ),
@@ -616,7 +624,7 @@ class _AdvanceRequestsReportScreenState
           Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
-            'No requests found',
+            widget.isArabic ? 'لم يتم العثور على طلبات' : 'No requests found',
             style: TextStyle(color: Colors.grey[600], fontSize: 16),
           ),
         ],
@@ -847,17 +855,45 @@ class _RequestCard extends StatelessWidget {
                       color: Colors.green,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      'Receipt Confirmed / تم تأكيد الاستلام',
-                      style: TextStyle(
-                        color: Colors.green[700],
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: Text(
+                        'Receipt Confirmed / تم تأكيد الاستلام',
+                        style: TextStyle(
+                          color: Colors.green[700],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
+              if (request.receiptSignatureMethod != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.draw, size: 14, color: Colors.blue[600]),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Signature: ${request.receiptSignatureMethod} / التوقيع: ${request.receiptSignatureMethod}',
+                      style: TextStyle(fontSize: 11, color: Colors.blue[600]),
+                    ),
+                  ],
+                ),
+              ],
+              if (request.receiptConfirmedAt != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: 6),
+                    Text(
+                      request.receiptConfirmedAt!,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ],
             ],
             if (_canShowConfirmButton(request)) ...[
               const SizedBox(height: 12),
