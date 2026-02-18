@@ -3940,6 +3940,64 @@ const QuestionnaireAnalytics = () => {
                         </div>
                       </div>
 
+                      {trackerData && trackerData.matrix && trackerData.matrix.length > 0 && (() => {
+                        const { hubs: tHubs, matrix: tMatrix, hubTotals: tHubTotals, grandQ: tGrandQ, grandSites: tGrandSites, grandCollectors: tGrandCollectors } = trackerData;
+                        const pdmSitesGrand = tMatrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) ? Math.ceil(r.totalQ / 7) : 0), 0);
+                        const actualSitesGrand = tMatrix.reduce((a: number, r: any) => {
+                          let nonPdm = 0;
+                          r.cells.forEach((c: any) => { if (!isPdmActivity(r.activity)) nonPdm += (c.questionnaires || 0); });
+                          return a + nonPdm;
+                        }, 0) + pdmSitesGrand;
+                        return (
+                          <div>
+                            <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                              <BarChart3 className="h-3.5 w-3.5" /> Tracker Grand Totals
+                            </h4>
+                            <div className="border rounded-lg overflow-hidden">
+                              <table className="w-full text-sm" data-testid="table-report-tracker-totals">
+                                <thead>
+                                  <tr className="bg-muted/40 border-b">
+                                    <th className="text-left py-2 px-3 font-medium text-xs">Hub</th>
+                                    <th className="text-center py-2 px-3 font-medium text-xs">Sites</th>
+                                    <th className="text-center py-2 px-3 font-medium text-xs">Actual</th>
+                                    <th className="text-center py-2 px-3 font-medium text-xs">PDM Sites</th>
+                                    <th className="text-center py-2 px-3 font-medium text-xs">DC</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {tHubs.map((hub: string, hi: number) => {
+                                    const ht = tHubTotals[hi];
+                                    const hubPdmSites = tMatrix.reduce((a: number, r: any) => a + (isPdmActivity(r.activity) && r.cells[hi].questionnaires ? Math.ceil(r.cells[hi].questionnaires / 7) : 0), 0);
+                                    return (
+                                      <tr key={hub} className="border-b last:border-b-0 hover:bg-muted/20">
+                                        <td className="py-1.5 px-3 font-medium">{hub}</td>
+                                        <td className="py-1.5 px-3 text-center font-mono text-blue-600">{ht.sites}</td>
+                                        <td className="py-1.5 px-3 text-center font-mono text-green-600">{ht.questionnaires}</td>
+                                        <td className="py-1.5 px-3 text-center font-mono text-amber-600">{hubPdmSites || '-'}</td>
+                                        <td className="py-1.5 px-3 text-center font-mono text-purple-600">{ht.collectors}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                  <tr className="bg-primary/10 dark:bg-primary/20 font-bold border-t-2 border-primary/30">
+                                    <td className="py-2 px-3 font-bold text-primary">Grand Total</td>
+                                    <td className="py-2 px-3 text-center font-mono font-bold text-blue-600" data-testid="text-tracker-grand-sites">{tGrandSites}</td>
+                                    <td className="py-2 px-3 text-center font-mono font-bold text-green-600" data-testid="text-tracker-grand-actual">{tGrandQ}</td>
+                                    <td className="py-2 px-3 text-center font-mono font-bold text-amber-600" data-testid="text-tracker-grand-pdm-sites">{pdmSitesGrand || '-'}</td>
+                                    <td className="py-2 px-3 text-center font-mono font-bold text-purple-600" data-testid="text-tracker-grand-dc">{tGrandCollectors}</td>
+                                  </tr>
+                                  <tr className="bg-emerald-100 dark:bg-emerald-950/40 border-t-2 border-emerald-400">
+                                    <td className="py-2.5 px-3 font-bold text-emerald-800 dark:text-emerald-300">Total Sites (PDM/7)</td>
+                                    <td colSpan={4} className="py-2.5 px-3 text-center">
+                                      <span className="text-2xl font-extrabold text-emerald-700 dark:text-emerald-300" data-testid="text-tracker-total-sites-pdm7">{actualSitesGrand}</span>
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <h4 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1">
