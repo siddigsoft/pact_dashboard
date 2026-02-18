@@ -3644,8 +3644,8 @@ const QuestionnaireAnalytics = () => {
       </Dialog>
 
       <Dialog open={showCleanDialog} onOpenChange={setShowCleanDialog}>
-        <DialogContent className="sm:max-w-3xl mx-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-primary/10">
                 <Sparkles className="h-4.5 w-4.5 text-primary" />
@@ -3667,7 +3667,7 @@ const QuestionnaireAnalytics = () => {
             ];
 
             return (
-              <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto pr-1">
+              <div className="space-y-4 py-1 flex-1 overflow-y-auto pr-1 min-h-0">
                 <div className="relative rounded-xl border bg-gradient-to-br from-muted/30 to-muted/60 p-4">
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
@@ -3892,21 +3892,21 @@ const QuestionnaireAnalytics = () => {
               </div>
             );
           })()}
-          <DialogFooter className="flex-col sm:flex-row gap-2 pt-1">
+          <DialogFooter className="shrink-0 flex flex-row items-center gap-2 pt-2 border-t">
             <Button variant="outline" onClick={() => setShowCleanDialog(false)} data-testid="button-clean-cancel">Close</Button>
             {cleanResults && (cleanResults.duplicatesRemoved > 0 || cleanResults.emptyRowsRemoved > 0 || cleanResults.trimmedFields > 0 || cleanResults.namesStandardized > 0) && (
-              <div className="flex gap-2 flex-wrap flex-1 sm:justify-end">
+              <div className="flex gap-2 flex-1 justify-end">
                 <Button variant="outline" className="gap-1.5" onClick={downloadReviewExcel} data-testid="button-download-review">
                   <FileSearch className="h-4 w-4" />
-                  Download Review
+                  <span className="hidden sm:inline">Download</span> Review
                 </Button>
                 <Button variant="outline" className="gap-1.5" onClick={downloadCleanedExcel} data-testid="button-download-cleaned">
                   <Download className="h-4 w-4" />
-                  Download Cleaned
+                  <span className="hidden sm:inline">Download</span> Cleaned
                 </Button>
                 <Button className="gap-1.5" onClick={applyCleanedData} data-testid="button-apply-cleaned">
                   <CheckCircle2 className="h-4 w-4" />
-                  Apply to View
+                  Apply
                 </Button>
               </div>
             )}
