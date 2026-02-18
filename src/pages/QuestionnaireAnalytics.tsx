@@ -8,7 +8,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle, ArrowRight, FileSearch, Mail, FileText, Send, ClipboardList, AlertTriangle, Plus, UserPlus } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Switch } from '@/components/ui/switch';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
@@ -239,13 +241,16 @@ const QuestionnaireAnalytics = () => {
     nameChanges: { index: number; deviceId: string; oldName: string; newName: string }[];
   } | null>(null);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
-  const [emailTo, setEmailTo] = useState('');
+  const [emailToUsers, setEmailToUsers] = useState<{id?: string; name: string; email: string; role?: string; isSystemUser?: boolean}[]>([]);
+  const [emailToInput, setEmailToInput] = useState('');
+  const [emailToSearchOpen, setEmailToSearchOpen] = useState(false);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailCcRoles, setEmailCcRoles] = useState<string[]>([]);
   const [emailAttachReview, setEmailAttachReview] = useState(true);
   const [emailAttachCleaned, setEmailAttachCleaned] = useState(true);
   const [emailSending, setEmailSending] = useState(false);
   const [emailUsers, setEmailUsers] = useState<{id: string; name: string; email: string; role: string}[]>([]);
+  const [emailHighPriority, setEmailHighPriority] = useState(true);
   const [reportIssuesExpanded, setReportIssuesExpanded] = useState(false);
 
   useEffect(() => {
@@ -1280,35 +1285,109 @@ const QuestionnaireAnalytics = () => {
     return emailUsers.filter(u => emailCcRoles.includes(u.role));
   }, [emailCcRoles, emailUsers]);
 
-  const getEmailBody = useMemo(() => {
+  const emailToFilteredUsers = useMemo(() => {
+    const q = emailToInput.trim().toLowerCase();
+    if (!q) return emailUsers.slice(0, 20);
+    return emailUsers.filter(u =>
+      u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
+    ).slice(0, 20);
+  }, [emailToInput, emailUsers]);
+
+  const emailToRecipientLabel = useMemo(() => {
+    if (emailToUsers.length === 0) return '';
+    const names = emailToUsers.map(u => u.name || u.email);
+    if (names.length <= 2) return names.join(' & ');
+    return `${names[0]}, ${names[1]} and ${names.length - 2} others`;
+  }, [emailToUsers]);
+
+  const addEmailToUser = useCallback((user: {id?: string; name: string; email: string; role?: string; isSystemUser?: boolean}) => {
+    setEmailToUsers(prev => {
+      if (prev.find(u => u.email === user.email)) return prev;
+      return [...prev, user];
+    });
+    setEmailToInput('');
+    setEmailToSearchOpen(false);
+  }, []);
+
+  const addEmailToManual = useCallback(() => {
+    const email = emailToInput.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    addEmailToUser({ name: email, email, isSystemUser: false });
+    setEmailToSearchOpen(false);
+  }, [emailToInput, addEmailToUser]);
+
+  const addEmailToGroup = useCallback((role: string) => {
+    const groupUsers = emailUsers.filter(u => u.role === role);
+    setEmailToUsers(prev => {
+      const existing = new Set(prev.map(u => u.email));
+      const newUsers = groupUsers.filter(u => !existing.has(u.email)).map(u => ({ ...u, isSystemUser: true }));
+      return [...prev, ...newUsers];
+    });
+  }, [emailUsers]);
+
+  const removeEmailToUser = useCallback((email: string) => {
+    setEmailToUsers(prev => prev.filter(u => u.email !== email));
+  }, []);
+
+  const buildEmailBody = useCallback((recipientName?: string, isSystemUser?: boolean) => {
     const s = computeReportSummary;
     if (!s) return '';
+
+    const greeting = recipientName || 'Team';
+    const systemUrl = typeof window !== 'undefined' ? `${window.location.origin}/questionnaire-analytics` : '';
     const qScore = s.qualityReport ? `Data Quality Score: ${s.qualityReport.qualityScore}%` : '';
+
     const en = [
-      `Questionnaire Data Report - ${s.monthCoverage}`,
+      `Dear ${greeting},`,
       '',
-      `Total Questionnaires: ${s.totalQuestionnaires}`,
-      `Unique Sites: ${s.uniqueSites}`,
-      `Hubs: ${s.uniqueHubs} | States: ${s.uniqueStates} | Localities: ${s.uniqueLocalities}`,
-      `Data Collectors: ${s.totalCollectors} | Supervisors: ${s.totalSupervisors}`,
-      qScore,
+      `Please find attached the Questionnaire Data Report for ${s.monthCoverage}.`,
+      '',
+      `Report Summary:`,
+      `  Total Questionnaires: ${s.totalQuestionnaires}`,
+      `  Unique Sites: ${s.uniqueSites}`,
+      `  Hubs: ${s.uniqueHubs} | States: ${s.uniqueStates} | Localities: ${s.uniqueLocalities}`,
+      `  Data Collectors: ${s.totalCollectors} | Supervisors: ${s.totalSupervisors}`,
+      qScore ? `  ${qScore}` : '',
       '',
       'Hub Coverage:',
       ...s.hubBreakdown.map(h => `  ${h.hub}: ${h.questionnaires} questionnaires, ${h.sites} sites`),
+      '',
+      isSystemUser && systemUrl ? `You can view the full interactive report at:\n${systemUrl}` : '',
+      '',
+      'Best regards,',
+      'PACT Command Center',
     ].filter(Boolean).join('\n');
 
     const ar = [
-      `تقرير بيانات الاستبيانات - ${s.monthCoverage}`,
       '',
-      `إجمالي الاستبيانات: ${s.totalQuestionnaires}`,
-      `المواقع الفريدة: ${s.uniqueSites}`,
-      `المحاور: ${s.uniqueHubs} | الولايات: ${s.uniqueStates} | المحليات: ${s.uniqueLocalities}`,
-      `جامعي البيانات: ${s.totalCollectors} | المشرفين: ${s.totalSupervisors}`,
-      s.qualityReport ? `درجة جودة البيانات: ${s.qualityReport.qualityScore}%` : '',
+      '---',
+      '',
+      `${greeting} عزيزي/عزيزتي`,
+      '',
+      `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق لشهر ${s.monthCoverage}.`,
+      '',
+      `ملخص التقرير:`,
+      `  إجمالي الاستبيانات: ${s.totalQuestionnaires}`,
+      `  المواقع الفريدة: ${s.uniqueSites}`,
+      `  المحاور: ${s.uniqueHubs} | الولايات: ${s.uniqueStates} | المحليات: ${s.uniqueLocalities}`,
+      `  جامعي البيانات: ${s.totalCollectors} | المشرفين: ${s.totalSupervisors}`,
+      s.qualityReport ? `  درجة جودة البيانات: ${s.qualityReport.qualityScore}%` : '',
+      '',
+      isSystemUser && systemUrl ? `يمكنك عرض التقرير التفاعلي الكامل عبر الرابط:\n${systemUrl}` : '',
+      '',
+      'مع أطيب التحيات،',
+      'مركز قيادة PACT',
     ].filter(Boolean).join('\n');
 
-    return `${en}\n\n---\n\n${ar}`;
+    return `${en}\n${ar}`;
   }, [computeReportSummary]);
+
+  const getEmailBody = useMemo(() => {
+    return buildEmailBody(
+      emailToUsers.length > 0 ? emailToRecipientLabel : undefined,
+      emailToUsers.some(u => u.isSystemUser)
+    );
+  }, [buildEmailBody, emailToUsers, emailToRecipientLabel]);
 
   const generateExcelBase64 = useCallback(async (type: 'cleaned' | 'review'): Promise<string | null> => {
     if (!cleanResults) return null;
@@ -1342,15 +1421,28 @@ const QuestionnaireAnalytics = () => {
   }, [cleanResults, data, getCustomCleanedData]);
 
   const sendEmailReport = useCallback(async () => {
-    if (!emailTo.trim()) {
-      toast({ title: 'Error', description: 'Please enter a recipient email', variant: 'destructive' });
+    if (emailToUsers.length === 0) {
+      toast({ title: 'Error', description: 'Please add at least one recipient', variant: 'destructive' });
       return;
     }
     setEmailSending(true);
     try {
       const ccEmails = getEmailCcList.map(u => u.email).filter(Boolean);
       const s = computeReportSummary;
-      const arBody = s ? `تقرير بيانات الاستبيانات - ${s.monthCoverage}\nإجمالي الاستبيانات: ${s.totalQuestionnaires}\nالمواقع الفريدة: ${s.uniqueSites}` : '';
+      const arBody = s ? [
+        `${emailToRecipientLabel} عزيزي/عزيزتي`,
+        '',
+        `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق لشهر ${s.monthCoverage}.`,
+        '',
+        `إجمالي الاستبيانات: ${s.totalQuestionnaires}`,
+        `المواقع الفريدة: ${s.uniqueSites}`,
+        `المحاور: ${s.uniqueHubs} | الولايات: ${s.uniqueStates} | المحليات: ${s.uniqueLocalities}`,
+        `جامعي البيانات: ${s.totalCollectors} | المشرفين: ${s.totalSupervisors}`,
+        s.qualityReport ? `درجة جودة البيانات: ${s.qualityReport.qualityScore}%` : '',
+        '',
+        'مع أطيب التحيات،',
+        'مركز قيادة PACT',
+      ].filter(Boolean).join('\n') : '';
       const attachments: { filename: string; content: string; type: string }[] = [];
       const baseName = fileName.replace(/\.[^.]+$/, '') || 'report';
       if (emailAttachCleaned && cleanResults) {
@@ -1361,29 +1453,60 @@ const QuestionnaireAnalytics = () => {
         const b64 = await generateExcelBase64('review');
         if (b64) attachments.push({ filename: `${baseName}_review.xlsx`, content: b64, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       }
-      await EmailNotificationService.sendNotification(
-        emailTo.trim(),
-        'Recipient',
-        {
-          title: emailSubject,
-          message: getEmailBody,
-          titleAr: s ? `تقرير بيانات الاستبيانات - ${s.monthCoverage}` : emailSubject,
-          messageAr: arBody,
-          type: 'info',
-          cc: ccEmails.length > 0 ? ccEmails : undefined,
-          attachments: attachments.length > 0 ? attachments : undefined,
+
+      let sentCount = 0;
+      for (const recipient of emailToUsers) {
+        try {
+          const personalBody = buildEmailBody(recipient.name || recipient.email, !!recipient.isSystemUser);
+          const personalArBody = s ? [
+            `${recipient.name || recipient.email} عزيزي/عزيزتي`,
+            '',
+            `يرجى الاطلاع على تقرير بيانات الاستبيانات المرفق لشهر ${s.monthCoverage}.`,
+            '',
+            `إجمالي الاستبيانات: ${s.totalQuestionnaires}`,
+            `المواقع الفريدة: ${s.uniqueSites}`,
+            `المحاور: ${s.uniqueHubs} | الولايات: ${s.uniqueStates} | المحليات: ${s.uniqueLocalities}`,
+            `جامعي البيانات: ${s.totalCollectors} | المشرفين: ${s.totalSupervisors}`,
+            s.qualityReport ? `درجة جودة البيانات: ${s.qualityReport.qualityScore}%` : '',
+            '',
+            'مع أطيب التحيات،',
+            'مركز قيادة PACT',
+          ].filter(Boolean).join('\n') : '';
+          await EmailNotificationService.sendNotification(
+            recipient.email,
+            recipient.name || 'Recipient',
+            {
+              title: emailSubject,
+              message: personalBody,
+              titleAr: s ? `تقرير بيانات الاستبيانات - ${s.monthCoverage}` : emailSubject,
+              messageAr: personalArBody,
+              type: emailHighPriority ? 'warning' : 'info',
+              cc: sentCount === 0 && ccEmails.length > 0 ? ccEmails : undefined,
+              attachments: attachments.length > 0 ? attachments : undefined,
+              actionUrl: recipient.isSystemUser ? `${window.location.origin}/questionnaire-analytics` : undefined,
+            }
+          );
+          sentCount++;
+        } catch (e: any) {
+          console.error(`Failed to send to ${recipient.email}:`, e);
         }
-      );
-      toast({ title: 'Email Sent', description: 'Report email sent successfully' });
+      }
+
+      if (sentCount > 0) {
+        toast({ title: 'Email Sent', description: `Report email sent to ${sentCount} recipient${sentCount > 1 ? 's' : ''} successfully` });
+      } else {
+        toast({ title: 'Email Failed', description: 'Failed to send email to any recipient', variant: 'destructive' });
+      }
       setShowEmailDialog(false);
-      setEmailTo('');
+      setEmailToUsers([]);
+      setEmailToInput('');
       setEmailCcRoles([]);
     } catch (e: any) {
       toast({ title: 'Email Failed', description: e.message || 'Failed to send email', variant: 'destructive' });
     } finally {
       setEmailSending(false);
     }
-  }, [emailTo, emailSubject, getEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, computeReportSummary]);
+  }, [emailToUsers, emailSubject, emailHighPriority, buildEmailBody, getEmailCcList, toast, emailAttachCleaned, emailAttachReview, cleanResults, fileName, generateExcelBase64, computeReportSummary]);
 
   const exportToExcel = useCallback(() => {
     const wb = XLSX.utils.book_new();
@@ -4841,20 +4964,100 @@ const QuestionnaireAnalytics = () => {
             <DialogTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5" />
               Send Report Email
+              {emailHighPriority && <Badge variant="destructive" className="text-xs gap-1"><AlertTriangle className="h-3 w-3" />High Priority</Badge>}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <Label htmlFor="email-to">To</Label>
-              <Input
-                id="email-to"
-                type="email"
-                value={emailTo}
-                onChange={(e) => setEmailTo(e.target.value)}
-                placeholder="recipient@example.com"
-                className="mt-1"
-                data-testid="input-email-to"
-              />
+              <Label className="mb-2 block">To</Label>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {['FOM', 'Admin', 'Supervisor', 'Super Admin'].map(role => {
+                    const count = emailUsers.filter(u => u.role === role).length;
+                    return (
+                      <Button key={role} size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => addEmailToGroup(role)} data-testid={`button-add-group-${role.toLowerCase().replace(/\s+/g, '-')}`}>
+                        <UserPlus className="h-3 w-3" />
+                        {role} {count > 0 && `(${count})`}
+                      </Button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex gap-2">
+                  <Popover open={emailToSearchOpen} onOpenChange={setEmailToSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <div className="flex-1 relative">
+                        <Input
+                          value={emailToInput}
+                          onChange={(e) => { setEmailToInput(e.target.value); setEmailToSearchOpen(true); }}
+                          onFocus={() => setEmailToSearchOpen(true)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEmailToManual(); } }}
+                          placeholder="Search users or type email..."
+                          className="w-full"
+                          data-testid="input-email-to"
+                        />
+                      </div>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0 w-[400px]" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                      <div className="max-h-[250px] overflow-y-auto">
+                        {emailToFilteredUsers.length > 0 ? (
+                          emailToFilteredUsers.map(u => {
+                            const isAdded = emailToUsers.some(eu => eu.email === u.email);
+                            return (
+                              <button
+                                key={u.id}
+                                type="button"
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 ${isAdded ? 'opacity-50' : ''}`}
+                                onClick={() => !isAdded && addEmailToUser({ ...u, isSystemUser: true })}
+                                disabled={isAdded}
+                                data-testid={`button-select-user-${u.id}`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="font-medium truncate">{u.name}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+                                </div>
+                                <Badge variant="outline" className="text-xs shrink-0">{u.role}</Badge>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="px-3 py-4 text-sm text-muted-foreground text-center">No users found</div>
+                        )}
+                        {emailToInput.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToInput.trim()) && (
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 border-t flex items-center gap-2 text-primary"
+                            onClick={addEmailToManual}
+                            data-testid="button-add-manual-email"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Add "{emailToInput.trim()}" as external recipient
+                          </button>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {emailToUsers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {emailToUsers.map(u => (
+                      <Badge key={u.email} variant={u.isSystemUser ? 'default' : 'secondary'} className="text-xs gap-1 pr-1" data-testid={`badge-to-${u.email}`}>
+                        {u.name !== u.email ? u.name : u.email}
+                        {u.role && <span className="opacity-70">({u.role})</span>}
+                        <button type="button" className="ml-0.5 hover:text-destructive" onClick={() => removeEmailToUser(u.email)} data-testid={`button-remove-to-${u.email}`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                    {emailToUsers.length > 1 && (
+                      <Button size="sm" variant="ghost" className="h-6 text-xs text-muted-foreground" onClick={() => setEmailToUsers([])} data-testid="button-clear-all-to">
+                        Clear all
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
@@ -4871,18 +5074,21 @@ const QuestionnaireAnalytics = () => {
             <div>
               <Label className="mb-2 block">CC by Role</Label>
               <div className="flex flex-wrap gap-3">
-                {['Super Admin', 'Admin', 'FOM', 'Supervisor', 'Data Team', 'Finance'].map(role => (
-                  <label key={role} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <Checkbox
-                      checked={emailCcRoles.includes(role)}
-                      onCheckedChange={(checked) => {
-                        setEmailCcRoles(prev => checked ? [...prev, role] : prev.filter(r => r !== role));
-                      }}
-                      data-testid={`checkbox-cc-role-${role.toLowerCase().replace(/\s+/g, '-')}`}
-                    />
-                    {role}
-                  </label>
-                ))}
+                {['Super Admin', 'Admin', 'FOM', 'Supervisor', 'Data Team', 'Finance'].map(role => {
+                  const roleUserCount = emailUsers.filter(u => u.role === role).length;
+                  return (
+                    <label key={role} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={emailCcRoles.includes(role)}
+                        onCheckedChange={(checked) => {
+                          setEmailCcRoles(prev => checked ? [...prev, role] : prev.filter(r => r !== role));
+                        }}
+                        data-testid={`checkbox-cc-role-${role.toLowerCase().replace(/\s+/g, '-')}`}
+                      />
+                      {role} {roleUserCount > 0 && <span className="text-xs text-muted-foreground">({roleUserCount})</span>}
+                    </label>
+                  );
+                })}
               </div>
               {getEmailCcList.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
@@ -4895,25 +5101,24 @@ const QuestionnaireAnalytics = () => {
               )}
             </div>
 
-            <div>
-              <Label className="mb-2 block">Attachments</Label>
-              <div className="flex gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label className="mb-0">Attachments:</Label>
                 <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                  <Checkbox
-                    checked={emailAttachReview}
-                    onCheckedChange={(checked) => setEmailAttachReview(!!checked)}
-                    data-testid="checkbox-attach-review"
-                  />
+                  <Checkbox checked={emailAttachReview} onCheckedChange={(checked) => setEmailAttachReview(!!checked)} data-testid="checkbox-attach-review" />
                   Review File
                 </label>
                 <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                  <Checkbox
-                    checked={emailAttachCleaned}
-                    onCheckedChange={(checked) => setEmailAttachCleaned(!!checked)}
-                    data-testid="checkbox-attach-cleaned"
-                  />
+                  <Checkbox checked={emailAttachCleaned} onCheckedChange={(checked) => setEmailAttachCleaned(!!checked)} data-testid="checkbox-attach-cleaned" />
                   Cleaned File
                 </label>
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <Label htmlFor="email-priority" className="mb-0 text-sm flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                  High Priority
+                </Label>
+                <Switch id="email-priority" checked={emailHighPriority} onCheckedChange={setEmailHighPriority} data-testid="switch-email-priority" />
               </div>
             </div>
 
@@ -4921,7 +5126,21 @@ const QuestionnaireAnalytics = () => {
               <Label className="mb-2 block">Email Preview</Label>
               <Card className="p-4">
                 <div className="space-y-2">
-                  <div className="text-sm font-semibold" data-testid="text-email-preview-subject">{emailSubject}</div>
+                  <div className="flex items-center gap-2">
+                    {emailHighPriority && <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />}
+                    <div className="text-sm font-semibold" data-testid="text-email-preview-subject">{emailSubject}</div>
+                    {emailHighPriority && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">High Priority</Badge>}
+                  </div>
+                  {emailToUsers.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      To: {emailToUsers.map(u => u.name !== u.email ? `${u.name} <${u.email}>` : u.email).join(', ')}
+                    </div>
+                  )}
+                  {getEmailCcList.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      CC: {getEmailCcList.map(u => `${u.name} <${u.email}>`).join(', ')}
+                    </div>
+                  )}
                   <div className="border-t pt-2">
                     <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed max-h-[200px] overflow-y-auto" data-testid="text-email-preview-body">
                       {getEmailBody}
@@ -4935,7 +5154,7 @@ const QuestionnaireAnalytics = () => {
             <Button variant="outline" onClick={() => setShowEmailDialog(false)} data-testid="button-email-cancel">
               Cancel
             </Button>
-            <Button onClick={sendEmailReport} disabled={emailSending || !emailTo.trim()} className="gap-1.5" data-testid="button-email-send">
+            <Button onClick={sendEmailReport} disabled={emailSending || emailToUsers.length === 0} className="gap-1.5" data-testid="button-email-send">
               {emailSending ? (
                 <>
                   <span className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full inline-block" />
@@ -4944,7 +5163,7 @@ const QuestionnaireAnalytics = () => {
               ) : (
                 <>
                   <Send className="h-4 w-4" />
-                  Send Email
+                  Send {emailToUsers.length > 1 ? `to ${emailToUsers.length} recipients` : 'Email'}
                 </>
               )}
             </Button>
