@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock } from 'lucide-react';
+import { Upload, FileSpreadsheet, BarChart3, Download, Search, Filter, X, ChevronDown, ChevronUp, Users, MapPin, Building2, Activity, Layers, FileDown, Save, FolderOpen, Trash2, Clock, Globe, PieChart, Lock, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuthorization } from '@/hooks/use-authorization';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -132,6 +132,16 @@ const QuestionnaireAnalytics = () => {
   const [drillExpandedStates, setDrillExpandedStates] = useState<Set<string>>(new Set());
   const [drillExpandedActivities, setDrillExpandedActivities] = useState<Set<string>>(new Set());
   const [drillExpandedLocalities, setDrillExpandedLocalities] = useState<Set<string>>(new Set());
+  const [showCleanDialog, setShowCleanDialog] = useState(false);
+  const [cleanResults, setCleanResults] = useState<{
+    originalCount: number;
+    cleanedCount: number;
+    duplicatesRemoved: number;
+    emptyRowsRemoved: number;
+    trimmedFields: number;
+    namesStandardized: number;
+    cleanedData: QuestionnaireRow[];
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -181,6 +191,145 @@ const QuestionnaireAnalytics = () => {
     setSavedSessions(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   }, [savedSessions]);
+
+  const cleanExcelData = useCallback(() => {
+    if (data.length === 0) return;
+
+    let trimmedFields = 0;
+    let namesStandardized = 0;
+    let emptyRowsRemoved = 0;
+    let duplicatesRemoved = 0;
+
+    const trimmed = data.map(row => {
+      const cleaned: QuestionnaireRow = { ...row };
+      (Object.keys(cleaned) as (keyof QuestionnaireRow)[]).forEach(key => {
+        const val = cleaned[key];
+        if (typeof val === 'string') {
+          const trimmedVal = val.replace(/\s+/g, ' ').trim();
+          if (trimmedVal !== val) {
+            (cleaned as any)[key] = trimmedVal;
+            trimmedFields++;
+          }
+        }
+      });
+      return cleaned;
+    });
+
+    const nonEmpty = trimmed.filter(row => {
+      const hasContent = row.hub || row.state || row.locality || row.activitySite ||
+        row.activity || row.dataCollector || row.date;
+      if (!hasContent) emptyRowsRemoved++;
+      return hasContent;
+    });
+
+    const safe = (v: string | undefined | null) => (v || '').trim();
+
+    const deviceNameCounts = new Map<string, Map<string, number>>();
+    nonEmpty.forEach(row => {
+      const devId = safe(row.deviceId);
+      if (!devId) return;
+      if (!deviceNameCounts.has(devId)) deviceNameCounts.set(devId, new Map());
+      const names = deviceNameCounts.get(devId)!;
+      const name = safe(row.dataCollector);
+      if (!name) return;
+      names.set(name, (names.get(name) || 0) + 1);
+    });
+    const deviceNameMap = new Map<string, string>();
+    deviceNameCounts.forEach((names, devId) => {
+      if (names.size <= 1) {
+        const firstName = names.keys().next().value;
+        if (firstName) deviceNameMap.set(devId, firstName);
+        return;
+      }
+      let maxCount = 0;
+      let primaryName = '';
+      names.forEach((count, name) => {
+        if (count > maxCount) { maxCount = count; primaryName = name; }
+      });
+      deviceNameMap.set(devId, primaryName);
+    });
+
+    const standardized = nonEmpty.map(row => {
+      const devId = safe(row.deviceId);
+      if (!devId) return row;
+      const primary = deviceNameMap.get(devId);
+      if (primary && safe(row.dataCollector) !== primary) {
+        namesStandardized++;
+        return { ...row, dataCollector: primary };
+      }
+      return row;
+    });
+
+    const seen = new Set<string>();
+    const deduped = standardized.filter(row => {
+      const key = [safe(row.deviceId), safe(row.dataCollector), safe(row.activitySite), safe(row.activity), safe(row.subActivity), safe(row.date), safe(row.hub), safe(row.state), safe(row.locality)].join('|||');
+      if (seen.has(key)) {
+        duplicatesRemoved++;
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+
+    setCleanResults({
+      originalCount: data.length,
+      cleanedCount: deduped.length,
+      duplicatesRemoved,
+      emptyRowsRemoved,
+      trimmedFields,
+      namesStandardized,
+      cleanedData: deduped,
+    });
+    setShowCleanDialog(true);
+  }, [data]);
+
+  const applyCleanedData = useCallback(() => {
+    if (!cleanResults) return;
+    setData(cleanResults.cleanedData);
+    setShowCleanDialog(false);
+    setFilterHubs([]);
+    setFilterStates([]);
+    setFilterActivities([]);
+    setFilterLocalities([]);
+    setSearchQuery('');
+  }, [cleanResults]);
+
+  const downloadCleanedExcel = useCallback(() => {
+    if (!cleanResults) return;
+    const rows = cleanResults.cleanedData.map(r => ({
+      Hub: r.hub,
+      State: r.state,
+      Locality: r.locality,
+      'Activity Site': r.activitySite,
+      Activity: r.activity,
+      'Sub Activity': r.subActivity,
+      'Data Collector': r.dataCollector,
+      'Device ID': r.deviceId,
+      Supervisor: r.supervisor,
+      Date: r.date,
+      'Site ID': r.siteId,
+      Partner: r.partner,
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Cleaned Data');
+
+    const summaryRows = [
+      { Metric: 'Original Rows', Value: cleanResults.originalCount },
+      { Metric: 'Cleaned Rows', Value: cleanResults.cleanedCount },
+      { Metric: 'Duplicates Removed', Value: cleanResults.duplicatesRemoved },
+      { Metric: 'Empty Rows Removed', Value: cleanResults.emptyRowsRemoved },
+      { Metric: 'Fields Trimmed', Value: cleanResults.trimmedFields },
+      { Metric: 'Names Standardized', Value: cleanResults.namesStandardized },
+    ];
+    const summaryWs = XLSX.utils.json_to_sheet(summaryRows);
+    summaryWs['!cols'] = [{ wch: 25 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'Cleaning Summary');
+
+    const baseName = fileName.replace(/\.[^.]+$/, '') || 'questionnaire_data';
+    XLSX.writeFile(wb, `${baseName}_cleaned.xlsx`);
+  }, [cleanResults, fileName]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1869,6 +2018,10 @@ const QuestionnaireAnalytics = () => {
           )}
           {data.length > 0 && (
             <>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={cleanExcelData} data-testid="button-clean">
+                <Sparkles className="h-4 w-4" />
+                Clean
+              </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setSaveName(currentSessionName || fileName.replace(/\.[^.]+$/, '')); setShowSaveDialog(true); }} data-testid="button-save">
                 <Save className="h-4 w-4" />
                 Save
@@ -3209,6 +3362,92 @@ const QuestionnaireAnalytics = () => {
               ))
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCleanDialog} onOpenChange={setShowCleanDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Data Cleaning Results
+            </DialogTitle>
+          </DialogHeader>
+          {cleanResults && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="border rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold">{cleanResults.originalCount}</p>
+                  <p className="text-xs text-muted-foreground">Original Rows</p>
+                </div>
+                <div className="border rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{cleanResults.cleanedCount}</p>
+                  <p className="text-xs text-muted-foreground">Cleaned Rows</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
+                  <span className="flex items-center gap-2">
+                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                    Duplicate rows removed
+                  </span>
+                  <Badge variant={cleanResults.duplicatesRemoved > 0 ? 'destructive' : 'secondary'}>
+                    {cleanResults.duplicatesRemoved}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
+                  <span className="flex items-center gap-2">
+                    <X className="h-3.5 w-3.5 text-orange-500" />
+                    Empty rows removed
+                  </span>
+                  <Badge variant={cleanResults.emptyRowsRemoved > 0 ? 'default' : 'secondary'}>
+                    {cleanResults.emptyRowsRemoved}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />
+                    Fields trimmed (whitespace)
+                  </span>
+                  <Badge variant={cleanResults.trimmedFields > 0 ? 'default' : 'secondary'}>
+                    {cleanResults.trimmedFields}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/50">
+                  <span className="flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5 text-purple-500" />
+                    Collector names standardized
+                  </span>
+                  <Badge variant={cleanResults.namesStandardized > 0 ? 'default' : 'secondary'}>
+                    {cleanResults.namesStandardized}
+                  </Badge>
+                </div>
+              </div>
+
+              {cleanResults.duplicatesRemoved === 0 && cleanResults.emptyRowsRemoved === 0 && cleanResults.trimmedFields === 0 && cleanResults.namesStandardized === 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                  <p className="text-sm text-green-800 dark:text-green-300">Your data is already clean. No issues were found.</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowCleanDialog(false)} data-testid="button-clean-cancel">Close</Button>
+            {cleanResults && (cleanResults.duplicatesRemoved > 0 || cleanResults.emptyRowsRemoved > 0 || cleanResults.trimmedFields > 0 || cleanResults.namesStandardized > 0) && (
+              <>
+                <Button variant="outline" className="gap-1.5" onClick={downloadCleanedExcel} data-testid="button-download-cleaned">
+                  <Download className="h-4 w-4" />
+                  Download Cleaned File
+                </Button>
+                <Button className="gap-1.5" onClick={applyCleanedData} data-testid="button-apply-cleaned">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Apply to Current View
+                </Button>
+              </>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
